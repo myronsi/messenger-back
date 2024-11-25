@@ -1,3 +1,11 @@
-wscat -c ws://127.0.0.1:8000/ws/username
+python -m venv .                               #launch python virtual environment
 
-http://127.0.0.1:8000/docs#/
+source bin/activate                            #check python virtual environment
+
+uvicorn server.main:app --reload               #launch server
+
+http://127.0.0.1:8000/docs#/                   #view swagger api
+
+wscat -c ws://127.0.0.1:8000/ws/username       #create connection
+
+to:username1 text                              #send(private) message

@@ -3,16 +3,38 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Web Messenger</title>
+    <title>Chat App</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div id="chat">
-    <h2>Веб-Мессенджер</h2>
-    <div id="messages"></div>
-    <input type="text" id="message" placeholder="Введите сообщение...">
-    <button id="send">Отправить</button>
+<div id="app">
+    <!-- Регистрация -->
+    <div id="register-section">
+        <h2>Регистрация</h2>
+        <input id="register-username" type="text" placeholder="Имя пользователя">
+        <input id="register-password" type="password" placeholder="Пароль">
+        <button id="register-btn">Зарегистрироваться</button>
+        <p id="register-message"></p>
+    </div>
+
+    <!-- Авторизация -->
+    <div id="login-section">
+        <h2>Авторизация</h2>
+        <input id="login-username" type="text" placeholder="Имя пользователя">
+        <input id="login-password" type="password" placeholder="Пароль">
+        <button id="login-btn">Войти</button>
+        <p id="login-message"></p>
+    </div>
+
+    <!-- Чат -->
+    <div id="chat-section" style="display:none;">
+        <h2>Чат</h2>
+        <div id="chat-window"></div>
+        <input id="message-input" type="text" placeholder="Введите сообщение">
+        <button id="send-btn">Отправить</button>
+    </div>
 </div>
+
 <script src="app.js"></script>
 </body>
 </html>
