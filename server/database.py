@@ -2,7 +2,7 @@ import sqlite3
 from pathlib import Path
 
 # Путь к базе данных
-DB_PATH = Path(__file__).parent / "messenger.db"
+DB_PATH = "messenger.db"
 
 # Функция для подключения к базе данных
 def get_connection():
@@ -28,12 +28,24 @@ def setup_database():
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            chat_id INTEGER NOT NULL,
             sender_id INTEGER NOT NULL,
-            receiver_id INTEGER NOT NULL,
             content TEXT NOT NULL,
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (sender_id) REFERENCES users (id),
-            FOREIGN KEY (receiver_id) REFERENCES users (id)
+            FOREIGN KEY (chat_id) REFERENCES chats (id),
+            FOREIGN KEY (sender_id) REFERENCES users (id)
+        )
+    """)
+
+    # Таблица чатов
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS chats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            user1_id INTEGER NOT NULL,
+            user2_id INTEGER NOT NULL,
+            FOREIGN KEY (user1_id) REFERENCES users (id),
+            FOREIGN KEY (user2_id) REFERENCES users (id)
         )
     """)
 

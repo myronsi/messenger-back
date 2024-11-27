@@ -55,3 +55,27 @@ button:hover {
 #chat-window div {
     margin-bottom: 5px;
 }
+
+#chats-list {
+    margin: 10px 0;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    background: #f9f9f9;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.chat-item {
+    padding: 10px;
+    margin: 5px 0;
+    background: #007bff;
+    color: #fff;
+    cursor: pointer;
+    border-radius: 5px;
+    text-align: center;
+}
+
+.chat-item:hover {
+    background: #0056b3;
+}

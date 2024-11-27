@@ -26,9 +26,17 @@
         <p id="login-message"></p>
     </div>
 
+    <!-- Список чатов -->
+    <div id="chats-section" style="display:none;">
+        <h2>Ваши чаты</h2>
+        <div id="chats-list"></div>
+        <input id="chat-username" type="text" placeholder="Имя пользователя для чата">
+        <button id="create-chat-btn">Создать чат</button>
+    </div>
+
     <!-- Чат -->
     <div id="chat-section" style="display:none;">
-        <h2>Чат</h2>
+        <h2 id="chat-name"></h2>
         <div id="chat-window"></div>
         <input id="message-input" type="text" placeholder="Введите сообщение">
         <button id="send-btn">Отправить</button>

@@ -64,3 +64,54 @@ def get_message_history(user1: str, user2: str):
     messages = cursor.fetchall()
     conn.close()
     return {"history": [{"content": msg["content"], "timestamp": msg["timestamp"], "direction": msg["direction"]} for msg in messages]}
+
+@router.get("/list/{username}")
+def list_chats(username: str):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
+    user_id = cursor.fetchone()
+
+    if not user_id:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+    cursor.execute("""
+        SELECT id, name FROM chats
+        WHERE user1_id = ? OR user2_id = ?
+    """, (user_id["id"], user_id["id"]))
+    chats = cursor.fetchall()
+    conn.close()
+
+    return {"chats": [{"id": chat["id"], "name": chat["name"]} for chat in chats]}
+
+@router.get("/history/{chat_id}")
+def get_message_history(chat_id: int):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Проверяем, существует ли чат
+    cursor.execute("SELECT id FROM chats WHERE id = ?", (chat_id,))
+    chat_exists = cursor.fetchone()
+
+    if not chat_exists:
+        raise HTTPException(status_code=404, detail="Чат не найден")
+
+    # Получаем историю сообщений
+    cursor.execute("""
+        SELECT messages.content, messages.timestamp, users.username AS sender
+        FROM messages
+        JOIN users ON messages.sender_id = users.id
+        WHERE messages.chat_id = ?
+        ORDER BY messages.timestamp ASC
+    """, (chat_id,))
+    messages = cursor.fetchall()
+    conn.close()
+
+    # Возвращаем результат
+    return {
+        "history": [
+            {"content": msg["content"], "timestamp": msg["timestamp"], "sender": msg["sender"]}
+            for msg in messages
+        ]
+    }
