@@ -79,6 +79,11 @@ async function initChats(username) {
 
 // Открытие чата
 async function openChat(chatId, chatName, username) {
+    document.getElementById("back-to-chats-btn").onclick = () => {
+        document.getElementById("chat-section").style.display = "none"; // Скрываем чат
+        document.getElementById("chats-section").style.display = "block"; // Показываем список чатов
+        currentChatId = null; // Сбрасываем текущий chatId
+    }; 
     document.getElementById("chats-section").style.display = "none";
     document.getElementById("chat-section").style.display = "block";
     document.getElementById("chat-name").textContent = chatName;
@@ -108,4 +113,97 @@ async function openChat(chatId, chatName, username) {
         ws.send(message);
         messageInput.value = "";
     };
+    try {
+        const response = await fetch(`${BASE_URL}/messages/history/${chatId}`);
+        if (!response.ok) {
+            const error = await response.json();
+            console.error("Ошибка от API:", error);
+            alert(`Ошибка: ${error.detail || "Не удалось загрузить историю сообщений"}`);
+            return;
+        }
+
+        const data = await response.json();
+        console.log("История сообщений:", data);
+
+        const chatWindow = document.getElementById("chat-window");
+        chatWindow.innerHTML = ""; // Очистка окна чата
+
+        data.history.forEach(msg => {
+            const msgDiv = document.createElement("div");
+
+            // Основное сообщение
+            const content = document.createElement("span");
+            content.textContent = `${msg.timestamp} - ${msg.sender}: ${msg.content}`;
+            msgDiv.appendChild(content);
+
+            // Кнопка "Редактировать"
+            const editBtn = document.createElement("button");
+            editBtn.textContent = "Редактировать";
+            editBtn.onclick = () => editMessage(msg.id, content);
+            msgDiv.appendChild(editBtn);
+
+            // Кнопка "Удалить"
+            const deleteBtn = document.createElement("button");
+            deleteBtn.textContent = "Удалить";
+            deleteBtn.onclick = () => deleteMessage(msg.id, msgDiv);
+            msgDiv.appendChild(deleteBtn);
+
+            chatWindow.appendChild(msgDiv);
+        });
+    } catch (error) {
+        console.error("Ошибка загрузки чата:", error);
+        alert("Не удалось загрузить чат. Проверьте подключение к серверу.");
+    }
+    ws.onmessage = (event) => {
+    const chatWindow = document.getElementById("chat-window");
+
+    // Создаём элемент для нового сообщения
+    const messageDiv = document.createElement("div");
+    messageDiv.textContent = event.data; // Отображаем сообщение
+
+    chatWindow.appendChild(messageDiv);
+
+    // Прокручиваем окно чата вниз
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+};
+}
+
+async function editMessage(messageId, contentElement) {
+    const newContent = prompt("Введите новое сообщение:", contentElement.textContent.split(": ")[1]);
+    if (!newContent) return;
+
+    try {
+        const response = await fetch(`${BASE_URL}/messages/edit/${messageId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ content: newContent }), // Формируем JSON-объект
+        });
+
+        if (response.ok) {
+            alert("Сообщение обновлено!");
+            contentElement.textContent = contentElement.textContent.split(": ")[0] + `: ${newContent} (ред.)`;
+        } else {
+            const error = await response.json();
+            console.error("Ошибка от сервера:", error);
+            alert(`Ошибка: ${JSON.stringify(error)}`);
+        }
+    } catch (err) {
+        console.error("Ошибка сети:", err);
+        alert("Ошибка сети. Проверьте подключение к серверу.");
+    }
+}
+
+async function deleteMessage(messageId, messageElement) {
+    const confirmDelete = confirm("Вы уверены, что хотите удалить это сообщение?");
+    if (!confirmDelete) return;
+
+    const response = await fetch(`${BASE_URL}/messages/delete/${messageId}`, { method: "DELETE" });
+
+    if (response.ok) {
+        alert("Сообщение удалено!");
+        messageElement.remove(); // Удаляем сообщение из DOM
+    } else {
+        const error = await response.json();
+        alert("Ошибка: " + error.detail);
+    }
 }

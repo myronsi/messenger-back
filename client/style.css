@@ -79,3 +79,19 @@ button:hover {
 .chat-item:hover {
     background: #0056b3;
 }
+#back-to-chats-btn {
+    background: #dc3545;
+    color: #fff;
+    border: none;
+    padding: 10px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    border-radius: 5px;
+    font-size: 14px;
+    display: inline-block;
+    transition: background 0.3s ease;
+}
+
+#back-to-chats-btn:hover {
+    background: #c82333;
+}

@@ -48,6 +48,14 @@ def setup_database():
             FOREIGN KEY (user2_id) REFERENCES users (id)
         )
     """)
+    
+    cursor.execute("""
+    UPDATE messages
+    SET chat_id = 1
+    WHERE sender_id IN (
+        SELECT id FROM users WHERE username IN ('user1', 'user2')
+    )
+""")
 
     conn.commit()
     conn.close()

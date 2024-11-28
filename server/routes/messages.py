@@ -10,6 +10,9 @@ class Message(BaseModel):
     receiver: str
     content: str
 
+class MessageEdit(BaseModel):
+    content: str    
+
 # Отправка сообщения
 @router.post("/send")
 def send_message(message: Message):
@@ -90,16 +93,9 @@ def get_message_history(chat_id: int):
     conn = get_connection()
     cursor = conn.cursor()
 
-    # Проверяем, существует ли чат
-    cursor.execute("SELECT id FROM chats WHERE id = ?", (chat_id,))
-    chat_exists = cursor.fetchone()
-
-    if not chat_exists:
-        raise HTTPException(status_code=404, detail="Чат не найден")
-
-    # Получаем историю сообщений
+    # Получаем историю сообщений с ID
     cursor.execute("""
-        SELECT messages.content, messages.timestamp, users.username AS sender
+        SELECT messages.id, messages.content, messages.timestamp, users.username AS sender
         FROM messages
         JOIN users ON messages.sender_id = users.id
         WHERE messages.chat_id = ?
@@ -108,10 +104,60 @@ def get_message_history(chat_id: int):
     messages = cursor.fetchall()
     conn.close()
 
-    # Возвращаем результат
+    # Возвращаем данные
     return {
         "history": [
-            {"content": msg["content"], "timestamp": msg["timestamp"], "sender": msg["sender"]}
+            {
+                "id": msg["id"],  # Добавляем ID сообщения
+                "content": msg["content"],
+                "timestamp": msg["timestamp"],
+                "sender": msg["sender"]
+            }
             for msg in messages
         ]
     }
+
+@router.put("/edit/{message_id}")
+def edit_message(message_id: int, payload: dict):
+    content = payload.get("content")
+    if not content:
+        raise HTTPException(status_code=400, detail="Текст сообщения обязателен")
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Проверяем, существует ли сообщение
+    cursor.execute("SELECT * FROM messages WHERE id = ?", (message_id,))
+    message = cursor.fetchone()  # Возвращает None, если сообщение не найдено
+    if not message:
+        raise HTTPException(status_code=404, detail="Сообщение не найдено")
+
+    # Обновляем сообщение
+    cursor.execute("""
+        UPDATE messages
+        SET content = ?, edited_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+    """, (content, message_id))
+    conn.commit()
+    conn.close()
+
+    return {"message": "Сообщение успешно обновлено"}
+
+
+@router.delete("/delete/{message_id}")
+def delete_message(message_id: int):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Проверяем, существует ли сообщение
+    cursor.execute("SELECT * FROM messages WHERE id = ?", (message_id,))
+    message = cursor.fetchone()
+    if not message:
+        raise HTTPException(status_code=404, detail="Сообщение не найдено")
+
+    # Удаляем сообщение
+    cursor.execute("DELETE FROM messages WHERE id = ?", (message_id,))
+    conn.commit()
+    conn.close()
+
+    return {"message": "Сообщение удалено"}
