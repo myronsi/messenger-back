@@ -6,9 +6,11 @@ DB_PATH = "messenger.db"
 
 # Функция для подключения к базе данных
 def get_connection():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row  # Для удобного доступа по именам колонок
+    conn = sqlite3.connect("messenger.db", check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")  # Разрешить параллельную работу
     return conn
+
 
 # Создание таблиц
 def setup_database():

@@ -15,8 +15,8 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
     try:
         while True:
             data = await websocket.receive_text()
+            print(f"Получено сообщение от {username}: {data}")
 
-            # Ожидаем формат: "chat_id:сообщение"
             if ":" not in data:
                 await websocket.send_text("Ошибка: неверный формат сообщения")
                 continue
@@ -28,12 +28,11 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
             sender = cursor.fetchone()
             if not sender:
                 raise ValueError("Отправитель не найден")
-
             sender_id = sender["id"]
 
-            # Получаем ID получателя
+            # Получаем ID и имя получателя
             cursor.execute("""
-                SELECT u.id
+                SELECT u.id, u.username
                 FROM users u
                 JOIN chats c ON (c.user1_id = u.id OR c.user2_id = u.id)
                 WHERE c.id = ? AND u.id != ?
@@ -41,23 +40,25 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
             receiver = cursor.fetchone()
             if not receiver:
                 raise ValueError("Получатель не найден")
-
             receiver_id = receiver["id"]
 
-            # Вставляем сообщение в базу
+            # Сохраняем сообщение в базу данных
             cursor.execute("""
                 INSERT INTO messages (chat_id, sender_id, receiver_id, content)
                 VALUES (?, ?, ?, ?)
             """, (chat_id, sender_id, receiver_id, message))
             conn.commit()
+            print(f"Сообщение сохранено: {message}")
 
-            # Отправляем сообщение получателю
-            participants = [username, receiver["id"]]
+            # Рассылка сообщения всем участникам чата
+            participants = [username, receiver["username"]]
             for participant in participants:
-                await manager.send_personal_message(f"{username}: {message}", participant)
+                if participant in manager.active_connections:
+                    await manager.send_personal_message(f"{username}: {message}", participant)
 
     except WebSocketDisconnect:
+        print(f"WebSocket отключён: {username}")
         manager.disconnect(username)
-        await manager.broadcast(f"{username} покинул чат.")
     finally:
         conn.close()
+
