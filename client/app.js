@@ -1,7 +1,7 @@
 const BASE_URL = "http://127.0.0.1:8000";
 let currentChatId = null;
 let ws = null;
-d9052835c82efc46c74bf6e1c7aefb0188546e71
+
 // Регистрация
 document.getElementById("register-btn").onclick = async () => {
     const username = document.getElementById("register-username").value;
@@ -79,7 +79,51 @@ async function initChats(username) {
 
 // Открытие чата
 async function openChat(chatId, chatName, username) {
-    let selectedMessageId = null; // Хранение ID выбранного сообщения  
+    let selectedMessageId = null; // Хранение ID выбранного сообщения
+
+    // Показ контекстного меню
+    document.getElementById("chat-window").addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+        console.log("Контекстное меню вызвано");
+
+        const messageElement = event.target.closest(".message");
+        if (!messageElement) {
+            console.log("Не найдено сообщение под курсором");
+            return;
+        }
+
+        selectedMessageId = messageElement.dataset.messageId;
+        console.log(`Выбрано сообщение с ID: ${selectedMessageId}`);
+
+        const menu = document.getElementById("context-menu");
+        let x = event.clientX;
+        let y = event.clientY;
+
+        // Ограничиваем меню, чтобы не выходило за границы экрана
+        const menuWidth = menu.offsetWidth;
+        const menuHeight = menu.offsetHeight;
+
+        if (x + menuWidth > window.innerWidth) {
+            x = window.innerWidth - menuWidth;
+        }
+        if (y + menuHeight > window.innerHeight) {
+            y = window.innerHeight - menuHeight;
+        }
+    
+        menu.style.top = `${y}px`;
+        menu.style.left = `${x}px`;
+        menu.classList.remove("hidden");
+    });
+
+    // Скрытие меню при клике вне его
+    document.addEventListener("click", (event) => {
+        const menu = document.getElementById("context-menu");
+
+        if (!menu.contains(event.target)) {
+            console.log("Клик вне контекстного меню, скрываем меню");
+            menu.classList.add("hidden");
+        }
+    });
     
     // Обработка кнопки "Редактировать"
     document.getElementById("edit-btn").addEventListener("click", () => {
@@ -99,7 +143,7 @@ async function openChat(chatId, chatName, username) {
         document.getElementById("context-menu").classList.add("hidden");
     });
       
-    document.getElementById("chats-btn").onclick = () => {
+    document.getElementById("back-to-chats-btn").onclick = () => {
         document.getElementById("chat-section").style.display = "none"; // Скрываем чат
         document.getElementById("chats-section").style.display = "block"; // Показываем список чатов
         currentChatId = null; // Сбрасываем текущий chatId
@@ -126,41 +170,17 @@ async function openChat(chatId, chatName, username) {
         chatWindow.appendChild(msgDiv);
     });
 
-    const ws = new WebSocket(`ws://127.0.0.1:8000/ws/${username}`);
-
-    ws.onopen = () => {
-        console.log("WebSocket подключен");
-    };
-    
+    ws = new WebSocket(`ws://127.0.0.1:8000/ws/${username}`);
     ws.onmessage = (event) => {
-        console.log("Новое сообщение через WebSocket:", event.data);
-        const chatWindow = document.getElementById("chat-window");
-    
-        // Создаём элемент для нового сообщения
         const messageDiv = document.createElement("div");
         messageDiv.textContent = event.data;
-    
-        // Добавляем сообщение в окно чата
         chatWindow.appendChild(messageDiv);
-    
-        // Прокручиваем окно чата вниз
-        chatWindow.scrollTop = chatWindow.scrollHeight;
     };
-    
-    ws.onerror = (error) => {
-        console.error("WebSocket ошибка:", error);
-    };
-    
-    ws.onclose = () => {
-        console.log("WebSocket отключён");
-    };
-    
 
     document.getElementById("send-btn").onclick = () => {
         const messageInput = document.getElementById("message-input");
         const message = `${currentChatId}:${messageInput.value}`; // Формат chat_id:сообщение
         ws.send(message);
-        console.log("Отправлено сообщение:", message);
         messageInput.value = "";
     };
     try {
@@ -177,19 +197,29 @@ async function openChat(chatId, chatName, username) {
 
         const chatWindow = document.getElementById("chat-window");
         chatWindow.innerHTML = ""; // Очистка окна чата
-        
+
         data.history.forEach(msg => {
             const msgDiv = document.createElement("div");
-            msgDiv.className = "message"; // Класс для обработки контекстного меню
-            msgDiv.dataset.messageId = msg.id; // Привязка ID сообщения
-        
+
             // Основное сообщение
             const content = document.createElement("span");
             content.textContent = `${msg.timestamp} - ${msg.sender}: ${msg.content}`;
             msgDiv.appendChild(content);
-        
+
+            // Кнопка "Редактировать"
+            const editBtn = document.createElement("button");
+            editBtn.textContent = "Редактировать";
+            editBtn.onclick = () => editMessage(msg.id, content);
+            msgDiv.appendChild(editBtn);
+
+            // Кнопка "Удалить"
+            const deleteBtn = document.createElement("button");
+            deleteBtn.textContent = "Удалить";
+            deleteBtn.onclick = () => deleteMessage(msg.id, msgDiv);
+            msgDiv.appendChild(deleteBtn);
+
             chatWindow.appendChild(msgDiv);
-        });        
+        });
     } catch (error) {
         console.error("Ошибка загрузки чата:", error);
         alert("Не удалось загрузить чат. Проверьте подключение к серверу.");
@@ -207,122 +237,7 @@ async function openChat(chatId, chatName, username) {
     
         // Прокручиваем окно чата вниз
         chatWindow.scrollTop = chatWindow.scrollHeight;
-    };
-        // Показ контекстного меню
-    function setupContextMenu() {
-        const chatWindow = document.getElementById("chat-window");
-        const menu = document.getElementById("context-menu");
-    
-        // Удаляем старый обработчик, если он был назначен
-        chatWindow.removeEventListener("contextmenu", handleContextMenu);
-        document.removeEventListener("click", handleMenuHide);
-    
-        // Новый обработчик для показа меню
-        chatWindow.addEventListener("contextmenu", handleContextMenu);
-    
-        // Новый обработчик для скрытия меню
-        document.addEventListener("click", handleMenuHide);
-    
-        // Функция для обработки клика правой кнопкой
-        function handleContextMenu(event) {
-            event.preventDefault();
-            console.log("Контекстное меню вызвано");
-    
-            const messageElement = event.target.closest(".message");
-            if (!messageElement) {
-                console.log("Не найдено сообщение под курсором");
-                return;
-            }
-    
-            selectedMessageId = messageElement.dataset.messageId;
-            console.log(`Выбрано сообщение с ID: ${selectedMessageId}`);
-    
-            // Установка позиции меню
-            let x = event.clientX;
-            let y = event.clientY;
-    
-            // Ограничение меню по границам экрана
-            const menuWidth = menu.offsetWidth;
-            const menuHeight = menu.offsetHeight;
-    
-            if (x + menuWidth > window.innerWidth) {
-                x = window.innerWidth - menuWidth;
-            }
-            if (y + menuHeight > window.innerHeight) {
-                y = window.innerHeight - menuHeight;
-            }
-    
-            menu.style.top = `${y}px`;
-            menu.style.left = `${x}px`;
-            menu.classList.remove("hidden");
-        }
-    
-        // Функция для скрытия меню
-        function handleMenuHide(event) {
-            if (!menu.contains(event.target)) {
-                console.log("Клик вне контекстного меню, скрываем меню");
-                menu.classList.add("hidden");
-            }
-        }
-    }  
-
-    // Показ контекстного меню
-    function setupContextMenu() {
-        const chatWindow = document.getElementById("chat-window");
-        const menu = document.getElementById("context-menu");
-    
-        // Удаляем старый обработчик, если он был назначен
-        chatWindow.removeEventListener("contextmenu", handleContextMenu);
-        document.removeEventListener("click", handleMenuHide);
-    
-        // Новый обработчик для показа меню
-        chatWindow.addEventListener("contextmenu", handleContextMenu);
-    
-        // Новый обработчик для скрытия меню
-        document.addEventListener("click", handleMenuHide);
-    
-        // Функция для обработки клика правой кнопкой
-        function handleContextMenu(event) {
-            event.preventDefault();
-            console.log("Контекстное меню вызвано");
-    
-            const messageElement = event.target.closest(".message");
-            if (!messageElement) {
-                console.log("Не найдено сообщение под курсором");
-                return;
-            }
-    
-            selectedMessageId = messageElement.dataset.messageId;
-            console.log(`Выбрано сообщение с ID: ${selectedMessageId}`);
-    
-            // Установка позиции меню
-            let x = event.clientX;
-            let y = event.clientY;
-    
-            // Ограничение меню по границам экрана
-            const menuWidth = menu.offsetWidth;
-            const menuHeight = menu.offsetHeight;
-    
-            if (x + menuWidth > window.innerWidth) {
-                x = window.innerWidth - menuWidth;
-            }
-            if (y + menuHeight > window.innerHeight) {
-                y = window.innerHeight - menuHeight;
-            }
-    
-            menu.style.top = `${y}px`;
-            menu.style.left = `${x}px`;
-            menu.classList.remove("hidden");
-        }
-    
-        // Функция для скрытия меню
-        function handleMenuHide(event) {
-            if (!menu.contains(event.target)) {
-                console.log("Клик вне контекстного меню, скрываем меню");
-                menu.classList.add("hidden");
-            }
-        }
-    }  
+    };    
 }
 
 async function editMessage(messageId, contentElement) {
