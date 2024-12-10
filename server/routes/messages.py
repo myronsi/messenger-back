@@ -143,6 +143,7 @@ def edit_message(message_id: int, payload: dict):
 
     return {"message": "Сообщение успешно обновлено"}
 
+
 @router.delete("/delete/{message_id}")
 def delete_message(message_id: int):
     conn = get_connection()

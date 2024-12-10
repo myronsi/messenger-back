@@ -1,7 +1,7 @@
 const BASE_URL = "http://127.0.0.1:8000";
 let currentChatId = null;
 let ws = null;
-
+d9052835c82efc46c74bf6e1c7aefb0188546e71
 // Регистрация
 document.getElementById("register-btn").onclick = async () => {
     const username = document.getElementById("register-username").value;
