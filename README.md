@@ -48,7 +48,7 @@ This is a simple messenger application designed to support user registration, lo
 `source /bin/activate`
 
 #### Windows
-`\Scripts\activate.bat`  Windows Command Prompt
+`\Scripts\activate.bat`  Windows Command Prompt<br>
 `\Scripts\Activate.ps1`  Windows PowerShell
 <br>
 <br>
