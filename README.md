@@ -41,22 +41,26 @@ This is a simple messenger application designed to support user registration, lo
 ### Launch python virtual environment
 `python -m venv .`
 <br>
+<br>
 
 ### Activate python virtual environment
 #### macOS/Linux
 `source /bin/activate`
-<br>
+
 #### Windows
 `\Scripts\activate.bat`  Windows Command Prompt
 `\Scripts\Activate.ps1`  Windows PowerShell
+<br>
 <br>
 
 ### Launch server
 `uvicorn server.main:app --reload`
 <br>
+<br>
 
 ### View swagger api
 `http://127.0.0.1:8000/docs#/`
+<br>
 <br>
 
 ### View index.html page
