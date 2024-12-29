@@ -45,7 +45,7 @@ This is a simple messenger application designed to support user registration, lo
 
 ### Activate python virtual environment
 #### macOS/Linux
-`source /bin/activate`
+`source bin/activate`
 
 #### Windows
 `\Scripts\activate.bat`  Windows Command Prompt<br>
