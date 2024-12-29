@@ -14,23 +14,23 @@ This is a simple messenger application designed to support user registration, lo
 - **`notes.txt`**: Contains project-related notes and developer comments.
 
 ## Installation
-**`git clone https://github.com/myronsi/messanger.git`**
+`git clone https://github.com/myronsi/messanger.git`
 
 ### Windows
-**`pip install fastapi uvicorn sqlite3 websockets`**
+`pip install fastapi uvicorn sqlite3 websockets`
 
 ### Arch Linux
-**`sudo pacman -S python`**<br>
-**`pip install fastapi uvicorn sqlite3 websockets`**
+`sudo pacman -S python`<br>
+`pip install fastapi uvicorn sqlite3 websockets`
 
 ### Debian/Ubuntu
-**`sudo apt update`**<br>
-**`sudo apt install python3 python3-pip`**<br>
-**`pip3 install fastapi uvicorn sqlite3 websockets`**
+`sudo apt update`<br>
+`sudo apt install python3 python3-pip`<br>
+`pip3 install fastapi uvicorn sqlite3 websockets`
 
 ### macOS
-**`brew install python`**<br>
-**`pip3 install fastapi uvicorn sqlite3 websockets`**
+`brew install python`<br>
+`pip3 install fastapi uvicorn sqlite3 websockets`
 
 ## Usage
 
