@@ -1,5 +1,0 @@
-﻿fastapi
-uvicorn
-sqlite3
-websockets
-
