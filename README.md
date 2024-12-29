@@ -4,7 +4,7 @@
 This is a simple messenger application designed to support user registration, login and personal messaging. The project is structured into `client` and `server` directories, where the frontend and backend are implemented, respectively.
 
 ## Features
-- **User Authentication**: Includes login, registration, and password reset via email.
+- **User Authentication**: Includes login and registration.
 - **Real-Time Messaging**: Supports real-time personal chats using WebSockets.
 
 ### Key Files
@@ -20,14 +20,14 @@ This is a simple messenger application designed to support user registration, lo
 **`pip install fastapi uvicorn sqlite3 websockets`**
 
 ### Arch Linux
-**`sudo pacman -S python`**
+**`sudo pacman -S python`**<br>
 **`pip install fastapi uvicorn sqlite3 websockets`**
 
 ### Debian/Ubuntu
-**`sudo apt update`**
-**`sudo apt install python3 python3-pip`**
+**`sudo apt update`**<br>
+**`sudo apt install python3 python3-pip`**<br>
 **`pip3 install fastapi uvicorn sqlite3 websockets`**
 
 ### macOS
-**`brew install python`**
+**`brew install python`**<br>
 **`pip3 install fastapi uvicorn sqlite3 websockets`**
