@@ -31,3 +31,29 @@ This is a simple messenger application designed to support user registration, lo
 ### macOS
 **`brew install python`**<br>
 **`pip3 install fastapi uvicorn sqlite3 websockets`**
+
+## Usage
+
+### change directory
+`cd messanger`
+
+### launch python virtual environment
+`python -m venv .`
+
+### activate python virtual environment
+#### macOS/Linux
+`source /bin/activate`
+
+#### Windows
+`\Scripts\activate.bat`  Windows Command Prompt
+`\Scripts\Activate.ps1`  Windows PowerShell
+
+### launch server
+`uvicorn server.main:app --reload`
+
+### view swagger api
+`http://127.0.0.1:8000/docs#/`
+
+### view index.html page
+
+just open the `index.html` file in `/client/` in your browser
