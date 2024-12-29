@@ -34,13 +34,15 @@ This is a simple messenger application designed to support user registration, lo
 
 ## Usage
 
-### change directory
+### Change directory
 `cd messanger`
 
-### launch python virtual environment
+
+### Launch python virtual environment
 `python -m venv .`
 
-### activate python virtual environment
+
+### Activate python virtual environment
 #### macOS/Linux
 `source /bin/activate`
 
@@ -48,12 +50,15 @@ This is a simple messenger application designed to support user registration, lo
 `\Scripts\activate.bat`  Windows Command Prompt
 `\Scripts\Activate.ps1`  Windows PowerShell
 
-### launch server
+
+### Launch server
 `uvicorn server.main:app --reload`
 
-### view swagger api
+
+### View swagger api
 `http://127.0.0.1:8000/docs#/`
 
-### view index.html page
+
+### View index.html page
 
 just open the `index.html` file in `/client/` in your browser
