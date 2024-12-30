@@ -3,50 +3,50 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat App</title>
+    <title>Messenger</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div id="app">
-    <!-- Регистрация -->
+    <!-- Registration -->
     <div id="register-section">
-        <h2>Регистрация</h2>
-        <input id="register-username" type="text" placeholder="Имя пользователя">
-        <input id="register-password" type="password" placeholder="Пароль">
-        <button id="register-btn">Зарегистрироваться</button>
+        <h2>Sign In</h2>
+        <input id="register-username" type="text" placeholder="Username">
+        <input id="register-password" type="password" placeholder="Password">
+        <button id="register-btn">Sign In</button>
         <p id="register-message"></p>
     </div>
 
-    <!-- Авторизация -->
+    <!-- Authorization -->
     <div id="login-section">
-        <h2>Авторизация</h2>
-        <input id="login-username" type="text" placeholder="Имя пользователя">
-        <input id="login-password" type="password" placeholder="Пароль">
-        <button id="login-btn">Войти</button>
+        <h2>Log In</h2>
+        <input id="login-username" type="text" placeholder="Username">
+        <input id="login-password" type="password" placeholder="Password">
+        <button id="login-btn">Log In</button>
         <p id="login-message"></p>
     </div>
 
-    <!-- Список чатов -->
+    <!-- Chat List -->
     <div id="chats-section" style="display:none;">
-        <h2>Ваши чаты</h2>
+        <h2>Your Chats</h2>
         <div id="chats-list"></div>
-        <input id="chat-username" type="text" placeholder="Имя пользователя для чата">
-        <button id="create-chat-btn">Создать чат</button>
+        <input id="chat-username" type="text" placeholder="Username for chat">
+        <button id="create-chat-btn">Create a chat</button>
     </div>
 
-    <!-- Чат -->
+    <!-- Chat -->
     <div id="chat-section" style="display:none;">
         <h2 id="chat-name"></h2>
-        <button id="back-to-chats-btn">Назад к чатам</button>
+        <button id="back-to-chats-btn">Back to chats</button>
         <div id="chat-window"></div>
-        <input id="message-input" type="text" placeholder="Введите сообщение">
+        <input id="message-input" type="text" placeholder="Enter your message">
         <button id="send-btn">Отправить</button>
     </div>
 
-    <!-- Контекстное меню -->
+    <!-- Context menu -->
     <div id="context-menu" class="hidden">
-        <button id="edit-btn">Редактировать</button>
-        <button id="delete-btn">Удалить</button>
+        <button id="edit-btn">Edit</button>
+        <button id="delete-btn">Delete</button>
     </div>
 </div>
 
