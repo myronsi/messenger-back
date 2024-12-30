@@ -4,7 +4,7 @@ from server.database import get_connection
 
 router = APIRouter()
 
-# Модель данных для сообщения
+# Data model for message
 class Message(BaseModel):
     sender: str
     receiver: str
@@ -13,49 +13,49 @@ class Message(BaseModel):
 class MessageEdit(BaseModel):
     content: str    
 
-# Отправка сообщения
+# Sending a message
 @router.post("/send")
 def send_message(message: Message):
-    print(f"Получено сообщение: {message.dict()}")
+    print(f"Message received: {message.dict()}")
     conn = get_connection()
     cursor = conn.cursor()
 
-    # Получаем ID отправителя и получателя
+    # Get the sender and recipient IDs
     cursor.execute("SELECT id FROM users WHERE username = ?", (message.sender,))
     sender_id = cursor.fetchone()
     cursor.execute("SELECT id FROM users WHERE username = ?", (message.receiver,))
     receiver_id = cursor.fetchone()
 
     if not sender_id or not receiver_id:
-        raise HTTPException(status_code=404, detail="Отправитель или получатель не найден")
+        raise HTTPException(status_code=404, detail="Sender or recipient not found")
 
-    # Сохраняем сообщение в базе данных
-    cursor.execute("""
+    # Save the message in the database
+        cursor.execute("""
         INSERT INTO messages (sender_id, receiver_id, content)
         VALUES (?, ?, ?)
     """, (sender_id["id"], receiver_id["id"], message.content))
 
     conn.commit()
     conn.close()
-    return {"message": "Сообщение отправлено"}
+    return {"message": "Message sent"}
 
-# Получение истории сообщений
+# Getting message history
 @router.get("/history/{user1}/{user2}")
 def get_message_history(user1: str, user2: str):
     conn = get_connection()
     cursor = conn.cursor()
 
-    # Получаем ID пользователей
+    # Get user IDs
     cursor.execute("SELECT id FROM users WHERE username = ?", (user1,))
     user1_id = cursor.fetchone()
     cursor.execute("SELECT id FROM users WHERE username = ?", (user2,))
     user2_id = cursor.fetchone()
 
     if not user1_id or not user2_id:
-        raise HTTPException(status_code=404, detail="Один из пользователей не найден")
+        raise HTTPException(status_code=404, detail="One of the users was not found")
 
-    # Получаем историю сообщений
-    cursor.execute("""
+    # Get message history
+        cursor.execute("""
         SELECT content, timestamp,
                CASE WHEN sender_id = ? THEN 'sent' ELSE 'received' END as direction
         FROM messages
@@ -77,7 +77,7 @@ def list_chats(username: str):
     user_id = cursor.fetchone()
 
     if not user_id:
-        raise HTTPException(status_code=404, detail="Пользователь не найден")
+        raise HTTPException(status_code=404, detail="User not found")
 
     cursor.execute("""
         SELECT id, name FROM chats
@@ -93,7 +93,7 @@ def get_message_history(chat_id: int):
     conn = get_connection()
     cursor = conn.cursor()
 
-    # Получаем историю сообщений с ID
+    # Get message history with ID
     cursor.execute("""
         SELECT messages.id, messages.content, messages.timestamp, users.username AS sender
         FROM messages
@@ -104,11 +104,11 @@ def get_message_history(chat_id: int):
     messages = cursor.fetchall()
     conn.close()
 
-    # Возвращаем данные
+    # Returning data
     return {
         "history": [
             {
-                "id": msg["id"],  # Добавляем ID сообщения
+                "id": msg["id"],  # Add message ID
                 "content": msg["content"],
                 "timestamp": msg["timestamp"],
                 "sender": msg["sender"]
@@ -121,19 +121,19 @@ def get_message_history(chat_id: int):
 def edit_message(message_id: int, payload: dict):
     content = payload.get("content")
     if not content:
-        raise HTTPException(status_code=400, detail="Текст сообщения обязателен")
+        raise HTTPException(status_code=400, detail="Message text is required")
 
     conn = get_connection()
     cursor = conn.cursor()
 
-    # Проверяем, существует ли сообщение
+    # Check if the message exists
     cursor.execute("SELECT * FROM messages WHERE id = ?", (message_id,))
-    message = cursor.fetchone()  # Возвращает None, если сообщение не найдено
+    message = cursor.fetchone()  # Returns None if message not found
     if not message:
-        raise HTTPException(status_code=404, detail="Сообщение не найдено")
+        raise HTTPException(status_code=404, detail="Message not found")
 
-    # Обновляем сообщение
-    cursor.execute("""
+    # Updating the message
+        cursor.execute("""
         UPDATE messages
         SET content = ?, edited_at = CURRENT_TIMESTAMP
         WHERE id = ?
@@ -141,22 +141,22 @@ def edit_message(message_id: int, payload: dict):
     conn.commit()
     conn.close()
 
-    return {"message": "Сообщение успешно обновлено"}
+    return {"message": "Message successfully updated"}
 
 @router.delete("/delete/{message_id}")
 def delete_message(message_id: int):
     conn = get_connection()
     cursor = conn.cursor()
 
-    # Проверяем, существует ли сообщение
+    # Check if the message exists
     cursor.execute("SELECT * FROM messages WHERE id = ?", (message_id,))
     message = cursor.fetchone()
     if not message:
-        raise HTTPException(status_code=404, detail="Сообщение не найдено")
+        raise HTTPException(status_code=404, detail="Message not found")
 
-    # Удаляем сообщение
+    # Delete the message
     cursor.execute("DELETE FROM messages WHERE id = ?", (message_id,))
     conn.commit()
     conn.close()
 
-    return {"message": "Сообщение удалено"}
+    return {"message": "Message deleted"}
