@@ -102,15 +102,15 @@ messenger/<br>
 │⠀⠀⠀└── style.css          # Styling for the web client<br>
 │   <br>
 ├── server/<br>
-│   ├── connection_manager.py  # Handles WebSocket connections<br>
-│   ├── database.py            # Database models and queries<br>
-│   ├── main.py                # Entry point for the server<br>
-│   ├── websocket.py           # WebSocket communication logic<br>
-│   ├── messanger.db           # SQLite database file<br>
-│   └── routes/<br>
-│   ⠀⠀⠀├── auth.py            # User authentication routes<br>
-│   ⠀⠀⠀├── chats.py           # Chat-related routes<br>
-│   ⠀⠀⠀└── messages.py        # Message-related routes<br>
+│⠀⠀⠀├── connection_manager.py  # Handles WebSocket connections<br>
+│⠀⠀⠀├── database.py            # Database models and queries<br>
+│⠀⠀⠀├── main.py                # Entry point for the server<br>
+│⠀⠀⠀├── websocket.py           # WebSocket communication logic<br>
+│⠀⠀⠀├── messanger.db           # SQLite database file<br>
+│⠀⠀⠀└── routes/<br>
+│   ⠀⠀⠀⠀⠀⠀├── auth.py            # User authentication routes<br>
+│   ⠀⠀⠀⠀⠀⠀├── chats.py           # Chat-related routes<br>
+│   ⠀⠀⠀⠀⠀⠀└── messages.py        # Message-related routes<br>
 ├── LICENSE                 # License file<br>
 └── README.md               # Project documentation<br>
  
