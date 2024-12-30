@@ -46,11 +46,11 @@ This project is a simple web-based messenger application designed for sending an
 #### macOS/Linux
 `source bin/activate`
 
-### Install dependencies
-
 #### Windows
 `\Scripts\activate.bat`  Windows Command Prompt<br>
 `\Scripts\Activate.ps1`  Windows PowerShell
+
+### Install dependencies
 
 #### Windows
 `pip install fastapi uvicorn websockets`
