@@ -6,16 +6,16 @@ import hashlib
 
 router = APIRouter()
 
-# Модель данных для пользователя
+# Data model for user
 class User(BaseModel):
     username: str
     password: str
 
-# Хэширование паролей
+# Password Hashing
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
 
-# Регистрация пользователя
+# User registration
 @router.post("/register")
 def register(user: User):
     conn = get_connection()
@@ -26,12 +26,12 @@ def register(user: User):
                        (user.username, hashed_password))
         conn.commit()
     except sqlite3.IntegrityError:
-        raise HTTPException(status_code=400, detail="Пользователь уже существует")
+        raise HTTPException(status_code=400, detail="The user already exists")
     finally:
         conn.close()
-    return {"message": "Пользователь успешно зарегистрирован"}
-
-# Авторизация пользователя
+    return {"message": "User registered successfully"}
+    
+# User authorization
 @router.post("/login")
 def login(user: User):
     conn = get_connection()
@@ -40,5 +40,5 @@ def login(user: User):
     db_user = cursor.fetchone()
     conn.close()
     if not db_user or hash_password(user.password) != db_user["password"]:
-        raise HTTPException(status_code=400, detail="Неверный логин или пароль")
-    return {"message": "Успешный вход"}
+        raise HTTPException(status_code=400, detail="Incorrect login or password")
+    return {"message": "Successful login"}
