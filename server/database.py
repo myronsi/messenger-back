@@ -2,11 +2,11 @@ import sqlite3
 from pathlib import Path
 
 # Путь к базе данных
-DB_PATH = "server/messanger.db"
+DB_PATH = "server/messenger.db"
 
 # Функция для подключения к базе данных
 def get_connection():
-    conn = sqlite3.connect("server/messanger.db", check_same_thread=False)
+    conn = sqlite3.connect("server/messenger.db", check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")  # Разрешить параллельную работу
     return conn
