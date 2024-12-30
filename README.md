@@ -33,19 +33,38 @@ This project is a simple web-based messenger application designed for sending an
 ## Installation
 `git clone https://github.com/myronsi/messenger.git`
 
-### Windows
+### Change directory
+`cd messenger`
+
+
+### Launch python virtual environment
+`python -m venv .`
+<br>
+<br>
+
+### Activate python virtual environment
+#### macOS/Linux
+`source bin/activate`
+
+### Install dependencies
+
+#### Windows
+`\Scripts\activate.bat`  Windows Command Prompt<br>
+`\Scripts\Activate.ps1`  Windows PowerShell
+
+#### Windows
 `pip install fastapi uvicorn websockets`
 
-### Arch Linux
+#### Arch Linux
 `sudo pacman -S python`<br>
 `pip install fastapi uvicorn websockets`
 
-### Debian/Ubuntu
+#### Debian/Ubuntu
 `sudo apt update`<br>
 `sudo apt install python3 python3-pip`<br>
 `pip3 install fastapi uvicorn websockets`
 
-### macOS
+#### macOS
 `brew install python`<br>
 `pip3 install fastapi uvicorn websockets`
 
