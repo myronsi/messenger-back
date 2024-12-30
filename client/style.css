@@ -102,7 +102,7 @@ button:hover {
     border: 1px solid #ddd;
     box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.2);
     z-index: 1000;
-    display: none; /* Скрыто по умолчанию */
+    display: none; /* Hidden by default */
     flex-direction: column;
     min-width: 150px;
     padding: 5px;
@@ -110,7 +110,7 @@ button:hover {
 }
 
 #context-menu.hidden {
-    display: none; /* Скрываем меню через класс hidden */
+    display: none; /* Hide the menu using the hidden class */
 }
 
 #context-menu button {
@@ -125,7 +125,7 @@ button:hover {
 }
 
 #context-menu:not(.hidden) {
-    display: flex; /* Показать меню, если класс hidden отсутствует */
+    display: flex; /* Show menu if hidden class is not present */
 }
 
 #context-menu button:hover {
