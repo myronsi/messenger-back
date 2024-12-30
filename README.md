@@ -97,9 +97,9 @@ just open the `index.html` file in `/client/` in your browser
 ## Project Structure
 messenger/<br>
 ├── client/<br>
-│   ├── app.js             # Core client-side JavaScript logic<br>
-│   ├── index.html         # Main client interface<br>
-│   └── style.css          # Styling for the web client<br>
+│⠀⠀⠀├── app.js             # Core client-side JavaScript logic<br>
+│⠀⠀⠀├── index.html         # Main client interface<br>
+│⠀⠀⠀└── style.css          # Styling for the web client<br>
 │   <br>
 ├── server/<br>
 │   ├── connection_manager.py  # Handles WebSocket connections<br>
@@ -108,9 +108,9 @@ messenger/<br>
 │   ├── websocket.py           # WebSocket communication logic<br>
 │   ├── messanger.db           # SQLite database file<br>
 │   └── routes/<br>
-│       ├── auth.py            # User authentication routes<br>
-│       ├── chats.py           # Chat-related routes<br>
-│       └── messages.py        # Message-related routes<br>
+│   ⠀⠀⠀├── auth.py            # User authentication routes<br>
+│   ⠀⠀⠀├── chats.py           # Chat-related routes<br>
+│   ⠀⠀⠀└── messages.py        # Message-related routes<br>
 ├── LICENSE                 # License file<br>
 └── README.md               # Project documentation<br>
  
