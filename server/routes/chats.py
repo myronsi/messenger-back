@@ -18,16 +18,16 @@ def create_chat(chat: ChatCreate):
     conn = get_connection()
     cursor = conn.cursor()
 
-    # Получаем ID пользователей
+    # Get user IDs
     cursor.execute("SELECT id FROM users WHERE username = ?", (chat.user1,))
     user1_id = cursor.fetchone()
     cursor.execute("SELECT id FROM users WHERE username = ?", (chat.user2,))
     user2_id = cursor.fetchone()
 
     if not user1_id or not user2_id:
-        raise HTTPException(status_code=404, detail="Один из пользователей не найден")
+        raise HTTPException(status_code=404, detail="User not found")
 
-    # Создаем чат
+    # Chat creating
     cursor.execute("""
         INSERT INTO chats (name, user1_id, user2_id)
         VALUES (?, ?, ?)
@@ -36,21 +36,21 @@ def create_chat(chat: ChatCreate):
     chat_id = cursor.lastrowid
     conn.close()
 
-    return {"chat_id": chat_id, "message": "Чат создан"}
+    return {"chat_id": chat_id, "message": "Chat created"}
 
 @router.get("/list/{username}")
 def list_chats(username: str):
     conn = get_connection()
     cursor = conn.cursor()
 
-    # Получаем ID пользователя
+    # Get user IDs
     cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
     user_id = cursor.fetchone()
 
     if not user_id:
-        raise HTTPException(status_code=404, detail="Пользователь не найден")
-
-    # Получаем список чатов
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    # Get a list of chats
     cursor.execute("""
         SELECT id, name FROM chats
         WHERE user1_id = ? OR user2_id = ?
@@ -65,6 +65,6 @@ def send_message(message: MessageSend):
     conn = get_connection()
     cursor = conn.cursor()
 
-    # Получаем ID отправителя
+    # Get the sender ID
     cursor.execute("SELECT id FROM users WHERE username = ?", (message.sender,))
     sender_id
