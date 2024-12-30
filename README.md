@@ -95,22 +95,22 @@ just open the `index.html` file in `/client/` in your browser
 
 
 ## Project Structure
-messenger/
-├── client/
-│   ├── app.js             # Core client-side JavaScript logic
-│   ├── index.html         # Main client interface
-│   └── style.css          # Styling for the web client
-│   
-├── server/
-│   ├── connection_manager.py  # Handles WebSocket connections
-│   ├── database.py            # Database models and queries
-│   ├── main.py                # Entry point for the server
-│   ├── websocket.py           # WebSocket communication logic
-│   ├── messanger.db           # SQLite database file
-│   └── routes/
-│       ├── auth.py            # User authentication routes
-│       ├── chats.py           # Chat-related routes
-│       └── messages.py        # Message-related routes
-├── LICENSE                 # License file
-└── README.md               # Project documentation
+messenger/<br>
+├── client/<br>
+│   ├── app.js             # Core client-side JavaScript logic<br>
+│   ├── index.html         # Main client interface<br>
+│   └── style.css          # Styling for the web client<br>
+│   <br>
+├── server/<br>
+│   ├── connection_manager.py  # Handles WebSocket connections<br>
+│   ├── database.py            # Database models and queries<br>
+│   ├── main.py                # Entry point for the server<br>
+│   ├── websocket.py           # WebSocket communication logic<br>
+│   ├── messanger.db           # SQLite database file<br>
+│   └── routes/<br>
+│       ├── auth.py            # User authentication routes<br>
+│       ├── chats.py           # Chat-related routes<br>
+│       └── messages.py        # Message-related routes<br>
+├── LICENSE                 # License file<br>
+└── README.md               # Project documentation<br>
  
