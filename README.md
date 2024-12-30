@@ -10,7 +10,6 @@ This project is a simple web-based messenger application designed for sending an
 - [Installation](#installation)
 - [Usage](#usage)
 - [Project Structure](#project-structure)
-- [License](#license)
 
 ---
 
@@ -31,6 +30,8 @@ This project is a simple web-based messenger application designed for sending an
 ---
 
 ## Installation
+
+### Clone Git-Repository
 `git clone https://github.com/myronsi/messenger.git`
 
 ### Change directory
