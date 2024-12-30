@@ -15,22 +15,22 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
     try:
         while True:
             data = await websocket.receive_text()
-            print(f"Получено сообщение от {username}: {data}")
+            print(f"Received message from {username}: {data}")
 
             if ":" not in data:
-                await websocket.send_text("Ошибка: неверный формат сообщения")
+                await websocket.send_text("Error: Invalid message format")
                 continue
 
             chat_id, message = data.split(":", 1)
 
-            # Получаем ID отправителя
+            # Get the sender ID
             cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
             sender = cursor.fetchone()
             if not sender:
-                raise ValueError("Отправитель не найден")
+                raise ValueError("Sender not found")
             sender_id = sender["id"]
 
-            # Получаем ID и имя получателя
+            # Get the recipient's ID and name
             cursor.execute("""
                 SELECT u.id, u.username
                 FROM users u
@@ -39,18 +39,18 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
             """, (chat_id, sender_id))
             receiver = cursor.fetchone()
             if not receiver:
-                raise ValueError("Получатель не найден")
+                raise ValueError("Recipient not found")
             receiver_id = receiver["id"]
 
-            # Сохраняем сообщение в базу данных
+            # Save the message to the database
             cursor.execute("""
                 INSERT INTO messages (chat_id, sender_id, receiver_id, content)
                 VALUES (?, ?, ?, ?)
             """, (chat_id, sender_id, receiver_id, message))
             conn.commit()
-            print(f"Сообщение сохранено: {message}")
+            print(f"Message saved: {message}")
 
-            # Рассылка сообщения всем участникам чата
+            # Sending a message to all chat participants
             participants = [username, receiver["username"]]
             for participant in participants:
                 if participant in manager.active_connections:
