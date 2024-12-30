@@ -1,23 +1,23 @@
 import sqlite3
 from pathlib import Path
 
-# Путь к базе данных
+# Path to the database
 DB_PATH = "server/messenger.db"
 
-# Функция для подключения к базе данных
+# Function to connect to the database
 def get_connection():
     conn = sqlite3.connect("server/messenger.db", check_same_thread=False)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")  # Разрешить параллельную работу
+    conn.execute("PRAGMA journal_mode=WAL")  # Allow parallel work
     return conn
 
 
-# Создание таблиц
-def setup_database():
+    # Creating tables
+    def setup_database():
     conn = get_connection()
     cursor = conn.cursor()
 
-    # Таблица пользователей
+    # Users table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -26,7 +26,7 @@ def setup_database():
         )
     """)
 
-    # Таблица сообщений
+    # Message table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,8 +49,8 @@ def setup_database():
         if "duplicate column name" not in str(e).lower():
             raise
 
-    # Таблица чатов
-    cursor.execute("""
+        # Chat table
+        cursor.execute("""
         CREATE TABLE IF NOT EXISTS chats (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
