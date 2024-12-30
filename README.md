@@ -31,7 +31,7 @@ This project is a simple web-based messenger application designed for sending an
 ---
 
 ## Installation
-`git clone https://github.com/myronsi/messanger.git`
+`git clone https://github.com/myronsi/messenger.git`
 
 ### Windows
 `pip install fastapi uvicorn websockets`
@@ -52,7 +52,7 @@ This project is a simple web-based messenger application designed for sending an
 ## Usage
 
 ### Change directory
-`cd messanger`
+`cd messenger`
 
 
 ### Launch python virtual environment
@@ -82,3 +82,25 @@ This project is a simple web-based messenger application designed for sending an
 
 ### View index.html page
 just open the `index.html` file in `/client/` in your browser
+
+
+## Project Structure
+messenger/
+├── client/
+│   ├── app.js             # Core client-side JavaScript logic
+│   ├── index.html         # Main client interface
+│   └── style.css          # Styling for the web client
+│   
+├── server/
+│   ├── connection_manager.py  # Handles WebSocket connections
+│   ├── database.py            # Database models and queries
+│   ├── main.py                # Entry point for the server
+│   ├── websocket.py           # WebSocket communication logic
+│   ├── messanger.db           # SQLite database file
+│   └── routes/
+│       ├── auth.py            # User authentication routes
+│       ├── chats.py           # Chat-related routes
+│       └── messages.py        # Message-related routes
+├── LICENSE                 # License file
+└── README.md               # Project documentation
+ 
