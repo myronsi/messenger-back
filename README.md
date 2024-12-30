@@ -1,17 +1,34 @@
 # Messenger Application
 
-## Description
-This is a simple messenger application designed to support user registration, login and personal messaging. The project is structured into `client` and `server` directories, where the frontend and backend are implemented, respectively.
+This project is a simple web-based messenger application designed for sending and receiving real-time messages using a client-server architecture. It includes a web client interface and a Python-based server for handling connections, user authentication, and message storage.
+
+---
+
+## Table of Contents
+- [Features](#features)
+- [Technologies Used](#technologies-used)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Project Structure](#project-structure)
+- [License](#license)
+
+---
 
 ## Features
-- **User Authentication**: Includes login and registration.
-- **Real-Time Messaging**: Supports real-time personal chats using WebSockets.
+- Real-time messaging using WebSocket.
+- User authentication and session management.
+- Message storage in a lightweight SQLite database.
+- RESTful API for user and chat management.
+- Simple and responsive web-based client interface.
 
-### Key Files
-- **`client/`**: Contains Javascript files for UI and user interaction.
-- **`server/`**: Implements APIs and WebSocket handlers for the backend.
-- **`requirements.txt`**: Lists Python dependencies (if applicable).
-- **`notes.txt`**: Contains project-related notes and developer comments.
+---
+
+## Technologies Used
+- **Frontend**: HTML, CSS, JavaScript
+- **Backend**: Python (Flask, SQLite, WebSocket)
+- **Database**: SQLite
+
+---
 
 ## Installation
 `git clone https://github.com/myronsi/messanger.git`
