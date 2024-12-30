@@ -6,14 +6,13 @@ DB_PATH = "server/messenger.db"
 
 # Function to connect to the database
 def get_connection():
-    conn = sqlite3.connect("server/messenger.db", check_same_thread=False)
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")  # Allow parallel work
     return conn
 
-
-    # Creating tables
-    def setup_database():
+# Creating tables
+def setup_database():
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -49,8 +48,8 @@ def get_connection():
         if "duplicate column name" not in str(e).lower():
             raise
 
-        # Chat table
-        cursor.execute("""
+    # Chat table
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS chats (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -60,17 +59,18 @@ def get_connection():
             FOREIGN KEY (user2_id) REFERENCES users (id)
         )
     """)
-    
+
+    # Update messages table for default chat (if necessary)
     cursor.execute("""
-    UPDATE messages
-    SET chat_id = 1
-    WHERE sender_id IN (
-        SELECT id FROM users WHERE username IN ('user1', 'user2')
-    )
-""")
+        UPDATE messages
+        SET chat_id = 1
+        WHERE sender_id IN (
+            SELECT id FROM users WHERE username IN ('user1', 'user2')
+        )
+    """)
 
     conn.commit()
     conn.close()
 
-# Инициализация базы данных
+# Initialize the database
 setup_database()
