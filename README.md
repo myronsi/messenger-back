@@ -24,7 +24,7 @@ This project is a simple web-based messenger application designed for sending an
 
 ## Technologies Used
 - **Frontend**: HTML, CSS, JavaScript
-- **Backend**: Python (Flask, SQLite, WebSocket)
+- **Backend**: Python (RestAPI, SQLite, WebSocket)
 - **Database**: SQLite
 
 ---
