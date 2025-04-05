@@ -152,3 +152,7 @@ button:hover {
 #delete-chat-btn:hover  {
     background-color: #c82333;
 }
+
+#logout-btn {
+    display: none;
+}

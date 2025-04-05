@@ -1,7 +1,2 @@
-/lib
-/lib64
-/client/node_modules
-/client/package-lock.json
-/include
-pyvenv.cfg
-/bin
+# Created by venv; see https://docs.python.org/3/library/venv.html
+*

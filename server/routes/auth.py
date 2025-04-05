@@ -39,6 +39,21 @@ def create_access_token(user_id: int):
     token = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
     return token
 
+def verify_token(token: str):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("sub")
+        if user_id is None:
+            return None
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, username FROM users WHERE id = ?", (user_id,))
+        user = cursor.fetchone()
+        conn.close()
+        return user  # Вернём ID и username пользователя
+    except JWTError:
+        return None    
+
 def get_user_by_id(user_id: int):
     conn = get_connection()
     cursor = conn.cursor()

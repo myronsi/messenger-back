@@ -1,6 +1,10 @@
 const BASE_URL = "http://192.168.178.29:8000";
+const WS_URL = "ws://192.168.178.29:8000";
 let currentChatId = null;
+let ws = null;
+let selectedMessageId = null;
 
+// Проверка авторизации при загрузке страницы
 window.onload = async () => {
     const token = localStorage.getItem("access_token");
     if (token) {
@@ -15,6 +19,7 @@ window.onload = async () => {
             } else {
                 console.log("Токен недействителен, требуется повторный вход");
                 localStorage.removeItem("access_token");
+                document.getElementById("login-section").style.display = "block";
             }
         } catch (err) {
             console.error("Ошибка при проверке токена:", err);
@@ -32,7 +37,7 @@ document.getElementById("register-btn").onclick = async () => {
     const response = await fetch(`${BASE_URL}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password })
+        body: JSON.stringify({ username, password }),
     });
 
     const message = await response.json();
@@ -46,10 +51,11 @@ async function login() {
     const response = await fetch(`${BASE_URL}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password })
+        body: JSON.stringify({ username, password }),
     });
     const message = await response.json();
     if (response.ok) {
+        document.getElementById("logout-btn").style.display = "block";
         localStorage.setItem("access_token", message.access_token);
         initChats(username);
     } else {
@@ -59,34 +65,30 @@ async function login() {
 
 document.getElementById("login-btn").onclick = login;
 
+// Логаут
 document.getElementById("logout-btn").onclick = () => {
     localStorage.removeItem("access_token");
     document.getElementById("login-section").style.display = "block";
-    document.getElementById("chats-section").style.display = "none";
-};
-
-// Логаут
-document.getElementById("logout-btn").onclick = () => {
-    localStorage.removeItem("access_token"); // Удаляем данные пользователя
-    document.getElementById("login-section").style.display = "block"; // Показываем экран логина
     document.getElementById("register-section").style.display = "block";
     document.getElementById("chats-section").style.display = "none";
-    document.getElementById("chat-section").style.display = "none";
+    document.getElementById("logout-btn").style.display = "none";
 };
 
-// Инициализация чатов
+// Инициализация списка чатов
 async function initChats(username) {
     document.getElementById("login-section").style.display = "none";
     document.getElementById("register-section").style.display = "none";
     document.getElementById("chats-section").style.display = "block";
 
-    const response = await fetch(`${BASE_URL}/chats/list/${username}`);
+    const response = await fetch(`${BASE_URL}/chats/list/${username}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` },
+    });
     const { chats } = await response.json();
 
     const chatsList = document.getElementById("chats-list");
     chatsList.innerHTML = "";
     if (Array.isArray(chats)) {
-        chats.forEach(chat => {
+        chats.forEach((chat) => {
             const chatItem = document.createElement("div");
             chatItem.className = "chat-item";
             chatItem.textContent = chat.name;
@@ -101,8 +103,11 @@ async function initChats(username) {
         const targetUser = document.getElementById("chat-username").value;
         const response = await fetch(`${BASE_URL}/chats/create`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ user1: username, user2: targetUser })
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+            },
+            body: JSON.stringify({ user1: username, user2: targetUser }),
         });
 
         const message = await response.json();
@@ -115,28 +120,89 @@ async function initChats(username) {
     };
 }
 
+// Загрузка сообщений чата
+async function loadChatMessages(chatId) {
+    try {
+        const response = await fetch(`${BASE_URL}/messages/history/${chatId}`, {
+            headers: {
+                Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+            },
+        });
+
+        if (response.ok) {
+            const { history } = await response.json();
+            const chatWindow = document.getElementById("chat-window");
+            chatWindow.innerHTML = "";
+            history.forEach((msg) => {
+                const msgDiv = document.createElement("div");
+                msgDiv.className = "message";
+                msgDiv.dataset.messageId = msg.id;
+                msgDiv.innerHTML = `<span>${msg.timestamp} - ${msg.sender}: ${msg.content}</span>`;
+                chatWindow.appendChild(msgDiv);
+            });
+        } else if (response.status === 401) {
+            alert("Сессия истекла. Пожалуйста, войдите снова.");
+            localStorage.removeItem("access_token");
+            window.location.reload();
+        } else {
+            console.error("Ошибка при загрузке сообщений:", await response.json());
+        }
+    } catch (err) {
+        console.error("Ошибка сети при загрузке сообщений:", err);
+    }
+}
+
+// Отправка сообщения через WebSocket
+async function sendMessage() {
+    const messageInput = document.getElementById("message-input");
+    const content = messageInput.value.trim();
+    if (!content || !ws || ws.readyState !== WebSocket.OPEN) return;
+
+    const messageData = {
+        chat_id: currentChatId,
+        content: content,
+    };
+
+    ws.send(JSON.stringify(messageData));
+    messageInput.value = "";
+    // Локальное добавление сообщения удалено, ждём ответа от сервера
+}
+
+// Добавление сообщения в интерфейс
+function addMessageToChat(username, content, messageId, timestamp) {
+    const chatWindow = document.getElementById("chat-window");
+    const msgDiv = document.createElement("div");
+    msgDiv.className = "message";
+    msgDiv.dataset.messageId = messageId; // ID теперь всегда присутствует
+    msgDiv.innerHTML = `<span>${timestamp} - ${username}: ${content}</span>`;
+    chatWindow.appendChild(msgDiv);
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+}
+
 // Открытие чата
 async function openChat(chatId, chatName, username) {
-    let selectedMessageId = null; // Хранение ID выбранного сообщения
+    currentChatId = chatId;
+    document.getElementById("chats-section").style.display = "none";
+    document.getElementById("chat-section").style.display = "block";
+    document.getElementById("chat-name").textContent = chatName;
 
-    // Показ контекстного меню
+    await loadChatMessages(chatId);
+
     const chatWindow = document.getElementById("chat-window");
     const menu = document.getElementById("context-menu");
 
-    chatWindow.addEventListener("contextmenu", (event) => {
+    // Обработчик контекстного меню
+    const contextMenuHandler = (event) => {
         event.preventDefault();
-        console.log("Контекстное меню вызвано");
-
         const messageElement = event.target.closest(".message");
-        if (!messageElement) {
-            console.log("Не найдено сообщение под курсором");
+        if (!messageElement) return;
+        selectedMessageId = messageElement.dataset.messageId;
+        console.log("Выбранный ID сообщения:", selectedMessageId); // Для отладки
+        if (!selectedMessageId) {
+            alert("ID сообщения не найден");
             return;
         }
 
-        selectedMessageId = messageElement.dataset.messageId;
-        console.log(`Выбрано сообщение с ID: ${selectedMessageId}`);
-
-        // Позиционирование контекстного меню
         const menuWidth = menu.offsetWidth;
         const menuHeight = menu.offsetHeight;
         let x = event.clientX;
@@ -148,17 +214,19 @@ async function openChat(chatId, chatName, username) {
         menu.style.top = `${y}px`;
         menu.style.left = `${x}px`;
         menu.classList.remove("hidden");
-    });
+    };
 
     // Скрытие меню при клике вне его
-    document.addEventListener("click", (event) => {
+    const hideMenuHandler = (event) => {
         if (!menu.contains(event.target)) {
-            console.log("Клик вне контекстного меню, скрываем меню");
             menu.classList.add("hidden");
         }
-    });
+    };
 
-    // Обработка кнопки "Редактировать"
+    chatWindow.addEventListener("contextmenu", contextMenuHandler);
+    document.addEventListener("click", hideMenuHandler);
+
+    // Редактирование сообщения
     document.getElementById("edit-btn").onclick = () => {
         if (!selectedMessageId) {
             alert("Сообщение не выбрано");
@@ -169,7 +237,7 @@ async function openChat(chatId, chatName, username) {
         menu.classList.add("hidden");
     };
 
-    // Обработка кнопки "Удалить"
+    // Удаление сообщения
     document.getElementById("delete-btn").onclick = () => {
         if (!selectedMessageId) {
             alert("Сообщение не выбрано");
@@ -180,13 +248,18 @@ async function openChat(chatId, chatName, username) {
         menu.classList.add("hidden");
     };
 
-    document.getElementById("logout-btn").style.display = "none";
-    document.getElementById("chats-section").style.display = "none";
-    document.getElementById("chat-section").style.display = "block";
-    document.getElementById("chat-name").textContent = chatName;
-    currentChatId = chatId;
+    // Возврат к списку чатов
+    document.getElementById("back-to-chats-btn").onclick = () => {
+        chatWindow.removeEventListener("contextmenu", contextMenuHandler);
+        document.removeEventListener("click", hideMenuHandler);
+        document.getElementById("chat-section").style.display = "none";
+        document.getElementById("chats-section").style.display = "block";
+        document.getElementById("logout-btn").style.display = "block";
+        currentChatId = null;
+        if (ws) ws.close();
+    };
 
-    // Кнопка удаления чата
+    // Удаление чата
     document.getElementById("delete-chat-btn").onclick = async () => {
         const confirmDelete = confirm("Вы уверены, что хотите удалить этот чат?");
         if (!confirmDelete) return;
@@ -194,16 +267,14 @@ async function openChat(chatId, chatName, username) {
         try {
             const response = await fetch(`${BASE_URL}/chats/delete/${chatId}`, {
                 method: "DELETE",
-                headers: {
-                    "Authorization": `Bearer ${localStorage.getItem("access_token")}`
-                }
+                headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` },
             });
 
             if (response.ok) {
                 alert("Чат успешно удалён!");
                 document.getElementById("chat-section").style.display = "none";
                 document.getElementById("chats-section").style.display = "block";
-                initChats(username); // Обновляем список чатов
+                initChats(username);
             } else {
                 const error = await response.json();
                 alert(`Ошибка: ${error.detail}`);
@@ -213,50 +284,20 @@ async function openChat(chatId, chatName, username) {
         }
     };
 
-    const response = await fetch(`${BASE_URL}/messages/history/${chatId}`);
-    const { history } = await response.json();
-
-    chatWindow.innerHTML = ""; // Очищаем окно чата
-    history.forEach(msg => {
-        const msgDiv = document.createElement("div");
-        msgDiv.className = "message";
-        msgDiv.dataset.messageId = msg.id; // Привязываем ID сообщения
-
-        const content = document.createElement("span");
-        content.textContent = `${msg.timestamp} - ${msg.sender}: ${msg.content}`;
-        msgDiv.appendChild(content);
-
-        chatWindow.appendChild(msgDiv);
-    });
-
-    // WebSocket для получения новых сообщений
-    ws = new WebSocket(`ws://${window.location.hostname}:8000/ws/${username}`);
-    ws.onopen = () => console.log("WebSocket подключён");
+    // WebSocket подключение
+    if (ws) ws.close();
+    const token = localStorage.getItem("access_token");
+    ws = new WebSocket(`${WS_URL}/ws/chat/${chatId}?token=${token}`);
+    ws.onopen = () => console.log("WebSocket подключён к чату", chatId);
     ws.onmessage = (event) => {
-        const msgDiv = document.createElement("div");
-        msgDiv.className = "message";
-        msgDiv.textContent = event.data;
-        chatWindow.appendChild(msgDiv);
-        chatWindow.scrollTop = chatWindow.scrollHeight;
+        const parsedData = JSON.parse(event.data);
+        const { username, data, timestamp } = parsedData;
+        addMessageToChat(username, data.content, data.message_id, timestamp);
     };
     ws.onerror = (error) => console.error("WebSocket ошибка:", error);
     ws.onclose = () => console.log("WebSocket отключён");
 
-    // Отправка сообщений
-    document.getElementById("send-btn").onclick = () => {
-        const messageInput = document.getElementById("message-input");
-        const message = `${currentChatId}:${messageInput.value}`;
-        ws.send(message);
-        console.log("Отправлено сообщение:", message);
-        messageInput.value = "";
-    };
-    document.getElementById("back-to-chats-btn").onclick = () => {
-        document.getElementById("logout-btn").style.display = "block";
-        document.getElementById("chat-section").style.display = "none"; // Скрываем чат
-        document.getElementById("chats-section").style.display = "block"; // Показываем список чатов
-        currentChatId = null; // Сбрасываем текущий chatId
-        ws.close();
-    };
+    document.getElementById("send-btn").onclick = sendMessage;
 }
 
 // Редактирование сообщения
@@ -267,7 +308,10 @@ async function editMessage(messageId, contentElement) {
     try {
         const response = await fetch(`${BASE_URL}/messages/edit/${messageId}`, {
             method: "PUT",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+            },
             body: JSON.stringify({ content: newContent }),
         });
 
@@ -276,11 +320,9 @@ async function editMessage(messageId, contentElement) {
             contentElement.textContent = contentElement.textContent.split(": ")[0] + `: ${newContent}`;
         } else {
             const error = await response.json();
-            console.error("Ошибка от сервера:", error);
-            alert(`Ошибка: ${JSON.stringify(error)}`);
+            alert(`Ошибка: ${error.detail}`);
         }
     } catch (err) {
-        console.error("Ошибка сети:", err);
         alert("Ошибка сети. Проверьте подключение к серверу.");
     }
 }
@@ -290,13 +332,22 @@ async function deleteMessage(messageId, messageElement) {
     const confirmDelete = confirm("Вы уверены, что хотите удалить это сообщение?");
     if (!confirmDelete) return;
 
-    const response = await fetch(`${BASE_URL}/messages/delete/${messageId}`, { method: "DELETE" });
+    try {
+        const response = await fetch(`${BASE_URL}/messages/delete/${messageId}`, {
+            method: "DELETE",
+            headers: {
+                Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+            },
+        });
 
-    if (response.ok) {
-        alert("Сообщение удалено!");
-        messageElement.remove(); // Удаляем сообщение из DOM
-    } else {
-        const error = await response.json();
-        alert("Ошибка: " + error.detail);
+        if (response.ok) {
+            alert("Сообщение удалено!");
+            messageElement.remove();
+        } else {
+            const error = await response.json();
+            alert(`Ошибка: ${error.detail}`);
+        }
+    } catch (err) {
+        alert("Ошибка сети. Проверьте подключение к серверу.");
     }
 }

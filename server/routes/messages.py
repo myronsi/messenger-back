@@ -1,13 +1,16 @@
+import json
 from fastapi import APIRouter, HTTPException, Depends, status
 from pydantic import BaseModel
 from server.database import get_connection
+from server.routes.auth import get_current_user
+from server.websocket import manager
+from datetime import datetime
 
 router = APIRouter()
 
 # Data model for message
 class Message(BaseModel):
-    sender: str
-    receiver: str
+    chat_id: int
     content: str
 
 class MessageEdit(BaseModel):
@@ -15,29 +18,28 @@ class MessageEdit(BaseModel):
 
 # Sending a message
 @router.post("/send")
-def send_message(message: Message):
-    print(f"Message received: {message.dict()}")
+def send_message(message: Message, current_user: dict = Depends(get_current_user)):
     conn = get_connection()
     cursor = conn.cursor()
 
-    # Get the sender and recipient IDs
-    cursor.execute("SELECT id FROM users WHERE username = ?", (message.sender,))
-    sender_id = cursor.fetchone()
-    cursor.execute("SELECT id FROM users WHERE username = ?", (message.receiver,))
-    receiver_id = cursor.fetchone()
+    # Проверяем, существует ли чат
+    cursor.execute("SELECT id FROM chats WHERE id = ?", (message.chat_id,))
+    chat = cursor.fetchone()
+    if not chat:
+        raise HTTPException(status_code=404, detail="Чат не найден")
 
-    if not sender_id or not receiver_id:
-        raise HTTPException(status_code=404, detail="Sender or recipient not found")
-
-    # Save the message in the database
-        cursor.execute("""
-        INSERT INTO messages (sender_id, receiver_id, content)
-        VALUES (?, ?, ?)
-    """, (sender_id["id"], receiver_id["id"], message.content))
-
+    # Сохраняем сообщение
+    print(f"Получено сообщение для сохранения: chat_id={message.chat_id}, sender_id={current_user['id']}, content={message.content}")
+    cursor.execute("""
+        INSERT INTO messages (chat_id, sender_id, content, timestamp)
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+    """, (message.chat_id, current_user["id"], message.content))
     conn.commit()
+    print("Сообщение успешно сохранено через REST API")
     conn.close()
-    return {"message": "Message sent"}
+
+    return {"message": "Сообщение успешно отправлено"}
+
 
 @router.get("/list/{username}")
 def list_chats(username: str):
