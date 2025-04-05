@@ -1,0 +1,28 @@
+/lib
+/lib64
+/client/node_modules
+/client/package-lock.json
+include/
+pyvenv.cfg
+/bin
+
+# Игнорировать .zip и .pyc файлы
+*.zip
+*.pyc
+*.db
+*.db-shm
+*.db-wal
+
+# Игнорировать каталоги
+/lib/
+/lib64/
+/client/node_modules/
+/include/
+/bin/
+
+# Игнорировать файл
+/client/package-lock.json
+/pyvenv.cfg
+
+# Игнорировать все __pycache__ каталоги в любом месте
+__pycache__/

@@ -24,7 +24,7 @@ This project is a simple web-based messenger application designed for sending an
 
 ## Technologies Used
 - **Frontend**: HTML, CSS, JavaScript
-- **Backend**: Python (RestAPI, SQLite, WebSocket)
+- **Backend**: Python (FastAPI, SQLite, WebSocket)
 - **Database**: SQLite
 
 ---
@@ -32,10 +32,10 @@ This project is a simple web-based messenger application designed for sending an
 ## Installation
 
 ### Clone Git-Repository
-`git clone https://github.com/myronsi/messenger.git`
+`git clone https://github.com/myronsi/messenger2.0.git`
 
 ### Change directory
-`cd messenger`
+`cd messenger2.0`
 
 
 ### Launch python virtual environment
@@ -45,14 +45,7 @@ This project is a simple web-based messenger application designed for sending an
 #### macOS/Linux
 `source bin/activate`
 
-#### Windows
-`\Scripts\activate.bat`  Windows Command Prompt<br>
-`\Scripts\Activate.ps1`  Windows PowerShell
-
 ### Install dependencies
-
-#### Windows
-`pip install fastapi uvicorn websockets`
 
 #### Arch Linux
 `sudo pacman -S python`<br>
@@ -67,11 +60,20 @@ This project is a simple web-based messenger application designed for sending an
 `brew install python`<br>
 `pip3 install fastapi uvicorn websockets`
 
+### Install npm (in client directory only)
+
+`npm i`<br>
+or<br>
+`npm i --legacy-peer-deps`<br>
+
 ## Usage
 
 ### Change directory
-`cd messenger`
+`cd messenger2.0`
 
+### Change your app.js file
+
+at first line change `const BASE_URL = "http://ip:8000";` to yours ip addres
 
 ### Launch python virtual environment
 `python -m venv .`
@@ -80,18 +82,16 @@ This project is a simple web-based messenger application designed for sending an
 #### macOS/Linux
 `source bin/activate`
 
-#### Windows
-`\Scripts\activate.bat`  Windows Command Prompt<br>
-`\Scripts\Activate.ps1`  Windows PowerShell
-
 ### Launch server
-`uvicorn server.main:app --reload`
+`uvicorn server.main:app --host 0.0.0.0 --port 8000`
 
 ### View swagger api
-`http://127.0.0.1:8000/docs#/`
+`http://your_ip:8000/docs#/`
 
-### View index.html page
-just open the `index.html` file in `/client/` in your browser
+### View messenger
+run `npm run dev -- --host` (in client directory)
+
+copy "Network: http://your_link/" and paste in your browser
 
 
 ## Project Structure
@@ -113,4 +113,3 @@ messenger/<br>
 │   ⠀⠀⠀⠀⠀⠀└── messages.py        # Message-related routes<br>
 ├── LICENSE                 # License file<br>
 └── README.md               # Project documentation<br>
- 

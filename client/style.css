@@ -131,3 +131,28 @@ button:hover {
 #context-menu button:hover {
     background-color: #f0f0f0;
 }
+
+#logout-btn {
+    background-color: #dc3545;
+    margin-top: 30px;
+}
+
+#logout-btn:hover {
+    background-color: #c82333;
+}
+
+#delete-button  {
+    background-color: #dc3545;
+}
+
+#delete-chat-btn    {
+    background-color: #dc3545;
+}
+
+#delete-chat-btn:hover  {
+    background-color: #c82333;
+}
+
+#logout-btn {
+    display: none;
+}
