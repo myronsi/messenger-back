@@ -1,0 +1,10 @@
+fastapi
+jose
+pydantic
+starlette
+uvicorn
+jwt
+jose
+python-jose
+websockets
+fastapi
