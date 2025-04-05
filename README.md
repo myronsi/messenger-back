@@ -32,7 +32,7 @@ This project is a simple web-based messenger application designed for sending an
 ## Installation
 
 ### Clone Git-Repository
-`git clone https://github.com/myronsi/messenger2.0.git`
+`git clone https://github.com/myronsi/messenger.git`
 
 ### Change directory
 `cd messenger2.0`
