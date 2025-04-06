@@ -23,7 +23,7 @@ This project is a simple web-based messenger application designed for sending an
 ---
 
 ## Technologies Used
-- **Frontend**: HTML, CSS, JavaScript
+- **Frontend**: React, TypeScript
 - **Backend**: Python (FastAPI, SQLite, WebSocket)
 - **Database**: SQLite
 
@@ -35,7 +35,7 @@ This project is a simple web-based messenger application designed for sending an
 `git clone https://github.com/myronsi/messenger.git`
 
 ### Change directory
-`cd messenger2.0`
+`cd messenger`
 
 
 ### Launch python virtual environment
@@ -49,16 +49,16 @@ This project is a simple web-based messenger application designed for sending an
 
 #### Arch Linux
 `sudo pacman -S python`<br>
-`pip install fastapi uvicorn websockets`
+`pip install -r requirements.txt`
 
 #### Debian/Ubuntu
 `sudo apt update`<br>
 `sudo apt install python3 python3-pip`<br>
-`pip3 install fastapi uvicorn websockets`
+`pip3 install -r requirements.txt`
 
 #### macOS
 `brew install python`<br>
-`pip3 install fastapi uvicorn websockets`
+`pip3 install -r requirements.txt`
 
 ### Install npm (in client directory only)
 
@@ -67,9 +67,6 @@ or<br>
 `npm i --legacy-peer-deps`<br>
 
 ## Usage
-
-### Change directory
-`cd messenger2.0`
 
 ### Change your app.js file
 
@@ -89,9 +86,7 @@ at first line change `const BASE_URL = "http://ip:8000";` to yours ip addres
 `http://your_ip:8000/docs#/`
 
 ### View messenger
-run `npm run dev -- --host` (in client directory)
-
-copy "Network: http://your_link/" and paste in your browser
+run `npm start` (in client directory)
 
 
 ## Project Structure
