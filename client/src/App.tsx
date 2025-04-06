@@ -57,15 +57,24 @@ const App: React.FC = () => {
           <RegisterComponent />
           <LoginComponent onLoginSuccess={handleLoginSuccess} />
         </>
-      ) : currentChat ? (
-        <ChatComponent
-          chatId={currentChat.id}
-          chatName={currentChat.name}
-          username={username}
-          onBack={backToChats}
-        />
       ) : (
-        <ChatsListComponent username={username} onChatOpen={openChat} />
+        <div className="app-container">
+          <div className="chats-list">
+            <ChatsListComponent username={username} onChatOpen={openChat} />
+          </div>
+          <div className="chat-area">
+            {currentChat ? (
+              <ChatComponent
+                chatId={currentChat.id}
+                chatName={currentChat.name}
+                username={username}
+                onBack={backToChats}
+              />
+            ) : (
+              <p>Выберите чат</p>
+            )}
+          </div>
+        </div>
       )}
       {isLoggedIn && <button id="logout-btn" onClick={handleLogout}>Log Out</button>}
     </div>

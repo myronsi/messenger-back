@@ -28,7 +28,7 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
         });
         if (response.ok) {
           const data = await response.json();
-          setMessages(data.history);
+          setMessages(data.history || []);
         } else if (response.status === 401) {
           alert('Сессия истекла. Войдите снова.');
           localStorage.removeItem('access_token');
@@ -41,16 +41,16 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
       }
     };
 
-    // Проверка токена перед созданием WebSocket
+    // Проверка токена перед любыми действиями
     if (!token) {
-      console.error('Токен отсутствует. WebSocket не будет создан.');
+      console.error('Токен отсутствует. WebSocket и сообщения не будут загружены.');
       setMessages([]);
       return;
     }
 
     loadMessages();
 
-    // Создание WebSocket только если он ещё не существует
+    // Создание WebSocket только если он ещё не существует или закрыт
     if (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED) {
       wsRef.current = new WebSocket(`${WS_URL}/ws/chat/${chatId}?token=${token}`);
 
@@ -180,19 +180,19 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
   };
 
   return (
-    <div id="chat-section">
-      <h2 id="chat-name">{chatName}</h2>
-      <button id="back-to-chats-btn" onClick={onBack}>
-        Back to chats
-      </button>
-      <button id="delete-chat-btn" onClick={handleDeleteChat}>
-        Delete Chat
-      </button>
-      <div
-        id="chat-window"
-        onClick={() => setContextMenu(null)}
-        onContextMenu={(e) => e.preventDefault()}
-      >
+    <div id="chat-section" style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '10px' }}>
+        <h2 id="chat-name">{chatName}</h2>
+        <div>
+          <button id="back-to-chats-btn" onClick={onBack}>
+            Back to chats
+          </button>
+          <button id="delete-chat-btn" onClick={handleDeleteChat}>
+            Delete Chat
+          </button>
+        </div>
+      </div>
+      <div id="chat-window">
         {messages.map((msg) => (
           <div
             key={msg.id}
@@ -206,16 +206,18 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
           </div>
         ))}
       </div>
-      <input
-        id="message-input"
-        type="text"
-        placeholder="Enter your message"
-        value={messageInput}
-        onChange={(e) => setMessageInput(e.target.value)}
-      />
-      <button id="send-btn" onClick={handleSendMessage}>
-        Send
-      </button>
+      <div style={{ display: 'flex', paddingTop: '10px' }}>
+        <input
+          id="message-input"
+          type="text"
+          placeholder="Enter your message"
+          value={messageInput}
+          onChange={(e) => setMessageInput(e.target.value)}
+        />
+        <button id="send-btn" onClick={handleSendMessage}>
+          Send
+        </button>
+      </div>
       {contextMenu && (
         <ContextMenuComponent
           x={contextMenu.x}

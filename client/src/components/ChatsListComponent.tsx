@@ -49,7 +49,7 @@ const ChatsListComponent: React.FC<ChatsListComponentProps> = ({ username, onCha
   };
 
   return (
-    <div id="chats-section">
+    <div>
       <h2>Your Chats</h2>
       <div id="chats-list">
         {chats.map((chat) => (
