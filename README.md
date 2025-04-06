@@ -90,21 +90,36 @@ run `npm start` (in client directory)
 
 
 ## Project Structure
-messenger/<br>
-├── client/<br>
-│⠀⠀⠀├── app.js             # Core client-side JavaScript logic<br>
-│⠀⠀⠀├── index.html         # Main client interface<br>
-│⠀⠀⠀└── style.css          # Styling for the web client<br>
-│   <br>
-├── server/<br>
-│⠀⠀⠀├── connection_manager.py  # Handles WebSocket connections<br>
-│⠀⠀⠀├── database.py            # Database models and queries<br>
-│⠀⠀⠀├── main.py                # Entry point for the server<br>
-│⠀⠀⠀├── websocket.py           # WebSocket communication logic<br>
-│⠀⠀⠀├── messanger.db           # SQLite database file<br>
-│⠀⠀⠀└── routes/<br>
-│   ⠀⠀⠀⠀⠀⠀├── auth.py            # User authentication routes<br>
-│   ⠀⠀⠀⠀⠀⠀├── chats.py           # Chat-related routes<br>
-│   ⠀⠀⠀⠀⠀⠀└── messages.py        # Message-related routes<br>
-├── LICENSE                 # License file<br>
-└── README.md               # Project documentation<br>
+└── messenger/
+    ├── README.md
+    ├── LICENSE
+    ├── requirements.txt
+    ├── client/
+    │   ├── README.md
+    │   ├── package.json
+    │   ├── tsconfig.json
+    │   ├── public/
+    │   │   ├── index.html
+    │   │   ├── manifest.json
+    │   │   └── robots.txt
+    │   └── src/
+    │       ├── App.tsx
+    │       ├── index.tsx
+    │       ├── styles.css
+    │       ├── types.ts
+    │       └── components/
+    │           ├── ChatComponent.tsx
+    │           ├── ChatsListComponent.tsx
+    │           ├── ContextMenuComponent.tsx
+    │           ├── LoginComponent.tsx
+    │           ├── RegisterComponent.tsx
+    │           └── .gitignore
+    └── server/
+        ├── connection_manager.py
+        ├── database.py
+        ├── main.py
+        ├── websocket.py
+        └── routes/
+            ├── auth.py
+            ├── chats.py
+            └── messages.py
