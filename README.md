@@ -90,36 +90,38 @@ run `npm start` (in client directory)
 
 
 ## Project Structure
-└── messenger/
-    ├── README.md
-    ├── LICENSE
-    ├── requirements.txt
-    ├── client/
-    │   ├── README.md
-    │   ├── package.json
-    │   ├── tsconfig.json
-    │   ├── public/
-    │   │   ├── index.html
-    │   │   ├── manifest.json
-    │   │   └── robots.txt
-    │   └── src/
-    │       ├── App.tsx
-    │       ├── index.tsx
-    │       ├── styles.css
-    │       ├── types.ts
-    │       └── components/
-    │           ├── ChatComponent.tsx
-    │           ├── ChatsListComponent.tsx
-    │           ├── ContextMenuComponent.tsx
-    │           ├── LoginComponent.tsx
-    │           ├── RegisterComponent.tsx
-    │           └── .gitignore
-    └── server/
-        ├── connection_manager.py
-        ├── database.py
-        ├── main.py
-        ├── websocket.py
-        └── routes/
-            ├── auth.py
-            ├── chats.py
-            └── messages.py
+<pre>
+messenger/
+├── README.md
+├── LICENSE
+├── requirements.txt
+├── client/
+│   ├── README.md
+│   ├── package.json
+│   ├── tsconfig.json
+│   ├── public/
+│   │   ├── index.html
+│   │   ├── manifest.json
+│   │   └── robots.txt
+│   └── src/
+│       ├── App.tsx
+│       ├── index.tsx
+│       ├── styles.css
+│       ├── types.ts
+│       └── components/
+│           ├── ChatComponent.tsx
+│           ├── ChatsListComponent.tsx
+│           ├── ContextMenuComponent.tsx
+│           ├── LoginComponent.tsx
+│           ├── RegisterComponent.tsx
+│           └── .gitignore
+└── server/
+    ├── connection_manager.py
+    ├── database.py
+    ├── main.py
+    ├── websocket.py
+    └── routes/
+        ├── auth.py
+        ├── chats.py
+        └── messages.py
+</pre>
