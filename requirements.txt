@@ -7,4 +7,3 @@ jwt
 jose
 python-jose
 websockets
-fastapi

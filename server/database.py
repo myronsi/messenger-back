@@ -1,17 +1,14 @@
 import sqlite3
 from pathlib import Path
 
-# Path to the database
 DB_PATH = "server/messenger.db"
 
-# Function to connect to the database
 def get_connection():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")  # Allow parallel work
+    conn.execute("PRAGMA journal_mode=WAL")  # Paral. work
     return conn
 
-# Creating tables
 def setup_database():
     conn = get_connection()
     cursor = conn.cursor()
@@ -39,8 +36,6 @@ def setup_database():
         )
     """)
 
-
-    # Add 'edited_at' column if it doesn't exist
     try:
         cursor.execute("ALTER TABLE messages ADD COLUMN edited_at DATETIME DEFAULT NULL")
     except sqlite3.OperationalError as e:
@@ -59,7 +54,7 @@ def setup_database():
         )
     """)
 
-    # Update messages table for default chat (if necessary)
+    # Update messages table for default chat
     cursor.execute("""
         UPDATE messages
         SET chat_id = 1
@@ -68,7 +63,7 @@ def setup_database():
         )
     """)
 
-    # Таблица участников чата (если нужно хранить участников отдельно)
+    # Chat members
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS participants (
             chat_id INTEGER NOT NULL,
@@ -82,5 +77,4 @@ def setup_database():
     conn.commit()
     conn.close()
 
-# Initialize the database
 setup_database()

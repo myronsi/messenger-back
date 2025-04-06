@@ -11,14 +11,12 @@ from server.database import get_connection
 
 router = APIRouter()
 
-# JWT Настройки
-SECRET_KEY = "supersecretkey"  # Нужно заменить на надёжный ключ
+SECRET_KEY = "supersecretkey"  # REPLACE THIS KEY!!!!!
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
-# Модели данных
 class User(BaseModel):
     username: str
     password: str
@@ -50,7 +48,7 @@ def verify_token(token: str):
         cursor.execute("SELECT id, username FROM users WHERE id = ?", (user_id,))
         user = cursor.fetchone()
         conn.close()
-        return user  # Вернём ID и username пользователя
+        return user
     except JWTError:
         return None    
 
@@ -72,7 +70,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         user = get_user_by_id(user_id)
         if not user:
             raise HTTPException(status_code=401, detail="Invalid token")
-        return user  # Теперь это dict, а не tuple
+        return user
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
