@@ -22,7 +22,7 @@ body {
 }
 
 .chats-list {
-  width: 30%; /* Список чатов занимает 30% ширины */
+  width: 20%; /* Список чатов занимает 30% ширины */
   border-right: 1px solid #ccc;
   overflow-y: auto;
   padding: 20px;
@@ -30,7 +30,7 @@ body {
 }
 
 .chat-area {
-  width: 70%; /* Область чата занимает 70% ширины */
+  width: 80%; /* Область чата занимает 70% ширины */
   display: flex;
   justify-content: center;
   align-items: center;
@@ -63,6 +63,30 @@ button:hover {
   background: #0056b3;
 }
 
+/* Общий стиль для сообщений */
+.message {
+  margin-bottom: 5px;
+  padding: 10px;
+  border-radius: 5px;
+  max-width: 70%; /* Ограничиваем ширину сообщений */
+  word-wrap: break-word; /* Перенос длинных слов */
+}
+
+/* Сообщения пользователя (справа) */
+.message-mine {
+  margin-left: auto; /* Выравнивание вправо */
+  background-color: #007bff; /* Синий фон для твоих сообщений */
+  color: #fff; /* Белый текст */
+}
+
+/* Сообщения собеседника (слева) */
+.message-theirs {
+  margin-right: auto; /* Выравнивание влево */
+  background-color: #e9ecef; /* Светло-серый фон для сообщений собеседника */
+  color: #000; /* Чёрный текст */
+}
+
+/* Стили для окна чата */
 #chat-window {
   flex-grow: 1; /* Растягивается на доступное пространство */
   overflow-y: auto;
@@ -70,6 +94,16 @@ button:hover {
   padding: 10px;
   background: #f9f9f9;
   margin-bottom: 10px;
+  display: flex;
+  flex-direction: column; /* Вертикальное расположение сообщений */
+}
+
+#chat-window .separator {
+  text-align: center;
+  padding: 10px 0;
+  color: #666;
+  border-bottom: 1px solid #ccc;
+  margin: 10px 0;
 }
 
 #chat-window div {

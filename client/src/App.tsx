@@ -3,7 +3,7 @@ import RegisterComponent from './components/RegisterComponent';
 import LoginComponent from './components/LoginComponent';
 import ChatsListComponent from './components/ChatsListComponent';
 import ChatComponent from './components/ChatComponent';
-import './styles.css';
+import './index.css';
 
 const App: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -51,18 +51,18 @@ const App: React.FC = () => {
   };
 
   return (
-    <div id="app">
+    <div className="h-screen flex flex-col">
       {!isLoggedIn ? (
-        <>
+        <div className="flex flex-col items-center justify-center h-full space-y-4">
           <RegisterComponent />
           <LoginComponent onLoginSuccess={handleLoginSuccess} />
-        </>
+        </div>
       ) : (
-        <div className="app-container">
-          <div className="chats-list">
+        <div className="flex flex-1 overflow-hidden">
+          <div className="w-1/3 border-r border-gray-300 overflow-y-auto p-4">
             <ChatsListComponent username={username} onChatOpen={openChat} />
           </div>
-          <div className="chat-area">
+          <div className="w-2/3 flex justify-center items-center p-4">
             {currentChat ? (
               <ChatComponent
                 chatId={currentChat.id}
@@ -71,12 +71,19 @@ const App: React.FC = () => {
                 onBack={backToChats}
               />
             ) : (
-              <p>Выберите чат</p>
+              <p className="text-gray-500 text-lg">Выберите чат</p>
             )}
           </div>
         </div>
       )}
-      {isLoggedIn && <button id="logout-btn" onClick={handleLogout}>Log Out</button>}
+      {isLoggedIn && (
+        <button
+          className="bg-red-500 text-white p-2 mt-4 mx-4 rounded hover:bg-red-600 transition-colors"
+          onClick={handleLogout}
+        >
+          Выйти
+        </button>
+      )}
     </div>
   );
 };

@@ -25,6 +25,11 @@ const ChatsListComponent: React.FC<ChatsListComponentProps> = ({ username, onCha
     fetchChats();
   }, [username]);
 
+  const getInterlocutor = (chatName: string, currentUser: string): string => {
+    const users = chatName.replace('Chat: ', '').split(' & ');
+    return users.find((user) => user !== currentUser) || 'Неизвестный';
+  };
+
   const handleCreateChat = async () => {
     try {
       const response = await fetch('http://192.168.178.29:8000/chats/create', {
@@ -38,7 +43,7 @@ const ChatsListComponent: React.FC<ChatsListComponentProps> = ({ username, onCha
       const data = await response.json();
       if (response.ok) {
         alert('Чат создан!');
-        setChats([...chats, { id: data.chat_id, name: targetUser }]);
+        setChats([...chats, { id: data.chat_id, name: `Chat: ${username} & ${targetUser}` }]);
         setTargetUser('');
       } else {
         alert(data.detail);
@@ -49,27 +54,32 @@ const ChatsListComponent: React.FC<ChatsListComponentProps> = ({ username, onCha
   };
 
   return (
-    <div>
-      <h2>Your Chats</h2>
-      <div id="chats-list">
+    <div className="space-y-4">
+      <h2 className="text-xl font-bold">Ваши чаты</h2>
+      <div className="space-y-2">
         {chats.map((chat) => (
           <div
             key={chat.id}
-            className="chat-item"
-            onClick={() => onChatOpen(chat.id, chat.name)}
+            className="bg-blue-500 text-white p-3 rounded cursor-pointer hover:bg-blue-600 transition-colors"
+            onClick={() => onChatOpen(chat.id, getInterlocutor(chat.name, username))}
           >
-            {chat.name}
+            {getInterlocutor(chat.name, username)}
           </div>
         ))}
       </div>
       <input
-        id="chat-username"
         type="text"
-        placeholder="Username for chat"
+        placeholder="Имя пользователя для чата"
         value={targetUser}
         onChange={(e) => setTargetUser(e.target.value)}
+        className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
-      <button id="create-chat-btn" onClick={handleCreateChat}>Create a chat</button>
+      <button
+        onClick={handleCreateChat}
+        className="w-full bg-green-500 text-white p-2 rounded hover:bg-green-600 transition-colors"
+      >
+        Создать чат
+      </button>
     </div>
   );
 };

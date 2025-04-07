@@ -12,6 +12,46 @@ interface ChatComponentProps {
 const WS_URL = "ws://192.168.178.29:8000";
 const BASE_URL = "http://192.168.178.29:8000";
 
+const getTime = (timestamp: string): string => {
+  const date = new Date(timestamp);
+  return date.toTimeString().substring(0, 8);
+};
+
+const getDateString = (date: Date): string => {
+  return date.toISOString().substring(0, 10);
+};
+
+const formatDateLabel = (timestamp: string): string => {
+  const messageDate = new Date(timestamp);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+
+  const diffInDays = Math.floor((today.getTime() - messageDate.getTime()) / (1000 * 60 * 60 * 24));
+  const isSameYear = messageDate.getFullYear() === today.getFullYear();
+
+  if (getDateString(messageDate) === getDateString(today)) {
+    return 'Сегодня';
+  } else if (getDateString(messageDate) === getDateString(yesterday)) {
+    return 'Вчера';
+  } else if (diffInDays <= 7) {
+    const daysOfWeek = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
+    return daysOfWeek[messageDate.getDay()];
+  } else if (isSameYear) {
+    const months = [
+      'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+      'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
+    ];
+    return `${messageDate.getDate()} ${months[messageDate.getMonth()]}`;
+  } else {
+    const months = [
+      'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+      'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
+    ];
+    return `${messageDate.getDate()} ${months[messageDate.getMonth()]} ${messageDate.getFullYear()}`;
+  }
+};
+
 const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, username, onBack }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [messageInput, setMessageInput] = useState('');
@@ -54,10 +94,7 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
     if (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED) {
       wsRef.current = new WebSocket(`${WS_URL}/ws/chat/${chatId}?token=${token}`);
 
-      wsRef.current.onopen = () => {
-        console.log('WebSocket подключён к чату', chatId);
-      };
-
+      wsRef.current.onopen = () => console.log('WebSocket подключён к чату', chatId);
       wsRef.current.onmessage = (event) => {
         const parsedData = JSON.parse(event.data);
         const { username: sender, data, timestamp } = parsedData;
@@ -179,43 +216,79 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
     setContextMenu(null);
   };
 
+  const renderMessagesWithSeparators = () => {
+    const result: React.ReactNode[] = [];
+    let lastDateLabel: string | null = null;
+
+    messages.forEach((msg) => {
+      const currentDateLabel = formatDateLabel(msg.timestamp);
+
+      if (currentDateLabel !== lastDateLabel) {
+        result.push(
+          <div
+            key={`separator-${msg.id}`}
+            className="text-center text-gray-500 py-2 border-b border-gray-300"
+          >
+            {currentDateLabel}
+          </div>
+        );
+        lastDateLabel = currentDateLabel;
+      }
+
+      const isMine = msg.sender === username;
+      result.push(
+        <div
+          key={msg.id}
+          className={`p-3 rounded-lg max-w-[70%] mb-2 ${
+            isMine ? 'ml-auto bg-blue-500 text-white' : 'mr-auto bg-gray-200 text-black'
+          }`}
+          onContextMenu={(e) => handleContextMenu(e, msg.id)}
+        >
+          <span>
+            {getTime(msg.timestamp)} - {msg.sender}: {msg.content}
+          </span>
+        </div>
+      );
+    });
+
+    return result;
+  };
+
   return (
-    <div id="chat-section" style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '10px' }}>
-        <h2 id="chat-name">{chatName}</h2>
-        <div>
-          <button id="back-to-chats-btn" onClick={onBack}>
-            Back to chats
+    <div className="flex flex-col h-full w-full">
+      <div className="flex justify-between items-center pb-4">
+        <h2 className="text-2xl font-bold">{chatName}</h2>
+        <div className="space-x-2">
+          <button
+            className="bg-red-500 text-white p-2 rounded hover:bg-red-600 transition-colors"
+            onClick={onBack}
+          >
+            Назад
           </button>
-          <button id="delete-chat-btn" onClick={handleDeleteChat}>
-            Delete Chat
+          <button
+            className="bg-red-500 text-white p-2 rounded hover:bg-red-600 transition-colors"
+            onClick={handleDeleteChat}
+          >
+            Удалить чат
           </button>
         </div>
       </div>
-      <div id="chat-window">
-        {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className="message"
-            data-message-id={msg.id}
-            onContextMenu={(e) => handleContextMenu(e, msg.id)}
-          >
-            <span>
-              {msg.timestamp} - {msg.sender}: {msg.content}
-            </span>
-          </div>
-        ))}
+      <div className="flex-1 overflow-y-auto border border-gray-300 p-4 bg-gray-50 rounded">
+        {renderMessagesWithSeparators()}
       </div>
-      <div style={{ display: 'flex', paddingTop: '10px' }}>
+      <div className="flex pt-4">
         <input
-          id="message-input"
           type="text"
-          placeholder="Enter your message"
+          placeholder="Введите сообщение"
           value={messageInput}
           onChange={(e) => setMessageInput(e.target.value)}
+          className="flex-1 p-2 border border-gray-300 rounded-l focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
-        <button id="send-btn" onClick={handleSendMessage}>
-          Send
+        <button
+          className="bg-blue-500 text-white p-2 rounded-r hover:bg-blue-600 transition-colors"
+          onClick={handleSendMessage}
+        >
+          Отправить
         </button>
       </div>
       {contextMenu && (
