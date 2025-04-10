@@ -11,10 +11,11 @@ interface ChatComponentProps {
 
 const WS_URL = "ws://192.168.178.29:8000";
 const BASE_URL = "http://192.168.178.29:8000";
+const DEFAULT_AVATAR = "/static/avatars/default.jpg";
 
 const getTime = (timestamp: string): string => {
   const date = new Date(timestamp);
-  return date.toTimeString().substring(0, 8);
+  return date.toTimeString().substring(0, 5);
 };
 
 const getDateString = (date: Date): string => {
@@ -30,26 +31,18 @@ const formatDateLabel = (timestamp: string): string => {
   const diffInDays = Math.floor((today.getTime() - messageDate.getTime()) / (1000 * 60 * 60 * 24));
   const isSameYear = messageDate.getFullYear() === today.getFullYear();
 
-  if (getDateString(messageDate) === getDateString(today)) {
-    return 'Сегодня';
-  } else if (getDateString(messageDate) === getDateString(yesterday)) {
-    return 'Вчера';
-  } else if (diffInDays <= 7) {
+  if (getDateString(messageDate) === getDateString(today)) return 'Сегодня';
+  if (getDateString(messageDate) === getDateString(yesterday)) return 'Вчера';
+  if (diffInDays <= 7) {
     const daysOfWeek = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
     return daysOfWeek[messageDate.getDay()];
-  } else if (isSameYear) {
-    const months = [
-      'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
-      'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
-    ];
-    return `${messageDate.getDate()} ${months[messageDate.getMonth()]}`;
-  } else {
-    const months = [
-      'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
-      'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
-    ];
-    return `${messageDate.getDate()} ${months[messageDate.getMonth()]} ${messageDate.getFullYear()}`;
   }
+  if (isSameYear) {
+    const months = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+    return `${messageDate.getDate()} ${months[messageDate.getMonth()]}`;
+  }
+  const months = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+  return `${messageDate.getDate()} ${months[messageDate.getMonth()]} ${messageDate.getFullYear()}`;
 };
 
 const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, username, onBack }) => {
@@ -57,9 +50,29 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
   const [messageInput, setMessageInput] = useState('');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; messageId: number } | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const chatWindowRef = useRef<HTMLDivElement>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
   const token = localStorage.getItem('access_token');
 
-  // Загрузка сообщений и инициализация WebSocket
+  const scrollToBottom = () => {
+    if (chatWindowRef.current) {
+      chatWindowRef.current.scrollTo({
+        top: chatWindowRef.current.scrollHeight,
+        behavior: 'smooth',
+      });
+    }
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(event.target as Node) && contextMenu) {
+        setContextMenu(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [contextMenu]);
+
   useEffect(() => {
     const loadMessages = async () => {
       try {
@@ -68,7 +81,10 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
         });
         if (response.ok) {
           const data = await response.json();
-          setMessages(data.history || []);
+          setMessages(data.history.map((msg: Message) => ({
+            ...msg,
+            avatar_url: msg.avatar_url || DEFAULT_AVATAR,
+          })) || []);
         } else if (response.status === 401) {
           alert('Сессия истекла. Войдите снова.');
           localStorage.removeItem('access_token');
@@ -81,7 +97,6 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
       }
     };
 
-    // Проверка токена перед любыми действиями
     if (!token) {
       console.error('Токен отсутствует. WebSocket и сообщения не будут загружены.');
       setMessages([]);
@@ -90,49 +105,86 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
 
     loadMessages();
 
-    // Создание WebSocket только если он ещё не существует или закрыт
-    if (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED) {
-      wsRef.current = new WebSocket(`${WS_URL}/ws/chat/${chatId}?token=${token}`);
+    const connectWebSocket = () => {
+      if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
+        console.log('Закрываем существующее WebSocket-соединение');
+        wsRef.current.close();
+      }
 
-      wsRef.current.onopen = () => console.log('WebSocket подключён к чату', chatId);
-      wsRef.current.onmessage = (event) => {
-        const parsedData = JSON.parse(event.data);
-        const { username: sender, data, timestamp } = parsedData;
-        setMessages((prev) => [
-          ...prev,
-          { id: data.message_id, sender, content: data.content, timestamp },
-        ]);
-      };
+      setTimeout(() => {
+        console.log('Создаём новое WebSocket-соединение для chatId:', chatId);
+        wsRef.current = new WebSocket(`${WS_URL}/ws/chat/${chatId}?token=${token}`);
 
-      wsRef.current.onerror = (error) => {
-        console.error('WebSocket ошибка:', error);
-      };
+        wsRef.current.onopen = () => {
+          console.log('WebSocket успешно подключён к чату', chatId);
+        };
 
-      wsRef.current.onclose = (event) => {
-        console.log('WebSocket закрыт. Код:', event.code, 'Причина:', event.reason);
-      };
-    }
+        wsRef.current.onmessage = (event) => {
+          const parsedData = JSON.parse(event.data);
+          const { type } = parsedData;
 
-    // Очистка WebSocket при размонтировании компонента
+          if (type === "message") {
+            const { username: sender, data, timestamp, avatar_url } = parsedData;
+            const newMessage = {
+              id: data.message_id,
+              sender,
+              content: data.content,
+              timestamp,
+              avatar_url: avatar_url || DEFAULT_AVATAR,
+            };
+            setMessages((prev) => {
+              if (prev.some((msg) => msg.id === newMessage.id)) {
+                return prev;
+              }
+              return [...prev, newMessage];
+            });
+          } else if (type === "edit") {
+            const { message_id, new_content } = parsedData;
+            setMessages((prev) =>
+              prev.map((msg) => (msg.id === message_id ? { ...msg, content: new_content } : msg))
+            );
+          } else if (type === "delete") {
+            const { message_id } = parsedData;
+            setMessages((prev) => prev.filter((msg) => msg.id !== message_id));
+          }
+        };
+
+        wsRef.current.onerror = (error) => {
+          console.error('WebSocket ошибка:', error);
+        };
+
+        wsRef.current.onclose = (event) => {
+          console.log('WebSocket закрыт. Код:', event.code, 'Причина:', event.reason);
+          if (event.code !== 1000 && event.code !== 1005) {
+            console.log('Попытка переподключения через 1 секунду...');
+            setTimeout(connectWebSocket, 1000);
+          }
+        };
+      }, 100);
+    };
+
+    connectWebSocket();
+
     return () => {
-      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
+        console.log('Очистка: закрываем WebSocket для chatId:', chatId);
         wsRef.current.close();
       }
     };
   }, [chatId, token, onBack]);
 
-  // Отправка сообщения
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
   const handleSendMessage = () => {
-    if (!messageInput.trim() || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      console.error('WebSocket не готов или сообщение пустое');
-      return;
-    }
-    const messageData = { chat_id: chatId, content: messageInput };
+    if (!messageInput.trim() || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    const messageData = { type: "message", content: messageInput };
     wsRef.current.send(JSON.stringify(messageData));
     setMessageInput('');
+    setTimeout(scrollToBottom, 0);
   };
 
-  // Удаление чата
   const handleDeleteChat = async () => {
     // eslint-disable-next-line no-restricted-globals
     if (!confirm('Вы уверены, что хотите удалить этот чат?')) return;
@@ -153,7 +205,6 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
     }
   };
 
-  // Обработка контекстного меню
   const handleContextMenu = (e: React.MouseEvent, messageId: number) => {
     e.preventDefault();
     const menuWidth = 150;
@@ -165,54 +216,22 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
     setContextMenu({ x, y, messageId });
   };
 
-  // Редактирование сообщения
-  const handleEditMessage = async (messageId: number) => {
+  const handleEditMessage = (messageId: number) => {
     const message = messages.find((m) => m.id === messageId);
     const newContent = prompt('Введите новое сообщение:', message?.content);
-    if (!newContent) return;
-    try {
-      const response = await fetch(`${BASE_URL}/messages/edit/${messageId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ content: newContent }),
-      });
-      if (response.ok) {
-        setMessages((prev) =>
-          prev.map((m) => (m.id === messageId ? { ...m, content: newContent } : m))
-        );
-        alert('Сообщение обновлено!');
-      } else {
-        const error = await response.json();
-        alert(`Ошибка: ${error.detail}`);
-      }
-    } catch (err) {
-      alert('Ошибка сети.');
-    }
+    if (!newContent || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+
+    const editData = { type: "edit", message_id: messageId, content: newContent };
+    wsRef.current.send(JSON.stringify(editData));
     setContextMenu(null);
   };
 
-  // Удаление сообщения
-  const handleDeleteMessage = async (messageId: number) => {
+  const handleDeleteMessage = (messageId: number) => {
     // eslint-disable-next-line no-restricted-globals
-    if (!confirm('Вы уверены, что хотите удалить это сообщение?')) return;
-    try {
-      const response = await fetch(`${BASE_URL}/messages/delete/${messageId}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (response.ok) {
-        setMessages((prev) => prev.filter((m) => m.id !== messageId));
-        alert('Сообщение удалено!');
-      } else {
-        const error = await response.json();
-        alert(`Ошибка: ${error.detail}`);
-      }
-    } catch (err) {
-      alert('Ошибка сети.');
-    }
+    if (!confirm('Вы уверены, что хотите удалить это сообщение?') || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+
+    const deleteData = { type: "delete", message_id: messageId };
+    wsRef.current.send(JSON.stringify(deleteData));
     setContextMenu(null);
   };
 
@@ -225,10 +244,7 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
 
       if (currentDateLabel !== lastDateLabel) {
         result.push(
-          <div
-            key={`separator-${msg.id}`}
-            className="text-center text-gray-500 py-2 border-b border-gray-300"
-          >
+          <div key={`separator-${msg.id}`} className="text-center text-gray-500 py-2 border-b border-gray-300">
             {currentDateLabel}
           </div>
         );
@@ -239,14 +255,40 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
       result.push(
         <div
           key={msg.id}
-          className={`p-3 rounded-lg max-w-[70%] mb-2 ${
-            isMine ? 'ml-auto bg-blue-500 text-white' : 'mr-auto bg-gray-200 text-black'
+          className={`mb-2 flex items-start max-w-[70%] break-words w-fit ${
+            isMine ? 'ml-auto' : 'mr-auto'
           }`}
           onContextMenu={(e) => handleContextMenu(e, msg.id)}
         >
-          <span>
-            {getTime(msg.timestamp)} - {msg.sender}: {msg.content}
-          </span>
+          {!isMine && (
+            <div className="mr-2">
+              <img
+                src={`${BASE_URL}${msg.avatar_url || DEFAULT_AVATAR}`}
+                alt={msg.sender}
+                className="w-8 h-8 rounded-full"
+              />
+            </div>
+          )}
+          <div
+            className={`p-3 rounded-md ${
+              isMine ? 'bg-blue-500 text-white' : 'bg-gray-200 text-black'
+            }`}
+          >
+            {!isMine && <div className="font-semibold">{msg.sender}</div>}
+            <div>{msg.content}</div>
+            <div className={`text-xs opacity-50 ${isMine ? 'text-right' : 'text-left'}`}>
+              {getTime(msg.timestamp)}
+            </div>
+          </div>
+          {isMine && (
+            <div className="ml-2">
+              <img
+                src={`${BASE_URL}${msg.avatar_url || DEFAULT_AVATAR}`}
+                alt={msg.sender}
+                className="w-8 h-8 rounded-full"
+              />
+            </div>
+          )}
         </div>
       );
     });
@@ -273,7 +315,10 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
           </button>
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto border border-gray-300 p-4 bg-gray-50 rounded">
+      <div
+        ref={chatWindowRef}
+        className="flex-1 overflow-y-auto border border-gray-300 p-4 bg-gray-50 rounded"
+      >
         {renderMessagesWithSeparators()}
       </div>
       <div className="flex pt-4">
@@ -293,6 +338,7 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
       </div>
       {contextMenu && (
         <ContextMenuComponent
+          ref={contextMenuRef}
           x={contextMenu.x}
           y={contextMenu.y}
           onEdit={() => handleEditMessage(contextMenu.messageId)}

@@ -15,58 +15,13 @@ class Message(BaseModel):
 class MessageEdit(BaseModel):
     content: str    
 
-## Deleted as no needed. 
-## Uncomment on errors with message sending (may fix)
-
-# @router.post("/send")
-# def send_message(message: Message, current_user: dict = Depends(get_current_user)):
-#     conn = get_connection()
-#     cursor = conn.cursor()
-
-#     cursor.execute("SELECT id FROM chats WHERE id = ?", (message.chat_id,))
-#     chat = cursor.fetchone()
-#     if not chat:
-#         raise HTTPException(status_code=404, detail="Чат не найден")
-
-#     print(f"Получено сообщение для сохранения: chat_id={message.chat_id}, sender_id={current_user['id']}, content={message.content}")
-#     cursor.execute("""
-#         INSERT INTO messages (chat_id, sender_id, content, timestamp)
-#         VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-#     """, (message.chat_id, current_user["id"], message.content))
-#     conn.commit()
-#     print("Сообщение успешно сохранено через REST API")
-#     conn.close()
-
-#     return {"message": "Сообщение успешно отправлено"}
-
-## Already this function(route) is existing in chats.py
-# @router.get("/list/{username}")
-# def list_chats(username: str):
-#     conn = get_connection()
-#     cursor = conn.cursor()
-
-#     cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
-#     user_id = cursor.fetchone()
-
-#     if not user_id:
-#         raise HTTPException(status_code=404, detail="User not found")
-
-#     cursor.execute("""
-#         SELECT id, name FROM chats
-#         WHERE user1_id = ? OR user2_id = ?
-#     """, (user_id["id"], user_id["id"]))
-#     chats = cursor.fetchall()
-#     conn.close()
-
-#     return {"chats": [{"id": chat["id"], "name": chat["name"]} for chat in chats]}
-
 @router.get("/history/{chat_id}")
 def get_message_history(chat_id: int):
     conn = get_connection()
     cursor = conn.cursor()
 
     cursor.execute("""
-        SELECT messages.id, messages.content, messages.timestamp, users.username AS sender
+        SELECT messages.id, messages.content, messages.timestamp, users.username AS sender, users.avatar_url
         FROM messages
         JOIN users ON messages.sender_id = users.id
         WHERE messages.chat_id = ?
@@ -78,10 +33,11 @@ def get_message_history(chat_id: int):
     return {
         "history": [
             {
-                "id": msg["id"],  # Add message ID
+                "id": msg["id"],
                 "content": msg["content"],
                 "timestamp": msg["timestamp"],
-                "sender": msg["sender"]
+                "sender": msg["sender"],
+                "avatar_url": msg["avatar_url"]
             }
             for msg in messages
         ]

@@ -54,15 +54,15 @@ const App: React.FC = () => {
     <div className="h-screen flex flex-col">
       {!isLoggedIn ? (
         <div className="flex flex-col items-center justify-center h-full space-y-4">
-          <RegisterComponent />
+          <RegisterComponent onLoginSuccess={handleLoginSuccess} /> {/* Добавляем пропс */}
           <LoginComponent onLoginSuccess={handleLoginSuccess} />
         </div>
       ) : (
         <div className="flex flex-1 overflow-hidden">
-          <div className="w-1/3 border-r border-gray-300 overflow-y-auto p-4">
+          <div className="w-1/5 border-r border-gray-300 overflow-y-auto p-4">
             <ChatsListComponent username={username} onChatOpen={openChat} />
           </div>
-          <div className="w-2/3 flex justify-center items-center p-4">
+          <div className="w-4/5 flex justify-center items-center p-4">
             {currentChat ? (
               <ChatComponent
                 chatId={currentChat.id}

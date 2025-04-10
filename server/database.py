@@ -13,14 +13,29 @@ def setup_database():
     conn = get_connection()
     cursor = conn.cursor()
 
-    # Users table
+    # Users table with avatar_url and bio
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL
+            password TEXT NOT NULL,
+            avatar_url TEXT,
+            bio TEXT
         )
     """)
+
+    # Add avatar_url and bio if not exists (for existing databases)
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN avatar_url TEXT")
+    except sqlite3.OperationalError as e:
+        if "duplicate column name" not in str(e).lower():
+            raise
+
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN bio TEXT")
+    except sqlite3.OperationalError as e:
+        if "duplicate column name" not in str(e).lower():
+            raise
 
     # Message table
     cursor.execute("""

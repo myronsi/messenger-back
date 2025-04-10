@@ -1,9 +1,10 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from server.routes import auth, messages, chats
+from server.routes import auth, messages, chats, users
 from server.websocket import router as websocket_router
 from starlette.responses import JSONResponse
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.staticfiles import StaticFiles
 
 app = FastAPI()
 
@@ -21,10 +22,13 @@ app = FastAPI()
 
 #     return await call_next(request)
 
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(messages.router, prefix="/messages", tags=["messages"])
 app.include_router(websocket_router, prefix="")
 app.include_router(chats.router, prefix="/chats", tags=["chats"])
+app.include_router(users.router, prefix="/userrs", tags=["users"])
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*"])
 app.add_middleware(
     CORSMiddleware,
