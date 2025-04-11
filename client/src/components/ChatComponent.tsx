@@ -45,10 +45,16 @@ const formatDateLabel = (timestamp: string): string => {
   return `${messageDate.getDate()} ${months[messageDate.getMonth()]} ${messageDate.getFullYear()}`;
 };
 
+const shortenText = (text: string, maxLength: number = 50): string => {
+  if (text.length <= maxLength) return text;
+  return text.substring(0, maxLength) + '...';
+};
+
 const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, username, onBack }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [messageInput, setMessageInput] = useState('');
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; messageId: number } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; messageId: number; isMine: boolean } | null>(null);
+  const [replyTo, setReplyTo] = useState<Message | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const chatWindowRef = useRef<HTMLDivElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
@@ -81,10 +87,12 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
         });
         if (response.ok) {
           const data = await response.json();
-          setMessages(data.history.map((msg: Message) => ({
+          const loadedMessages = data.history.map((msg: Message) => ({
             ...msg,
             avatar_url: msg.avatar_url || DEFAULT_AVATAR,
-          })) || []);
+            reply_to: msg.reply_to || null,
+          })) || [];
+          setMessages(loadedMessages);
         } else if (response.status === 401) {
           alert('Сессия истекла. Войдите снова.');
           localStorage.removeItem('access_token');
@@ -96,13 +104,13 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
         console.error('Ошибка сети при загрузке сообщений:', err);
       }
     };
-
+  
     if (!token) {
       console.error('Токен отсутствует. WebSocket и сообщения не будут загружены.');
       setMessages([]);
       return;
     }
-
+  
     loadMessages();
 
     const connectWebSocket = () => {
@@ -131,6 +139,7 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
               content: data.content,
               timestamp,
               avatar_url: avatar_url || DEFAULT_AVATAR,
+              reply_to: data.reply_to || null,
             };
             setMessages((prev) => {
               if (prev.some((msg) => msg.id === newMessage.id)) {
@@ -179,9 +188,14 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
 
   const handleSendMessage = () => {
     if (!messageInput.trim() || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-    const messageData = { type: "message", content: messageInput };
+    const messageData = {
+      type: "message",
+      content: messageInput,
+      reply_to: replyTo ? replyTo.id : null,
+    };
     wsRef.current.send(JSON.stringify(messageData));
     setMessageInput('');
+    setReplyTo(null);
     setTimeout(scrollToBottom, 0);
   };
 
@@ -207,13 +221,15 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
 
   const handleContextMenu = (e: React.MouseEvent, messageId: number) => {
     e.preventDefault();
+    const message = messages.find((m) => m.id === messageId);
+    const isMine = message?.sender === username;
     const menuWidth = 150;
-    const menuHeight = 100;
+    const menuHeight = 150;
     let x = e.clientX;
     let y = e.clientY;
     if (x + menuWidth > window.innerWidth) x = window.innerWidth - menuWidth;
     if (y + menuHeight > window.innerHeight) y = window.innerHeight - menuHeight;
-    setContextMenu({ x, y, messageId });
+    setContextMenu({ x, y, messageId, isMine });
   };
 
   const handleEditMessage = (messageId: number) => {
@@ -235,13 +251,31 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
     setContextMenu(null);
   };
 
+  const handleCopyMessage = (messageId: number) => {
+    const message = messages.find((m) => m.id === messageId);
+    if (message) {
+      navigator.clipboard.writeText(message.content);
+      alert('Сообщение скопировано!');
+    }
+    setContextMenu(null);
+  };
+
+  const handleReplyMessage = (messageId: number) => {
+    const message = messages.find((m) => m.id === messageId);
+    if (message) {
+      setReplyTo(message);
+      setMessageInput('');
+    }
+    setContextMenu(null);
+  };
+
   const renderMessagesWithSeparators = () => {
     const result: React.ReactNode[] = [];
     let lastDateLabel: string | null = null;
-
+  
     messages.forEach((msg) => {
       const currentDateLabel = formatDateLabel(msg.timestamp);
-
+  
       if (currentDateLabel !== lastDateLabel) {
         result.push(
           <div key={`separator-${msg.id}`} className="text-center text-gray-500 py-2 border-b border-gray-300">
@@ -250,8 +284,10 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
         );
         lastDateLabel = currentDateLabel;
       }
-
+  
       const isMine = msg.sender === username;
+      const repliedMessage = msg.reply_to ? messages.find((m) => m.id === msg.reply_to) : null;
+  
       result.push(
         <div
           key={msg.id}
@@ -275,6 +311,15 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
             }`}
           >
             {!isMine && <div className="font-semibold">{msg.sender}</div>}
+            {repliedMessage ? (
+              <div className="bg-gray-400 text-white opacity-70 p-2 rounded mb-2">
+                {shortenText(repliedMessage.content)}
+              </div>
+            ) : msg.reply_to ? (
+              <div className="bg-gray-400 text-white opacity-70 p-2 rounded mb-2">
+                [Сообщение не найдено]
+              </div>
+            ) : null}
             <div>{msg.content}</div>
             <div className={`text-xs opacity-50 ${isMine ? 'text-right' : 'text-left'}`}>
               {getTime(msg.timestamp)}
@@ -292,7 +337,7 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
         </div>
       );
     });
-
+  
     return result;
   };
 
@@ -321,28 +366,44 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
       >
         {renderMessagesWithSeparators()}
       </div>
-      <div className="flex pt-4">
-        <input
-          type="text"
-          placeholder="Введите сообщение"
-          value={messageInput}
-          onChange={(e) => setMessageInput(e.target.value)}
-          className="flex-1 p-2 border border-gray-300 rounded-l focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        <button
-          className="bg-blue-500 text-white p-2 rounded-r hover:bg-blue-600 transition-colors"
-          onClick={handleSendMessage}
-        >
-          Отправить
-        </button>
+      <div className="flex pt-4 flex-col">
+        {replyTo && (
+          <div className="flex items-center mb-2">
+            <span className="text-gray-500 mr-2">Ответ на: {shortenText(replyTo.content)}</span>
+            <button
+              className="text-red-500 hover:text-red-700"
+              onClick={() => setReplyTo(null)}
+            >
+              ✕
+            </button>
+          </div>
+        )}
+        <div className="flex">
+          <input
+            type="text"
+            placeholder="Введите сообщение"
+            value={messageInput}
+            onChange={(e) => setMessageInput(e.target.value)}
+            className="flex-1 p-2 border border-gray-300 rounded-l focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <button
+            className="bg-blue-500 text-white p-2 rounded-r hover:bg-blue-600 transition-colors"
+            onClick={handleSendMessage}
+          >
+            Отправить
+          </button>
+        </div>
       </div>
       {contextMenu && (
         <ContextMenuComponent
           ref={contextMenuRef}
           x={contextMenu.x}
           y={contextMenu.y}
+          isMine={contextMenu.isMine}
           onEdit={() => handleEditMessage(contextMenu.messageId)}
           onDelete={() => handleDeleteMessage(contextMenu.messageId)}
+          onCopy={() => handleCopyMessage(contextMenu.messageId)}
+          onReply={() => handleReplyMessage(contextMenu.messageId)}
         />
       )}
     </div>

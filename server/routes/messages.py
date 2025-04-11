@@ -16,35 +16,48 @@ class MessageEdit(BaseModel):
     content: str    
 
 @router.get("/history/{chat_id}")
-def get_message_history(chat_id: int):
+def get_message_history(chat_id: int, current_user: dict = Depends(get_current_user)):
     conn = get_connection()
     cursor = conn.cursor()
 
-    cursor.execute("""
-        SELECT messages.id, messages.content, messages.timestamp, users.username AS sender, users.avatar_url
-        FROM messages
-        JOIN users ON messages.sender_id = users.id
-        WHERE messages.chat_id = ?
-        ORDER BY messages.timestamp ASC
-    """, (chat_id,))
-    messages = cursor.fetchall()
-    conn.close()
+    try:
+        # Проверяем, что пользователь состоит в чате
+        cursor.execute("SELECT * FROM participants WHERE chat_id = ? AND user_id = ?", (chat_id, current_user["id"]))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=403, detail="You are not a member of this chat")
 
-    return {
-        "history": [
-            {
-                "id": msg["id"],
-                "content": msg["content"],
-                "timestamp": msg["timestamp"],
-                "sender": msg["sender"],
-                "avatar_url": msg["avatar_url"]
-            }
-            for msg in messages
-        ]
-    }
+        # Добавляем reply_to в запрос
+        cursor.execute("""
+            SELECT messages.id, messages.content, messages.timestamp, users.username AS sender, 
+                   users.avatar_url, messages.reply_to
+            FROM messages
+            JOIN users ON messages.sender_id = users.id
+            WHERE messages.chat_id = ?
+            ORDER BY messages.timestamp ASC
+        """, (chat_id,))
+        messages = cursor.fetchall()
+
+        # Включаем reply_to в ответ
+        return {
+            "history": [
+                {
+                    "id": msg["id"],
+                    "content": msg["content"],
+                    "timestamp": msg["timestamp"],
+                    "sender": msg["sender"],
+                    "avatar_url": msg["avatar_url"],
+                    "reply_to": msg["reply_to"]  # Добавляем reply_to
+                }
+                for msg in messages
+            ]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error loading history: {str(e)}")
+    finally:
+        conn.close()
 
 @router.put("/edit/{message_id}")
-def edit_message(message_id: int, payload: MessageEdit):
+def edit_message(message_id: int, payload: MessageEdit, current_user: dict = Depends(get_current_user)):
     content = payload.content.strip()
     if not content:
         raise HTTPException(status_code=400, detail="Message text is required")
@@ -53,10 +66,13 @@ def edit_message(message_id: int, payload: MessageEdit):
     cursor = conn.cursor()
 
     try:
-        cursor.execute("SELECT id FROM messages WHERE id = ?", (message_id,))
+        # Проверяем, что сообщение существует и пользователь — автор
+        cursor.execute("SELECT sender_id FROM messages WHERE id = ?", (message_id,))
         message = cursor.fetchone()
         if not message:
             raise HTTPException(status_code=404, detail="Message not found")
+        if message["sender_id"] != current_user["id"]:
+            raise HTTPException(status_code=403, detail="You are not the author of this message")
 
         cursor.execute("""
             UPDATE messages
@@ -69,22 +85,28 @@ def edit_message(message_id: int, payload: MessageEdit):
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
-
     finally:
         conn.close()
 
 @router.delete("/delete/{message_id}")
-def delete_message(message_id: int):
+def delete_message(message_id: int, current_user: dict = Depends(get_current_user)):
     conn = get_connection()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT * FROM messages WHERE id = ?", (message_id,))
-    message = cursor.fetchone()
-    if not message:
-        raise HTTPException(status_code=404, detail="Message not found")
+    try:
+        # Проверяем, что сообщение существует и пользователь — автор
+        cursor.execute("SELECT sender_id FROM messages WHERE id = ?", (message_id,))
+        message = cursor.fetchone()
+        if not message:
+            raise HTTPException(status_code=404, detail="Message not found")
+        if message["sender_id"] != current_user["id"]:
+            raise HTTPException(status_code=403, detail="You are not the author of this message")
 
-    cursor.execute("DELETE FROM messages WHERE id = ?", (message_id,))
-    conn.commit()
-    conn.close()
-
-    return {"message": "Message deleted"}
+        cursor.execute("DELETE FROM messages WHERE id = ?", (message_id,))
+        conn.commit()
+        return {"message": "Message deleted"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+    finally:
+        conn.close()

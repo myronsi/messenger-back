@@ -46,8 +46,10 @@ def setup_database():
             content TEXT NOT NULL,
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
             edited_at DATETIME DEFAULT NULL,
+            reply_to INTEGER DEFAULT NULL,  -- Добавляем поле reply_to
             FOREIGN KEY (chat_id) REFERENCES chats (id),
-            FOREIGN KEY (sender_id) REFERENCES users (id)
+            FOREIGN KEY (sender_id) REFERENCES users (id),
+            FOREIGN KEY (reply_to) REFERENCES messages (id)
         )
     """)
 

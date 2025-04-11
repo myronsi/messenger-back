@@ -72,9 +72,10 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
 
             try:
                 parsed_data = json.loads(data)
-                message_type = parsed_data.get("type", "message")  # Тип сообщения (по умолчанию "message")
+                message_type = parsed_data.get("type", "message")
                 content = parsed_data.get("content")
                 message_id = parsed_data.get("message_id")
+                reply_to = parsed_data.get("reply_to")  # Добавляем поддержку reply_to
             except (json.JSONDecodeError, KeyError) as e:
                 await websocket.send_text("Error: Invalid message format")
                 logger.error(f"JSON parsing error: {e}")
@@ -88,12 +89,12 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
 
                 try:
                     cursor.execute("""
-                        INSERT INTO messages (chat_id, sender_id, content, timestamp)
-                        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-                    """, (chat_id, user_id, content))
+                        INSERT INTO messages (chat_id, sender_id, content, timestamp, reply_to)
+                        VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?)
+                    """, (chat_id, user_id, content, reply_to))
                     conn.commit()
                     message_id = cursor.lastrowid
-                    logger.info(f"Message saved in db: {{'chat_id': {chat_id}, 'content': '{content}'}}, ID: {message_id}")
+                    logger.info(f"Message saved in db: {{'chat_id': {chat_id}, 'content': '{content}', 'reply_to': {reply_to}}}, ID: {message_id}")
                 except sqlite3.Error as e:
                     logger.error(f"Error while saving message to db: {e}")
                     await websocket.send_text("Error: Failed to save message")
@@ -106,7 +107,8 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                     "data": {
                         "chat_id": chat_id,
                         "content": content,
-                        "message_id": message_id
+                        "message_id": message_id,
+                        "reply_to": reply_to  # Передаём reply_to клиентам
                     },
                     "timestamp": datetime.utcnow().isoformat()
                 }
@@ -119,7 +121,6 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                     continue
 
                 try:
-                    # Проверка, что пользователь — автор сообщения
                     cursor.execute("SELECT sender_id FROM messages WHERE id = ?", (message_id,))
                     sender_id = cursor.fetchone()
                     if not sender_id or sender_id[0] != user_id:
@@ -149,7 +150,6 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                     continue
 
                 try:
-                    # Проверка, что пользователь — автор сообщения
                     cursor.execute("SELECT sender_id FROM messages WHERE id = ?", (message_id,))
                     sender_id = cursor.fetchone()
                     if not sender_id or sender_id[0] != user_id:

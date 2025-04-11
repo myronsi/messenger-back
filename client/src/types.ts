@@ -6,9 +6,10 @@ export interface Chat {
   export interface Message {
     id: number;
     sender: string;
-    avatar_url: string | null;
     content: string;
     timestamp: string;
+    avatar_url?: string;
+    reply_to?: number | null; // ID сообщения, на которое это ответ
   }
   
   export interface Chat {
