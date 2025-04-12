@@ -104,13 +104,13 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
         console.error('Ошибка сети при загрузке сообщений:', err);
       }
     };
-  
+
     if (!token) {
       console.error('Токен отсутствует. WebSocket и сообщения не будут загружены.');
       setMessages([]);
       return;
     }
-  
+
     loadMessages();
 
     const connectWebSocket = () => {
@@ -132,7 +132,11 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
           const { type } = parsedData;
 
           if (type === "message") {
-            const { username: sender, data, timestamp, avatar_url } = parsedData;
+            const { username: sender, data, timestamp, avatar_url, is_deleted } = parsedData;
+            if (data.chat_id !== chatId) {
+              console.log(`Игнорируем сообщение для другого chatId: ${data.chat_id}`);
+              return; // Игнорируем сообщения не для текущего чата
+            }
             const newMessage = {
               id: data.message_id,
               sender,
@@ -140,6 +144,7 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
               timestamp,
               avatar_url: avatar_url || DEFAULT_AVATAR,
               reply_to: data.reply_to || null,
+              is_deleted: is_deleted || false,
             };
             setMessages((prev) => {
               if (prev.some((msg) => msg.id === newMessage.id)) {
@@ -200,8 +205,7 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
   };
 
   const handleDeleteChat = async () => {
-    // eslint-disable-next-line no-restricted-globals
-    if (!confirm('Вы уверены, что хотите удалить этот чат?')) return;
+    if (!window.confirm('Вы уверены, что хотите удалить этот чат?')) return;
     try {
       const response = await fetch(`${BASE_URL}/chats/delete/${chatId}`, {
         method: 'DELETE',
@@ -243,8 +247,7 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
   };
 
   const handleDeleteMessage = (messageId: number) => {
-    // eslint-disable-next-line no-restricted-globals
-    if (!confirm('Вы уверены, что хотите удалить это сообщение?') || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    if (!window.confirm('Вы уверены, что хотите удалить это сообщение?') || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
 
     const deleteData = { type: "delete", message_id: messageId };
     wsRef.current.send(JSON.stringify(deleteData));
@@ -272,10 +275,10 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
   const renderMessagesWithSeparators = () => {
     const result: React.ReactNode[] = [];
     let lastDateLabel: string | null = null;
-  
+
     messages.forEach((msg) => {
       const currentDateLabel = formatDateLabel(msg.timestamp);
-  
+
       if (currentDateLabel !== lastDateLabel) {
         result.push(
           <div key={`separator-${msg.id}`} className="text-center text-gray-500 py-2 border-b border-gray-300">
@@ -284,10 +287,11 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
         );
         lastDateLabel = currentDateLabel;
       }
-  
+
       const isMine = msg.sender === username;
+      const isDeleted = msg.is_deleted === true;
       const repliedMessage = msg.reply_to ? messages.find((m) => m.id === msg.reply_to) : null;
-  
+
       result.push(
         <div
           key={msg.id}
@@ -310,7 +314,11 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
               isMine ? 'bg-blue-500 text-white' : 'bg-gray-200 text-black'
             }`}
           >
-            {!isMine && <div className="font-semibold">{msg.sender}</div>}
+            {!isMine && (
+              <div className={`font-semibold ${isDeleted ? 'italic text-gray-500' : ''}`}>
+                {msg.sender}
+              </div>
+            )}
             {repliedMessage ? (
               <div className="bg-gray-400 text-white opacity-70 p-2 rounded mb-2">
                 {shortenText(repliedMessage.content)}
@@ -337,7 +345,7 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
         </div>
       );
     });
-  
+
     return result;
   };
 

@@ -21,32 +21,30 @@ def get_message_history(chat_id: int, current_user: dict = Depends(get_current_u
     cursor = conn.cursor()
 
     try:
-        # Проверяем, что пользователь состоит в чате
         cursor.execute("SELECT * FROM participants WHERE chat_id = ? AND user_id = ?", (chat_id, current_user["id"]))
         if not cursor.fetchone():
             raise HTTPException(status_code=403, detail="You are not a member of this chat")
 
-        # Добавляем reply_to в запрос
         cursor.execute("""
-            SELECT messages.id, messages.content, messages.timestamp, users.username AS sender, 
-                   users.avatar_url, messages.reply_to
+            SELECT messages.id, messages.content, messages.timestamp, messages.sender_name AS sender,
+                   messages.reply_to, users.avatar_url
             FROM messages
-            JOIN users ON messages.sender_id = users.id
+            LEFT JOIN users ON messages.sender_id = users.id
             WHERE messages.chat_id = ?
             ORDER BY messages.timestamp ASC
         """, (chat_id,))
         messages = cursor.fetchall()
 
-        # Включаем reply_to в ответ
         return {
             "history": [
                 {
                     "id": msg["id"],
                     "content": msg["content"],
                     "timestamp": msg["timestamp"],
-                    "sender": msg["sender"],
-                    "avatar_url": msg["avatar_url"],
-                    "reply_to": msg["reply_to"]  # Добавляем reply_to
+                    "sender": msg["sender"],  # Всегда используем sender_name
+                    "avatar_url": msg["avatar_url"] if msg["avatar_url"] else "/static/avatars/default.jpg",
+                    "reply_to": msg["reply_to"],
+                    "is_deleted": not bool(msg["avatar_url"])  # Явно указываем статус удаления
                 }
                 for msg in messages
             ]

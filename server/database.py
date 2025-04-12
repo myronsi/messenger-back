@@ -13,7 +13,7 @@ def setup_database():
     conn = get_connection()
     cursor = conn.cursor()
 
-    # Users table with avatar_url and bio
+    # Users table with avatar_url and bio (no deleted field)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -24,40 +24,43 @@ def setup_database():
         )
     """)
 
-    # Add avatar_url and bio if not exists (for existing databases)
-    try:
-        cursor.execute("ALTER TABLE users ADD COLUMN avatar_url TEXT")
-    except sqlite3.OperationalError as e:
-        if "duplicate column name" not in str(e).lower():
-            raise
+    # Add columns to users if not exist
+    for column, definition in [
+        ("avatar_url", "TEXT"),
+        ("bio", "TEXT")
+    ]:
+        try:
+            cursor.execute(f"ALTER TABLE users ADD COLUMN {column} {definition}")
+        except sqlite3.OperationalError as e:
+            if "duplicate column name" not in str(e).lower():
+                raise
 
-    try:
-        cursor.execute("ALTER TABLE users ADD COLUMN bio TEXT")
-    except sqlite3.OperationalError as e:
-        if "duplicate column name" not in str(e).lower():
-            raise
-
-    # Message table
+    # Message table with sender_name
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             chat_id INTEGER NOT NULL,
             sender_id INTEGER NOT NULL,
+            sender_name TEXT NOT NULL,
             content TEXT NOT NULL,
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
             edited_at DATETIME DEFAULT NULL,
-            reply_to INTEGER DEFAULT NULL,  -- Добавляем поле reply_to
+            reply_to INTEGER DEFAULT NULL,
             FOREIGN KEY (chat_id) REFERENCES chats (id),
-            FOREIGN KEY (sender_id) REFERENCES users (id),
             FOREIGN KEY (reply_to) REFERENCES messages (id)
         )
     """)
 
-    try:
-        cursor.execute("ALTER TABLE messages ADD COLUMN edited_at DATETIME DEFAULT NULL")
-    except sqlite3.OperationalError as e:
-        if "duplicate column name" not in str(e).lower():
-            raise
+    # Add columns to messages if not exist
+    for column, definition in [
+        ("edited_at", "DATETIME DEFAULT NULL"),
+        ("sender_name", "TEXT NOT NULL")
+    ]:
+        try:
+            cursor.execute(f"ALTER TABLE messages ADD COLUMN {column} {definition}")
+        except sqlite3.OperationalError as e:
+            if "duplicate column name" not in str(e).lower():
+                raise
 
     # Chat table
     cursor.execute("""
@@ -80,7 +83,7 @@ def setup_database():
         )
     """)
 
-    # Chat members
+    # Chat participants table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS participants (
             chat_id INTEGER NOT NULL,

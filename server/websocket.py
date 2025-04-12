@@ -2,7 +2,6 @@ import json
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 from server.database import get_connection
 from server.routes.auth import verify_token
-import json
 from datetime import datetime
 import logging
 import sqlite3
@@ -21,17 +20,23 @@ class ConnectionManager:
         if chat_id not in self.active_chats:
             self.active_chats[chat_id] = []
         self.active_chats[chat_id].append(websocket)
+        logger.info(f"Connected to chat {chat_id}. Active connections: {len(self.active_chats[chat_id])}")
 
     def disconnect(self, chat_id: int, websocket: WebSocket):
         if chat_id in self.active_chats:
             self.active_chats[chat_id].remove(websocket)
             if not self.active_chats[chat_id]:
                 del self.active_chats[chat_id]
+            logger.info(f"Disconnected from chat {chat_id}. Active connections: {len(self.active_chats.get(chat_id, []))}")
 
     async def broadcast(self, chat_id: int, message: dict):
         if chat_id in self.active_chats:
+            logger.info(f"Broadcasting to chat {chat_id}: {message}")
             for websocket in self.active_chats[chat_id]:
-                await websocket.send_text(json.dumps(message))
+                try:
+                    await websocket.send_text(json.dumps(message))
+                except Exception as e:
+                    logger.error(f"Error broadcasting to chat {chat_id}: {e}")
 
 manager = ConnectionManager()
 
@@ -49,9 +54,18 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
     conn = get_connection()
     cursor = conn.cursor()
 
+    # Проверяем, что пользователь существует
+    cursor.execute("SELECT id FROM users WHERE id = ?", (user_id,))
+    if not cursor.fetchone():
+        await websocket.send_text("Account does not exist")
+        await websocket.close(code=1008)
+        conn.close()
+        return
+
+    # Проверяем, что пользователь состоит в чате
     cursor.execute("SELECT * FROM participants WHERE chat_id = ? AND user_id = ?", (chat_id, user_id))
     if not cursor.fetchone():
-        await websocket.send_text("You are not the member of the chat")
+        await websocket.send_text("You are not a member of this chat")
         await websocket.close(code=1008)
         conn.close()
         return
@@ -59,7 +73,7 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
     # Получаем avatar_url пользователя
     cursor.execute("SELECT avatar_url FROM users WHERE id = ?", (user_id,))
     user_data = cursor.fetchone()
-    avatar_url = user_data["avatar_url"] if user_data else None
+    avatar_url = user_data["avatar_url"] if user_data and user_data["avatar_url"] else "/static/avatars/default.jpg"
 
     # Подключение клиента к WebSocket
     await manager.connect(chat_id, websocket)
@@ -75,13 +89,12 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                 message_type = parsed_data.get("type", "message")
                 content = parsed_data.get("content")
                 message_id = parsed_data.get("message_id")
-                reply_to = parsed_data.get("reply_to")  # Добавляем поддержку reply_to
+                reply_to = parsed_data.get("reply_to")
             except (json.JSONDecodeError, KeyError) as e:
                 await websocket.send_text("Error: Invalid message format")
                 logger.error(f"JSON parsing error: {e}")
                 continue
 
-            # Обработка нового сообщения
             if message_type == "message":
                 if not content or not content.strip():
                     await websocket.send_text("Error: Empty message")
@@ -89,12 +102,12 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
 
                 try:
                     cursor.execute("""
-                        INSERT INTO messages (chat_id, sender_id, content, timestamp, reply_to)
-                        VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?)
-                    """, (chat_id, user_id, content, reply_to))
+                        INSERT INTO messages (chat_id, sender_id, sender_name, content, timestamp, reply_to)
+                        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
+                    """, (chat_id, user_id, username, content, reply_to))
                     conn.commit()
                     message_id = cursor.lastrowid
-                    logger.info(f"Message saved in db: {{'chat_id': {chat_id}, 'content': '{content}', 'reply_to': {reply_to}}}, ID: {message_id}")
+                    logger.info(f"Message saved in db: {{'chat_id': {chat_id}, 'sender_name': '{username}', 'content': '{content}', 'reply_to': {reply_to}}}, ID: {message_id}")
                 except sqlite3.Error as e:
                     logger.error(f"Error while saving message to db: {e}")
                     await websocket.send_text("Error: Failed to save message")
@@ -104,17 +117,17 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                     "type": "message",
                     "username": username,
                     "avatar_url": avatar_url,
+                    "is_deleted": False,
                     "data": {
                         "chat_id": chat_id,
                         "content": content,
                         "message_id": message_id,
-                        "reply_to": reply_to  # Передаём reply_to клиентам
+                        "reply_to": reply_to
                     },
                     "timestamp": datetime.utcnow().isoformat()
                 }
                 await manager.broadcast(chat_id, message)
 
-            # Обработка редактирования сообщения
             elif message_type == "edit":
                 if not message_id or not content:
                     await websocket.send_text("Error: Missing message_id or content")
@@ -143,7 +156,6 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                 }
                 await manager.broadcast(chat_id, edit_message)
 
-            # Обработка удаления сообщения
             elif message_type == "delete":
                 if not message_id:
                     await websocket.send_text("Error: Missing message_id")

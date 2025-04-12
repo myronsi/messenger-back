@@ -173,3 +173,20 @@ async def get_user_avatar(username: str):
     if not user or not user[0]:  # user[0] — avatar_url
         return {"avatar_url": "/static/avatars/default.jpg", "bio": user[1] if user else ""}
     return {"avatar_url": user[0], "bio": user[1] or ""}
+
+@router.delete("/me")
+async def delete_account(current_user: dict = Depends(get_current_user)):
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        # Удаляем пользователя из участников чатов
+        cursor.execute("DELETE FROM participants WHERE user_id = ?", (current_user["id"],))
+        # Удаляем пользователя
+        cursor.execute("DELETE FROM users WHERE id = ?", (current_user["id"],))
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Error deleting account: {str(e)}")
+    finally:
+        conn.close()
+    return {"message": "Account deleted"}

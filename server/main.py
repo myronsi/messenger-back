@@ -28,7 +28,7 @@ app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(messages.router, prefix="/messages", tags=["messages"])
 app.include_router(websocket_router, prefix="")
 app.include_router(chats.router, prefix="/chats", tags=["chats"])
-app.include_router(users.router, prefix="/userrs", tags=["users"])
+app.include_router(users.router, prefix="/users", tags=["users"])
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*"])
 app.add_middleware(
     CORSMiddleware,
