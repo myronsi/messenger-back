@@ -59,6 +59,7 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
   const chatWindowRef = useRef<HTMLDivElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const token = localStorage.getItem('access_token');
+  const hasFetchedMessages = useRef(false); // Предотвращение повторных запросов истории
 
   const scrollToBottom = () => {
     if (chatWindowRef.current) {
@@ -81,6 +82,8 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
 
   useEffect(() => {
     const loadMessages = async () => {
+      if (hasFetchedMessages.current) return; // Проверяем, был ли уже запрос
+      hasFetchedMessages.current = true;
       try {
         const response = await fetch(`${BASE_URL}/messages/history/${chatId}`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -114,74 +117,72 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
     loadMessages();
 
     const connectWebSocket = () => {
-      if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
-        console.log('Закрываем существующее WebSocket-соединение');
-        wsRef.current.close();
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        console.log('WebSocket уже подключён для чата', chatId);
+        return; // Не создаём новое соединение, если оно уже открыто
       }
 
-      setTimeout(() => {
-        console.log('Создаём новое WebSocket-соединение для chatId:', chatId);
-        wsRef.current = new WebSocket(`${WS_URL}/ws/chat/${chatId}?token=${token}`);
+      console.log('Подключение WebSocket для чата', chatId);
+      wsRef.current = new WebSocket(`${WS_URL}/ws/chat/${chatId}?token=${token}`);
 
-        wsRef.current.onopen = () => {
-          console.log('WebSocket успешно подключён к чату', chatId);
-        };
+      wsRef.current.onopen = () => {
+        console.log('WebSocket успешно подключён к чату', chatId);
+      };
 
-        wsRef.current.onmessage = (event) => {
-          const parsedData = JSON.parse(event.data);
-          const { type } = parsedData;
+      wsRef.current.onmessage = (event) => {
+        const parsedData = JSON.parse(event.data);
+        const { type } = parsedData;
 
-          if (type === "message") {
-            const { username: sender, data, timestamp, avatar_url, is_deleted } = parsedData;
-            if (data.chat_id !== chatId) {
-              console.log(`Игнорируем сообщение для другого chatId: ${data.chat_id}`);
-              return; // Игнорируем сообщения не для текущего чата
+        if (type === "message") {
+          const { username: sender, data, timestamp, avatar_url, is_deleted } = parsedData;
+          if (data.chat_id !== chatId) {
+            console.log(`Игнорируем сообщение для другого chatId: ${data.chat_id}`);
+            return;
+          }
+          const newMessage = {
+            id: data.message_id,
+            sender,
+            content: data.content,
+            timestamp,
+            avatar_url: avatar_url || DEFAULT_AVATAR,
+            reply_to: data.reply_to || null,
+            is_deleted: is_deleted || false,
+          };
+          setMessages((prev) => {
+            if (prev.some((msg) => msg.id === newMessage.id)) {
+              return prev; // Избегаем дублирования сообщений
             }
-            const newMessage = {
-              id: data.message_id,
-              sender,
-              content: data.content,
-              timestamp,
-              avatar_url: avatar_url || DEFAULT_AVATAR,
-              reply_to: data.reply_to || null,
-              is_deleted: is_deleted || false,
-            };
-            setMessages((prev) => {
-              if (prev.some((msg) => msg.id === newMessage.id)) {
-                return prev;
-              }
-              return [...prev, newMessage];
-            });
-          } else if (type === "edit") {
-            const { message_id, new_content } = parsedData;
-            setMessages((prev) =>
-              prev.map((msg) => (msg.id === message_id ? { ...msg, content: new_content } : msg))
-            );
-          } else if (type === "delete") {
-            const { message_id } = parsedData;
-            setMessages((prev) => prev.filter((msg) => msg.id !== message_id));
-          }
-        };
+            return [...prev, newMessage];
+          });
+        } else if (type === "edit") {
+          const { message_id, new_content } = parsedData;
+          setMessages((prev) =>
+            prev.map((msg) => (msg.id === message_id ? { ...msg, content: new_content } : msg))
+          );
+        } else if (type === "delete") {
+          const { message_id } = parsedData;
+          setMessages((prev) => prev.filter((msg) => msg.id !== message_id));
+        }
+      };
 
-        wsRef.current.onerror = (error) => {
-          console.error('WebSocket ошибка:', error);
-        };
+      wsRef.current.onerror = (error) => {
+        console.error('WebSocket ошибка:', error);
+      };
 
-        wsRef.current.onclose = (event) => {
-          console.log('WebSocket закрыт. Код:', event.code, 'Причина:', event.reason);
-          if (event.code !== 1000 && event.code !== 1005) {
-            console.log('Попытка переподключения через 1 секунду...');
-            setTimeout(connectWebSocket, 1000);
-          }
-        };
-      }, 100);
+      wsRef.current.onclose = (event) => {
+        console.log('WebSocket закрыт. Код:', event.code, 'Причина:', event.reason);
+        if (event.code !== 1000 && event.code !== 1005) {
+          console.log('Переподключение через 1 секунду...');
+          setTimeout(connectWebSocket, 1000);
+        }
+      };
     };
 
     connectWebSocket();
 
     return () => {
       if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
-        console.log('Очистка: закрываем WebSocket для chatId:', chatId);
+        console.log('Очистка: закрываем WebSocket для чата', chatId);
         wsRef.current.close();
       }
     };

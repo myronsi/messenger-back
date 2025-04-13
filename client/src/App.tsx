@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import RegisterComponent from './components/RegisterComponent';
 import LoginComponent from './components/LoginComponent';
 import ChatsListComponent from './components/ChatsListComponent';
@@ -11,9 +11,13 @@ const App: React.FC = () => {
   const [username, setUsername] = useState('');
   const [currentChat, setCurrentChat] = useState<{ id: number; name: string } | null>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true); // Добавляем состояние загрузки
+  const [isLoading, setIsLoading] = useState(true);
+  const hasFetchedUser = useRef(false);
 
   useEffect(() => {
+    if (hasFetchedUser.current) return;
+    hasFetchedUser.current = true;
+
     const token = localStorage.getItem('access_token');
     if (token) {
       fetch('http://192.168.178.29:8000/auth/me', {
@@ -33,7 +37,7 @@ const App: React.FC = () => {
           setUsername('');
         })
         .finally(() => {
-          setIsLoading(false); // Завершаем загрузку
+          setIsLoading(false);
         });
     } else {
       setIsLoading(false);
@@ -55,6 +59,7 @@ const App: React.FC = () => {
   };
 
   const openChat = (chatId: number, chatName: string) => {
+    console.log('Открываем чат:', chatId, chatName); // Лог для отладки
     setCurrentChat({ id: chatId, name: chatName });
   };
 
@@ -85,11 +90,13 @@ const App: React.FC = () => {
                 username={username}
                 onChatOpen={openChat}
                 setIsProfileOpen={setIsProfileOpen}
+                activeChatId={currentChat?.id} // Передаём ID активного чата
               />
             </div>
             <div className="w-4/5 flex justify-center items-center p-4">
               {currentChat ? (
                 <ChatComponent
+                  key={currentChat.id} // Уникальный ключ для принудительного перерендера
                   chatId={currentChat.id}
                   chatName={currentChat.name}
                   username={username}

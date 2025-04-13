@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Chat } from '../types';
 import { Menu } from 'lucide-react';
 
@@ -6,18 +6,27 @@ interface ChatsListComponentProps {
   username: string;
   onChatOpen: (chatId: number, chatName: string) => void;
   setIsProfileOpen: (open: boolean) => void;
+  activeChatId?: number; // Новый проп для отслеживания активного чата
 }
 
 const BASE_URL = "http://192.168.178.29:8000";
 const DEFAULT_AVATAR = "/static/avatars/default.jpg";
 
-const ChatsListComponent: React.FC<ChatsListComponentProps> = ({ username, onChatOpen, setIsProfileOpen }) => {
+const ChatsListComponent: React.FC<ChatsListComponentProps> = ({
+  username,
+  onChatOpen,
+  setIsProfileOpen,
+  activeChatId,
+}) => {
   const [chats, setChats] = useState<Chat[]>([]);
   const [targetUser, setTargetUser] = useState('');
   const token = localStorage.getItem('access_token');
+  const hasFetchedChats = useRef(false);
 
   useEffect(() => {
     const fetchChats = async () => {
+      if (hasFetchedChats.current) return;
+      hasFetchedChats.current = true;
       try {
         const response = await fetch(`${BASE_URL}/chats/list/${username}`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -62,8 +71,8 @@ const ChatsListComponent: React.FC<ChatsListComponentProps> = ({ username, onCha
           id: data.chat_id,
           name: `Chat: ${username} & ${targetUser}`,
           interlocutor_name: targetUser,
-          avatar_url: DEFAULT_AVATAR, // Аватарка будет обновлена при следующем fetchChats
-          interlocutor_deleted: false
+          avatar_url: DEFAULT_AVATAR,
+          interlocutor_deleted: false,
         };
         setChats([...chats, newChat]);
         setTargetUser('');
@@ -73,6 +82,14 @@ const ChatsListComponent: React.FC<ChatsListComponentProps> = ({ username, onCha
     } catch (err) {
       alert('Ошибка сети. Проверьте подключение.');
     }
+  };
+
+  const handleChatClick = (chatId: number, chatName: string) => {
+    if (chatId === activeChatId) {
+      console.log('Чат уже активен, повторное подключение не требуется');
+      return; // Не вызываем onChatOpen для активного чата
+    }
+    onChatOpen(chatId, chatName); // Вызываем для нового чата
   };
 
   return (
@@ -90,8 +107,12 @@ const ChatsListComponent: React.FC<ChatsListComponentProps> = ({ username, onCha
         {chats.map((chat) => (
           <div
             key={chat.id}
-            className="flex items-center bg-blue-500 text-white p-3 rounded cursor-pointer hover:bg-blue-600 transition-colors"
-            onClick={() => onChatOpen(chat.id, chat.interlocutor_name)}
+            className={`flex items-center p-3 rounded cursor-pointer transition-colors ${
+              chat.id === activeChatId
+                ? 'bg-blue-700 text-white'
+                : 'bg-blue-500 text-white hover:bg-blue-600'
+            }`}
+            onClick={() => handleChatClick(chat.id, chat.interlocutor_name)}
           >
             <img
               src={`${BASE_URL}${chat.avatar_url || DEFAULT_AVATAR}`}
