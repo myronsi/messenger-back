@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Message } from '../types';
 import ContextMenuComponent from './ContextMenuComponent';
+import UserProfileComponent from './UserProfileComponent';
+import ConfirmModal from './ConfirmModal';
 
 interface ChatComponentProps {
   chatId: number;
   chatName: string;
   username: string;
+  interlocutorDeleted: boolean;
   onBack: () => void;
 }
 
@@ -50,16 +53,23 @@ const shortenText = (text: string, maxLength: number = 50): string => {
   return text.substring(0, maxLength) + '...';
 };
 
-const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, username, onBack }) => {
+const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, username, interlocutorDeleted, onBack }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [messageInput, setMessageInput] = useState('');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; messageId: number; isMine: boolean } | null>(null);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
+  const [editingMessage, setEditingMessage] = useState<Message | null>(null);
+  const [selectedUser, setSelectedUser] = useState<string | null>(null);
+  const [modal, setModal] = useState<{
+    type: 'deleteMessage' | 'deleteChat' | 'error' | 'copy' | 'deletedUser';
+    message: string;
+    onConfirm?: () => void;
+  } | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const chatWindowRef = useRef<HTMLDivElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const token = localStorage.getItem('access_token');
-  const hasFetchedMessages = useRef(false); // Предотвращение повторных запросов истории
+  const hasFetchedMessages = useRef(false);
 
   const scrollToBottom = () => {
     if (chatWindowRef.current) {
@@ -82,7 +92,7 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
 
   useEffect(() => {
     const loadMessages = async () => {
-      if (hasFetchedMessages.current) return; // Проверяем, был ли уже запрос
+      if (hasFetchedMessages.current) return;
       hasFetchedMessages.current = true;
       try {
         const response = await fetch(`${BASE_URL}/messages/history/${chatId}`, {
@@ -97,29 +107,47 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
           })) || [];
           setMessages(loadedMessages);
         } else if (response.status === 401) {
-          alert('Сессия истекла. Войдите снова.');
+          setModal({
+            type: 'error',
+            message: 'Сессия истекла. Войдите снова.',
+          });
           localStorage.removeItem('access_token');
-          onBack();
+          setTimeout(onBack, 2000);
         } else {
-          console.error('Ошибка загрузки сообщений:', await response.json());
+          const error = await response.json();
+          setModal({
+            type: 'error',
+            message: `Ошибка загрузки сообщений: ${error.detail || 'Неизвестная ошибка'}`,
+          });
         }
       } catch (err) {
-        console.error('Ошибка сети при загрузке сообщений:', err);
+        setModal({
+          type: 'error',
+          message: 'Ошибка сети при загрузке сообщений.',
+        });
       }
     };
 
     if (!token) {
-      console.error('Токен отсутствует. WebSocket и сообщения не будут загружены.');
+      setModal({
+        type: 'error',
+        message: 'Токен отсутствует. WebSocket и сообщения не будут загружены.',
+      });
       setMessages([]);
       return;
     }
 
     loadMessages();
 
+    if (interlocutorDeleted) {
+      console.log('Собеседник удалён, WebSocket не подключается для чата', chatId);
+      return;
+    }
+
     const connectWebSocket = () => {
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
         console.log('WebSocket уже подключён для чата', chatId);
-        return; // Не создаём новое соединение, если оно уже открыто
+        return;
       }
 
       console.log('Подключение WebSocket для чата', chatId);
@@ -150,7 +178,7 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
           };
           setMessages((prev) => {
             if (prev.some((msg) => msg.id === newMessage.id)) {
-              return prev; // Избегаем дублирования сообщений
+              return prev;
             }
             return [...prev, newMessage];
           });
@@ -159,6 +187,8 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
           setMessages((prev) =>
             prev.map((msg) => (msg.id === message_id ? { ...msg, content: new_content } : msg))
           );
+          setEditingMessage(null);
+          setMessageInput('');
         } else if (type === "delete") {
           const { message_id } = parsedData;
           setMessages((prev) => prev.filter((msg) => msg.id !== message_id));
@@ -185,8 +215,9 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
         console.log('Очистка: закрываем WebSocket для чата', chatId);
         wsRef.current.close();
       }
+      hasFetchedMessages.current = false;
     };
-  }, [chatId, token, onBack]);
+  }, [chatId, token, onBack, interlocutorDeleted]);
 
   useEffect(() => {
     scrollToBottom();
@@ -194,34 +225,60 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
 
   const handleSendMessage = () => {
     if (!messageInput.trim() || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-    const messageData = {
-      type: "message",
-      content: messageInput,
-      reply_to: replyTo ? replyTo.id : null,
-    };
-    wsRef.current.send(JSON.stringify(messageData));
+
+    if (editingMessage) {
+      const editData = {
+        type: "edit",
+        message_id: editingMessage.id,
+        content: messageInput,
+      };
+      wsRef.current.send(JSON.stringify(editData));
+    } else {
+      const messageData = {
+        type: "message",
+        content: messageInput,
+        reply_to: replyTo ? replyTo.id : null,
+      };
+      wsRef.current.send(JSON.stringify(messageData));
+    }
+
     setMessageInput('');
     setReplyTo(null);
+    setEditingMessage(null);
     setTimeout(scrollToBottom, 0);
   };
 
-  const handleDeleteChat = async () => {
-    if (!window.confirm('Вы уверены, что хотите удалить этот чат?')) return;
-    try {
-      const response = await fetch(`${BASE_URL}/chats/delete/${chatId}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (response.ok) {
-        alert('Чат удалён!');
-        onBack();
-      } else {
-        const error = await response.json();
-        alert(`Ошибка: ${error.detail}`);
-      }
-    } catch (err) {
-      alert('Ошибка сети.');
-    }
+  const handleDeleteChat = () => {
+    setModal({
+      type: 'deleteChat',
+      message: 'Вы уверены, что хотите удалить этот чат? Это действие нельзя отменить.',
+      onConfirm: async () => {
+        try {
+          const response = await fetch(`${BASE_URL}/chats/delete/${chatId}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (response.ok) {
+            setModal({
+              type: 'error',
+              message: 'Чат успешно удалён!',
+            });
+            setTimeout(onBack, 1000);
+          } else {
+            const error = await response.json();
+            setModal({
+              type: 'error',
+              message: `Ошибка: ${error.detail || 'Не удалось удалить чат'}`,
+            });
+          }
+        } catch (err) {
+          setModal({
+            type: 'error',
+            message: 'Ошибка сети при удалении чата.',
+          });
+        }
+      },
+    });
   };
 
   const handleContextMenu = (e: React.MouseEvent, messageId: number) => {
@@ -239,27 +296,37 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
 
   const handleEditMessage = (messageId: number) => {
     const message = messages.find((m) => m.id === messageId);
-    const newContent = prompt('Введите новое сообщение:', message?.content);
-    if (!newContent || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-
-    const editData = { type: "edit", message_id: messageId, content: newContent };
-    wsRef.current.send(JSON.stringify(editData));
+    if (message) {
+      setEditingMessage(message);
+      setMessageInput(message.content);
+      setReplyTo(null);
+    }
     setContextMenu(null);
   };
 
   const handleDeleteMessage = (messageId: number) => {
-    if (!window.confirm('Вы уверены, что хотите удалить это сообщение?') || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-
-    const deleteData = { type: "delete", message_id: messageId };
-    wsRef.current.send(JSON.stringify(deleteData));
-    setContextMenu(null);
+    setModal({
+      type: 'deleteMessage',
+      message: 'Вы уверены, что хотите удалить это сообщение?',
+      onConfirm: () => {
+        if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+        const deleteData = { type: "delete", message_id: messageId };
+        wsRef.current.send(JSON.stringify(deleteData));
+        setContextMenu(null);
+        setModal(null);
+      },
+    });
   };
 
   const handleCopyMessage = (messageId: number) => {
     const message = messages.find((m) => m.id === messageId);
     if (message) {
       navigator.clipboard.writeText(message.content);
-      alert('Сообщение скопировано!');
+      setModal({
+        type: 'copy',
+        message: 'Сообщение скопировано!',
+      });
+      setTimeout(() => setModal(null), 1000);
     }
     setContextMenu(null);
   };
@@ -269,8 +336,21 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
     if (message) {
       setReplyTo(message);
       setMessageInput('');
+      setEditingMessage(null);
     }
     setContextMenu(null);
+  };
+
+  const handleUserClick = (sender: string, isMine: boolean) => {
+    if (!isMine && interlocutorDeleted) {
+      setModal({
+        type: 'deletedUser',
+        message: 'Информация о удалённом аккаунте недоступна.',
+      });
+      setTimeout(() => setModal(null), 1500); // Автозакрытие через 1.5 сек
+    } else {
+      setSelectedUser(sender);
+    }
   };
 
   const renderMessagesWithSeparators = () => {
@@ -291,6 +371,7 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
 
       const isMine = msg.sender === username;
       const isDeleted = msg.is_deleted === true;
+      const displayName = !isMine && interlocutorDeleted ? 'Удалённый аккаунт' : msg.sender;
       const repliedMessage = msg.reply_to ? messages.find((m) => m.id === msg.reply_to) : null;
 
       result.push(
@@ -305,8 +386,11 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
             <div className="mr-2">
               <img
                 src={`${BASE_URL}${msg.avatar_url || DEFAULT_AVATAR}`}
-                alt={msg.sender}
-                className="w-8 h-8 rounded-full"
+                alt={displayName}
+                className={`w-8 h-8 rounded-full ${
+                  interlocutorDeleted ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
+                }`}
+                onClick={() => handleUserClick(msg.sender, isMine)}
               />
             </div>
           )}
@@ -316,8 +400,13 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
             }`}
           >
             {!isMine && (
-              <div className={`font-semibold ${isDeleted ? 'italic text-gray-500' : ''}`}>
-                {msg.sender}
+              <div
+                className={`font-semibold ${
+                  interlocutorDeleted ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
+                } ${isDeleted ? 'italic text-gray-500' : ''}`}
+                onClick={() => handleUserClick(msg.sender, isMine)}
+              >
+                {displayName}
               </div>
             )}
             {repliedMessage ? (
@@ -326,7 +415,7 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
               </div>
             ) : msg.reply_to ? (
               <div className="bg-gray-400 text-white opacity-70 p-2 rounded mb-2">
-                [Сообщение не найдено]
+                [Сообщение удалено]
               </div>
             ) : null}
             <div>{msg.content}</div>
@@ -339,7 +428,8 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
               <img
                 src={`${BASE_URL}${msg.avatar_url || DEFAULT_AVATAR}`}
                 alt={msg.sender}
-                className="w-8 h-8 rounded-full"
+                className="w-8 h-8 rounded-full cursor-pointer"
+                onClick={() => handleUserClick(msg.sender, isMine)}
               />
             </div>
           )}
@@ -376,32 +466,49 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
         {renderMessagesWithSeparators()}
       </div>
       <div className="flex pt-4 flex-col">
-        {replyTo && (
-          <div className="flex items-center mb-2">
-            <span className="text-gray-500 mr-2">Ответ на: {shortenText(replyTo.content)}</span>
-            <button
-              className="text-red-500 hover:text-red-700"
-              onClick={() => setReplyTo(null)}
-            >
-              ✕
-            </button>
-          </div>
-        )}
-        <div className="flex">
-          <input
-            type="text"
-            placeholder="Введите сообщение"
-            value={messageInput}
-            onChange={(e) => setMessageInput(e.target.value)}
-            className="flex-1 p-2 border border-gray-300 rounded-l focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+        {!interlocutorDeleted ? (
+          <>
+            {(replyTo || editingMessage) && (
+              <div className="flex items-center mb-2">
+                <span className="text-gray-500 mr-2">
+                  {replyTo ? `Ответ на: ${shortenText(replyTo.content)}` : `Редактирование: ${shortenText(editingMessage!.content)}`}
+                </span>
+                <button
+                  className="text-red-500 hover:text-red-700"
+                  onClick={() => {
+                    setReplyTo(null);
+                    setEditingMessage(null);
+                    setMessageInput('');
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+            <div className="flex">
+              <input
+                type="text"
+                placeholder={editingMessage ? 'Отредактируйте сообщение' : 'Введите сообщение'}
+                value={messageInput}
+                onChange={(e) => setMessageInput(e.target.value)}
+                className="flex-1 p-2 border border-gray-300 rounded-l focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <button
+                className="bg-blue-500 text-white p-2 rounded-r hover:bg-blue-600 transition-colors"
+                onClick={handleSendMessage}
+              >
+                {editingMessage ? 'Сохранить' : 'Отправить'}
+              </button>
+            </div>
+          </>
+        ) : (
           <button
-            className="bg-blue-500 text-white p-2 rounded-r hover:bg-blue-600 transition-colors"
-            onClick={handleSendMessage}
+            className="w-full bg-red-500 text-white p-2 rounded hover:bg-red-600 transition-colors"
+            onClick={handleDeleteChat}
           >
-            Отправить
+            Удалить чат
           </button>
-        </div>
+        )}
       </div>
       {contextMenu && (
         <ContextMenuComponent
@@ -413,6 +520,33 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
           onDelete={() => handleDeleteMessage(contextMenu.messageId)}
           onCopy={() => handleCopyMessage(contextMenu.messageId)}
           onReply={() => handleReplyMessage(contextMenu.messageId)}
+        />
+      )}
+      {selectedUser && (
+        <UserProfileComponent username={selectedUser} onClose={() => setSelectedUser(null)} />
+      )}
+      {modal && (
+        <ConfirmModal
+          title={
+            modal.type === 'deleteMessage'
+              ? 'Удаление сообщения'
+              : modal.type === 'deleteChat'
+              ? 'Удаление чата'
+              : modal.type === 'copy'
+              ? 'Успех'
+              : modal.type === 'deletedUser'
+              ? 'Ошибка'
+              : 'Ошибка'
+          }
+          message={modal.message}
+          onConfirm={modal.onConfirm || (() => setModal(null))}
+          onCancel={() => setModal(null)}
+          confirmText={
+            modal.type === 'copy' || modal.type === 'error' || modal.type === 'deletedUser'
+              ? 'OK'
+              : 'Подтвердить'
+          }
+          isError={modal.type === 'error' || modal.type === 'copy' || modal.type === 'deletedUser'}
         />
       )}
     </div>

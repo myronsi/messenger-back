@@ -6,10 +6,16 @@ import ChatComponent from './components/ChatComponent';
 import ProfileComponent from './components/ProfileComponent';
 import './index.css';
 
+interface CurrentChat {
+  id: number;
+  name: string;
+  interlocutorDeleted: boolean;
+}
+
 const App: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [username, setUsername] = useState('');
-  const [currentChat, setCurrentChat] = useState<{ id: number; name: string } | null>(null);
+  const [currentChat, setCurrentChat] = useState<CurrentChat | null>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const hasFetchedUser = useRef(false);
@@ -58,9 +64,9 @@ const App: React.FC = () => {
     setIsProfileOpen(false);
   };
 
-  const openChat = (chatId: number, chatName: string) => {
-    console.log('Открываем чат:', chatId, chatName); // Лог для отладки
-    setCurrentChat({ id: chatId, name: chatName });
+  const openChat = (chatId: number, chatName: string, interlocutorDeleted: boolean) => {
+    console.log('Открываем чат:', chatId, chatName, 'Удалён:', interlocutorDeleted);
+    setCurrentChat({ id: chatId, name: chatName, interlocutorDeleted });
   };
 
   const backToChats = () => {
@@ -90,16 +96,17 @@ const App: React.FC = () => {
                 username={username}
                 onChatOpen={openChat}
                 setIsProfileOpen={setIsProfileOpen}
-                activeChatId={currentChat?.id} // Передаём ID активного чата
+                activeChatId={currentChat?.id}
               />
             </div>
             <div className="w-4/5 flex justify-center items-center p-4">
               {currentChat ? (
                 <ChatComponent
-                  key={currentChat.id} // Уникальный ключ для принудительного перерендера
+                  key={currentChat.id}
                   chatId={currentChat.id}
                   chatName={currentChat.name}
                   username={username}
+                  interlocutorDeleted={currentChat.interlocutorDeleted}
                   onBack={backToChats}
                 />
               ) : (

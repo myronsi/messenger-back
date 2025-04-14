@@ -1,9 +1,12 @@
 from fastapi import UploadFile, File, APIRouter, HTTPException, Depends
+from server.database import get_connection
 from server.routes.auth import verify_token
 import os
 from pathlib import Path
 
 router = APIRouter()
+
+DEFAULT_AVATAR = "/static/avatars/default.jpg"
 
 @router.post("/users/me/avatar")
 async def upload_avatar(file: UploadFile = File(...), user: dict = Depends(verify_token)):
@@ -33,3 +36,17 @@ async def get_user_avatar(username: str):
     if not row or not row[0]:
         raise HTTPException(status_code=404, detail="Avatar not found")
     return {"avatar_url": row[0]}
+
+@router.get("/users/{username}")
+async def get_user_profile(username: str):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT avatar_url, bio FROM users WHERE username = ?", (username,))
+    row = cursor.fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {
+        "avatar_url": row[0] or DEFAULT_AVATAR,
+        "bio": row[1] or ""
+    }

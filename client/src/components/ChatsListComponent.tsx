@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Chat } from '../types';
 import { Menu } from 'lucide-react';
+import UserProfileComponent from './UserProfileComponent';
+import ConfirmModal from './ConfirmModal';
 
 interface ChatsListComponentProps {
   username: string;
-  onChatOpen: (chatId: number, chatName: string) => void;
+  onChatOpen: (chatId: number, chatName: string, interlocutorDeleted: boolean) => void;
   setIsProfileOpen: (open: boolean) => void;
-  activeChatId?: number; // Новый проп для отслеживания активного чата
+  activeChatId?: number;
 }
 
 const BASE_URL = "http://192.168.178.29:8000";
@@ -20,6 +22,12 @@ const ChatsListComponent: React.FC<ChatsListComponentProps> = ({
 }) => {
   const [chats, setChats] = useState<Chat[]>([]);
   const [targetUser, setTargetUser] = useState('');
+  const [selectedUser, setSelectedUser] = useState<string | null>(null);
+  const [modal, setModal] = useState<{
+    type: 'error' | 'success' | 'validation' | 'deletedUser';
+    message: string;
+    onConfirm?: () => void;
+  } | null>(null);
   const token = localStorage.getItem('access_token');
   const hasFetchedChats = useRef(false);
 
@@ -33,9 +41,14 @@ const ChatsListComponent: React.FC<ChatsListComponentProps> = ({
         });
         if (!response.ok) {
           if (response.status === 401) {
-            alert('Сессия истекла. Войдите снова.');
-            localStorage.removeItem('access_token');
-            window.location.href = '/';
+            setModal({
+              type: 'error',
+              message: 'Сессия истекла. Войдите снова.',
+              onConfirm: () => {
+                localStorage.removeItem('access_token');
+                window.location.href = '/';
+              },
+            });
             return;
           }
           throw new Error('Ошибка загрузки чатов');
@@ -44,7 +57,10 @@ const ChatsListComponent: React.FC<ChatsListComponentProps> = ({
         setChats(data.chats);
       } catch (err) {
         console.error('Ошибка при загрузке чатов:', err);
-        alert('Не удалось загрузить чаты');
+        setModal({
+          type: 'error',
+          message: 'Не удалось загрузить чаты. Попробуйте снова.',
+        });
       }
     };
     if (token) fetchChats();
@@ -52,7 +68,10 @@ const ChatsListComponent: React.FC<ChatsListComponentProps> = ({
 
   const handleCreateChat = async () => {
     if (!targetUser.trim()) {
-      alert('Введите имя пользователя');
+      setModal({
+        type: 'validation',
+        message: 'Введите имя пользователя.',
+      });
       return;
     }
     try {
@@ -66,7 +85,10 @@ const ChatsListComponent: React.FC<ChatsListComponentProps> = ({
       });
       const data = await response.json();
       if (response.ok) {
-        alert('Чат создан!');
+        setModal({
+          type: 'success',
+          message: 'Чат успешно создан!',
+        });
         const newChat = {
           id: data.chat_id,
           name: `Chat: ${username} & ${targetUser}`,
@@ -76,20 +98,39 @@ const ChatsListComponent: React.FC<ChatsListComponentProps> = ({
         };
         setChats([...chats, newChat]);
         setTargetUser('');
+        setTimeout(() => setModal(null), 1000);
       } else {
-        alert(data.detail || 'Ошибка при создании чата');
+        setModal({
+          type: 'error',
+          message: data.detail || 'Ошибка при создании чата.',
+        });
       }
     } catch (err) {
-      alert('Ошибка сети. Проверьте подключение.');
+      setModal({
+        type: 'error',
+        message: 'Ошибка сети. Проверьте подключение.',
+      });
     }
   };
 
-  const handleChatClick = (chatId: number, chatName: string) => {
+  const handleChatClick = (chatId: number, chatName: string, interlocutorDeleted: boolean) => {
     if (chatId === activeChatId) {
       console.log('Чат уже активен, повторное подключение не требуется');
-      return; // Не вызываем onChatOpen для активного чата
+      return;
     }
-    onChatOpen(chatId, chatName); // Вызываем для нового чата
+    onChatOpen(chatId, chatName, interlocutorDeleted);
+  };
+
+  const handleUserClick = (user: string, interlocutorDeleted: boolean) => {
+    if (interlocutorDeleted) {
+      setModal({
+        type: 'deletedUser',
+        message: 'Информация о удалённом аккаунте недоступна.',
+      });
+      setTimeout(() => setModal(null), 1500);
+    } else {
+      setSelectedUser(user);
+    }
   };
 
   return (
@@ -112,12 +153,18 @@ const ChatsListComponent: React.FC<ChatsListComponentProps> = ({
                 ? 'bg-blue-700 text-white'
                 : 'bg-blue-500 text-white hover:bg-blue-600'
             }`}
-            onClick={() => handleChatClick(chat.id, chat.interlocutor_name)}
+            onClick={() => handleChatClick(chat.id, chat.interlocutor_name, chat.interlocutor_deleted)}
           >
             <img
               src={`${BASE_URL}${chat.avatar_url || DEFAULT_AVATAR}`}
               alt={chat.interlocutor_name}
-              className="w-10 h-10 rounded-full mr-3"
+              className={`w-10 h-10 rounded-full mr-3 ${
+                chat.interlocutor_deleted ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
+              }`}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleUserClick(chat.interlocutor_name, chat.interlocutor_deleted);
+              }}
             />
             <span>{chat.interlocutor_name}</span>
           </div>
@@ -136,6 +183,31 @@ const ChatsListComponent: React.FC<ChatsListComponentProps> = ({
       >
         Создать чат
       </button>
+      {selectedUser && (
+        <UserProfileComponent username={selectedUser} onClose={() => setSelectedUser(null)} />
+      )}
+      {modal && (
+        <ConfirmModal
+          title={
+            modal.type === 'success'
+              ? 'Успех'
+              : modal.type === 'validation'
+              ? 'Ошибка ввода'
+              : modal.type === 'deletedUser'
+              ? 'Ошибка'
+              : 'Ошибка'
+          }
+          message={modal.message}
+          onConfirm={modal.onConfirm || (() => setModal(null))}
+          onCancel={() => setModal(null)}
+          confirmText={
+            modal.type === 'success' || modal.type === 'error' || modal.type === 'validation' || modal.type === 'deletedUser'
+              ? 'OK'
+              : 'Подтвердить'
+          }
+          isError={modal.type === 'success' || modal.type === 'error' || modal.type === 'validation' || modal.type === 'deletedUser'}
+        />
+      )}
     </div>
   );
 };

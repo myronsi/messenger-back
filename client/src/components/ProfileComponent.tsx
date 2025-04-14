@@ -1,4 +1,5 @@
 import React, { useState, useEffect, forwardRef } from 'react';
+import ConfirmModal from './ConfirmModal';
 
 interface ProfileComponentProps {
   onClose: () => void;
@@ -13,6 +14,11 @@ const ProfileComponent = forwardRef<HTMLDivElement, ProfileComponentProps>(({ on
   const [bio, setBio] = useState('');
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [modal, setModal] = useState<{
+    type: 'deleteAccount' | 'error' | 'success';
+    message: string;
+    onConfirm?: () => void;
+  } | null>(null);
   const token = localStorage.getItem('access_token');
 
   useEffect(() => {
@@ -30,8 +36,10 @@ const ProfileComponent = forwardRef<HTMLDivElement, ProfileComponentProps>(({ on
           throw new Error('Ошибка загрузки профиля');
         }
       } catch (err) {
-        console.error('Ошибка при загрузке профиля:', err);
-        alert('Не удалось загрузить профиль. Попробуйте снова.');
+        setModal({
+          type: 'error',
+          message: 'Не удалось загрузить профиль. Попробуйте снова.',
+        });
       }
     };
     if (token) fetchProfile();
@@ -53,38 +61,62 @@ const ProfileComponent = forwardRef<HTMLDivElement, ProfileComponentProps>(({ on
       const data = await response.json();
       if (response.ok) {
         setAvatarUrl(data.avatar_url);
-        alert('Аватарка успешно обновлена!');
+        setModal({
+          type: 'success',
+          message: 'Аватарка успешно обновлена!',
+        });
         setAvatarFile(null);
       } else {
-        alert(data.detail || 'Ошибка при загрузке аватарки');
+        setModal({
+          type: 'error',
+          message: data.detail || 'Ошибка при загрузке аватарки.',
+        });
       }
     } catch (err) {
-      alert('Ошибка сети при загрузке аватарки. Проверьте подключение.');
+      setModal({
+        type: 'error',
+        message: 'Ошибка сети при загрузке аватарки.',
+      });
     } finally {
       setIsUploading(false);
     }
   };
 
-  const handleDeleteAccount = async () => {
-    if (!window.confirm('Вы уверены, что хотите удалить аккаунт? Это действие нельзя отменить.')) return;
-  
-    try {
-      const response = await fetch(`${BASE_URL}/auth/me`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (response.ok) {
-        alert('Аккаунт удалён!');
-        localStorage.removeItem('access_token');
-        onClose(); // Закрываем профиль
-        window.location.reload(); // Перезагружаем страницу для сброса состояния
-      } else {
-        const error = await response.json();
-        alert(`Ошибка: ${error.detail || 'Не удалось удалить аккаунт'}`);
-      }
-    } catch (err) {
-      alert('Ошибка сети при удалении аккаунта. Проверьте подключение.');
-    }
+  const handleDeleteAccount = () => {
+    setModal({
+      type: 'deleteAccount',
+      message: 'Вы уверены, что хотите удалить аккаунт? Это действие будет выполнено мгновенно и его нельзя отменить.',
+      onConfirm: async () => {
+        try {
+          const response = await fetch(`${BASE_URL}/auth/me`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (response.ok) {
+            setModal({
+              type: 'success',
+              message: 'Аккаунт успешно удалён!',
+            });
+            localStorage.removeItem('access_token');
+            setTimeout(() => {
+              onClose();
+              window.location.reload();
+            }, 1000);
+          } else {
+            const error = await response.json();
+            setModal({
+              type: 'error',
+              message: `Ошибка: ${error.detail || 'Не удалось удалить аккаунт'}`,
+            });
+          }
+        } catch (err) {
+          setModal({
+            type: 'error',
+            message: 'Ошибка сети при удалении аккаунта.',
+          });
+        }
+      },
+    });
   };
 
   return (
@@ -136,6 +168,22 @@ const ProfileComponent = forwardRef<HTMLDivElement, ProfileComponentProps>(({ on
           </button>
         </div>
       </div>
+      {modal && (
+        <ConfirmModal
+          title={
+            modal.type === 'deleteAccount'
+              ? 'Удаление аккаунта'
+              : modal.type === 'success'
+              ? 'Успех'
+              : 'Ошибка'
+          }
+          message={modal.message}
+          onConfirm={modal.onConfirm || (() => setModal(null))}
+          onCancel={() => setModal(null)}
+          confirmText={modal.type === 'success' || modal.type === 'error' ? 'OK' : 'Подтвердить'}
+          isError={modal.type === 'success' || modal.type === 'error'}
+        />
+      )}
     </div>
   );
 });
