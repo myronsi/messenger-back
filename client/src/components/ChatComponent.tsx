@@ -158,7 +158,14 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
       };
 
       wsRef.current.onmessage = (event) => {
-        const parsedData = JSON.parse(event.data);
+        let parsedData;
+        try {
+          parsedData = JSON.parse(event.data);
+        } catch (error) {
+          console.error("Received non-JSON message:", event.data);
+          return;
+        }
+
         const { type } = parsedData;
 
         if (type === "message") {
@@ -192,6 +199,18 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
         } else if (type === "delete") {
           const { message_id } = parsedData;
           setMessages((prev) => prev.filter((msg) => msg.id !== message_id));
+        } else if (type === "chat_deleted") {
+          const { chat_id } = parsedData;
+          if (chat_id === chatId) {
+            setModal({
+              type: 'error',
+              message: 'Чат был удалён.',
+            });
+            setTimeout(onBack, 1000);
+          }
+        } else if (type === "error") {
+          console.error("Server error:", parsedData.message);
+          alert(parsedData.message);
         }
       };
 
@@ -347,7 +366,7 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ chatId, chatName, usernam
         type: 'deletedUser',
         message: 'Информация о удалённом аккаунте недоступна.',
       });
-      setTimeout(() => setModal(null), 1500); // Автозакрытие через 1.5 сек
+      setTimeout(() => setModal(null), 1500);
     } else {
       setSelectedUser(sender);
     }

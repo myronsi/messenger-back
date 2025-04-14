@@ -16,7 +16,7 @@ class ConnectionManager:
         self.active_chats = {}  # { chat_id: [websockets] }
 
     async def connect(self, chat_id: int, websocket: WebSocket):
-        await websocket.accept()
+        # Удаляем await websocket.accept(), так как соединение уже принято
         if chat_id not in self.active_chats:
             self.active_chats[chat_id] = []
         self.active_chats[chat_id].append(websocket)
@@ -31,6 +31,16 @@ class ConnectionManager:
 
     async def broadcast(self, chat_id: int, message: dict):
         if chat_id in self.active_chats:
+            logger.info(f"Broadcasting to chat {chat_id}: {message}, clients: {len(self.active_chats[chat_id])}")
+            for websocket in self.active_chats[chat_id]:
+                try:
+                    await websocket.send_text(json.dumps(message))
+                    logger.info(f"Sent message to client in chat {chat_id}")
+                except Exception as e:
+                    logger.error(f"Error broadcasting to chat {chat_id}: {e}")
+
+    async def broadcast_to_chat(self, chat_id: int, message: dict):
+        if chat_id in self.active_chats:
             logger.info(f"Broadcasting to chat {chat_id}: {message}")
             for websocket in self.active_chats[chat_id]:
                 try:
@@ -42,33 +52,42 @@ manager = ConnectionManager()
 
 @router.websocket("/ws/chat/{chat_id}")
 async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Query(...)):
+    # Принимаем соединение WebSocket
+    await websocket.accept()
+
+    # Проверка токена
     user = verify_token(token)
     if not user:
-        await websocket.send_text("Invalid token")
+        await websocket.send_text(json.dumps({"type": "error", "message": "Invalid token"}))
         await websocket.close(code=1008)
         return
 
     username = user["username"]
     user_id = user["id"]
 
+    # Подключение к базе данных
     conn = get_connection()
     cursor = conn.cursor()
 
-    # Проверяем, что пользователь существует
+    # Проверка существования пользователя
     cursor.execute("SELECT id FROM users WHERE id = ?", (user_id,))
     if not cursor.fetchone():
-        await websocket.send_text("Account does not exist")
+        await websocket.send_text(json.dumps({"type": "error", "message": "Account does not exist"}))
         await websocket.close(code=1008)
         conn.close()
         return
 
-    # Проверяем, что пользователь состоит в чате
-    cursor.execute("SELECT * FROM participants WHERE chat_id = ? AND user_id = ?", (chat_id, user_id))
-    if not cursor.fetchone():
-        await websocket.send_text("You are not a member of this chat")
-        await websocket.close(code=1008)
-        conn.close()
-        return
+    # Пропускаем проверку участия для chat_id=0 (глобальные уведомления)
+    if chat_id != 0:
+        cursor.execute("SELECT * FROM participants WHERE chat_id = ? AND user_id = ?", (chat_id, user_id))
+        participant = cursor.fetchone()
+        if not participant:
+            logger.error(f"User {user_id} not found in participants for chat {chat_id}")
+            await websocket.send_text(json.dumps({"type": "error", "message": "You are not a member of this chat"}))
+            await websocket.close(code=1008)
+            conn.close()
+            return
+        logger.info(f"User {user_id} verified as participant in chat {chat_id}")
 
     # Получаем avatar_url пользователя
     cursor.execute("SELECT avatar_url FROM users WHERE id = ?", (user_id,))
@@ -91,13 +110,13 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                 message_id = parsed_data.get("message_id")
                 reply_to = parsed_data.get("reply_to")
             except (json.JSONDecodeError, KeyError) as e:
-                await websocket.send_text("Error: Invalid message format")
+                await websocket.send_text(json.dumps({"type": "error", "message": "Invalid message format"}))
                 logger.error(f"JSON parsing error: {e}")
                 continue
 
             if message_type == "message":
                 if not content or not content.strip():
-                    await websocket.send_text("Error: Empty message")
+                    await websocket.send_text(json.dumps({"type": "error", "message": "Empty message"}))
                     continue
 
                 try:
@@ -110,7 +129,7 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                     logger.info(f"Message saved in db: {{'chat_id': {chat_id}, 'sender_name': '{username}', 'content': '{content}', 'reply_to': {reply_to}}}, ID: {message_id}")
                 except sqlite3.Error as e:
                     logger.error(f"Error while saving message to db: {e}")
-                    await websocket.send_text("Error: Failed to save message")
+                    await websocket.send_text(json.dumps({"type": "error", "message": "Failed to save message"}))
                     continue
 
                 message = {
@@ -130,14 +149,14 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
 
             elif message_type == "edit":
                 if not message_id or not content:
-                    await websocket.send_text("Error: Missing message_id or content")
+                    await websocket.send_text(json.dumps({"type": "error", "message": "Missing message_id or content"}))
                     continue
 
                 try:
                     cursor.execute("SELECT sender_id FROM messages WHERE id = ?", (message_id,))
                     sender_id = cursor.fetchone()
                     if not sender_id or sender_id[0] != user_id:
-                        await websocket.send_text("Error: You are not the author of this message")
+                        await websocket.send_text(json.dumps({"type": "error", "message": "You are not the author of this message"}))
                         continue
 
                     cursor.execute("UPDATE messages SET content = ? WHERE id = ?", (content, message_id))
@@ -145,7 +164,7 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                     logger.info(f"Message edited: {{'message_id': {message_id}, 'new_content': '{content}'}}")
                 except sqlite3.Error as e:
                     logger.error(f"Error while editing message: {e}")
-                    await websocket.send_text("Error: Failed to edit message")
+                    await websocket.send_text(json.dumps({"type": "error", "message": "Failed to edit message"}))
                     continue
 
                 edit_message = {
@@ -158,14 +177,14 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
 
             elif message_type == "delete":
                 if not message_id:
-                    await websocket.send_text("Error: Missing message_id")
+                    await websocket.send_text(json.dumps({"type": "error", "message": "Missing message_id"}))
                     continue
 
                 try:
                     cursor.execute("SELECT sender_id FROM messages WHERE id = ?", (message_id,))
                     sender_id = cursor.fetchone()
                     if not sender_id or sender_id[0] != user_id:
-                        await websocket.send_text("Error: You are not the author of this message")
+                        await websocket.send_text(json.dumps({"type": "error", "message": "You are not the author of this message"}))
                         continue
 
                     cursor.execute("DELETE FROM messages WHERE id = ?", (message_id,))
@@ -173,7 +192,7 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                     logger.info(f"Message deleted: {{'message_id': {message_id}}}")
                 except sqlite3.Error as e:
                     logger.error(f"Error while deleting message: {e}")
-                    await websocket.send_text("Error: Failed to delete message")
+                    await websocket.send_text(json.dumps({"type": "error", "message": "Failed to delete message"}))
                     continue
 
                 delete_message = {

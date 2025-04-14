@@ -11,7 +11,23 @@ interface ChatsListComponentProps {
   activeChatId?: number;
 }
 
+// Интерфейс для сообщений WebSocket
+interface WebSocketMessage {
+  type: 'chat_created' | 'chat_deleted' | 'error';
+  message?: string;
+  chat?: {
+    chat_id: number;
+    name: string;
+    user1: string;
+    user2: string;
+    user1_avatar_url?: string;
+    user2_avatar_url?: string;
+  };
+  chat_id?: number;
+}
+
 const BASE_URL = "http://192.168.178.29:8000";
+const WS_URL = "ws://192.168.178.29:8000";
 const DEFAULT_AVATAR = "/static/avatars/default.jpg";
 
 const ChatsListComponent: React.FC<ChatsListComponentProps> = ({
@@ -30,6 +46,7 @@ const ChatsListComponent: React.FC<ChatsListComponentProps> = ({
   } | null>(null);
   const token = localStorage.getItem('access_token');
   const hasFetchedChats = useRef(false);
+  const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     const fetchChats = async () => {
@@ -63,7 +80,104 @@ const ChatsListComponent: React.FC<ChatsListComponentProps> = ({
         });
       }
     };
+
     if (token) fetchChats();
+
+    // Периодический опрос каждые 30 секунд
+    const interval = setInterval(() => {
+      if (token) {
+        hasFetchedChats.current = false;
+        fetchChats();
+      }
+    }, 30000);
+
+    // Подключение WebSocket для уведомлений о чатах
+    const connectWebSocket = () => {
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        console.log('WebSocket уже подключён для списка чатов');
+        return;
+      }
+
+      console.log('Подключение WebSocket для списка чатов');
+      wsRef.current = new WebSocket(`${WS_URL}/ws/chat/0?token=${token}`);
+
+      wsRef.current.onopen = () => {
+        console.log('WebSocket успешно подключён для списка чатов');
+      };
+
+      wsRef.current.onmessage = (event) => {
+        let parsedData: WebSocketMessage;
+        try {
+          parsedData = JSON.parse(event.data);
+        } catch (error) {
+          console.error('Received non-JSON message:', event.data);
+          return;
+        }
+
+        const { type, message, chat } = parsedData;
+
+        if (type === 'chat_created' && chat) {
+          console.log('Received chat_created:', chat);
+          setChats((prev) => {
+            if (prev.some((c) => c.id === chat.chat_id)) return prev;
+            const interlocutor_name = chat.user1 === username ? chat.user2 : chat.user1;
+            // Проверяем, что пользователь является участником чата
+            if (![chat.user1, chat.user2].includes(username)) {
+              console.log('Ignoring chat_created: user not a participant');
+              return prev;
+            }
+            // Выбираем аватарку собеседника
+            const avatar_url =
+              chat.user1 === username
+                ? chat.user2_avatar_url || DEFAULT_AVATAR
+                : chat.user1_avatar_url || DEFAULT_AVATAR;
+            return [
+              ...prev,
+              {
+                id: chat.chat_id,
+                name: chat.name,
+                interlocutor_name,
+                avatar_url,
+                interlocutor_deleted: false,
+              },
+            ];
+          });
+        } else if (type === 'chat_deleted' && parsedData.chat_id !== undefined) {
+          console.log('Received chat_deleted:', parsedData.chat_id);
+          setChats((prev) => prev.filter((c) => c.id !== parsedData.chat_id));
+        } else if (type === 'error' && message) {
+          console.error('Server error:', message);
+          setModal({
+            type: 'error',
+            message,
+          });
+        } else {
+          console.warn('Unknown message type or missing data:', parsedData);
+        }
+      };
+
+      wsRef.current.onerror = (error) => {
+        console.error('WebSocket ошибка:', error);
+      };
+
+      wsRef.current.onclose = (event) => {
+        console.log('WebSocket закрыт. Код:', event.code, 'Причина:', event.reason);
+        if (event.code !== 1000 && event.code !== 1005) {
+          console.log('Переподключение через 1 секунду...');
+          setTimeout(connectWebSocket, 1000);
+        }
+      };
+    };
+
+    if (token) connectWebSocket();
+
+    return () => {
+      clearInterval(interval);
+      if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
+        console.log('Очистка: закрываем WebSocket для списка чатов');
+        wsRef.current.close();
+      }
+    };
   }, [username, token]);
 
   const handleCreateChat = async () => {
@@ -89,14 +203,6 @@ const ChatsListComponent: React.FC<ChatsListComponentProps> = ({
           type: 'success',
           message: 'Чат успешно создан!',
         });
-        const newChat = {
-          id: data.chat_id,
-          name: `Chat: ${username} & ${targetUser}`,
-          interlocutor_name: targetUser,
-          avatar_url: DEFAULT_AVATAR,
-          interlocutor_deleted: false,
-        };
-        setChats([...chats, newChat]);
         setTargetUser('');
         setTimeout(() => setModal(null), 1000);
       } else {
@@ -201,11 +307,19 @@ const ChatsListComponent: React.FC<ChatsListComponentProps> = ({
           onConfirm={modal.onConfirm || (() => setModal(null))}
           onCancel={() => setModal(null)}
           confirmText={
-            modal.type === 'success' || modal.type === 'error' || modal.type === 'validation' || modal.type === 'deletedUser'
+            modal.type === 'success' ||
+            modal.type === 'error' ||
+            modal.type === 'validation' ||
+            modal.type === 'deletedUser'
               ? 'OK'
               : 'Подтвердить'
           }
-          isError={modal.type === 'success' || modal.type === 'error' || modal.type === 'validation' || modal.type === 'deletedUser'}
+          isError={
+            modal.type === 'success' ||
+            modal.type === 'error' ||
+            modal.type === 'validation' ||
+            modal.type === 'deletedUser'
+          }
         />
       )}
     </div>

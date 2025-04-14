@@ -2,8 +2,13 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from server.database import get_connection
 from server.routes.auth import get_current_user
+from server.websocket import manager
+import logging
 
 router = APIRouter()
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class ChatCreate(BaseModel):
     user1: str
@@ -15,18 +20,18 @@ class MessageSend(BaseModel):
     content: str
 
 @router.post("/create")
-def create_chat(chat: ChatCreate):
+async def create_chat(chat: ChatCreate):
     conn = get_connection()
     cursor = conn.cursor()
 
     try:
-        # Проверяем существование пользователей
-        cursor.execute("SELECT id FROM users WHERE username = ?", (chat.user1,))
-        user1_id = cursor.fetchone()
-        cursor.execute("SELECT id FROM users WHERE username = ?", (chat.user2,))
-        user2_id = cursor.fetchone()
+        # Проверяем существование пользователей и получаем их данные
+        cursor.execute("SELECT id, avatar_url FROM users WHERE username = ?", (chat.user1,))
+        user1 = cursor.fetchone()
+        cursor.execute("SELECT id, avatar_url FROM users WHERE username = ?", (chat.user2,))
+        user2 = cursor.fetchone()
 
-        if not user1_id or not user2_id:
+        if not user1 or not user2:
             raise HTTPException(status_code=404, detail="One or both users not found")
         if chat.user1 == chat.user2:
             raise HTTPException(status_code=400, detail="Cannot create chat with yourself")
@@ -35,7 +40,7 @@ def create_chat(chat: ChatCreate):
         cursor.execute("""
             SELECT id FROM chats
             WHERE (user1_id = ? AND user2_id = ?) OR (user1_id = ? AND user2_id = ?)
-        """, (user1_id["id"], user2_id["id"], user2_id["id"], user1_id["id"]))
+        """, (user1["id"], user2["id"], user2["id"], user1["id"]))
         existing_chat = cursor.fetchone()
         if existing_chat:
             raise HTTPException(status_code=400, detail="Chat between these users already exists")
@@ -44,19 +49,48 @@ def create_chat(chat: ChatCreate):
         cursor.execute("""
             INSERT INTO chats (name, user1_id, user2_id)
             VALUES (?, ?, ?)
-        """, (f"Chat: {chat.user1} & {chat.user2}", user1_id["id"], user2_id["id"]))
+        """, (f"Chat: {chat.user1} & {chat.user2}", user1["id"], user2["id"]))
         chat_id = cursor.lastrowid
 
         # Добавляем участников
-        cursor.execute("INSERT INTO participants (chat_id, user_id) VALUES (?, ?)", (chat_id, user1_id["id"]))
-        cursor.execute("INSERT INTO participants (chat_id, user_id) VALUES (?, ?)", (chat_id, user2_id["id"]))
+        cursor.execute("INSERT INTO participants (chat_id, user_id) VALUES (?, ?)", (chat_id, user1["id"]))
+        logger.info(f"Added participant: chat_id={chat_id}, user_id={user1['id']}")
+        cursor.execute("INSERT INTO participants (chat_id, user_id) VALUES (?, ?)", (chat_id, user2["id"]))
+        logger.info(f"Added participant: chat_id={chat_id}, user_id={user2['id']}")
 
         conn.commit()
-        return {"chat_id": chat_id, "user1": chat.user1, "user2": chat.user2, "message": "Chat created"}
+
+        # Формируем данные нового чата
+        chat_data = {
+            "chat_id": chat_id,
+            "name": f"Chat: {chat.user1} & {chat.user2}",
+            "user1": chat.user1,
+            "user2": chat.user2,
+            "user1_avatar_url": user1["avatar_url"] or "/static/avatars/default.jpg",
+            "user2_avatar_url": user2["avatar_url"] or "/static/avatars/default.jpg"
+        }
+
+        # Отправляем уведомление о создании чата через WebSocket на chat_id=0
+        message = {
+            "type": "chat_created",
+            "chat": chat_data
+        }
+        await manager.broadcast(0, message)
+        logger.info(f"Sent chat_created notification for chat_id={chat_id} to chat_id=0")
+
+        # Возвращаем данные в зависимости от того, кто запрашивает
+        return {
+            "chat_id": chat_id,
+            "user1": chat.user1,
+            "user2": chat.user2,
+            "avatar_url": user2["avatar_url"] if chat.user1 == chat.user1 else user1["avatar_url"] or "/static/avatars/default.jpg",
+            "message": "Chat created"
+        }
     except HTTPException:
         raise
     except Exception as e:
         conn.rollback()
+        logger.error(f"Error creating chat: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error creating chat: {str(e)}")
     finally:
         conn.close()
@@ -111,7 +145,7 @@ def list_chats(username: str, current_user: dict = Depends(get_current_user)):
         conn.close()
 
 @router.delete("/delete/{chat_id}")
-def delete_chat(chat_id: int, current_user: dict = Depends(get_current_user)):
+async def delete_chat(chat_id: int, current_user: dict = Depends(get_current_user)):
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -128,15 +162,27 @@ def delete_chat(chat_id: int, current_user: dict = Depends(get_current_user)):
 
         # Удаляем записи из participants
         cursor.execute("DELETE FROM participants WHERE chat_id = ?", (chat_id,))
+        # Удаляем сообщения
+        cursor.execute("DELETE FROM messages WHERE chat_id = ?", (chat_id,))
         # Удаляем чат
         cursor.execute("DELETE FROM chats WHERE id = ?", (chat_id,))
 
         conn.commit()
+
+        # Отправляем уведомление об удалении чата через WebSocket на chat_id=0
+        message = {
+            "type": "chat_deleted",
+            "chat_id": chat_id
+        }
+        await manager.broadcast(0, message)
+        logger.info(f"Sent chat_deleted notification for chat_id={chat_id} to chat_id=0")
+
         return {"message": "Chat deleted"}
     except HTTPException:
         raise
     except Exception as e:
         conn.rollback()
+        logger.error(f"Error deleting chat: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error deleting chat: {str(e)}")
     finally:
         conn.close()
