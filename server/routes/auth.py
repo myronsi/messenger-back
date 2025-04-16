@@ -163,6 +163,22 @@ async def upload_avatar(file: UploadFile = File(...), current_user: dict = Depen
     conn.close()
     return {"avatar_url": avatar_url}
 
+@router.post("/me/bio")
+async def update_user_bio(bio_data: UserUpdate, current_user: dict = Depends(get_current_user)):
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("UPDATE users SET bio = ? WHERE id = ?", (bio_data.bio, current_user["id"]))
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="User not found")
+        conn.commit()
+        return {"message": "Bio updated"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Error updating bio: {str(e)}")
+    finally:
+        conn.close()
+
 @router.get("/users/{username}")
 async def get_user_avatar(username: str):
     conn = get_connection()
