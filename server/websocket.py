@@ -119,6 +119,10 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                     content = parsed_data.get("content")
                     message_id = parsed_data.get("message_id")
                     reply_to = parsed_data.get("reply_to")
+                    file_url = parsed_data.get("file_url")
+                    file_name = parsed_data.get("file_name")
+                    file_type = parsed_data.get("file_type")
+                    file_size = parsed_data.get("file_size")
                 except (json.JSONDecodeError, KeyError) as e:
                     await websocket.send_text(json.dumps({"type": "error", "message": "Invalid message format"}))
                     logger.error(f"JSON parsing error: {e}")
@@ -156,6 +160,47 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                         "timestamp": datetime.utcnow().isoformat()
                     }
                     await manager.broadcast(chat_id, message)
+
+                elif message_type == "file":
+                    if not file_url or not file_name or not file_type or not file_size:
+                        await websocket.send_text(json.dumps({"type": "error", "message": "Missing file metadata"}))
+                        continue
+
+                    try:
+                        cursor.execute("""
+                            INSERT INTO messages (chat_id, sender_id, sender_name, content, timestamp, reply_to)
+                            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
+                        """, (chat_id, user_id, username, json.dumps({
+                            "file_url": file_url,
+                            "file_name": file_name,
+                            "file_type": file_type,
+                            "file_size": file_size
+                        }), reply_to))
+                        conn.commit()
+                        message_id = cursor.lastrowid
+                        logger.info(f"File message saved in db: {{'chat_id': {chat_id}, 'sender_name': '{username}', 'file_url': '{file_url}'}}, ID: {message_id}")
+                    except sqlite3.Error as e:
+                        logger.error(f"Error while saving file message to db: {e}")
+                        await websocket.send_text(json.dumps({"type": "error", "message": "Failed to save file message"}))
+                        continue
+
+                    file_message = {
+                        "type": "file",
+                        "username": username,
+                        "avatar_url": avatar_url,
+                        "is_deleted": False,
+                        "data": {
+                            "chat_id": chat_id,
+                            "file_url": file_url,
+                            "file_name": file_name,
+                            "file_type": file_type,
+                            "file_size": file_size,
+                            "message_id": message_id,
+                            "reply_to": reply_to
+                        },
+                        "timestamp": datetime.utcnow().isoformat()
+                    }
+                    await manager.broadcast(chat_id, file_message)
 
                 elif message_type == "edit":
                     if not message_id or not content:

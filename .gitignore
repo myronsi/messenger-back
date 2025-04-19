@@ -23,4 +23,4 @@ pyvenv.cfg
 
 __pycache__/
 
-avatars/
+static/
