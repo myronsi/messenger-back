@@ -9,12 +9,25 @@ import hashlib
 import secrets
 from server.database import get_connection
 from pathlib import Path
+import subprocess
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.backends import default_backend
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives import padding
+import base64
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 SECRET_KEY = "supersecretkey"  # REPLACE THIS KEY!!!!!
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
+RECOVERY_TOKEN_EXPIRE_MINUTES = 5
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
@@ -30,6 +43,17 @@ class UserUpdate(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+    device_part: Optional[str] = None
+    qr_part: Optional[str] = None
+
+class RecoveryRequest(BaseModel):
+    username: str
+    part1: str
+    part2: str
+
+class ResetPasswordRequest(BaseModel):
+    recovery_token: str
+    new_password: str
 
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
@@ -38,6 +62,16 @@ def create_access_token(user_id: int):
     expires_delta = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {
         "sub": str(user_id),
+        "exp": datetime.utcnow() + expires_delta
+    }
+    token = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+    return token
+
+def create_recovery_token(user_id: int):
+    expires_delta = timedelta(minutes=RECOVERY_TOKEN_EXPIRE_MINUTES)
+    payload = {
+        "sub": str(user_id),
+        "type": "recovery",
         "exp": datetime.utcnow() + expires_delta
     }
     token = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
@@ -60,6 +94,25 @@ def verify_token(token: str):
     except JWTError:
         return None    
 
+def verify_recovery_token(token: str):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("type") != "recovery":
+            return None
+        user_id = payload.get("sub")
+        if user_id is None:
+            return None
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, username FROM users WHERE id = ?", (user_id,))
+        user = cursor.fetchone()
+        conn.close()
+        if user:
+            return {"id": user[0], "username": user[1]}
+        return None
+    except JWTError:
+        return None
+
 def get_user_by_id(user_id: int):
     conn = get_connection()
     cursor = conn.cursor()
@@ -81,26 +134,112 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
+def split_master_key(master_key_hex: str, shares: int = 3, threshold: int = 2):
+    try:
+        result = subprocess.run(
+            ['ssss-split', '-t', str(threshold), '-n', str(shares), '-w', master_key_hex],
+            input=master_key_hex + '\n', text=True, capture_output=True
+        )
+        if result.returncode != 0:
+            raise Exception(f"ssss-split failed: {result.stderr}")
+        shares_output = result.stdout.splitlines()[1:]  # Пропускаем первую строку с мастер-ключом
+        return [share.strip() for share in shares_output]
+    except Exception as e:
+        raise Exception(f"Error splitting master key: {e}")
+
+def combine_master_key(shares: list[str]):
+    try:
+        logger.info(f"Combining shares: {shares}")
+        shares_input = '\n'.join(shares) + '\n'
+        result = subprocess.run(
+            ['ssss-combine', '-t', '2'],
+            input=shares_input, text=True, capture_output=True
+        )
+        logger.info(f"ssss-combine stdout: {result.stdout}")
+        logger.info(f"ssss-combine stderr: {result.stderr}")
+        if result.returncode != 0:
+            raise Exception(f"ssss-combine failed: {result.stderr}")
+        # Проверяем как stdout, так и stderr на наличие мастер-ключа
+        output = result.stdout + result.stderr
+        for line in output.splitlines():
+            if "Resulting secret: " in line:
+                master_key_hex = line.split("Resulting secret: ")[1].strip()
+                logger.info(f"Recovered master_key_hex: {master_key_hex}")
+                return master_key_hex
+        raise Exception("Could not find master key in ssss-combine output")
+    except Exception as e:
+        logger.error(f"Error combining master key: {str(e)}")
+        raise Exception(f"Error combining master key: {e}")
+
 @router.post("/register", response_model=Token)
 def register(user: User):
     conn = get_connection()
     cursor = conn.cursor()
     try:
+        # Generate master key
+        master_key = secrets.token_bytes(32)
+        master_key_hex = master_key.hex()
+        
+        # Split master key into 3 parts with threshold 2
+        shares = split_master_key(master_key_hex)
+        logger.info(f"Generated shares: {shares}")
+        
+        # Assign parts
+        device_part = shares[0]
+        cloud_part = shares[1]
+        qr_part = shares[2]
+        
+        # Derive encryption key from password
+        password = user.password.encode()
+        salt = secrets.token_bytes(16)
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=salt,
+            iterations=100000,
+            backend=default_backend()
+        )
+        key = base64.urlsafe_b64encode(kdf.derive(password))
+        fernet = Fernet(key)
+        
+        # Encrypt cloud part
+        encrypted_cloud_part = fernet.encrypt(cloud_part.encode())
+        
+        # Encrypt verification data with master key (e.g., username)
+        padder = padding.PKCS7(128).padder()
+        padded_data = padder.update(user.username.encode()) + padder.finalize()
+        iv = secrets.token_bytes(16)
+        cipher = Cipher(algorithms.AES(master_key), modes.CBC(iv), backend=default_backend())
+        encryptor = cipher.encryptor()
+        ciphertext = encryptor.update(padded_data) + encryptor.finalize()
+        verification_ciphertext = base64.b64encode(iv + ciphertext).decode()
+        
+        # Store user with encrypted cloud part, salt, and verification_ciphertext
         hashed_password = hash_password(user.password)
         cursor.execute(
-            "INSERT INTO users (username, password, bio) VALUES (?, ?, ?)",
-            (user.username, hashed_password, user.bio or "")
+            "INSERT INTO users (username, password, bio, encrypted_cloud_part, salt, verification_ciphertext) VALUES (?, ?, ?, ?, ?, ?)",
+            (user.username, hashed_password, user.bio or "", encrypted_cloud_part, salt, verification_ciphertext)
         )
         conn.commit()
         user_id = cursor.lastrowid
     except sqlite3.IntegrityError:
         conn.close()
         raise HTTPException(status_code=400, detail="User already exists")
+    except Exception as e:
+        conn.close()
+        raise HTTPException(status_code=500, detail=f"Error during registration: {str(e)}")
     finally:
         conn.close()
     
     token = create_access_token(user_id)
-    return {"access_token": token, "token_type": "bearer"}
+    
+    # Return token, device_part, and qr_part
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "device_part": device_part,
+        "qr_part": qr_part
+    }
 
 @router.post("/login", response_model=Token)
 def login(user: User):
@@ -129,7 +268,6 @@ async def update_user_profile(update: UserUpdate = None, current_user: dict = De
     cursor = conn.cursor()
     updates = []
     values = []
-    # Если update не передан (None), ничего не обновляем, но не возвращаем ошибку
     if update:
         if update.avatar_url is not None:
             updates.append("avatar_url = ?")
@@ -138,7 +276,6 @@ async def update_user_profile(update: UserUpdate = None, current_user: dict = De
             updates.append("bio = ?")
             values.append(update.bio)
     
-    # Если есть что обновлять, выполняем запрос
     if updates:
         query = f"UPDATE users SET {', '.join(updates)} WHERE id = ?"
         values.append(current_user["id"])
@@ -195,9 +332,7 @@ async def delete_account(current_user: dict = Depends(get_current_user)):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        # Удаляем пользователя из участников чатов
         cursor.execute("DELETE FROM participants WHERE user_id = ?", (current_user["id"],))
-        # Удаляем пользователя
         cursor.execute("DELETE FROM users WHERE id = ?", (current_user["id"],))
         conn.commit()
     except Exception as e:
@@ -206,3 +341,83 @@ async def delete_account(current_user: dict = Depends(get_current_user)):
     finally:
         conn.close()
     return {"message": "Account deleted"}
+
+@router.post("/recover")
+def recover_password(recovery: RecoveryRequest):
+    logger.info(f"Recovery request for username: {recovery.username}")
+    logger.info(f"Provided part1: {recovery.part1}")
+    logger.info(f"Provided part2: {recovery.part2}")
+    
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("SELECT id, encrypted_cloud_part, salt, verification_ciphertext FROM users WHERE username = ?", (recovery.username,))
+        user = cursor.fetchone()
+        if not user:
+            logger.warning(f"User not found: {recovery.username}")
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Combine shares to recover master key
+        shares = [recovery.part1, recovery.part2]
+        try:
+            master_key_hex = combine_master_key(shares)
+            logger.info(f"Successfully combined master key: {master_key_hex}")
+            master_key = bytes.fromhex(master_key_hex)
+        except Exception as e:
+            logger.error(f"Failed to combine shares: {str(e)}")
+            raise HTTPException(status_code=400, detail="Invalid parts provided")
+        
+        # Decrypt verification_ciphertext with master_key
+        try:
+            verification_data = base64.b64decode(user[3])  # verification_ciphertext
+            iv = verification_data[:16]
+            ciphertext = verification_data[16:]
+            cipher = Cipher(algorithms.AES(master_key), modes.CBC(iv), backend=default_backend())
+            decryptor = cipher.decryptor()
+            padded_plaintext = decryptor.update(ciphertext) + decryptor.finalize()
+            unpadder = padding.PKCS7(128).unpadder()
+            plaintext = unpadder.update(padded_plaintext) + unpadder.finalize()
+            decrypted_username = plaintext.decode()
+            logger.info(f"Decrypted username: {decrypted_username}")
+        except Exception as e:
+            logger.error(f"Decryption error: {str(e)}")
+            raise HTTPException(status_code=400, detail="Invalid parts provided")
+        
+        if decrypted_username != recovery.username:
+            logger.warning(f"Decrypted username mismatch: expected {recovery.username}, got {decrypted_username}")
+            raise HTTPException(status_code=400, detail="Invalid parts provided")
+        
+        # Generate a recovery token
+        recovery_token = create_recovery_token(user[0])
+        logger.info(f"Recovery token generated for user ID {user[0]}")
+        return {"message": "Password recovery successful.", "recovery_token": recovery_token}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error during recovery: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error during password recovery: {str(e)}")
+    finally:
+        conn.close()
+
+@router.post("/reset-password")
+def reset_password(request: ResetPasswordRequest):
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        user = verify_recovery_token(request.recovery_token)
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid or expired recovery token")
+        
+        # Update password
+        hashed_password = hash_password(request.new_password)
+        cursor.execute("UPDATE users SET password = ? WHERE id = ?", (hashed_password, user["id"]))
+        conn.commit()
+        
+        return {"message": "Password reset successful."}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Error resetting password: {str(e)}")
+    finally:
+        conn.close()

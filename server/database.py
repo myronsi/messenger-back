@@ -13,21 +13,27 @@ def setup_database():
     conn = get_connection()
     cursor = conn.cursor()
 
-    # Users table with avatar_url and bio
+    # Users table with avatar_url, bio, encrypted_cloud_part, salt, and verification_ciphertext
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
             password TEXT NOT NULL,
             avatar_url TEXT,
-            bio TEXT
+            bio TEXT,
+            encrypted_cloud_part TEXT,
+            salt BLOB,
+            verification_ciphertext TEXT
         )
     """)
 
     # Add columns to users if not exist
     for column, definition in [
         ("avatar_url", "TEXT"),
-        ("bio", "TEXT")
+        ("bio", "TEXT"),
+        ("encrypted_cloud_part", "TEXT"),
+        ("salt", "BLOB"),
+        ("verification_ciphertext", "TEXT")
     ]:
         try:
             cursor.execute(f"ALTER TABLE users ADD COLUMN {column} {definition}")
