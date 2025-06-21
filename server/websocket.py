@@ -123,6 +123,7 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                     file_name = parsed_data.get("file_name")
                     file_type = parsed_data.get("file_type")
                     file_size = parsed_data.get("file_size")
+                    reaction = parsed_data.get("reaction")
                 except (json.JSONDecodeError, KeyError) as e:
                     await websocket.send_text(json.dumps({"type": "error", "message": "Invalid message format"}))
                     logger.error(f"JSON parsing error: {e}")
@@ -257,8 +258,78 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                     }
                     await manager.broadcast(chat_id, delete_message)
 
+                elif message_type == "reaction_add":
+                    if not message_id or not reaction:
+                        await websocket.send_text(json.dumps({"type": "error", "message": "Missing message_id or reaction"}))
+                        continue
+
+                    try:
+                        cursor.execute("SELECT reactions FROM messages WHERE id = ?", (message_id,))
+                        result = cursor.fetchone()
+                        if not result:
+                            await websocket.send_text(json.dumps({"type": "error", "message": "Message not found"}))
+                            continue
+
+                        reactions = json.loads(result["reactions"])
+                        if any(r["user_id"] == user_id and r["reaction"] == reaction for r in reactions):
+                            await websocket.send_text(json.dumps({"type": "error", "message": "You already reacted with this reaction"}))
+                            continue
+
+                        reactions.append({"user_id": user_id, "reaction": reaction})
+                        cursor.execute("UPDATE messages SET reactions = ? WHERE id = ?", (json.dumps(reactions), message_id))
+                        conn.commit()
+                        logger.info(f"Reaction added: {{'message_id': {message_id}, 'user_id': {user_id}, 'reaction': '{reaction}'}}")
+                    except sqlite3.Error as e:
+                        logger.error(f"Error while adding reaction: {e}")
+                        await websocket.send_text(json.dumps({"type": "error", "message": "Failed to add reaction"}))
+                        continue
+
+                    reaction_message = {
+                        "type": "reaction_add",
+                        "message_id": message_id,
+                        "user_id": user_id,
+                        "reaction": reaction,
+                        "timestamp": datetime.utcnow().isoformat()
+                    }
+                    await manager.broadcast(chat_id, reaction_message)
+
+                elif message_type == "reaction_remove":
+                    if not message_id or not reaction:
+                        await websocket.send_text(json.dumps({"type": "error", "message": "Missing message_id or reaction"}))
+                        continue
+
+                    try:
+                        cursor.execute("SELECT reactions FROM messages WHERE id = ?", (message_id,))
+                        result = cursor.fetchone()
+                        if not result:
+                            await websocket.send_text(json.dumps({"type": "error", "message": "Message not found"}))
+                            continue
+
+                        reactions = json.loads(result["reactions"])
+                        if not any(r["user_id"] == user_id and r["reaction"] == reaction for r in reactions):
+                            await websocket.send_text(json.dumps({"type": "error", "message": "You cannot remove this reaction"}))
+                            continue
+
+                        new_reactions = [r for r in reactions if not (r["user_id"] == user_id and r["reaction"] == reaction)]
+                        cursor.execute("UPDATE messages SET reactions = ? WHERE id = ?", (json.dumps(new_reactions), message_id))
+                        conn.commit()
+                        logger.info(f"Reaction removed: {{'message_id': {message_id}, 'user_id': {user_id}, 'reaction': '{reaction}'}}")
+                    except sqlite3.Error as e:
+                        logger.error(f"Error while removing reaction: {e}")
+                        await websocket.send_text(json.dumps({"type": "error", "message": "Failed to remove reaction"}))
+                        continue
+
+                    reaction_message = {
+                        "type": "reaction_remove",
+                        "message_id": message_id,
+                        "user_id": user_id,
+                        "reaction": reaction,
+                        "timestamp": datetime.utcnow().isoformat()
+                    }
+                    await manager.broadcast(chat_id, reaction_message)
+
                 elif message_type == "group_created":
-                    if chat_id == 0:  # Global notifications
+                    if chat_id == 0:
                         logger.info(f"Received group_created for chat {parsed_data.get('chat_id')}")
                         await manager.broadcast(chat_id, parsed_data)
 

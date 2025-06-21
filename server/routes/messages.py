@@ -125,7 +125,7 @@ def get_message_history(chat_id: int, current_user: dict = Depends(get_current_u
 
         cursor.execute("""
             SELECT messages.id, messages.content, messages.timestamp, messages.sender_name AS sender,
-                   messages.reply_to, users.avatar_url
+                   messages.reply_to, messages.reactions, users.avatar_url
             FROM messages
             LEFT JOIN users ON messages.sender_id = users.id
             WHERE messages.chat_id = ?
@@ -157,6 +157,7 @@ def get_message_history(chat_id: int, current_user: dict = Depends(get_current_u
                     "sender": msg["sender"],
                     "avatar_url": msg["avatar_url"] if msg["avatar_url"] else "/static/avatars/default.jpg",
                     "reply_to": msg["reply_to"],
+                    "reactions": msg["reactions"] or "[]",  # Возвращаем JSON-строку
                     "is_deleted": not bool(msg["content"]),
                     "type": message_type
                 })
@@ -174,65 +175,65 @@ def get_message_history(chat_id: int, current_user: dict = Depends(get_current_u
     finally:
         conn.close()
 
-@router.put("/edit/{message_id}")
-def edit_message(message_id: int, payload: MessageEdit, current_user: dict = Depends(get_current_user)):
-    content = payload.content.strip()
-    if not content:
-        raise HTTPException(status_code=400, detail="Message text is required")
+# @router.put("/edit/{message_id}")
+# def edit_message(message_id: int, payload: MessageEdit, current_user: dict = Depends(get_current_user)):
+#     content = payload.content.strip()
+#     if not content:
+#         raise HTTPException(status_code=400, detail="Message text is required")
 
-    conn = get_connection()
-    cursor = conn.cursor()
+#     conn = get_connection()
+#     cursor = conn.cursor()
 
-    try:
-        cursor.execute("SELECT sender_id, content FROM messages WHERE id = ?", (message_id,))
-        message = cursor.fetchone()
-        if not message:
-            raise HTTPException(status_code=404, detail="Message not found")
-        if message["sender_id"] != current_user["id"]:
-            raise HTTPException(status_code=403, detail="You are not the author of this message")
+#     try:
+#         cursor.execute("SELECT sender_id, content FROM messages WHERE id = ?", (message_id,))
+#         message = cursor.fetchone()
+#         if not message:
+#             raise HTTPException(status_code=404, detail="Message not found")
+#         if message["sender_id"] != current_user["id"]:
+#             raise HTTPException(status_code=403, detail="You are not the author of this message")
         
-        try:
-            content_data = json.loads(message["content"])
-            if "file_url" in content_data:
-                raise HTTPException(status_code=400, detail="File messages cannot be edited")
-        except json.JSONDecodeError:
-            pass
+#         try:
+#             content_data = json.loads(message["content"])
+#             if "file_url" in content_data:
+#                 raise HTTPException(status_code=400, detail="File messages cannot be edited")
+#         except json.JSONDecodeError:
+#             pass
 
-        cursor.execute("""
-            UPDATE messages
-            SET content = ?, edited_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-        """, (content, message_id))
-        conn.commit()
-        return {"message": "Message successfully updated"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        conn.rollback()
-        logger.error(f"Error editing message {message_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
-    finally:
-        conn.close()
+#         cursor.execute("""
+#             UPDATE messages
+#             SET content = ?, edited_at = CURRENT_TIMESTAMP
+#             WHERE id = ?
+#         """, (content, message_id))
+#         conn.commit()
+#         return {"message": "Message successfully updated"}
+#     except HTTPException:
+#         raise
+#     except Exception as e:
+#         conn.rollback()
+#         logger.error(f"Error editing message {message_id}: {str(e)}")
+#         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+#     finally:
+#         conn.close()
 
-@router.delete("/delete/{message_id}")
-def delete_message(message_id: int, current_user: dict = Depends(get_current_user)):
-    conn = get_connection()
-    cursor = conn.cursor()
+# @router.delete("/delete/{message_id}")
+# def delete_message(message_id: int, current_user: dict = Depends(get_current_user)):
+#     conn = get_connection()
+#     cursor = conn.cursor()
 
-    try:
-        cursor.execute("SELECT sender_id FROM messages WHERE id = ?", (message_id,))
-        message = cursor.fetchone()
-        if not message:
-            raise HTTPException(status_code=404, detail="Message not found")
-        if message["sender_id"] != current_user["id"]:
-            raise HTTPException(status_code=403, detail="You are not the author of this message")
+#     try:
+#         cursor.execute("SELECT sender_id FROM messages WHERE id = ?", (message_id,))
+#         message = cursor.fetchone()
+#         if not message:
+#             raise HTTPException(status_code=404, detail="Message not found")
+#         if message["sender_id"] != current_user["id"]:
+#             raise HTTPException(status_code=403, detail="You are not the author of this message")
 
-        cursor.execute("DELETE FROM messages WHERE id = ?", (message_id,))
-        conn.commit()
-        return {"message": "Message deleted"}
-    except Exception as e:
-        conn.rollback()
-        logger.error(f"Error deleting message {message_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
-    finally:
-        conn.close()
+#         cursor.execute("DELETE FROM messages WHERE id = ?", (message_id,))
+#         conn.commit()
+#         return {"message": "Message deleted"}
+#     except Exception as e:
+#         conn.rollback()
+#         logger.error(f"Error deleting message {message_id}: {str(e)}")
+#         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+#     finally:
+#         conn.close()
