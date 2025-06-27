@@ -30,8 +30,13 @@ async def upload_file(
     MAX_FILE_SIZE = 10 * 1024 * 1024
     ALLOWED_FILE_TYPES = {
         "image": [".jpg", ".jpeg", ".png", ".gif"],
-        "video": [".mp4", ".mov"],
-        "document": [".pdf", ".doc", ".docx", ".txt"]
+        "video": [".mp4", ".mov", ".ogg"],
+        "document": [".pdf", ".doc", ".docx", ".txt"],
+        "presention": [".pptx"],
+        "arcive": [".zip"],
+        "audio": [".mp3", ".wav", ".ogg"],
+        "code": [".js", ".ts", ".py", ".java", ".cpp", ".html", ".css"],
+        "none": [""]
     }
 
     file_size = 0
@@ -109,6 +114,87 @@ async def upload_file(
         conn.rollback()
         logger.error(f"Error uploading file: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error uploading file: {str(e)}")
+    finally:
+        conn.close()
+
+@router.post("/vm")
+async def upload_voice_message(
+    chat_id: int = Form(...),
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+    ALLOWED_FILE_TYPES = [".opus"]
+
+    file_extension = Path(file.filename).suffix.lower()
+    if file_extension not in ALLOWED_FILE_TYPES:
+        raise HTTPException(status_code=400, detail="Only Opus files are allowed for voice messages")
+
+    content = await file.read()
+    file_size = len(content)
+    if file_size > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="File size exceeds 10 MB limit")
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT * FROM participants WHERE chat_id = ? AND user_id = ?", (chat_id, current_user["id"]))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=403, detail="You are not a member of this chat")
+
+        upload_dir = Path("static/vm")
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        unique_filename = f"{uuid.uuid4()}_{file.filename}"
+        file_path = upload_dir / unique_filename
+        with file_path.open("wb") as buffer:
+            buffer.write(content)
+
+        file_url = f"/static/vm/{unique_filename}"
+        file_name = file.filename
+        file_type = "voice"
+
+        cursor.execute("""
+            INSERT INTO messages (chat_id, sender_id, sender_name, content, timestamp)
+            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+        """, (chat_id, current_user["id"], current_user["username"], json.dumps({
+            "file_url": file_url,
+            "file_name": file_name,
+            "file_type": file_type,
+            "file_size": file_size
+        })))
+        message_id = cursor.lastrowid
+        conn.commit()
+
+        cursor.execute("SELECT avatar_url FROM users WHERE id = ?", (current_user["id"],))
+        user_data = cursor.fetchone()
+        avatar_url = user_data["avatar_url"] if user_data and user_data["avatar_url"] else "/static/avatars/default.jpg"
+
+        voice_message = {
+            "type": "file",
+            "username": current_user["username"],
+            "avatar_url": avatar_url,
+            "is_deleted": False,
+            "data": {
+                "chat_id": chat_id,
+                "file_url": file_url,
+                "file_name": file_name,
+                "file_type": file_type,
+                "file_size": file_size,
+                "message_id": message_id,
+                "reply_to": None
+            },
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        await manager.broadcast(chat_id, voice_message)
+        logger.info(f"Voice message uploaded and broadcasted: {file_name} to chat {chat_id}")
+
+        return {"message": "Voice message uploaded successfully", "file_url": file_url}
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Error uploading voice message: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error uploading voice message: {str(e)}")
     finally:
         conn.close()
 

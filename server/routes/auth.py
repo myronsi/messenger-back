@@ -5,7 +5,6 @@ from pydantic import BaseModel
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
 from typing import Optional
-import hashlib
 import secrets
 from server.database import get_connection
 from pathlib import Path
@@ -55,8 +54,36 @@ class ResetPasswordRequest(BaseModel):
     recovery_token: str
     new_password: str
 
-def hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode()).hexdigest()
+def hash_password_with_new_salt(password: str) -> str:
+    pwd_salm = secrets.token_bytes(16)  # Уникальная соль длиной 16 байт
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=pwd_salm,
+        iterations=100000,
+        backend=default_backend()
+    )
+    hashed_password = kdf.derive(password.encode())
+    pwd_salm_b64 = base64.b64encode(pwd_salm).decode()
+    hashed_password_b64 = base64.b64encode(hashed_password).decode()
+    return f"{pwd_salm_b64}:{hashed_password_b64}"
+
+def verify_password(stored_password: str, provided_password: str) -> bool:
+    try:
+        pwd_salm_b64, hashed_pwd_b64 = stored_password.split(':')
+        pwd_salm = base64.b64decode(pwd_salm_b64)
+        stored_hash = base64.b64decode(hashed_pwd_b64)
+    except:
+        return False
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=pwd_salm,
+        iterations=100000,
+        backend=default_backend()
+    )
+    computed_hash = kdf.derive(provided_password.encode())
+    return computed_hash == stored_hash
 
 def create_access_token(user_id: int):
     expires_delta = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -142,7 +169,7 @@ def split_master_key(master_key_hex: str, shares: int = 3, threshold: int = 2):
         )
         if result.returncode != 0:
             raise Exception(f"ssss-split failed: {result.stderr}")
-        shares_output = result.stdout.splitlines()[1:]  # Пропускаем первую строку с мастер-ключом
+        shares_output = result.stdout.splitlines()[1:]
         return [share.strip() for share in shares_output]
     except Exception as e:
         raise Exception(f"Error splitting master key: {e}")
@@ -159,7 +186,6 @@ def combine_master_key(shares: list[str]):
         logger.info(f"ssss-combine stderr: {result.stderr}")
         if result.returncode != 0:
             raise Exception(f"ssss-combine failed: {result.stderr}")
-        # Проверяем как stdout, так и stderr на наличие мастер-ключа
         output = result.stdout + result.stderr
         for line in output.splitlines():
             if "Resulting secret: " in line:
@@ -176,20 +202,13 @@ def register(user: User):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        # Generate master key
         master_key = secrets.token_bytes(32)
         master_key_hex = master_key.hex()
-        
-        # Split master key into 3 parts with threshold 2
         shares = split_master_key(master_key_hex)
         logger.info(f"Generated shares: {shares}")
-        
-        # Assign parts
         device_part = shares[0]
         cloud_part = shares[1]
         qr_part = shares[2]
-        
-        # Derive encryption key from password
         password = user.password.encode()
         salt = secrets.token_bytes(16)
         kdf = PBKDF2HMAC(
@@ -201,11 +220,7 @@ def register(user: User):
         )
         key = base64.urlsafe_b64encode(kdf.derive(password))
         fernet = Fernet(key)
-        
-        # Encrypt cloud part
         encrypted_cloud_part = fernet.encrypt(cloud_part.encode())
-        
-        # Encrypt verification data with master key (e.g., username)
         padder = padding.PKCS7(128).padder()
         padded_data = padder.update(user.username.encode()) + padder.finalize()
         iv = secrets.token_bytes(16)
@@ -213,12 +228,10 @@ def register(user: User):
         encryptor = cipher.encryptor()
         ciphertext = encryptor.update(padded_data) + encryptor.finalize()
         verification_ciphertext = base64.b64encode(iv + ciphertext).decode()
-        
-        # Store user with encrypted cloud part, salt, and verification_ciphertext
-        hashed_password = hash_password(user.password)
+        password_field = hash_password_with_new_salt(user.password)
         cursor.execute(
             "INSERT INTO users (username, password, bio, encrypted_cloud_part, salt, verification_ciphertext) VALUES (?, ?, ?, ?, ?, ?)",
-            (user.username, hashed_password, user.bio or "", encrypted_cloud_part, salt, verification_ciphertext)
+            (user.username, password_field, user.bio or "", encrypted_cloud_part, salt, verification_ciphertext)
         )
         conn.commit()
         user_id = cursor.lastrowid
@@ -230,10 +243,7 @@ def register(user: User):
         raise HTTPException(status_code=500, detail=f"Error during registration: {str(e)}")
     finally:
         conn.close()
-    
     token = create_access_token(user_id)
-    
-    # Return token, device_part, and qr_part
     return {
         "access_token": token,
         "token_type": "bearer",
@@ -247,10 +257,10 @@ def login(user: User):
     cursor = conn.cursor()
     cursor.execute("SELECT id, password FROM users WHERE username = ?", (user.username,))
     db_user = cursor.fetchone()
-    conn.close()
-    if not db_user or hash_password(user.password) != db_user[1]:
+    if not db_user or not verify_password(db_user[1], user.password):
+        conn.close()
         raise HTTPException(status_code=401, detail="Incorrect username or password")
-    
+    conn.close()
     token = create_access_token(db_user[0])
     return {"access_token": token, "token_type": "bearer"}
 
@@ -276,7 +286,6 @@ async def update_user_profile(update: UserUpdate = None, current_user: dict = De
         if update.bio is not None:
             updates.append("bio = ?")
             values.append(update.bio)
-    
     if updates:
         query = f"UPDATE users SET {', '.join(updates)} WHERE id = ?"
         values.append(current_user["id"])
@@ -324,7 +333,7 @@ async def get_user_avatar(username: str):
     cursor.execute("SELECT avatar_url, bio FROM users WHERE username = ?", (username,))
     user = cursor.fetchone()
     conn.close()
-    if not user or not user[0]:  # user[0] — avatar_url
+    if not user or not user[0]:
         return {"avatar_url": "/static/avatars/default.jpg", "bio": user[1] if user else ""}
     return {"avatar_url": user[0], "bio": user[1] or ""}
 
@@ -348,18 +357,14 @@ def recover_password(recovery: RecoveryRequest):
     logger.info(f"Recovery request for username: {recovery.username}")
     logger.info(f"Provided part1: {recovery.part1}")
     logger.info(f"Provided part2: {recovery.part2}")
-    
     conn = get_connection()
     cursor = conn.cursor()
-    
     try:
         cursor.execute("SELECT id, encrypted_cloud_part, salt, verification_ciphertext FROM users WHERE username = ?", (recovery.username,))
         user = cursor.fetchone()
         if not user:
             logger.warning(f"User not found: {recovery.username}")
             raise HTTPException(status_code=404, detail="User not found")
-        
-        # Combine shares to recover master key
         shares = [recovery.part1, recovery.part2]
         try:
             master_key_hex = combine_master_key(shares)
@@ -368,10 +373,8 @@ def recover_password(recovery: RecoveryRequest):
         except Exception as e:
             logger.error(f"Failed to combine shares: {str(e)}")
             raise HTTPException(status_code=400, detail="Invalid parts provided")
-        
-        # Decrypt verification_ciphertext with master_key
         try:
-            verification_data = base64.b64decode(user[3])  # verification_ciphertext
+            verification_data = base64.b64decode(user[3])
             iv = verification_data[:16]
             ciphertext = verification_data[16:]
             cipher = Cipher(algorithms.AES(master_key), modes.CBC(iv), backend=default_backend())
@@ -384,12 +387,9 @@ def recover_password(recovery: RecoveryRequest):
         except Exception as e:
             logger.error(f"Decryption error: {str(e)}")
             raise HTTPException(status_code=400, detail="Invalid parts provided")
-        
         if decrypted_username != recovery.username:
             logger.warning(f"Decrypted username mismatch: expected {recovery.username}, got {decrypted_username}")
             raise HTTPException(status_code=400, detail="Invalid parts provided")
-        
-        # Generate a recovery token
         recovery_token = create_recovery_token(user[0])
         logger.info(f"Recovery token generated for user ID {user[0]}")
         return {"message": "Password recovery successful.", "recovery_token": recovery_token}
@@ -405,17 +405,13 @@ def recover_password(recovery: RecoveryRequest):
 def reset_password(request: ResetPasswordRequest):
     conn = get_connection()
     cursor = conn.cursor()
-    
     try:
         user = verify_recovery_token(request.recovery_token)
         if not user:
             raise HTTPException(status_code=401, detail="Invalid or expired recovery token")
-        
-        # Update password
-        hashed_password = hash_password(request.new_password)
-        cursor.execute("UPDATE users SET password = ? WHERE id = ?", (hashed_password, user["id"]))
+        password_field = hash_password_with_new_salt(request.new_password)
+        cursor.execute("UPDATE users SET password = ? WHERE id = ?", (password_field, user["id"]))
         conn.commit()
-        
         return {"message": "Password reset successful."}
     except Exception as e:
         conn.rollback()
