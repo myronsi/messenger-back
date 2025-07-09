@@ -418,3 +418,20 @@ def reset_password(request: ResetPasswordRequest):
         raise HTTPException(status_code=500, detail=f"Error resetting password: {str(e)}")
     finally:
         conn.close()
+
+@router.get("/get-cloud-part")
+async def get_cloud_part(username: str):
+    conn = get_connection()
+    cursor = conn.cursor()
+    logger.info(f"Fetching cloud part for username: {username}")
+    cursor.execute("SELECT encrypted_cloud_part FROM users WHERE LOWER(username) = LOWER(?)", (username,))
+    row = cursor.fetchone()
+    conn.close()
+    if not row:
+        logger.warning(f"No user found with username: {username}")
+        raise HTTPException(status_code=404, detail="User not found")
+    if not row[0]:
+        logger.warning(f"User found but encrypted_cloud_part is missing for username: {username}")
+        raise HTTPException(status_code=404, detail="Cloud part not found")
+    logger.info(f"Successfully retrieved encrypted_cloud_part for username: {username}")
+    return {"encrypted_cloud_part": row[0]}
