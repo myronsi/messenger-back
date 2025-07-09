@@ -54,7 +54,7 @@ class ResetPasswordRequest(BaseModel):
     recovery_token: str
     new_password: str
 
-def hash_password_with_new_salt(password: str) -> str:
+def hash_password_with_salt(password: str) -> str:
     pwd_salm = secrets.token_bytes(16)
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
@@ -218,7 +218,7 @@ def register(user: User):
         encryptor = cipher.encryptor()
         ciphertext = encryptor.update(padded_data) + encryptor.finalize()
         verification_ciphertext = base64.b64encode(iv + ciphertext).decode()
-        password_field = hash_password_with_new_salt(user.password)
+        password_field = hash_password_with_salt(user.password)
         cursor.execute(
             "INSERT INTO users (username, password, bio, encrypted_cloud_part, salt, verification_ciphertext) VALUES (?, ?, ?, ?, ?, ?)",
             (user.username, password_field, user.bio or "", cloud_part_plain, salt, verification_ciphertext)
@@ -399,7 +399,7 @@ def reset_password(request: ResetPasswordRequest):
         user = verify_recovery_token(request.recovery_token)
         if not user:
             raise HTTPException(status_code=401, detail="Invalid or expired recovery token")
-        password_field = hash_password_with_new_salt(request.new_password)
+        password_field = hash_password_with_salt(request.new_password)
         cursor.execute("UPDATE users SET password = ? WHERE id = ?", (password_field, user["id"]))
         conn.commit()
         return {"message": "Password reset successful."}
