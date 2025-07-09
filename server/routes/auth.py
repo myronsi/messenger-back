@@ -55,7 +55,7 @@ class ResetPasswordRequest(BaseModel):
     new_password: str
 
 def hash_password_with_new_salt(password: str) -> str:
-    pwd_salm = secrets.token_bytes(16)  # Уникальная соль длиной 16 байт
+    pwd_salm = secrets.token_bytes(16)
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,
@@ -209,18 +209,8 @@ def register(user: User):
         device_part = shares[0]
         cloud_part = shares[1]
         qr_part = shares[2]
-        password = user.password.encode()
+        cloud_part_plain = cloud_part
         salt = secrets.token_bytes(16)
-        kdf = PBKDF2HMAC(
-            algorithm=hashes.SHA256(),
-            length=32,
-            salt=salt,
-            iterations=100000,
-            backend=default_backend()
-        )
-        key = base64.urlsafe_b64encode(kdf.derive(password))
-        fernet = Fernet(key)
-        encrypted_cloud_part = fernet.encrypt(cloud_part.encode())
         padder = padding.PKCS7(128).padder()
         padded_data = padder.update(user.username.encode()) + padder.finalize()
         iv = secrets.token_bytes(16)
@@ -231,7 +221,7 @@ def register(user: User):
         password_field = hash_password_with_new_salt(user.password)
         cursor.execute(
             "INSERT INTO users (username, password, bio, encrypted_cloud_part, salt, verification_ciphertext) VALUES (?, ?, ?, ?, ?, ?)",
-            (user.username, password_field, user.bio or "", encrypted_cloud_part, salt, verification_ciphertext)
+            (user.username, password_field, user.bio or "", cloud_part_plain, salt, verification_ciphertext)
         )
         conn.commit()
         user_id = cursor.lastrowid
