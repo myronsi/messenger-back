@@ -199,7 +199,7 @@ async def upload_voice_message(
         conn.close()
 
 @router.get("/history/{chat_id}")
-def get_message_history(chat_id: int, current_user: dict = Depends(get_current_user)):
+async def get_message_history(chat_id: int, current_user: dict = Depends(get_current_user)):
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -211,7 +211,7 @@ def get_message_history(chat_id: int, current_user: dict = Depends(get_current_u
 
         cursor.execute("""
             SELECT messages.id, messages.content, messages.timestamp, messages.sender_name AS sender,
-                   messages.reply_to, messages.reactions, users.avatar_url
+                   messages.reply_to, messages.reactions, users.avatar_url, messages.read_by
             FROM messages
             LEFT JOIN users ON messages.sender_id = users.id
             WHERE messages.chat_id = ?
@@ -233,7 +233,7 @@ def get_message_history(chat_id: int, current_user: dict = Depends(get_current_u
                             message_type = "file"
                     except json.JSONDecodeError as json_err:
                         logger.error(f"Failed to parse JSON content for message {msg['id']}: {content}, error: {json_err}")
-                        parsed_content = content  # Оставляем как строку, если JSON невалидный
+                        parsed_content = content  # Keep as string if JSON is invalid
                         message_type = "message"
 
                 history.append({
@@ -243,13 +243,14 @@ def get_message_history(chat_id: int, current_user: dict = Depends(get_current_u
                     "sender": msg["sender"],
                     "avatar_url": msg["avatar_url"] if msg["avatar_url"] else "/static/avatars/default.jpg",
                     "reply_to": msg["reply_to"],
-                    "reactions": msg["reactions"] or "[]",  # Возвращаем JSON-строку
+                    "reactions": msg["reactions"] or "[]",  # Return JSON string
+                    "read_by": msg["read_by"] or "[]",  # Fixed: Use msg["read_by"] instead of row["read_by"]
                     "is_deleted": not bool(msg["content"]),
                     "type": message_type
                 })
             except Exception as e:
                 logger.error(f"Error processing message {msg['id']} in chat {chat_id}: {str(e)}")
-                continue  # Пропускаем проблемное сообщение
+                continue  # Skip problematic message
 
         logger.info(f"Returning {len(history)} messages for chat {chat_id}")
         return {"history": history}
@@ -259,7 +260,7 @@ def get_message_history(chat_id: int, current_user: dict = Depends(get_current_u
         logger.error(f"Error loading history for chat {chat_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error loading history: {str(e)}")
     finally:
-        conn.close()
+        conn.close()    
 
 # @router.put("/edit/{message_id}")
 # def edit_message(message_id: int, payload: MessageEdit, current_user: dict = Depends(get_current_user)):

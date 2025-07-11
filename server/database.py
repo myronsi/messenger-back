@@ -109,7 +109,7 @@ def setup_database():
         )
     """)
 
-    # Messages table with sender_name and reactions
+    # Messages table with sender_name, reactions, and read_by
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -121,6 +121,7 @@ def setup_database():
             edited_at DATETIME DEFAULT NULL,
             reply_to INTEGER DEFAULT NULL,
             reactions TEXT DEFAULT '[]',
+            read_by TEXT DEFAULT '[]',
             FOREIGN KEY (chat_id) REFERENCES chats (id),
             FOREIGN KEY (reply_to) REFERENCES messages (id)
         )
@@ -130,7 +131,8 @@ def setup_database():
     for column, definition in [
         ("edited_at", "DATETIME DEFAULT NULL"),
         ("sender_name", "TEXT NOT NULL"),
-        ("reactions", "TEXT DEFAULT '[]'")  # Add reactions column
+        ("reactions", "TEXT DEFAULT '[]'"),
+        ("read_by", "TEXT DEFAULT '[]'")  # Add read_by column
     ]:
         try:
             cursor.execute(f"ALTER TABLE messages ADD COLUMN {column} {definition}")

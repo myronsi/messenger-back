@@ -270,7 +270,7 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                             await websocket.send_text(json.dumps({"type": "error", "message": "Message not found"}))
                             continue
 
-                        reactions = json.loads(result["reactions"])
+                        reactions = json.loads(result["reactions"]) if result["reactions"] else []
                         if any(r["user_id"] == user_id and r["reaction"] == reaction for r in reactions):
                             await websocket.send_text(json.dumps({"type": "error", "message": "You already reacted with this reaction"}))
                             continue
@@ -305,7 +305,7 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                             await websocket.send_text(json.dumps({"type": "error", "message": "Message not found"}))
                             continue
 
-                        reactions = json.loads(result["reactions"])
+                        reactions = json.loads(result["reactions"]) if result["reactions"] else []
                         if not any(r["user_id"] == user_id and r["reaction"] == reaction for r in reactions):
                             await websocket.send_text(json.dumps({"type": "error", "message": "You cannot remove this reaction"}))
                             continue
@@ -327,6 +327,46 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                         "timestamp": datetime.utcnow().isoformat()
                     }
                     await manager.broadcast(chat_id, reaction_message)
+
+                elif message_type == "is_read":
+                    if not message_id:
+                        await websocket.send_text(json.dumps({"type": "error", "message": "Missing message_id"}))
+                        continue
+
+                    try:
+                        cursor.execute("SELECT id, sender_id, read_by FROM messages WHERE id = ?", (message_id,))
+                        message = cursor.fetchone()
+                        if not message:
+                            await websocket.send_text(json.dumps({"type": "error", "message": "Message not found"}))
+                            continue
+                        
+                        if message["sender_id"] == user_id:
+                            await websocket.send_text(json.dumps({"type": "error", "message": "Cannot mark own message as read"}))
+                            continue
+
+                        read_by = json.loads(message["read_by"]) if message["read_by"] else []
+                        if any(r["user_id"] == user_id for r in read_by):
+                            # await websocket.send_text(json.dumps({"type": "error", "message": "Message already marked as read"}))
+                            continue
+
+                        read_by.append({"user_id": user_id, "read_at": datetime.utcnow().isoformat()})
+                        cursor.execute("UPDATE messages SET read_by = ? WHERE id = ?", (json.dumps(read_by), message_id))
+                        conn.commit()
+                        logger.info(f"Message marked as read: {{'message_id': {message_id}, 'user_id': {user_id}}}")
+
+                    except sqlite3.Error as e:
+                        logger.error(f"Error while marking message as read: {e}")
+                        await websocket.send_text(json.dumps({"type": "error", "message": "Failed to mark message as read"}))
+                        continue
+
+                    read_message = {
+                        "type": "is_read",
+                        "message_id": message_id,
+                        "user_id": user_id,
+                        "username": username,
+                        "timestamp": datetime.utcnow().isoformat()
+                    }
+                    await manager.broadcast(chat_id, read_message)
 
                 elif message_type == "group_created":
                     if chat_id == 0:
