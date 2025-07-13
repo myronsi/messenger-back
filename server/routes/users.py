@@ -1,7 +1,6 @@
 from fastapi import UploadFile, File, APIRouter, HTTPException, Depends
-from server.database import get_connection
+from server.database import get_connection, release_connection
 from server.routes.auth import verify_token
-import os
 from pathlib import Path
 
 router = APIRouter()
@@ -20,9 +19,9 @@ async def upload_avatar(file: UploadFile = File(...), user: dict = Depends(verif
     avatar_url = f"/static/avatars/{user['id']}_{file.filename}"
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("UPDATE users SET avatar_url = ? WHERE id = ?", (avatar_url, user["id"]))
+    cursor.execute("UPDATE users SET avatar_url = %s WHERE id = %s", (avatar_url, user["id"]))
     conn.commit()
-    conn.close()
+    release_connection(conn)
     
     return {"avatar_url": avatar_url}
 
@@ -30,9 +29,9 @@ async def upload_avatar(file: UploadFile = File(...), user: dict = Depends(verif
 async def get_user_avatar(username: str):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT avatar_url FROM users WHERE username = ?", (username,))
+    cursor.execute("SELECT avatar_url FROM users WHERE username = %s", (username,))
     row = cursor.fetchone()
-    conn.close()
+    release_connection(conn)
     if not row or not row[0]:
         raise HTTPException(status_code=404, detail="Avatar not found")
     return {"avatar_url": row[0]}
@@ -41,9 +40,9 @@ async def get_user_avatar(username: str):
 async def get_user_profile(username: str):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT avatar_url, bio FROM users WHERE username = ?", (username,))
+    cursor.execute("SELECT avatar_url, bio FROM users WHERE username = %s", (username,))
     row = cursor.fetchone()
-    conn.close()
+    release_connection(conn)
     if not row:
         raise HTTPException(status_code=404, detail="User not found")
     return {

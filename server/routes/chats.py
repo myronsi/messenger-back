@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from server.database import get_connection
+from server.database import get_connection, release_connection
 from server.routes.auth import get_current_user
 from server.websocket import manager
 import logging
@@ -24,9 +24,9 @@ async def create_chat(chat: ChatCreate, current_user: dict = Depends(get_current
 
     try:
         # Check if users exist
-        cursor.execute("SELECT id, avatar_url FROM users WHERE username = ?", (chat.user1,))
+        cursor.execute("SELECT id, avatar_url FROM users WHERE username = %s", (chat.user1,))
         user1 = cursor.fetchone()
-        cursor.execute("SELECT id, avatar_url FROM users WHERE username = ?", (chat.user2,))
+        cursor.execute("SELECT id, avatar_url FROM users WHERE username = %s", (chat.user2,))
         user2 = cursor.fetchone()
 
         if not user1 or not user2:
@@ -38,10 +38,10 @@ async def create_chat(chat: ChatCreate, current_user: dict = Depends(get_current
         cursor.execute("""
             SELECT id FROM chats
             WHERE type = 'one-on-one' AND (
-                (user1_id = ? AND user2_id = ?) OR
-                (user1_id = ? AND user2_id = ?)
+                (user1_id = %s AND user2_id = %s) OR
+                (user1_id = %s AND user2_id = %s)
             )
-        """, (user1["id"], user2["id"], user2["id"], user1["id"]))
+        """, (user1[0], user2[0], user2[0], user1[0]))
         existing_chat = cursor.fetchone()
         if existing_chat:
             raise HTTPException(status_code=400, detail="Chat between these users already exists")
@@ -50,15 +50,16 @@ async def create_chat(chat: ChatCreate, current_user: dict = Depends(get_current
         chat_name = f"{chat.user1} & {chat.user2}"
         cursor.execute("""
             INSERT INTO chats (name, type, user1_id, user2_id)
-            VALUES (?, 'one-on-one', ?, ?)
-        """, (chat_name, user1["id"], user2["id"]))
-        chat_id = cursor.lastrowid
+            VALUES (%s, 'one-on-one', %s, %s)
+            RETURNING id
+        """, (chat_name, user1[0], user2[0]))
+        chat_id = cursor.fetchone()[0]
 
         # Add participants
-        cursor.execute("INSERT INTO participants (chat_id, user_id) VALUES (?, ?)", (chat_id, user1["id"]))
-        logger.info(f"Added participant: chat_id={chat_id}, user_id={user1['id']}")
-        cursor.execute("INSERT INTO participants (chat_id, user_id) VALUES (?, ?)", (chat_id, user2["id"]))
-        logger.info(f"Added participant: chat_id={chat_id}, user_id={user2['id']}")
+        cursor.execute("INSERT INTO participants (chat_id, user_id) VALUES (%s, %s)", (chat_id, user1[0]))
+        logger.info(f"Added participant: chat_id={chat_id}, user_id={user1[0]}")
+        cursor.execute("INSERT INTO participants (chat_id, user_id) VALUES (%s, %s)", (chat_id, user2[0]))
+        logger.info(f"Added participant: chat_id={chat_id}, user_id={user2[0]}")
 
         conn.commit()
 
@@ -70,8 +71,8 @@ async def create_chat(chat: ChatCreate, current_user: dict = Depends(get_current
                 "name": chat_name,
                 "user1": chat.user1,
                 "user2": chat.user2,
-                "user1_avatar_url": user1["avatar_url"] or "/static/avatars/default.jpg",
-                "user2_avatar_url": user2["avatar_url"] or "/static/avatars/default.jpg"
+                "user1_avatar_url": user1[1] or "/static/avatars/default.jpg",
+                "user2_avatar_url": user2[1] or "/static/avatars/default.jpg"
             }
         }
         await manager.broadcast(0, chat_data)
@@ -88,7 +89,7 @@ async def create_chat(chat: ChatCreate, current_user: dict = Depends(get_current
         logger.error(f"Error creating chat: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error creating chat: {str(e)}")
     finally:
-        conn.close()
+        release_connection(conn)
 
 @router.get("/list/{username}")
 async def list_chats(username: str, current_user: dict = Depends(get_current_user)):
@@ -99,7 +100,7 @@ async def list_chats(username: str, current_user: dict = Depends(get_current_use
     cursor = conn.cursor()
 
     try:
-        cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
+        cursor.execute("SELECT id FROM users WHERE username = %s", (username,))
         user_id = cursor.fetchone()
         if not user_id:
             raise HTTPException(status_code=404, detail="User not found")
@@ -112,21 +113,21 @@ async def list_chats(username: str, current_user: dict = Depends(get_current_use
             JOIN participants p ON c.id = p.chat_id
             LEFT JOIN users u1 ON c.user1_id = u1.id
             LEFT JOIN users u2 ON c.user2_id = u2.id
-            WHERE p.user_id = ? AND c.type = 'one-on-one'
-        """, (user_id["id"],))
+            WHERE p.user_id = %s AND c.type = 'one-on-one'
+        """, (user_id[0],))
         chats = cursor.fetchall()
 
         chat_list = []
         for chat in chats:
-            is_user1 = chat["user1_id"] == user_id["id"]
-            interlocutor_username = chat["user2_username"] if is_user1 else chat["user1_username"]
+            is_user1 = chat[2] == user_id[0]
+            interlocutor_username = chat[6] if is_user1 else chat[4]
             interlocutor_avatar = (
-                chat["user2_avatar_url"] if is_user1 else chat["user1_avatar_url"]
+                chat[7] if is_user1 else chat[5]
             ) or "/static/avatars/default.jpg"
             interlocutor_deleted = not interlocutor_username
 
             chat_list.append({
-                "id": chat["id"],
+                "id": chat[0],
                 "name": interlocutor_username or "Deleted User",
                 "interlocutor_name": interlocutor_username or "Deleted User",
                 "avatar_url": interlocutor_avatar,
@@ -138,7 +139,7 @@ async def list_chats(username: str, current_user: dict = Depends(get_current_use
         logger.error(f"Error fetching chats: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error fetching chats: {str(e)}")
     finally:
-        conn.close()
+        release_connection(conn)
 
 @router.delete("/delete/{chat_id}")
 async def delete_chat(chat_id: int, current_user: dict = Depends(get_current_user)):
@@ -147,17 +148,17 @@ async def delete_chat(chat_id: int, current_user: dict = Depends(get_current_use
 
     try:
         # Check if chat exists and user is a participant
-        cursor.execute("SELECT user1_id, user2_id FROM chats WHERE id = ? AND type = 'one-on-one'", (chat_id,))
+        cursor.execute("SELECT user1_id, user2_id FROM chats WHERE id = %s AND type = 'one-on-one'", (chat_id,))
         chat = cursor.fetchone()
         if not chat:
             raise HTTPException(status_code=404, detail="Chat not found")
-        if current_user["id"] not in (chat["user1_id"], chat["user2_id"]):
+        if current_user["id"] not in (chat[0], chat[1]):
             raise HTTPException(status_code=403, detail="You are not a member of this chat")
 
         # Delete related data
-        cursor.execute("DELETE FROM participants WHERE chat_id = ?", (chat_id,))
-        cursor.execute("DELETE FROM messages WHERE chat_id = ?", (chat_id,))
-        cursor.execute("DELETE FROM chats WHERE id = ?", (chat_id,))
+        cursor.execute("DELETE FROM participants WHERE chat_id = %s", (chat_id,))
+        cursor.execute("DELETE FROM messages WHERE chat_id = %s", (chat_id,))
+        cursor.execute("DELETE FROM chats WHERE id = %s", (chat_id,))
 
         conn.commit()
 
@@ -177,4 +178,4 @@ async def delete_chat(chat_id: int, current_user: dict = Depends(get_current_use
         logger.error(f"Error deleting chat: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error deleting chat: {str(e)}")
     finally:
-        conn.close()
+        release_connection(conn)

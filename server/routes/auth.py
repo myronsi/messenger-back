@@ -1,18 +1,18 @@
-import sqlite3
+import psycopg2
 from fastapi import APIRouter, HTTPException, Depends, status, File, UploadFile
 from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
 from typing import Optional
 import secrets
-from server.database import get_connection
+from server.database import get_connection, release_connection
 from pathlib import Path
 import subprocess
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
-from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import padding
 import base64
@@ -112,9 +112,9 @@ def verify_token(token: str):
             return None
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT id, username, avatar_url, bio FROM users WHERE id = ?", (user_id,))
+        cursor.execute("SELECT id, username, avatar_url, bio FROM users WHERE id = %s", (user_id,))
         user = cursor.fetchone()
-        conn.close()
+        release_connection(conn)
         if user:
             return {"id": user[0], "username": user[1], "avatar_url": user[2], "bio": user[3]}
         return None
@@ -131,9 +131,9 @@ def verify_recovery_token(token: str):
             return None
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT id, username FROM users WHERE id = ?", (user_id,))
+        cursor.execute("SELECT id, username FROM users WHERE id = %s", (user_id,))
         user = cursor.fetchone()
-        conn.close()
+        release_connection(conn)
         if user:
             return {"id": user[0], "username": user[1]}
         return None
@@ -143,9 +143,9 @@ def verify_recovery_token(token: str):
 def get_user_by_id(user_id: int):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, username, avatar_url, bio FROM users WHERE id = ?", (user_id,))
+    cursor.execute("SELECT id, username, avatar_url, bio FROM users WHERE id = %s", (user_id,))
     row = cursor.fetchone()
-    conn.close()
+    release_connection(conn)
     if row:
         return {"id": row[0], "username": row[1], "avatar_url": row[2], "bio": row[3]}
     return None
@@ -220,19 +220,25 @@ def register(user: User):
         verification_ciphertext = base64.b64encode(iv + ciphertext).decode()
         password_field = hash_password_with_salt(user.password)
         cursor.execute(
-            "INSERT INTO users (username, password, bio, encrypted_cloud_part, salt, verification_ciphertext) VALUES (?, ?, ?, ?, ?, ?)",
+            """
+            INSERT INTO users (username, password, bio, encrypted_cloud_part, salt, verification_ciphertext)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            RETURNING id
+            """,
             (user.username, password_field, user.bio or "", cloud_part_plain, salt, verification_ciphertext)
         )
+        user_id = cursor.fetchone()[0]
         conn.commit()
-        user_id = cursor.lastrowid
-    except sqlite3.IntegrityError:
-        conn.close()
+    except psycopg2.IntegrityError:
+        conn.rollback()
+        release_connection(conn)
         raise HTTPException(status_code=400, detail="User already exists")
     except Exception as e:
-        conn.close()
+        conn.rollback()
+        release_connection(conn)
         raise HTTPException(status_code=500, detail=f"Error during registration: {str(e)}")
     finally:
-        conn.close()
+        release_connection(conn)
     token = create_access_token(user_id)
     return {
         "access_token": token,
@@ -242,16 +248,23 @@ def register(user: User):
     }
 
 @router.post("/login", response_model=Token)
-def login(user: User):
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    logger.info(f"Received login request: username={form_data.username}, password={form_data.password}")
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, password FROM users WHERE username = ?", (user.username,))
+    cursor.execute("SELECT id, password FROM users WHERE username = %s", (form_data.username,))
     db_user = cursor.fetchone()
-    if not db_user or not verify_password(db_user[1], user.password):
-        conn.close()
+    if not db_user:
+        logger.error(f"User not found: username={form_data.username}")
+        release_connection(conn)
         raise HTTPException(status_code=401, detail="Incorrect username or password")
-    conn.close()
+    if not verify_password(db_user[1], form_data.password):
+        logger.error(f"Password verification failed for username={form_data.username}")
+        release_connection(conn)
+        raise HTTPException(status_code=401, detail="Incorrect username or password")
+    release_connection(conn)
     token = create_access_token(db_user[0])
+    logger.info(f"Login successful for username={form_data.username}, token={token}")
     return {"access_token": token, "token_type": "bearer"}
 
 @router.get("/me")
@@ -271,17 +284,17 @@ async def update_user_profile(update: UserUpdate = None, current_user: dict = De
     values = []
     if update:
         if update.avatar_url is not None:
-            updates.append("avatar_url = ?")
+            updates.append("avatar_url = %s")
             values.append(update.avatar_url)
         if update.bio is not None:
-            updates.append("bio = ?")
+            updates.append("bio = %s")
             values.append(update.bio)
     if updates:
-        query = f"UPDATE users SET {', '.join(updates)} WHERE id = ?"
+        query = f"UPDATE users SET {', '.join(updates)} WHERE id = %s"
         values.append(current_user["id"])
         cursor.execute(query, values)
         conn.commit()
-    conn.close()
+    release_connection(conn)
     return {"message": "Profile updated" if updates else "No updates provided"}
 
 @router.post("/me/avatar")
@@ -295,9 +308,9 @@ async def upload_avatar(file: UploadFile = File(...), current_user: dict = Depen
     avatar_url = f"/static/avatars/{username}/{file.filename}"
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("UPDATE users SET avatar_url = ? WHERE id = ?", (avatar_url, current_user["id"]))
+    cursor.execute("UPDATE users SET avatar_url = %s WHERE id = %s", (avatar_url, current_user["id"]))
     conn.commit()
-    conn.close()
+    release_connection(conn)
     return {"avatar_url": avatar_url}
 
 @router.post("/me/bio")
@@ -305,7 +318,7 @@ async def update_user_bio(bio_data: UserUpdate, current_user: dict = Depends(get
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute("UPDATE users SET bio = ? WHERE id = ?", (bio_data.bio, current_user["id"]))
+        cursor.execute("UPDATE users SET bio = %s WHERE id = %s", (bio_data.bio, current_user["id"]))
         if cursor.rowcount == 0:
             raise HTTPException(status_code=404, detail="User not found")
         conn.commit()
@@ -314,32 +327,32 @@ async def update_user_bio(bio_data: UserUpdate, current_user: dict = Depends(get
         conn.rollback()
         raise HTTPException(status_code=500, detail=f"Error updating bio: {str(e)}")
     finally:
-        conn.close()
+        release_connection(conn)
 
-@router.get("/users/{username}")
-async def get_user_avatar(username: str):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT avatar_url, bio FROM users WHERE username = ?", (username,))
-    user = cursor.fetchone()
-    conn.close()
-    if not user or not user[0]:
-        return {"avatar_url": "/static/avatars/default.jpg", "bio": user[1] if user else ""}
-    return {"avatar_url": user[0], "bio": user[1] or ""}
+# @router.get("/users/{username}")
+# async def get_user_avatar(username: str):
+#     conn = get_connection()
+#     cursor = conn.cursor()
+#     cursor.execute("SELECT avatar_url, bio FROM users WHERE username = %s", (username,))
+#     user = cursor.fetchone()
+#     release_connection(conn)
+#     if not user or not user[0]:
+#         return {"avatar_url": "/static/avatars/default.jpg", "bio": user[1] if user else ""}
+#     return {"avatar_url": user[0], "bio": user[1] or ""}
 
 @router.delete("/me")
 async def delete_account(current_user: dict = Depends(get_current_user)):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute("DELETE FROM participants WHERE user_id = ?", (current_user["id"],))
-        cursor.execute("DELETE FROM users WHERE id = ?", (current_user["id"],))
+        cursor.execute("DELETE FROM participants WHERE user_id = %s", (current_user["id"],))
+        cursor.execute("DELETE FROM users WHERE id = %s", (current_user["id"],))
         conn.commit()
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=f"Error deleting account: {str(e)}")
     finally:
-        conn.close()
+        release_connection(conn)
     return {"message": "Account deleted"}
 
 @router.post("/recover")
@@ -350,7 +363,7 @@ def recover_password(recovery: RecoveryRequest):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute("SELECT id, encrypted_cloud_part, salt, verification_ciphertext FROM users WHERE username = ?", (recovery.username,))
+        cursor.execute("SELECT id, encrypted_cloud_part, salt, verification_ciphertext FROM users WHERE username = %s", (recovery.username,))
         user = cursor.fetchone()
         if not user:
             logger.warning(f"User not found: {recovery.username}")
@@ -389,7 +402,7 @@ def recover_password(recovery: RecoveryRequest):
         logger.error(f"Unexpected error during recovery: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error during password recovery: {str(e)}")
     finally:
-        conn.close()
+        release_connection(conn)
 
 @router.post("/reset-password")
 def reset_password(request: ResetPasswordRequest):
@@ -400,23 +413,23 @@ def reset_password(request: ResetPasswordRequest):
         if not user:
             raise HTTPException(status_code=401, detail="Invalid or expired recovery token")
         password_field = hash_password_with_salt(request.new_password)
-        cursor.execute("UPDATE users SET password = ? WHERE id = ?", (password_field, user["id"]))
+        cursor.execute("UPDATE users SET password = %s WHERE id = %s", (password_field, user["id"]))
         conn.commit()
         return {"message": "Password reset successful."}
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=f"Error resetting password: {str(e)}")
     finally:
-        conn.close()
+        release_connection(conn)
 
 @router.get("/get-cloud-part")
 async def get_cloud_part(username: str):
     conn = get_connection()
     cursor = conn.cursor()
     logger.info(f"Fetching cloud part for username: {username}")
-    cursor.execute("SELECT encrypted_cloud_part FROM users WHERE LOWER(username) = LOWER(?)", (username,))
+    cursor.execute("SELECT encrypted_cloud_part FROM users WHERE LOWER(username) = LOWER(%s)", (username,))
     row = cursor.fetchone()
-    conn.close()
+    release_connection(conn)
     if not row:
         logger.warning(f"No user found with username: {username}")
         raise HTTPException(status_code=404, detail="User not found")

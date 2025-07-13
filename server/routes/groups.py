@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from server.database import get_connection
+from server.database import get_connection, release_connection
 from server.routes.auth import get_current_user
 from server.websocket import manager
 import logging
@@ -24,12 +24,12 @@ async def create_group(group: GroupCreate, current_user: dict = Depends(get_curr
         participant_ids = []
         participant_usernames = []
         for username in group.participants:
-            cursor.execute("SELECT id, username FROM users WHERE username = ?", (username,))
+            cursor.execute("SELECT id, username FROM users WHERE username = %s", (username,))
             user = cursor.fetchone()
             if not user:
                 raise HTTPException(status_code=404, detail=f"User {username} not found")
-            participant_ids.append(user["id"])
-            participant_usernames.append(user["username"])
+            participant_ids.append(user[0])
+            participant_usernames.append(user[1])
 
         # Include the creator if not already in participants
         creator_id = current_user["id"]
@@ -41,19 +41,20 @@ async def create_group(group: GroupCreate, current_user: dict = Depends(get_curr
         # Create chat entry
         cursor.execute("""
             INSERT INTO chats (name, type)
-            VALUES (?, 'group')
+            VALUES (%s, 'group')
+            RETURNING id
         """, (group.name,))
-        chat_id = cursor.lastrowid
+        chat_id = cursor.fetchone()[0]
 
         # Create group entry
         cursor.execute("""
             INSERT INTO groups (chat_id, admin_id)
-            VALUES (?, ?)
+            VALUES (%s, %s)
         """, (chat_id, creator_id))
 
         # Add participants
         for user_id in set(participant_ids):  # Avoid duplicates
-            cursor.execute("INSERT INTO participants (chat_id, user_id) VALUES (?, ?)", (chat_id, user_id))
+            cursor.execute("INSERT INTO participants (chat_id, user_id) VALUES (%s, %s)", (chat_id, user_id))
 
         conn.commit()
 
@@ -66,7 +67,7 @@ async def create_group(group: GroupCreate, current_user: dict = Depends(get_curr
                 "participants": list(set(participant_usernames))
             }
         }
-        await manager.broadcast(0, message)  # Broadcast to chat_id=0 for chat list updates
+        await manager.broadcast(0, message)
         logger.info(f"Sent group_created notification for chat_id={chat_id} to chat_id=0")
 
         return {"chat_id": chat_id, "name": group.name, "message": "Group created successfully"}
@@ -77,7 +78,7 @@ async def create_group(group: GroupCreate, current_user: dict = Depends(get_curr
         logger.error(f"Error creating group: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error creating group: {str(e)}")
     finally:
-        conn.close()
+        release_connection(conn)
 
 @router.get("/list/{username}")
 async def list_groups(username: str, current_user: dict = Depends(get_current_user)):
@@ -93,13 +94,13 @@ async def list_groups(username: str, current_user: dict = Depends(get_current_us
             FROM chats c
             JOIN participants p ON c.id = p.chat_id
             JOIN users u ON p.user_id = u.id
-            WHERE u.username = ? AND c.type = 'group'
+            WHERE u.username = %s AND c.type = 'group'
         """, (username,))
         groups = cursor.fetchall()
 
         return {
             "groups": [
-                {"chat_id": group["id"], "name": group["name"], "type": group["type"]}
+                {"chat_id": group[0], "name": group[1], "type": group[2]}
                 for group in groups
             ]
         }
@@ -107,7 +108,7 @@ async def list_groups(username: str, current_user: dict = Depends(get_current_us
         logger.error(f"Error fetching groups: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error fetching groups: {str(e)}")
     finally:
-        conn.close()
+        release_connection(conn)
 
 @router.delete("/delete/{chat_id}")
 async def delete_group(chat_id: int, current_user: dict = Depends(get_current_user)):
@@ -120,25 +121,25 @@ async def delete_group(chat_id: int, current_user: dict = Depends(get_current_us
             SELECT g.admin_id
             FROM groups g
             JOIN chats c ON g.chat_id = c.id
-            WHERE g.chat_id = ? AND c.type = 'group'
+            WHERE g.chat_id = %s AND c.type = 'group'
         """, (chat_id,))
         group = cursor.fetchone()
         if not group:
             raise HTTPException(status_code=404, detail="Group not found")
-        if group["admin_id"] != current_user["id"]:
+        if group[0] != current_user["id"]:
             raise HTTPException(status_code=403, detail="Only the group admin can delete the group")
 
         # Delete related data
-        cursor.execute("DELETE FROM participants WHERE chat_id = ?", (chat_id,))
-        cursor.execute("DELETE FROM messages WHERE chat_id = ?", (chat_id,))
-        cursor.execute("DELETE FROM groups WHERE chat_id = ?", (chat_id,))
-        cursor.execute("DELETE FROM chats WHERE id = ?", (chat_id,))
+        cursor.execute("DELETE FROM participants WHERE chat_id = %s", (chat_id,))
+        cursor.execute("DELETE FROM messages WHERE chat_id = %s", (chat_id,))
+        cursor.execute("DELETE FROM groups WHERE chat_id = %s", (chat_id,))
+        cursor.execute("DELETE FROM chats WHERE id = %s", (chat_id,))
 
         conn.commit()
 
         # Notify via WebSocket
         message = {"type": "chat_deleted", "chat_id": chat_id}
-        await manager.broadcast(0, message)  # Broadcast to chat_id=0 for chat list updates
+        await manager.broadcast(0, message)
         logger.info(f"Sent chat_deleted notification for chat_id={chat_id} to chat_id=0")
 
         return {"message": "Group deleted successfully"}
@@ -149,4 +150,4 @@ async def delete_group(chat_id: int, current_user: dict = Depends(get_current_us
         logger.error(f"Error deleting group: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error deleting group: {str(e)}")
     finally:
-        conn.close()
+        release_connection(conn)
