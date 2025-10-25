@@ -1,7 +1,7 @@
 import json
 from fastapi import APIRouter, HTTPException, Depends, status, UploadFile, File, Form
 from pydantic import BaseModel
-from server.database import get_connection, release_connection
+from server.database import get_connection
 from server.routes.auth import get_current_user
 from server.websocket import manager
 from datetime import datetime
@@ -58,7 +58,7 @@ async def upload_file(
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute("SELECT * FROM participants WHERE chat_id = %s AND user_id = %s", (chat_id, current_user["id"]))
+        cursor.execute("SELECT * FROM participants WHERE chat_id = ? AND user_id = ?", (chat_id, current_user["id"]))
         if not cursor.fetchone():
             raise HTTPException(status_code=403, detail="You are not a member of this chat")
 
@@ -74,20 +74,19 @@ async def upload_file(
 
         cursor.execute("""
             INSERT INTO messages (chat_id, sender_id, sender_name, content, timestamp)
-            VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP)
-            RETURNING id
+            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
         """, (chat_id, current_user["id"], current_user["username"], json.dumps({
             "file_url": file_url,
             "file_name": file_name,
             "file_type": file_type,
             "file_size": file_size
         })))
-        message_id = cursor.fetchone()[0]
+        message_id = cursor.lastrowid
         conn.commit()
 
-        cursor.execute("SELECT avatar_url FROM users WHERE id = %s", (current_user["id"],))
+        cursor.execute("SELECT avatar_url FROM users WHERE id = ?", (current_user["id"],))
         user_data = cursor.fetchone()
-        avatar_url = user_data[0] if user_data and user_data[0] else "/static/avatars/default.jpg"
+        avatar_url = user_data["avatar_url"] if user_data and user_data["avatar_url"] else "/static/avatars/default.jpg"
 
         file_message = {
             "type": "file",
@@ -116,7 +115,7 @@ async def upload_file(
         logger.error(f"Error uploading file: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error uploading file: {str(e)}")
     finally:
-        release_connection(conn)
+        conn.close()
 
 @router.post("/vm")
 async def upload_voice_message(
@@ -139,7 +138,7 @@ async def upload_voice_message(
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute("SELECT * FROM participants WHERE chat_id = %s AND user_id = %s", (chat_id, current_user["id"]))
+        cursor.execute("SELECT * FROM participants WHERE chat_id = ? AND user_id = ?", (chat_id, current_user["id"]))
         if not cursor.fetchone():
             raise HTTPException(status_code=403, detail="You are not a member of this chat")
 
@@ -156,20 +155,19 @@ async def upload_voice_message(
 
         cursor.execute("""
             INSERT INTO messages (chat_id, sender_id, sender_name, content, timestamp)
-            VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP)
-            RETURNING id
+            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
         """, (chat_id, current_user["id"], current_user["username"], json.dumps({
             "file_url": file_url,
             "file_name": file_name,
             "file_type": file_type,
             "file_size": file_size
         })))
-        message_id = cursor.fetchone()[0]
+        message_id = cursor.lastrowid
         conn.commit()
 
-        cursor.execute("SELECT avatar_url FROM users WHERE id = %s", (current_user["id"],))
+        cursor.execute("SELECT avatar_url FROM users WHERE id = ?", (current_user["id"],))
         user_data = cursor.fetchone()
-        avatar_url = user_data[0] if user_data and user_data[0] else "/static/avatars/default.jpg"
+        avatar_url = user_data["avatar_url"] if user_data and user_data["avatar_url"] else "/static/avatars/default.jpg"
 
         voice_message = {
             "type": "file",
@@ -198,7 +196,7 @@ async def upload_voice_message(
         logger.error(f"Error uploading voice message: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error uploading voice message: {str(e)}")
     finally:
-        release_connection(conn)
+        conn.close()
 
 @router.get("/history/{chat_id}")
 async def get_message_history(chat_id: int, current_user: dict = Depends(get_current_user)):
@@ -206,18 +204,18 @@ async def get_message_history(chat_id: int, current_user: dict = Depends(get_cur
     cursor = conn.cursor()
 
     try:
-        cursor.execute("SELECT * FROM participants WHERE chat_id = %s AND user_id = %s", (chat_id, current_user["id"]))
+        cursor.execute("SELECT * FROM participants WHERE chat_id = ? AND user_id = ?", (chat_id, current_user["id"]))
         if not cursor.fetchone():
             logger.error(f"User {current_user['id']} is not a member of chat {chat_id}")
             raise HTTPException(status_code=403, detail="You are not a member of this chat")
 
         cursor.execute("""
-            SELECT m.id, m.content, m.timestamp, m.sender_name AS sender,
-                   m.reply_to, m.reactions, u.avatar_url, m.read_by
-            FROM messages m
-            LEFT JOIN users u ON m.sender_id = u.id
-            WHERE m.chat_id = %s
-            ORDER BY m.timestamp ASC
+            SELECT messages.id, messages.content, messages.timestamp, messages.sender_name AS sender,
+                   messages.reply_to, messages.reactions, users.avatar_url, messages.read_by
+            FROM messages
+            LEFT JOIN users ON messages.sender_id = users.id
+            WHERE messages.chat_id = ?
+            ORDER BY messages.timestamp ASC
         """, (chat_id,))
         messages = cursor.fetchall()
         logger.info(f"Fetched {len(messages)} messages for chat {chat_id}")
@@ -225,7 +223,7 @@ async def get_message_history(chat_id: int, current_user: dict = Depends(get_cur
         history = []
         for msg in messages:
             try:
-                content = msg[1]
+                content = msg["content"]
                 message_type = "message"
                 parsed_content = content
                 if content and content.startswith("{"):
@@ -234,25 +232,25 @@ async def get_message_history(chat_id: int, current_user: dict = Depends(get_cur
                         if isinstance(parsed_content, dict) and "file_url" in parsed_content:
                             message_type = "file"
                     except json.JSONDecodeError as json_err:
-                        logger.error(f"Failed to parse JSON content for message {msg[0]}: {content}, error: {json_err}")
-                        parsed_content = content
+                        logger.error(f"Failed to parse JSON content for message {msg['id']}: {content}, error: {json_err}")
+                        parsed_content = content  # Keep as string if JSON is invalid
                         message_type = "message"
 
                 history.append({
-                    "id": msg[0],
+                    "id": msg["id"],
                     "content": parsed_content,
-                    "timestamp": msg[2],
-                    "sender": msg[3],
-                    "avatar_url": msg[6] if msg[6] else "/static/avatars/default.jpg",
-                    "reply_to": msg[4],
-                    "reactions": msg[5] or "[]",
-                    "read_by": msg[7] or "[]",
-                    "is_deleted": not bool(msg[1]),
+                    "timestamp": msg["timestamp"],
+                    "sender": msg["sender"],
+                    "avatar_url": msg["avatar_url"] if msg["avatar_url"] else "/static/avatars/default.jpg",
+                    "reply_to": msg["reply_to"],
+                    "reactions": msg["reactions"] or "[]",  # Return JSON string
+                    "read_by": msg["read_by"] or "[]",  # Fixed: Use msg["read_by"] instead of row["read_by"]
+                    "is_deleted": not bool(msg["content"]),
                     "type": message_type
                 })
             except Exception as e:
-                logger.error(f"Error processing message {msg[0]} in chat {chat_id}: {str(e)}")
-                continue
+                logger.error(f"Error processing message {msg['id']} in chat {chat_id}: {str(e)}")
+                continue  # Skip problematic message
 
         logger.info(f"Returning {len(history)} messages for chat {chat_id}")
         return {"history": history}
@@ -262,4 +260,67 @@ async def get_message_history(chat_id: int, current_user: dict = Depends(get_cur
         logger.error(f"Error loading history for chat {chat_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error loading history: {str(e)}")
     finally:
-        release_connection(conn)
+        conn.close()    
+
+# @router.put("/edit/{message_id}")
+# def edit_message(message_id: int, payload: MessageEdit, current_user: dict = Depends(get_current_user)):
+#     content = payload.content.strip()
+#     if not content:
+#         raise HTTPException(status_code=400, detail="Message text is required")
+
+#     conn = get_connection()
+#     cursor = conn.cursor()
+
+#     try:
+#         cursor.execute("SELECT sender_id, content FROM messages WHERE id = ?", (message_id,))
+#         message = cursor.fetchone()
+#         if not message:
+#             raise HTTPException(status_code=404, detail="Message not found")
+#         if message["sender_id"] != current_user["id"]:
+#             raise HTTPException(status_code=403, detail="You are not the author of this message")
+        
+#         try:
+#             content_data = json.loads(message["content"])
+#             if "file_url" in content_data:
+#                 raise HTTPException(status_code=400, detail="File messages cannot be edited")
+#         except json.JSONDecodeError:
+#             pass
+
+#         cursor.execute("""
+#             UPDATE messages
+#             SET content = ?, edited_at = CURRENT_TIMESTAMP
+#             WHERE id = ?
+#         """, (content, message_id))
+#         conn.commit()
+#         return {"message": "Message successfully updated"}
+#     except HTTPException:
+#         raise
+#     except Exception as e:
+#         conn.rollback()
+#         logger.error(f"Error editing message {message_id}: {str(e)}")
+#         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+#     finally:
+#         conn.close()
+
+# @router.delete("/delete/{message_id}")
+# def delete_message(message_id: int, current_user: dict = Depends(get_current_user)):
+#     conn = get_connection()
+#     cursor = conn.cursor()
+
+#     try:
+#         cursor.execute("SELECT sender_id FROM messages WHERE id = ?", (message_id,))
+#         message = cursor.fetchone()
+#         if not message:
+#             raise HTTPException(status_code=404, detail="Message not found")
+#         if message["sender_id"] != current_user["id"]:
+#             raise HTTPException(status_code=403, detail="You are not the author of this message")
+
+#         cursor.execute("DELETE FROM messages WHERE id = ?", (message_id,))
+#         conn.commit()
+#         return {"message": "Message deleted"}
+#     except Exception as e:
+#         conn.rollback()
+#         logger.error(f"Error deleting message {message_id}: {str(e)}")
+#         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+#     finally:
+#         conn.close()

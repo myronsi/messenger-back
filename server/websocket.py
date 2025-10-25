@@ -1,9 +1,10 @@
 from fastapi import WebSocket, WebSocketDisconnect, Query
 from fastapi.routing import APIRouter
-from server.database import get_connection, release_connection
+from server.database import get_connection
 from server.routes.auth import verify_token
 from datetime import datetime
 import logging
+import sqlite3
 import json
 
 router = APIRouter()
@@ -51,6 +52,7 @@ manager = ConnectionManager()
 
 @router.websocket("/ws/chat/{chat_id}")
 async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Query(...)):
+    # Проверка токена
     user = verify_token(token)
     if not user:
         await websocket.accept()
@@ -61,28 +63,34 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
     username = user["username"]
     user_id = user["id"]
 
+    # Подключение к базе данных
     conn = get_connection()
     cursor = conn.cursor()
 
     try:
-        cursor.execute("SELECT id FROM users WHERE id = %s", (user_id,))
+        # Проверка существования пользователя
+        cursor.execute("SELECT id FROM users WHERE id = ?", (user_id,))
         if not cursor.fetchone():
             await websocket.accept()
             await websocket.send_text(json.dumps({"type": "error", "message": "Account does not exist"}))
             await websocket.close(code=1008)
             return
 
+        # Принимаем соединение WebSocket после проверки токена и пользователя
         await websocket.accept()
 
+        # Пропускаем проверку для chat_id=0 (глобальные уведомления)
         if chat_id != 0:
-            cursor.execute("SELECT id FROM chats WHERE id = %s", (chat_id,))
+            # Проверка существования чата
+            cursor.execute("SELECT id FROM chats WHERE id = ?", (chat_id,))
             if not cursor.fetchone():
                 await websocket.send_text(json.dumps({"type": "error", "message": "Chat does not exist"}))
                 await websocket.close(code=1008)
                 logger.error(f"Chat {chat_id} does not exist")
                 return
 
-            cursor.execute("SELECT * FROM participants WHERE chat_id = %s AND user_id = %s", (chat_id, user_id))
+            # Проверка участия пользователя
+            cursor.execute("SELECT * FROM participants WHERE chat_id = ? AND user_id = ?", (chat_id, user_id))
             participant = cursor.fetchone()
             if not participant:
                 await websocket.send_text(json.dumps({"type": "error", "message": "You are not a member of this chat"}))
@@ -91,10 +99,12 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                 return
             logger.info(f"User {user_id} verified as participant in chat {chat_id}")
 
-        cursor.execute("SELECT avatar_url FROM users WHERE id = %s", (user_id,))
+        # Получаем avatar_url пользователя
+        cursor.execute("SELECT avatar_url FROM users WHERE id = ?", (user_id,))
         user_data = cursor.fetchone()
-        avatar_url = user_data[0] if user_data and user_data[0] else "/static/avatars/default.jpg"
+        avatar_url = user_data["avatar_url"] if user_data and user_data["avatar_url"] else "/static/avatars/default.jpg"
 
+        # Подключение клиента к WebSocket
         await manager.connect(chat_id, websocket)
         logger.info(f"WebSocket CONNECTED for {username} in chat {chat_id}")
 
@@ -127,13 +137,12 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                     try:
                         cursor.execute("""
                             INSERT INTO messages (chat_id, sender_id, sender_name, content, timestamp, reply_to)
-                            VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP, %s)
-                            RETURNING id
+                            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
                         """, (chat_id, user_id, username, content, reply_to))
-                        message_id = cursor.fetchone()[0]
                         conn.commit()
+                        message_id = cursor.lastrowid
                         logger.info(f"Message saved in db: {{'chat_id': {chat_id}, 'sender_name': '{username}', 'content': '{content}', 'reply_to': {reply_to}}}, ID: {message_id}")
-                    except psycopg2.Error as e:
+                    except sqlite3.Error as e:
                         logger.error(f"Error while saving message to db: {e}")
                         await websocket.send_text(json.dumps({"type": "error", "message": "Failed to save message"}))
                         continue
@@ -161,18 +170,17 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                     try:
                         cursor.execute("""
                             INSERT INTO messages (chat_id, sender_id, sender_name, content, timestamp, reply_to)
-                            VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP, %s)
-                            RETURNING id
+                            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
                         """, (chat_id, user_id, username, json.dumps({
                             "file_url": file_url,
                             "file_name": file_name,
                             "file_type": file_type,
                             "file_size": file_size
                         }), reply_to))
-                        message_id = cursor.fetchone()[0]
                         conn.commit()
+                        message_id = cursor.lastrowid
                         logger.info(f"File message saved in db: {{'chat_id': {chat_id}, 'sender_name': '{username}', 'file_url': '{file_url}'}}, ID: {message_id}")
-                    except psycopg2.Error as e:
+                    except sqlite3.Error as e:
                         logger.error(f"Error while saving file message to db: {e}")
                         await websocket.send_text(json.dumps({"type": "error", "message": "Failed to save file message"}))
                         continue
@@ -201,16 +209,16 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                         continue
 
                     try:
-                        cursor.execute("SELECT sender_id FROM messages WHERE id = %s", (message_id,))
+                        cursor.execute("SELECT sender_id FROM messages WHERE id = ?", (message_id,))
                         sender_id = cursor.fetchone()
-                        if not sender_id or sender_id[0] != user_id:
+                        if not sender_id or sender_id["sender_id"] != user_id:
                             await websocket.send_text(json.dumps({"type": "error", "message": "You are not the author of this message"}))
                             continue
 
-                        cursor.execute("UPDATE messages SET content = %s, edited_at = CURRENT_TIMESTAMP WHERE id = %s", (content, message_id))
+                        cursor.execute("UPDATE messages SET content = ?, edited_at = CURRENT_TIMESTAMP WHERE id = ?", (content, message_id))
                         conn.commit()
                         logger.info(f"Message edited: {{'message_id': {message_id}, 'new_content': '{content}'}}")
-                    except psycopg2.Error as e:
+                    except sqlite3.Error as e:
                         logger.error(f"Error while editing message: {e}")
                         await websocket.send_text(json.dumps({"type": "error", "message": "Failed to edit message"}))
                         continue
@@ -229,16 +237,16 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                         continue
 
                     try:
-                        cursor.execute("SELECT sender_id FROM messages WHERE id = %s", (message_id,))
+                        cursor.execute("SELECT sender_id FROM messages WHERE id = ?", (message_id,))
                         sender_id = cursor.fetchone()
-                        if not sender_id or sender_id[0] != user_id:
+                        if not sender_id or sender_id["sender_id"] != user_id:
                             await websocket.send_text(json.dumps({"type": "error", "message": "You are not the author of this message"}))
                             continue
 
-                        cursor.execute("DELETE FROM messages WHERE id = %s", (message_id,))
+                        cursor.execute("DELETE FROM messages WHERE id = ?", (message_id,))
                         conn.commit()
                         logger.info(f"Message deleted: {{'message_id': {message_id}}}")
-                    except psycopg2.Error as e:
+                    except sqlite3.Error as e:
                         logger.error(f"Error while deleting message: {e}")
                         await websocket.send_text(json.dumps({"type": "error", "message": "Failed to delete message"}))
                         continue
@@ -256,22 +264,22 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                         continue
 
                     try:
-                        cursor.execute("SELECT reactions FROM messages WHERE id = %s", (message_id,))
+                        cursor.execute("SELECT reactions FROM messages WHERE id = ?", (message_id,))
                         result = cursor.fetchone()
                         if not result:
                             await websocket.send_text(json.dumps({"type": "error", "message": "Message not found"}))
                             continue
 
-                        reactions = json.loads(result[0]) if result[0] else []
+                        reactions = json.loads(result["reactions"]) if result["reactions"] else []
                         if any(r["user_id"] == user_id and r["reaction"] == reaction for r in reactions):
                             await websocket.send_text(json.dumps({"type": "error", "message": "You already reacted with this reaction"}))
                             continue
 
                         reactions.append({"user_id": user_id, "reaction": reaction})
-                        cursor.execute("UPDATE messages SET reactions = %s WHERE id = %s", (json.dumps(reactions), message_id))
+                        cursor.execute("UPDATE messages SET reactions = ? WHERE id = ?", (json.dumps(reactions), message_id))
                         conn.commit()
                         logger.info(f"Reaction added: {{'message_id': {message_id}, 'user_id': {user_id}, 'reaction': '{reaction}'}}")
-                    except psycopg2.Error as e:
+                    except sqlite3.Error as e:
                         logger.error(f"Error while adding reaction: {e}")
                         await websocket.send_text(json.dumps({"type": "error", "message": "Failed to add reaction"}))
                         continue
@@ -291,22 +299,22 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                         continue
 
                     try:
-                        cursor.execute("SELECT reactions FROM messages WHERE id = %s", (message_id,))
+                        cursor.execute("SELECT reactions FROM messages WHERE id = ?", (message_id,))
                         result = cursor.fetchone()
                         if not result:
                             await websocket.send_text(json.dumps({"type": "error", "message": "Message not found"}))
                             continue
 
-                        reactions = json.loads(result[0]) if result[0] else []
+                        reactions = json.loads(result["reactions"]) if result["reactions"] else []
                         if not any(r["user_id"] == user_id and r["reaction"] == reaction for r in reactions):
                             await websocket.send_text(json.dumps({"type": "error", "message": "You cannot remove this reaction"}))
                             continue
 
                         new_reactions = [r for r in reactions if not (r["user_id"] == user_id and r["reaction"] == reaction)]
-                        cursor.execute("UPDATE messages SET reactions = %s WHERE id = %s", (json.dumps(new_reactions), message_id))
+                        cursor.execute("UPDATE messages SET reactions = ? WHERE id = ?", (json.dumps(new_reactions), message_id))
                         conn.commit()
                         logger.info(f"Reaction removed: {{'message_id': {message_id}, 'user_id': {user_id}, 'reaction': '{reaction}'}}")
-                    except psycopg2.Error as e:
+                    except sqlite3.Error as e:
                         logger.error(f"Error while removing reaction: {e}")
                         await websocket.send_text(json.dumps({"type": "error", "message": "Failed to remove reaction"}))
                         continue
@@ -326,26 +334,27 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                         continue
 
                     try:
-                        cursor.execute("SELECT id, sender_id, read_by FROM messages WHERE id = %s", (message_id,))
+                        cursor.execute("SELECT id, sender_id, read_by FROM messages WHERE id = ?", (message_id,))
                         message = cursor.fetchone()
                         if not message:
                             await websocket.send_text(json.dumps({"type": "error", "message": "Message not found"}))
                             continue
                         
-                        if message[1] == user_id:
+                        if message["sender_id"] == user_id:
                             await websocket.send_text(json.dumps({"type": "error", "message": "Cannot mark own message as read"}))
                             continue
 
-                        read_by = json.loads(message[2]) if message[2] else []
+                        read_by = json.loads(message["read_by"]) if message["read_by"] else []
                         if any(r["user_id"] == user_id for r in read_by):
+                            # await websocket.send_text(json.dumps({"type": "error", "message": "Message already marked as read"}))
                             continue
 
                         read_by.append({"user_id": user_id, "read_at": datetime.utcnow().isoformat()})
-                        cursor.execute("UPDATE messages SET read_by = %s WHERE id = %s", (json.dumps(read_by), message_id))
+                        cursor.execute("UPDATE messages SET read_by = ? WHERE id = ?", (json.dumps(read_by), message_id))
                         conn.commit()
                         logger.info(f"Message marked as read: {{'message_id': {message_id}, 'user_id': {user_id}}}")
 
-                    except psycopg2.Error as e:
+                    except sqlite3.Error as e:
                         logger.error(f"Error while marking message as read: {e}")
                         await websocket.send_text(json.dumps({"type": "error", "message": "Failed to mark message as read"}))
                         continue
@@ -372,4 +381,4 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
             manager.disconnect(chat_id, websocket)
             await websocket.close(code=1000)
     finally:
-        release_connection(conn)
+        conn.close()
