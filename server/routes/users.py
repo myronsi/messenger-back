@@ -50,3 +50,39 @@ async def get_user_profile(username: str):
         "avatar_url": row[0] or DEFAULT_AVATAR,
         "bio": row[1] or ""
     }
+
+@router.get("/{id}")
+async def get_user_profile(id: int):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT username, avatar_url, bio FROM users WHERE id = ?", (id,))
+    row = cursor.fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {
+        "username": row[0],
+        "avatar_url": row[1] or DEFAULT_AVATAR,
+        "bio": row[2] or ""
+    }
+
+
+@router.get("/search")
+async def search_users(q: str):
+    """Search users by partial username. Returns list of {id, username, avatar_url}."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        like_q = f"%{q}%"
+        cursor.execute("SELECT id, username, avatar_url FROM users WHERE username LIKE ? LIMIT 20", (like_q,))
+        rows = cursor.fetchall()
+        results = []
+        for row in rows:
+            results.append({
+                "id": row[0],
+                "username": row[1],
+                "avatar_url": row[2] or DEFAULT_AVATAR,
+            })
+        return {"users": results}
+    finally:
+        conn.close()
