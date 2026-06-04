@@ -10,3 +10,4 @@ websockets
 python-multipart
 ssss
 cryptography
+argon2-cffi

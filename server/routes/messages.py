@@ -1,10 +1,12 @@
 import json
-from fastapi import APIRouter, HTTPException, Depends, status, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, Depends, status, UploadFile, File, Form, Query
 from pydantic import BaseModel
 from server.database import get_connection
 from server.routes.auth import get_current_user
 from server.websocket import manager
-from datetime import datetime
+from server.time_utils import to_utc_iso, utc_now_iso
+from server.chat_summary import get_message_summary
+from server.privacy import DEFAULT_AVATAR, can_send_to_chat, read_receipts_enabled, serialize_user_snapshot
 from pathlib import Path
 import uuid
 import logging
@@ -20,6 +22,76 @@ class Message(BaseModel):
 
 class MessageEdit(BaseModel):
     content: str    
+
+def _parse_json_list(value):
+    if not value:
+        return []
+    if isinstance(value, list):
+        return value
+    try:
+        parsed = json.loads(value)
+    except (json.JSONDecodeError, TypeError):
+        return []
+    return parsed if isinstance(parsed, list) else []
+
+def _hydrate_user_items(cursor, items, requester_id: int, respect_read_receipts: bool = False):
+    user_ids = sorted({item.get("user_id") for item in items if isinstance(item, dict) and item.get("user_id")})
+    if not user_ids:
+        return [item for item in items if isinstance(item, dict)]
+
+    placeholders = ",".join(["?"] * len(user_ids))
+    cursor.execute(
+        f"SELECT id, username, display_name, avatar_url FROM users WHERE id IN ({placeholders})",
+        user_ids,
+    )
+    users = {row["id"]: row for row in cursor.fetchall()}
+
+    hydrated = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        user = users.get(item.get("user_id"))
+        if respect_read_receipts and user and not read_receipts_enabled(cursor, user["id"]):
+            continue
+        snapshot = serialize_user_snapshot(cursor, item.get("user_id"), requester_id)
+        hydrated.append({
+            **item,
+            "username": item.get("username") or snapshot["username"],
+            "display_name": item.get("display_name") or snapshot["display_name"],
+            "avatar_url": snapshot["avatar_url"],
+        })
+    return hydrated
+
+
+def _parse_undelivered_to(value):
+    if not value:
+        return []
+    try:
+        parsed = json.loads(value)
+    except (json.JSONDecodeError, TypeError):
+        return []
+    return parsed if isinstance(parsed, list) else []
+
+
+def _message_visible_to(message, user_id: int) -> bool:
+    if message["sender_id"] == user_id:
+        return True
+    return user_id not in _parse_undelivered_to(message["undelivered_to"] if "undelivered_to" in message.keys() else None)
+
+
+def _undelivered_recipients_for_send(cursor, chat_id: int, sender_id: int) -> tuple[list[int], str | None]:
+    if can_send_to_chat(cursor, chat_id, sender_id):
+        return [], None
+
+    cursor.execute("SELECT type, user1_id, user2_id FROM chats WHERE id = ?", (chat_id,))
+    chat = cursor.fetchone()
+    if not chat or chat["type"] != "one-on-one":
+        return [], "This message could not be delivered."
+
+    other_id = chat["user2_id"] if chat["user1_id"] == sender_id else chat["user1_id"]
+    if not other_id:
+        return [], "This message could not be delivered."
+    return [other_id], "This message could not be delivered due to the recipient's privacy settings."
 
 @router.post("/upload")
 async def upload_file(
@@ -61,6 +133,7 @@ async def upload_file(
         cursor.execute("SELECT * FROM participants WHERE chat_id = ? AND user_id = ?", (chat_id, current_user["id"]))
         if not cursor.fetchone():
             raise HTTPException(status_code=403, detail="You are not a member of this chat")
+        undelivered_to, delivery_error = _undelivered_recipients_for_send(cursor, chat_id, current_user["id"])
 
         upload_dir = Path("static/uploads")
         upload_dir.mkdir(parents=True, exist_ok=True)
@@ -73,26 +146,29 @@ async def upload_file(
         file_name = file.filename
 
         cursor.execute("""
-            INSERT INTO messages (chat_id, sender_id, sender_name, content, timestamp)
-            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-        """, (chat_id, current_user["id"], current_user["username"], json.dumps({
+            INSERT INTO messages (chat_id, sender_id, sender_name, content, timestamp, delivery_error, undelivered_to)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (chat_id, current_user["id"], current_user["display_name"], json.dumps({
             "file_url": file_url,
             "file_name": file_name,
             "file_type": file_type,
             "file_size": file_size
-        })))
+        }), utc_now_iso(), delivery_error, json.dumps(undelivered_to)))
         message_id = cursor.lastrowid
         conn.commit()
 
-        cursor.execute("SELECT avatar_url FROM users WHERE id = ?", (current_user["id"],))
-        user_data = cursor.fetchone()
-        avatar_url = user_data["avatar_url"] if user_data and user_data["avatar_url"] else "/static/avatars/default.jpg"
+        timestamp = utc_now_iso()
 
-        file_message = {
+        await manager.broadcast_personalized(chat_id, lambda recipient_id: None if recipient_id in undelivered_to else {
             "type": "file",
-            "username": current_user["username"],
-            "avatar_url": avatar_url,
+            "username": serialize_user_snapshot(cursor, current_user["id"], recipient_id)["display_name"],
+            "sender_username": current_user["username"],
+            "sender_id": current_user["id"],
+            "avatar_url": serialize_user_snapshot(cursor, current_user["id"], recipient_id)["avatar_url"],
             "is_deleted": False,
+            "delivery_error": delivery_error if recipient_id == current_user["id"] else None,
+            "reactions": [],
+            "read_by": [],
             "data": {
                 "chat_id": chat_id,
                 "file_url": file_url,
@@ -102,9 +178,22 @@ async def upload_file(
                 "message_id": message_id,
                 "reply_to": None
             },
-            "timestamp": datetime.utcnow().isoformat()
-        }
-        await manager.broadcast(chat_id, file_message)
+            "timestamp": timestamp,
+        })
+        if undelivered_to:
+            await manager.send_to_user(current_user["id"], {
+                "type": "chat_list_message",
+                "chat_id": chat_id,
+                "sender_id": current_user["id"],
+                "last_message": get_message_summary(cursor, message_id, current_user["id"]),
+            })
+        else:
+            await manager.broadcast(0, {
+                "type": "chat_list_message",
+                "chat_id": chat_id,
+                "sender_id": current_user["id"],
+                "last_message": get_message_summary(cursor, message_id),
+            })
         logger.info(f"File uploaded and broadcasted: {file_name} to chat {chat_id}")
 
         return {"message": "File uploaded successfully", "file_url": file_url}
@@ -141,6 +230,7 @@ async def upload_voice_message(
         cursor.execute("SELECT * FROM participants WHERE chat_id = ? AND user_id = ?", (chat_id, current_user["id"]))
         if not cursor.fetchone():
             raise HTTPException(status_code=403, detail="You are not a member of this chat")
+        undelivered_to, delivery_error = _undelivered_recipients_for_send(cursor, chat_id, current_user["id"])
 
         upload_dir = Path("static/vm")
         upload_dir.mkdir(parents=True, exist_ok=True)
@@ -154,26 +244,29 @@ async def upload_voice_message(
         file_type = "voice"
 
         cursor.execute("""
-            INSERT INTO messages (chat_id, sender_id, sender_name, content, timestamp)
-            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-        """, (chat_id, current_user["id"], current_user["username"], json.dumps({
+            INSERT INTO messages (chat_id, sender_id, sender_name, content, timestamp, delivery_error, undelivered_to)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (chat_id, current_user["id"], current_user["display_name"], json.dumps({
             "file_url": file_url,
             "file_name": file_name,
             "file_type": file_type,
             "file_size": file_size
-        })))
+        }), utc_now_iso(), delivery_error, json.dumps(undelivered_to)))
         message_id = cursor.lastrowid
         conn.commit()
 
-        cursor.execute("SELECT avatar_url FROM users WHERE id = ?", (current_user["id"],))
-        user_data = cursor.fetchone()
-        avatar_url = user_data["avatar_url"] if user_data and user_data["avatar_url"] else "/static/avatars/default.jpg"
+        timestamp = utc_now_iso()
 
-        voice_message = {
+        await manager.broadcast_personalized(chat_id, lambda recipient_id: None if recipient_id in undelivered_to else {
             "type": "file",
-            "username": current_user["username"],
-            "avatar_url": avatar_url,
+            "username": serialize_user_snapshot(cursor, current_user["id"], recipient_id)["display_name"],
+            "sender_username": current_user["username"],
+            "sender_id": current_user["id"],
+            "avatar_url": serialize_user_snapshot(cursor, current_user["id"], recipient_id)["avatar_url"],
             "is_deleted": False,
+            "delivery_error": delivery_error if recipient_id == current_user["id"] else None,
+            "reactions": [],
+            "read_by": [],
             "data": {
                 "chat_id": chat_id,
                 "file_url": file_url,
@@ -183,9 +276,22 @@ async def upload_voice_message(
                 "message_id": message_id,
                 "reply_to": None
             },
-            "timestamp": datetime.utcnow().isoformat()
-        }
-        await manager.broadcast(chat_id, voice_message)
+            "timestamp": timestamp,
+        })
+        if undelivered_to:
+            await manager.send_to_user(current_user["id"], {
+                "type": "chat_list_message",
+                "chat_id": chat_id,
+                "sender_id": current_user["id"],
+                "last_message": get_message_summary(cursor, message_id, current_user["id"]),
+            })
+        else:
+            await manager.broadcast(0, {
+                "type": "chat_list_message",
+                "chat_id": chat_id,
+                "sender_id": current_user["id"],
+                "last_message": get_message_summary(cursor, message_id),
+            })
         logger.info(f"Voice message uploaded and broadcasted: {file_name} to chat {chat_id}")
 
         return {"message": "Voice message uploaded successfully", "file_url": file_url}
@@ -199,7 +305,12 @@ async def upload_voice_message(
         conn.close()
 
 @router.get("/history/{chat_id}")
-async def get_message_history(chat_id: int, current_user: dict = Depends(get_current_user)):
+async def get_message_history(
+    chat_id: int,
+    limit: int = Query(50, ge=1, le=100),
+    before_id: int | None = Query(None, ge=1),
+    current_user: dict = Depends(get_current_user)
+):
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -209,20 +320,43 @@ async def get_message_history(chat_id: int, current_user: dict = Depends(get_cur
             logger.error(f"User {current_user['id']} is not a member of chat {chat_id}")
             raise HTTPException(status_code=403, detail="You are not a member of this chat")
 
-        cursor.execute("""
-            SELECT messages.id, messages.content, messages.timestamp, messages.sender_name AS sender,
-                   messages.reply_to, messages.reactions, users.avatar_url, messages.read_by
-            FROM messages
-            LEFT JOIN users ON messages.sender_id = users.id
-            WHERE messages.chat_id = ?
-            ORDER BY messages.timestamp ASC
-        """, (chat_id,))
+        history_limit = limit + 1
+        if before_id:
+            cursor.execute("""
+                SELECT messages.id, messages.sender_id, messages.content, messages.timestamp,
+                       COALESCE(users.display_name, messages.sender_name) AS sender,
+                       users.username AS sender_username,
+                       messages.reply_to, messages.reactions, users.avatar_url, messages.read_by,
+                       messages.edited_at, messages.delivery_error, messages.undelivered_to
+                FROM messages
+                LEFT JOIN users ON messages.sender_id = users.id
+                WHERE messages.chat_id = ? AND messages.id < ?
+                ORDER BY messages.id DESC
+                LIMIT ?
+            """, (chat_id, before_id, history_limit))
+        else:
+            cursor.execute("""
+                SELECT messages.id, messages.sender_id, messages.content, messages.timestamp,
+                       COALESCE(users.display_name, messages.sender_name) AS sender,
+                       users.username AS sender_username,
+                       messages.reply_to, messages.reactions, users.avatar_url, messages.read_by,
+                       messages.edited_at, messages.delivery_error, messages.undelivered_to
+                FROM messages
+                LEFT JOIN users ON messages.sender_id = users.id
+                WHERE messages.chat_id = ?
+                ORDER BY messages.id DESC
+                LIMIT ?
+            """, (chat_id, history_limit))
         messages = cursor.fetchall()
+        has_more = len(messages) > limit
+        messages = list(reversed(messages[:limit]))
         logger.info(f"Fetched {len(messages)} messages for chat {chat_id}")
 
         history = []
         for msg in messages:
             try:
+                if not _message_visible_to(msg, current_user["id"]):
+                    continue
                 content = msg["content"]
                 message_type = "message"
                 parsed_content = content
@@ -236,24 +370,34 @@ async def get_message_history(chat_id: int, current_user: dict = Depends(get_cur
                         parsed_content = content  # Keep as string if JSON is invalid
                         message_type = "message"
 
+                sender_snapshot = serialize_user_snapshot(cursor, msg["sender_id"], current_user["id"])
                 history.append({
                     "id": msg["id"],
+                    "sender_id": msg["sender_id"],
                     "content": parsed_content,
-                    "timestamp": msg["timestamp"],
-                    "sender": msg["sender"],
-                    "avatar_url": msg["avatar_url"] if msg["avatar_url"] else "/static/avatars/default.jpg",
+                    "timestamp": to_utc_iso(msg["timestamp"]),
+                    "sender": sender_snapshot["display_name"] or msg["sender"],
+                    "sender_username": msg["sender_username"],
+                    "avatar_url": sender_snapshot["avatar_url"],
                     "reply_to": msg["reply_to"],
-                    "reactions": msg["reactions"] or "[]",  # Return JSON string
-                    "read_by": msg["read_by"] or "[]",  # Fixed: Use msg["read_by"] instead of row["read_by"]
+                    "edited_at": to_utc_iso(msg["edited_at"]) if msg["edited_at"] else None,
+                    "reactions": _hydrate_user_items(cursor, _parse_json_list(msg["reactions"]), current_user["id"]),
+                    "read_by": _hydrate_user_items(cursor, _parse_json_list(msg["read_by"]), current_user["id"], respect_read_receipts=True),
                     "is_deleted": not bool(msg["content"]),
-                    "type": message_type
+                    "type": message_type,
+                    "delivery_error": msg["delivery_error"]
                 })
             except Exception as e:
                 logger.error(f"Error processing message {msg['id']} in chat {chat_id}: {str(e)}")
                 continue  # Skip problematic message
 
+        next_before_id = history[0]["id"] if has_more and history else None
         logger.info(f"Returning {len(history)} messages for chat {chat_id}")
-        return {"history": history}
+        return {
+            "history": history,
+            "has_more": has_more,
+            "next_before_id": next_before_id
+        }
     except HTTPException:
         raise
     except Exception as e:
