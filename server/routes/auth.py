@@ -26,13 +26,18 @@ from server.presence import is_user_online
 from server.time_utils import to_utc_iso, utc_now_iso
 from server.avatar_history import make_avatar_url, record_user_avatar
 from server.privacy import (
+    AVATAR_PROFILE_VISIBILITY_SCOPES,
     DEFAULT_PRIVACY_SETTINGS,
+    DIRECT_MESSAGE_VISIBILITY_SCOPES,
     ensure_privacy_settings,
     get_privacy_settings,
+    GROUP_INVITE_VISIBILITY_SCOPES,
     normalize_visibility,
+    PRESENCE_VISIBILITY_SCOPES,
+    PRIVACY_EXCEPTION_EFFECTS,
+    PRIVACY_EXCEPTION_KEYS,
     serialize_user,
     SEARCH_VISIBILITY,
-    VISIBILITY_SCOPES,
 )
 
 try:
@@ -87,6 +92,10 @@ class PrivacySettingsUpdate(BaseModel):
     direct_messages: Optional[str] = None
     group_invites: Optional[str] = None
     search_visibility: Optional[str] = None
+
+
+class PrivacyExceptionsUpdate(BaseModel):
+    usernames: list[str]
 
 class Token(BaseModel):
     access_token: Optional[str] = None
@@ -191,6 +200,12 @@ def parse_datetime(value) -> datetime:
     normalized = str(value).replace("Z", "+00:00")
     parsed = datetime.fromisoformat(normalized)
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+def require_privacy_visibility(field: str, value: str | None, allowed_values: set[str]) -> str:
+    normalized = (value or "").strip().lower()
+    if normalized not in allowed_values:
+        raise HTTPException(status_code=400, detail=f"{field} does not support this privacy option")
+    return normalized
 
 def create_access_token(user_id: int, session_id: str):
     expires_delta = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -887,7 +902,7 @@ async def get_my_privacy(current_user: dict = Depends(get_current_user)):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        settings = get_privacy_settings(cursor, current_user["id"])
+        settings = get_privacy_settings(cursor, current_user["id"], include_exceptions=True)
         conn.commit()
         return settings
     finally:
@@ -899,12 +914,30 @@ async def update_my_privacy(payload: PrivacySettingsUpdate, current_user: dict =
     values = []
     data = payload.dict(exclude_unset=True)
 
-    scope_fields = ["avatar_visibility", "profile_visibility", "presence_visibility", "direct_messages", "group_invites"]
-    for field in scope_fields:
-        if field in data:
-            value = normalize_visibility(data[field], VISIBILITY_SCOPES)
-            updates.append(f"{field} = ?")
-            values.append(value)
+    if "avatar_visibility" in data:
+        value = require_privacy_visibility("avatar_visibility", data["avatar_visibility"], AVATAR_PROFILE_VISIBILITY_SCOPES)
+        updates.append("avatar_visibility = ?")
+        values.append(value)
+
+    if "profile_visibility" in data:
+        value = require_privacy_visibility("profile_visibility", data["profile_visibility"], AVATAR_PROFILE_VISIBILITY_SCOPES)
+        updates.append("profile_visibility = ?")
+        values.append(value)
+
+    if "presence_visibility" in data:
+        value = require_privacy_visibility("presence_visibility", data["presence_visibility"], PRESENCE_VISIBILITY_SCOPES)
+        updates.append("presence_visibility = ?")
+        values.append(value)
+
+    if "group_invites" in data:
+        value = require_privacy_visibility("group_invites", data["group_invites"], GROUP_INVITE_VISIBILITY_SCOPES)
+        updates.append("group_invites = ?")
+        values.append(value)
+
+    if "direct_messages" in data:
+        value = require_privacy_visibility("direct_messages", data["direct_messages"], DIRECT_MESSAGE_VISIBILITY_SCOPES)
+        updates.append("direct_messages = ?")
+        values.append(value)
 
     if "search_visibility" in data:
         value = normalize_visibility(data["search_visibility"], SEARCH_VISIBILITY)
@@ -923,9 +956,81 @@ async def update_my_privacy(payload: PrivacySettingsUpdate, current_user: dict =
             values.append(current_user["id"])
             cursor.execute(f"UPDATE user_privacy_settings SET {', '.join(updates)} WHERE user_id = ?", values)
         conn.commit()
-        return get_privacy_settings(cursor, current_user["id"])
+        return get_privacy_settings(cursor, current_user["id"], include_exceptions=True)
     finally:
         conn.close()
+
+
+@router.put("/me/privacy/exceptions/{setting_key}/{effect}")
+async def update_my_privacy_exceptions(
+    setting_key: str,
+    effect: str,
+    payload: PrivacyExceptionsUpdate,
+    current_user: dict = Depends(get_current_user),
+):
+    normalized_key = setting_key.strip().lower()
+    normalized_effect = effect.strip().lower()
+    if normalized_key not in PRIVACY_EXCEPTION_KEYS:
+        raise HTTPException(status_code=400, detail="Unsupported privacy setting")
+    if normalized_effect not in PRIVACY_EXCEPTION_EFFECTS:
+        raise HTTPException(status_code=400, detail="Unsupported exception effect")
+
+    normalized_usernames = []
+    seen_usernames = set()
+    for username in payload.usernames:
+        normalized_username = username.strip()
+        username_key = normalized_username.lower()
+        if not normalized_username or username_key in seen_usernames:
+            continue
+        seen_usernames.add(username_key)
+        normalized_usernames.append(normalized_username)
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        target_ids = []
+        for username in normalized_usernames:
+            cursor.execute("SELECT id, username FROM users WHERE username = ?", (username,))
+            target = cursor.fetchone()
+            if not target:
+                raise HTTPException(status_code=404, detail=f"User {username} not found")
+            if target["id"] == current_user["id"]:
+                raise HTTPException(status_code=400, detail="You cannot add yourself to privacy exceptions")
+            target_ids.append(target["id"])
+
+        cursor.execute(
+            """
+            DELETE FROM user_privacy_exceptions
+            WHERE owner_id = ? AND setting_key = ? AND effect = ?
+            """,
+            (current_user["id"], normalized_key, normalized_effect),
+        )
+        for target_id in target_ids:
+            cursor.execute(
+                """
+                DELETE FROM user_privacy_exceptions
+                WHERE owner_id = ? AND setting_key = ? AND target_user_id = ?
+                """,
+                (current_user["id"], normalized_key, target_id),
+            )
+            cursor.execute(
+                """
+                INSERT INTO user_privacy_exceptions (owner_id, setting_key, target_user_id, effect, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (current_user["id"], normalized_key, target_id, normalized_effect, utc_now_iso()),
+            )
+        conn.commit()
+        return get_privacy_settings(cursor, current_user["id"], include_exceptions=True)
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
 
 @router.get("/me/blocked-users")
 async def get_blocked_users(current_user: dict = Depends(get_current_user)):

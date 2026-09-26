@@ -10,11 +10,17 @@ from server.privacy import DEFAULT_AVATAR, can_send_to_chat, read_receipts_enabl
 from pathlib import Path
 import uuid
 import logging
+import subprocess
+import sys
+from array import array
 
 router = APIRouter()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+WAVEFORM_BAR_COUNT = 38
+WAVEFORM_SAMPLE_RATE = 8000
 
 class Message(BaseModel):
     chat_id: int
@@ -22,6 +28,10 @@ class Message(BaseModel):
 
 class MessageEdit(BaseModel):
     content: str    
+
+class ForwardMessageRequest(BaseModel):
+    source_message_id: int
+    target_chat_ids: list[int]
 
 def _parse_json_list(value):
     if not value:
@@ -79,6 +89,176 @@ def _message_visible_to(message, user_id: int) -> bool:
     return user_id not in _parse_undelivered_to(message["undelivered_to"] if "undelivered_to" in message.keys() else None)
 
 
+def _is_image_file(content: dict) -> bool:
+    file_name = str(content.get("file_name") or "")
+    file_type = str(content.get("file_type") or "")
+    return file_type == "image" or Path(file_name).suffix.lower() in {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".avif"}
+
+
+def _audio_kind(content: dict) -> str | None:
+    file_name = str(content.get("file_name") or "")
+    file_type = str(content.get("file_type") or "")
+    extension = Path(file_name).suffix.lower()
+    if file_type == "voice" or extension == ".opus":
+        return "voice"
+    if file_type == "audio" or extension in {".mp3", ".wav", ".ogg", ".m4a", ".aac", ".flac"}:
+        return "file"
+    return None
+
+
+def _parse_message_content(content: str):
+    if content and content.startswith("{"):
+        try:
+            parsed_content = json.loads(content)
+            if isinstance(parsed_content, dict):
+                return parsed_content, "file" if parsed_content.get("file_url") else "message"
+        except json.JSONDecodeError:
+            pass
+    return content, "message"
+
+
+def _audio_metadata_from_row(row) -> dict | None:
+    if "audio_duration" not in row.keys() and "audio_waveform" not in row.keys():
+        return None
+
+    metadata: dict = {}
+    duration = row["audio_duration"] if "audio_duration" in row.keys() else None
+    waveform_value = row["audio_waveform"] if "audio_waveform" in row.keys() else None
+
+    if duration is not None:
+        metadata["duration"] = duration
+
+    if waveform_value:
+        try:
+            waveform = json.loads(waveform_value)
+            if isinstance(waveform, list):
+                metadata["waveform"] = waveform
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    return metadata or None
+
+
+def _with_audio_metadata(content: dict, row) -> dict:
+    metadata = _audio_metadata_from_row(row)
+    if not metadata:
+        return content
+    return {
+        **content,
+        "audio_metadata": metadata,
+    }
+
+
+def _forwarded_from_from_row(row) -> dict | None:
+    if "forwarded_from_message_id" not in row.keys():
+        return None
+    if row["forwarded_from_message_id"] is None:
+        return None
+    return {
+        "message_id": row["forwarded_from_message_id"],
+        "sender_id": row["forwarded_from_sender_id"],
+        "sender_name": row["forwarded_from_sender_name"],
+        "sender_username": row["forwarded_from_sender_username"],
+    }
+
+
+def _message_kind_and_payload(content: str, row=None) -> tuple[str, str | dict]:
+    parsed_content, message_type = _parse_message_content(content)
+    if message_type == "file" and isinstance(parsed_content, dict) and row is not None:
+        parsed_content = _with_audio_metadata(parsed_content, row)
+    return message_type, parsed_content
+
+
+def _extract_voice_audio_metadata(file_path: Path) -> dict:
+    metadata: dict = {}
+    duration = 0.0
+
+    try:
+        probe = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                str(file_path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        if probe.returncode == 0:
+            duration = float((probe.stdout or "").strip() or 0)
+    except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+        logger.warning(f"Could not read audio duration for {file_path}: {exc}")
+
+    try:
+        decoded = subprocess.run(
+            [
+                "ffmpeg",
+                "-v",
+                "error",
+                "-i",
+                str(file_path),
+                "-ac",
+                "1",
+                "-ar",
+                str(WAVEFORM_SAMPLE_RATE),
+                "-f",
+                "s16le",
+                "pipe:1",
+            ],
+            capture_output=True,
+            timeout=20,
+            check=False,
+        )
+        if decoded.returncode != 0 or not decoded.stdout:
+            raise RuntimeError((decoded.stderr or b"").decode("utf-8", errors="ignore") or "ffmpeg decode failed")
+
+        samples = array("h")
+        samples.frombytes(decoded.stdout)
+        if sys.byteorder != "little":
+            samples.byteswap()
+
+        if not samples:
+            return metadata
+
+        if duration <= 0:
+            duration = len(samples) / WAVEFORM_SAMPLE_RATE
+
+        samples_per_bar = max(1, len(samples) // WAVEFORM_BAR_COUNT)
+        raw_bars = []
+        for bar_index in range(WAVEFORM_BAR_COUNT):
+            start = bar_index * samples_per_bar
+            end = len(samples) if bar_index == WAVEFORM_BAR_COUNT - 1 else min(len(samples), start + samples_per_bar)
+            step = max(1, (end - start) // 120)
+            total = 0.0
+            count = 0
+
+            for sample_index in range(start, end, step):
+                sample = samples[sample_index] / 32768
+                total += sample * sample
+                count += 1
+
+            raw_bars.append((total / count) ** 0.5 if count else 0.0)
+
+        peak = max(max(raw_bars), 0.001)
+        metadata["waveform"] = [
+            round(min(1.0, max(0.16, value / peak)), 4)
+            for value in raw_bars
+        ]
+    except (OSError, RuntimeError, subprocess.TimeoutExpired) as exc:
+        logger.warning(f"Could not extract waveform for {file_path}: {exc}")
+
+    if duration > 0:
+        metadata["duration"] = round(duration, 3)
+
+    return metadata
+
+
 def _undelivered_recipients_for_send(cursor, chat_id: int, sender_id: int) -> tuple[list[int], str | None]:
     if can_send_to_chat(cursor, chat_id, sender_id):
         return [], None
@@ -96,6 +276,7 @@ def _undelivered_recipients_for_send(cursor, chat_id: int, sender_id: int) -> tu
 @router.post("/upload")
 async def upload_file(
     chat_id: int = Form(...),
+    caption: str | None = Form(None),
     file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user)
 ):
@@ -144,16 +325,20 @@ async def upload_file(
 
         file_url = f"/static/uploads/{unique_filename}"
         file_name = file.filename
-
-        cursor.execute("""
-            INSERT INTO messages (chat_id, sender_id, sender_name, content, timestamp, delivery_error, undelivered_to)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (chat_id, current_user["id"], current_user["display_name"], json.dumps({
+        clean_caption = caption.strip() if caption else ""
+        message_content = {
             "file_url": file_url,
             "file_name": file_name,
             "file_type": file_type,
             "file_size": file_size
-        }), utc_now_iso(), delivery_error, json.dumps(undelivered_to)))
+        }
+        if clean_caption:
+            message_content["caption"] = clean_caption
+
+        cursor.execute("""
+            INSERT INTO messages (chat_id, sender_id, sender_name, content, timestamp, delivery_error, undelivered_to)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (chat_id, current_user["id"], current_user["display_name"], json.dumps(message_content), utc_now_iso(), delivery_error, json.dumps(undelivered_to)))
         message_id = cursor.lastrowid
         conn.commit()
 
@@ -175,6 +360,7 @@ async def upload_file(
                 "file_name": file_name,
                 "file_type": file_type,
                 "file_size": file_size,
+                **({"caption": clean_caption} if clean_caption else {}),
                 "message_id": message_id,
                 "reply_to": None
             },
@@ -213,11 +399,11 @@ async def upload_voice_message(
     current_user: dict = Depends(get_current_user)
 ):
     MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
-    ALLOWED_FILE_TYPES = [".opus"]
+    ALLOWED_FILE_TYPES = [".opus", ".webm"]
 
     file_extension = Path(file.filename).suffix.lower()
     if file_extension not in ALLOWED_FILE_TYPES:
-        raise HTTPException(status_code=400, detail="Only Opus files are allowed for voice messages")
+        raise HTTPException(status_code=400, detail="Only Opus voice recordings are allowed")
 
     content = await file.read()
     file_size = len(content)
@@ -242,16 +428,33 @@ async def upload_voice_message(
         file_url = f"/static/vm/{unique_filename}"
         file_name = file.filename
         file_type = "voice"
-
-        cursor.execute("""
-            INSERT INTO messages (chat_id, sender_id, sender_name, content, timestamp, delivery_error, undelivered_to)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (chat_id, current_user["id"], current_user["display_name"], json.dumps({
+        audio_metadata = _extract_voice_audio_metadata(file_path)
+        message_content = {
             "file_url": file_url,
             "file_name": file_name,
             "file_type": file_type,
             "file_size": file_size
-        }), utc_now_iso(), delivery_error, json.dumps(undelivered_to)))
+        }
+        audio_duration = audio_metadata.get("duration")
+        audio_waveform = json.dumps(audio_metadata["waveform"]) if audio_metadata.get("waveform") else None
+
+        cursor.execute("""
+            INSERT INTO messages (
+                chat_id, sender_id, sender_name, content, timestamp,
+                delivery_error, undelivered_to, audio_duration, audio_waveform
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            chat_id,
+            current_user["id"],
+            current_user["display_name"],
+            json.dumps(message_content),
+            utc_now_iso(),
+            delivery_error,
+            json.dumps(undelivered_to),
+            audio_duration,
+            audio_waveform,
+        ))
         message_id = cursor.lastrowid
         conn.commit()
 
@@ -273,6 +476,7 @@ async def upload_voice_message(
                 "file_name": file_name,
                 "file_type": file_type,
                 "file_size": file_size,
+                "audio_metadata": audio_metadata,
                 "message_id": message_id,
                 "reply_to": None
             },
@@ -304,11 +508,361 @@ async def upload_voice_message(
     finally:
         conn.close()
 
+@router.post("/forward")
+async def forward_message(
+    payload: ForwardMessageRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    target_chat_ids = []
+    seen_targets = set()
+    for chat_id in payload.target_chat_ids:
+        if chat_id in seen_targets:
+            continue
+        seen_targets.add(chat_id)
+        target_chat_ids.append(chat_id)
+
+    if not target_chat_ids:
+        raise HTTPException(status_code=400, detail="Select at least one chat")
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("""
+            SELECT messages.id, messages.chat_id, messages.sender_id, messages.sender_name,
+                   messages.content, messages.undelivered_to,
+                   messages.audio_duration, messages.audio_waveform,
+                   messages.forwarded_from_message_id,
+                   messages.forwarded_from_sender_id,
+                   messages.forwarded_from_sender_name,
+                   messages.forwarded_from_sender_username,
+                   users.username AS sender_username
+            FROM messages
+            LEFT JOIN users ON users.id = messages.sender_id
+            WHERE messages.id = ?
+        """, (payload.source_message_id,))
+        source = cursor.fetchone()
+        if not source or not source["content"]:
+            raise HTTPException(status_code=404, detail="Message not found")
+
+        cursor.execute(
+            "SELECT 1 FROM participants WHERE chat_id = ? AND user_id = ?",
+            (source["chat_id"], current_user["id"]),
+        )
+        if not cursor.fetchone() or not _message_visible_to(source, current_user["id"]):
+            raise HTTPException(status_code=403, detail="You cannot forward this message")
+
+        source_forwarded = _forwarded_from_from_row(source)
+        forwarded_from = source_forwarded or {
+            "message_id": source["id"],
+            "sender_id": source["sender_id"],
+            "sender_name": source["sender_name"],
+            "sender_username": source["sender_username"],
+        }
+
+        forwarded = []
+        failed = []
+
+        for target_chat_id in target_chat_ids:
+            cursor.execute("SELECT id FROM chats WHERE id = ?", (target_chat_id,))
+            if not cursor.fetchone():
+                failed.append({"chat_id": target_chat_id, "reason": "Chat not found"})
+                continue
+
+            cursor.execute(
+                "SELECT 1 FROM participants WHERE chat_id = ? AND user_id = ?",
+                (target_chat_id, current_user["id"]),
+            )
+            if not cursor.fetchone():
+                failed.append({"chat_id": target_chat_id, "reason": "You are not a member of this chat"})
+                continue
+
+            undelivered_to, delivery_error = _undelivered_recipients_for_send(cursor, target_chat_id, current_user["id"])
+            timestamp = utc_now_iso()
+
+            try:
+                cursor.execute("""
+                    INSERT INTO messages (
+                        chat_id, sender_id, sender_name, content, timestamp,
+                        delivery_error, undelivered_to, audio_duration, audio_waveform,
+                        forwarded_from_message_id, forwarded_from_sender_id,
+                        forwarded_from_sender_name, forwarded_from_sender_username
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    target_chat_id,
+                    current_user["id"],
+                    current_user["display_name"],
+                    source["content"],
+                    timestamp,
+                    delivery_error,
+                    json.dumps(undelivered_to),
+                    source["audio_duration"],
+                    source["audio_waveform"],
+                    forwarded_from["message_id"],
+                    forwarded_from["sender_id"],
+                    forwarded_from["sender_name"],
+                    forwarded_from["sender_username"],
+                ))
+                new_message_id = cursor.lastrowid
+                conn.commit()
+            except Exception as exc:
+                conn.rollback()
+                logger.error(f"Error forwarding message {source['id']} to chat {target_chat_id}: {exc}")
+                failed.append({"chat_id": target_chat_id, "reason": "Failed to forward message"})
+                continue
+
+            message_kind, content_payload = _message_kind_and_payload(source["content"], source)
+            forwarded.append({"chat_id": target_chat_id, "message_id": new_message_id})
+
+            def build_forwarded_message(recipient_id):
+                if recipient_id in undelivered_to:
+                    return None
+                sender_snapshot = serialize_user_snapshot(cursor, current_user["id"], recipient_id)
+                return {
+                    "type": message_kind,
+                    "username": sender_snapshot["display_name"],
+                    "sender_username": current_user["username"],
+                    "sender_id": current_user["id"],
+                    "avatar_url": sender_snapshot["avatar_url"],
+                    "is_deleted": False,
+                    "delivery_error": delivery_error if recipient_id == current_user["id"] else None,
+                    "reactions": [],
+                    "read_by": [],
+                    "forwarded_from": forwarded_from,
+                    "data": {
+                        "chat_id": target_chat_id,
+                        **(content_payload if message_kind == "file" else {"content": content_payload}),
+                        "message_id": new_message_id,
+                        "reply_to": None,
+                    },
+                    "timestamp": timestamp,
+                }
+
+            await manager.broadcast_personalized(target_chat_id, build_forwarded_message)
+            if undelivered_to:
+                await manager.send_to_user(current_user["id"], {
+                    "type": "chat_list_message",
+                    "chat_id": target_chat_id,
+                    "sender_id": current_user["id"],
+                    "last_message": get_message_summary(cursor, new_message_id, current_user["id"]),
+                })
+            else:
+                await manager.broadcast(0, {
+                    "type": "chat_list_message",
+                    "chat_id": target_chat_id,
+                    "sender_id": current_user["id"],
+                    "last_message": get_message_summary(cursor, new_message_id),
+                })
+
+        return {"forwarded": forwarded, "failed": failed}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        conn.rollback()
+        logger.error(f"Error forwarding message {payload.source_message_id}: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to forward message")
+    finally:
+        conn.close()
+
+@router.get("/photos/{chat_id}")
+async def get_chat_photos(
+    chat_id: int,
+    current_user: dict = Depends(get_current_user)
+):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("SELECT 1 FROM participants WHERE chat_id = ? AND user_id = ?", (chat_id, current_user["id"]))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=403, detail="You are not a member of this chat")
+
+        cursor.execute("""
+            SELECT id, sender_id, content, timestamp, undelivered_to
+            FROM messages
+            WHERE chat_id = ?
+              AND content LIKE '%"file_url"%'
+            ORDER BY id DESC
+        """, (chat_id,))
+
+        photos = []
+        for msg in cursor.fetchall():
+            if not _message_visible_to(msg, current_user["id"]):
+                continue
+
+            try:
+                content = json.loads(msg["content"])
+            except (json.JSONDecodeError, TypeError):
+                continue
+
+            if not isinstance(content, dict) or not content.get("file_url") or not _is_image_file(content):
+                continue
+
+            file_name = content.get("file_name") or "Photo"
+            file_url = content.get("file_url")
+            photos.append({
+                "id": msg["id"],
+                "file_url": file_url,
+                "url": file_url,
+                "file_name": file_name,
+                "name": file_name,
+                "file_type": content.get("file_type") or "image",
+                "file_size": content.get("file_size"),
+                "timestamp": to_utc_iso(msg["timestamp"]),
+            })
+
+        return {"photos": photos}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error loading photos for chat {chat_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error loading photos: {str(e)}")
+    finally:
+        conn.close()
+
+@router.get("/audios/{chat_id}")
+async def get_chat_audios(
+    chat_id: int,
+    current_user: dict = Depends(get_current_user)
+):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("SELECT 1 FROM participants WHERE chat_id = ? AND user_id = ?", (chat_id, current_user["id"]))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=403, detail="You are not a member of this chat")
+
+        cursor.execute("""
+            SELECT id, sender_id, content, timestamp, undelivered_to, audio_duration, audio_waveform
+            FROM messages
+            WHERE chat_id = ?
+              AND content LIKE '%"file_url"%'
+            ORDER BY id DESC
+        """, (chat_id,))
+
+        audios = []
+        for msg in cursor.fetchall():
+            if not _message_visible_to(msg, current_user["id"]):
+                continue
+
+            parsed_content, message_type = _parse_message_content(msg["content"])
+            if message_type != "file" or not isinstance(parsed_content, dict) or not parsed_content.get("file_url"):
+                continue
+
+            parsed_content = _with_audio_metadata(parsed_content, msg)
+            audio_kind = _audio_kind(parsed_content)
+            if not audio_kind:
+                continue
+
+            file_name = parsed_content.get("file_name") or ("Voice message" if audio_kind == "voice" else "Audio")
+            file_url = parsed_content.get("file_url")
+            audios.append({
+                "id": msg["id"],
+                "file_url": file_url,
+                "url": file_url,
+                "file_name": file_name,
+                "name": file_name,
+                "file_type": parsed_content.get("file_type") or ("voice" if audio_kind == "voice" else "audio"),
+                "file_size": parsed_content.get("file_size"),
+                "audio_metadata": parsed_content.get("audio_metadata"),
+                "audio_kind": audio_kind,
+                "timestamp": to_utc_iso(msg["timestamp"]),
+            })
+
+        return {"audios": audios}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error loading audios for chat {chat_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error loading audios: {str(e)}")
+    finally:
+        conn.close()
+
+@router.get("/search/{chat_id}")
+async def search_chat_messages(
+    chat_id: int,
+    q: str = Query(..., min_length=1),
+    current_user: dict = Depends(get_current_user)
+):
+    query = q.strip().lower()
+    if not query:
+        return {"results": []}
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("SELECT 1 FROM participants WHERE chat_id = ? AND user_id = ?", (chat_id, current_user["id"]))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=403, detail="You are not a member of this chat")
+
+        cursor.execute("""
+            SELECT messages.id, messages.sender_id, messages.content, messages.timestamp,
+                   messages.audio_duration, messages.audio_waveform,
+                   messages.forwarded_from_message_id,
+                   messages.forwarded_from_sender_id,
+                   messages.forwarded_from_sender_name,
+                   messages.forwarded_from_sender_username,
+                   COALESCE(users.display_name, messages.sender_name) AS sender,
+                   users.username AS sender_username,
+                   users.avatar_url,
+                   messages.undelivered_to
+            FROM messages
+            LEFT JOIN users ON messages.sender_id = users.id
+            WHERE messages.chat_id = ?
+            ORDER BY messages.id DESC
+        """, (chat_id,))
+
+        results = []
+        for msg in cursor.fetchall():
+            if not _message_visible_to(msg, current_user["id"]):
+                continue
+
+            parsed_content, message_type = _parse_message_content(msg["content"])
+            if message_type == "file" and isinstance(parsed_content, dict):
+                parsed_content = _with_audio_metadata(parsed_content, msg)
+            if isinstance(parsed_content, dict):
+                searchable_text = " ".join(
+                    str(parsed_content.get(key) or "")
+                    for key in ("file_name", "file_type", "caption")
+                )
+            else:
+                searchable_text = str(parsed_content or "")
+
+            if query not in searchable_text.lower():
+                continue
+
+            sender_snapshot = serialize_user_snapshot(cursor, msg["sender_id"], current_user["id"])
+            results.append({
+                "id": msg["id"],
+                "sender_id": msg["sender_id"],
+                "sender": sender_snapshot["display_name"] or msg["sender"],
+                "sender_username": msg["sender_username"],
+                "avatar_url": sender_snapshot["avatar_url"],
+                "content": parsed_content,
+                "type": message_type,
+                "forwarded_from": _forwarded_from_from_row(msg),
+                "timestamp": to_utc_iso(msg["timestamp"]),
+            })
+
+        return {"results": results}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error searching messages for chat {chat_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error searching messages: {str(e)}")
+    finally:
+        conn.close()
+
 @router.get("/history/{chat_id}")
 async def get_message_history(
     chat_id: int,
     limit: int = Query(50, ge=1, le=100),
     before_id: int | None = Query(None, ge=1),
+    after_id: int | None = Query(None, ge=1),
+    around_id: int | None = Query(None, ge=1),
     current_user: dict = Depends(get_current_user)
 ):
     conn = get_connection()
@@ -321,35 +875,119 @@ async def get_message_history(
             raise HTTPException(status_code=403, detail="You are not a member of this chat")
 
         history_limit = limit + 1
-        if before_id:
+        has_more_before = False
+        has_more_after = False
+        if around_id:
+            before_limit = max(0, limit // 2)
+            after_limit = max(0, limit - before_limit - 1)
             cursor.execute("""
                 SELECT messages.id, messages.sender_id, messages.content, messages.timestamp,
+                       messages.audio_duration, messages.audio_waveform,
+                       messages.forwarded_from_message_id,
+                       messages.forwarded_from_sender_id,
+                       messages.forwarded_from_sender_name,
+                       messages.forwarded_from_sender_username,
                        COALESCE(users.display_name, messages.sender_name) AS sender,
                        users.username AS sender_username,
                        messages.reply_to, messages.reactions, users.avatar_url, messages.read_by,
-                       messages.edited_at, messages.delivery_error, messages.undelivered_to
+                       messages.edited_at, messages.delivery_error, messages.undelivered_to, messages.deleted_for
+                FROM messages
+                LEFT JOIN users ON messages.sender_id = users.id
+                WHERE messages.chat_id = ? AND messages.id <= ?
+                ORDER BY messages.id DESC
+                LIMIT ?
+            """, (chat_id, around_id, before_limit + 2))
+            before_rows = cursor.fetchall()
+            has_more_before = len(before_rows) > before_limit + 1
+            before_rows = list(reversed(before_rows[:before_limit + 1]))
+
+            cursor.execute("""
+                SELECT messages.id, messages.sender_id, messages.content, messages.timestamp,
+                       messages.audio_duration, messages.audio_waveform,
+                       messages.forwarded_from_message_id,
+                       messages.forwarded_from_sender_id,
+                       messages.forwarded_from_sender_name,
+                       messages.forwarded_from_sender_username,
+                       COALESCE(users.display_name, messages.sender_name) AS sender,
+                       users.username AS sender_username,
+                       messages.reply_to, messages.reactions, users.avatar_url, messages.read_by,
+                       messages.edited_at, messages.delivery_error, messages.undelivered_to, messages.deleted_for
+                FROM messages
+                LEFT JOIN users ON messages.sender_id = users.id
+                WHERE messages.chat_id = ? AND messages.id > ?
+                ORDER BY messages.id ASC
+                LIMIT ?
+            """, (chat_id, around_id, after_limit + 1))
+            after_rows = cursor.fetchall()
+            has_more_after = len(after_rows) > after_limit
+            messages = before_rows + after_rows[:after_limit]
+            has_more = has_more_before
+        elif after_id:
+            cursor.execute("""
+                SELECT messages.id, messages.sender_id, messages.content, messages.timestamp,
+                       messages.audio_duration, messages.audio_waveform,
+                       messages.forwarded_from_message_id,
+                       messages.forwarded_from_sender_id,
+                       messages.forwarded_from_sender_name,
+                       messages.forwarded_from_sender_username,
+                       COALESCE(users.display_name, messages.sender_name) AS sender,
+                       users.username AS sender_username,
+                       messages.reply_to, messages.reactions, users.avatar_url, messages.read_by,
+                       messages.edited_at, messages.delivery_error, messages.undelivered_to, messages.deleted_for
+                FROM messages
+                LEFT JOIN users ON messages.sender_id = users.id
+                WHERE messages.chat_id = ? AND messages.id > ?
+                ORDER BY messages.id ASC
+                LIMIT ?
+            """, (chat_id, after_id, history_limit))
+            messages = cursor.fetchall()
+            has_more_after = len(messages) > limit
+            messages = messages[:limit]
+            has_more = False
+        elif before_id:
+            cursor.execute("""
+                SELECT messages.id, messages.sender_id, messages.content, messages.timestamp,
+                       messages.audio_duration, messages.audio_waveform,
+                       messages.forwarded_from_message_id,
+                       messages.forwarded_from_sender_id,
+                       messages.forwarded_from_sender_name,
+                       messages.forwarded_from_sender_username,
+                       COALESCE(users.display_name, messages.sender_name) AS sender,
+                       users.username AS sender_username,
+                       messages.reply_to, messages.reactions, users.avatar_url, messages.read_by,
+                       messages.edited_at, messages.delivery_error, messages.undelivered_to, messages.deleted_for
                 FROM messages
                 LEFT JOIN users ON messages.sender_id = users.id
                 WHERE messages.chat_id = ? AND messages.id < ?
                 ORDER BY messages.id DESC
                 LIMIT ?
             """, (chat_id, before_id, history_limit))
+            messages = cursor.fetchall()
+            has_more = len(messages) > limit
+            has_more_before = has_more
+            messages = list(reversed(messages[:limit]))
         else:
             cursor.execute("""
                 SELECT messages.id, messages.sender_id, messages.content, messages.timestamp,
+                       messages.audio_duration, messages.audio_waveform,
+                       messages.forwarded_from_message_id,
+                       messages.forwarded_from_sender_id,
+                       messages.forwarded_from_sender_name,
+                       messages.forwarded_from_sender_username,
                        COALESCE(users.display_name, messages.sender_name) AS sender,
                        users.username AS sender_username,
                        messages.reply_to, messages.reactions, users.avatar_url, messages.read_by,
-                       messages.edited_at, messages.delivery_error, messages.undelivered_to
+                       messages.edited_at, messages.delivery_error, messages.undelivered_to, messages.deleted_for
                 FROM messages
                 LEFT JOIN users ON messages.sender_id = users.id
                 WHERE messages.chat_id = ?
                 ORDER BY messages.id DESC
                 LIMIT ?
             """, (chat_id, history_limit))
-        messages = cursor.fetchall()
-        has_more = len(messages) > limit
-        messages = list(reversed(messages[:limit]))
+            messages = cursor.fetchall()
+            has_more = len(messages) > limit
+            has_more_before = has_more
+            messages = list(reversed(messages[:limit]))
         logger.info(f"Fetched {len(messages)} messages for chat {chat_id}")
 
         history = []
@@ -364,6 +1002,7 @@ async def get_message_history(
                     try:
                         parsed_content = json.loads(content)
                         if isinstance(parsed_content, dict) and "file_url" in parsed_content:
+                            parsed_content = _with_audio_metadata(parsed_content, msg)
                             message_type = "file"
                     except json.JSONDecodeError as json_err:
                         logger.error(f"Failed to parse JSON content for message {msg['id']}: {content}, error: {json_err}")
@@ -384,19 +1023,25 @@ async def get_message_history(
                     "reactions": _hydrate_user_items(cursor, _parse_json_list(msg["reactions"]), current_user["id"]),
                     "read_by": _hydrate_user_items(cursor, _parse_json_list(msg["read_by"]), current_user["id"], respect_read_receipts=True),
                     "is_deleted": not bool(msg["content"]),
+                    "deleted_for": _parse_json_list(msg["deleted_for"]) if "deleted_for" in msg.keys() else [],
                     "type": message_type,
+                    "forwarded_from": _forwarded_from_from_row(msg),
                     "delivery_error": msg["delivery_error"]
                 })
             except Exception as e:
                 logger.error(f"Error processing message {msg['id']} in chat {chat_id}: {str(e)}")
                 continue  # Skip problematic message
 
-        next_before_id = history[0]["id"] if has_more and history else None
+        next_before_id = history[0]["id"] if has_more_before and history else None
+        next_after_id = history[-1]["id"] if has_more_after and history else None
         logger.info(f"Returning {len(history)} messages for chat {chat_id}")
         return {
             "history": history,
             "has_more": has_more,
-            "next_before_id": next_before_id
+            "has_more_before": has_more_before,
+            "has_more_after": has_more_after,
+            "next_before_id": next_before_id,
+            "next_after_id": next_after_id
         }
     except HTTPException:
         raise
@@ -405,6 +1050,79 @@ async def get_message_history(
         raise HTTPException(status_code=500, detail=f"Error loading history: {str(e)}")
     finally:
         conn.close()    
+
+@router.post("/{message_id}/delete-for-me")
+async def delete_message_for_me(
+    message_id: int,
+    current_user: dict = Depends(get_current_user)
+):
+    """Soft-delete a message for the current user only. Other users can still see the message."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        # Fetch the message
+        cursor.execute("""
+            SELECT messages.id, messages.chat_id, messages.sender_id, messages.content,
+                   messages.deleted_for, chats.type AS chat_type
+            FROM messages
+            LEFT JOIN chats ON messages.chat_id = chats.id
+            WHERE messages.id = ?
+        """, (message_id,))
+        message = cursor.fetchone()
+        
+        if not message:
+            raise HTTPException(status_code=404, detail="Message not found")
+
+        # Check if user is member of the chat
+        cursor.execute(
+            "SELECT 1 FROM participants WHERE chat_id = ? AND user_id = ?",
+            (message["chat_id"], current_user["id"])
+        )
+        if not cursor.fetchone():
+            raise HTTPException(status_code=403, detail="You are not a member of this chat")
+
+        # Check if user can see the message (visibility check)
+        if not _message_visible_to(message, current_user["id"]):
+            raise HTTPException(status_code=404, detail="Message not found")
+
+        # Parse existing deleted_for list
+        deleted_for = _parse_json_list(message["deleted_for"])
+        
+        # Add current user if not already deleted
+        if current_user["id"] not in deleted_for:
+            deleted_for.append(current_user["id"])
+            deleted_for_json = json.dumps(deleted_for)
+            
+            # Update the message
+            cursor.execute("""
+                UPDATE messages
+                SET deleted_for = ?
+                WHERE id = ?
+            """, (deleted_for_json, message_id))
+            conn.commit()
+
+        # Notify all users in the chat that message was deleted for current user
+        # Send different notifications based on chat type
+        chat_type = message["chat_type"]
+        
+        await manager.send_to_user(current_user["id"], {
+            "type": "message_deleted_for_me",
+            "chat_id": message["chat_id"],
+            "message_id": message_id,
+            "user_id": current_user["id"],
+        })
+
+        return {"message": "Message deleted for you"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Error deleting message {message_id} for user {current_user['id']}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error deleting message: {str(e)}")
+    finally:
+        conn.close()
 
 # @router.put("/edit/{message_id}")
 # def edit_message(message_id: int, payload: MessageEdit, current_user: dict = Depends(get_current_user)):
