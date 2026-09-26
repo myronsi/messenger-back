@@ -1,3 +1,10 @@
+.venv/
+venv/
+bin/
+lib/
+lib64/
+pyvenv.cfg
+
 server/messenger.db
 static/
 data/
