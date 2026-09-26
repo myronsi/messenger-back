@@ -945,7 +945,7 @@ async def update_my_privacy(payload: PrivacySettingsUpdate, current_user: dict =
 
     if "read_receipts_enabled" in data:
         updates.append("read_receipts_enabled = ?")
-        values.append(1 if data["read_receipts_enabled"] else 0)
+        values.append(data["read_receipts_enabled"])
 
     conn = get_connection()
     cursor = conn.cursor()

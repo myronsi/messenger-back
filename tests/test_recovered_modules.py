@@ -87,5 +87,45 @@ class AvatarUrlTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
 
 
+class PrivacySettingsTests(unittest.TestCase):
+    def test_updates_read_receipts_with_a_boolean_parameter(self):
+        from server.routes.auth import PrivacySettingsUpdate, update_my_privacy
+
+        class Cursor:
+            def __init__(self):
+                self.executions = []
+
+            def execute(self, query, params):
+                self.executions.append((query, params))
+
+        class Connection:
+            def __init__(self):
+                self.cursor_instance = Cursor()
+
+            def cursor(self):
+                return self.cursor_instance
+
+            def commit(self):
+                pass
+
+            def close(self):
+                pass
+
+        connection = Connection()
+        with patch("server.routes.auth.get_connection", return_value=connection), patch(
+            "server.routes.auth.get_privacy_settings", return_value={}
+        ):
+            asyncio.run(
+                update_my_privacy(
+                    PrivacySettingsUpdate(read_receipts_enabled=False),
+                    {"id": 7},
+                )
+            )
+
+        _, parameters = connection.cursor_instance.executions[0]
+        self.assertIs(parameters[0], False)
+        self.assertEqual(parameters[1], 7)
+
+
 if __name__ == "__main__":
     unittest.main()
