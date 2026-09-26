@@ -82,6 +82,13 @@ at first line change `const BASE_URL = "http://ip:8000";` to yours ip addres
 ### Launch server
 `uvicorn server.main:app --host 0.0.0.0 --port 8000`
 
+### Launch with Docker
+```bash
+docker compose up --build
+```
+
+The API will be available at `http://localhost:8000`, and data will persist in `./data/messenger.db`.
+
 ### View swagger api
 `http://your_ip:8000/docs#/`
 

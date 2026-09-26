@@ -1,0 +1,13 @@
+services:
+  backend:
+    build:
+      context: .
+    container_name: messenger-back
+    environment:
+      MESSENGER_DB_PATH: /app/data/messenger.db
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./static:/app/static
+    restart: unless-stopped

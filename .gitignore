@@ -1,2 +1,16 @@
-# Created by venv; see https://docs.python.org/3/library/venv.html
-*
+# Python virtual environments
+.venv/
+venv/
+bin/
+lib/
+lib64/
+pyvenv.cfg
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Local runtime data
+server/messenger.db
+static/
+data/

@@ -1,0 +1,11 @@
+.git
+__pycache__
+*.pyc
+.venv
+venv
+bin
+lib
+lib64
+data
+static
+server/messenger.db

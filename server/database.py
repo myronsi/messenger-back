@@ -1,8 +1,10 @@
 import sqlite3
+import os
 from pathlib import Path
 from server.time_utils import utc_now_iso
 
-DB_PATH = "server/messenger.db"
+DB_PATH = os.getenv("MESSENGER_DB_PATH", "server/messenger.db")
+Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
 
 def get_connection():
     conn = sqlite3.connect(DB_PATH, timeout=30, check_same_thread=False)
