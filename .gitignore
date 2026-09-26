@@ -5,6 +5,12 @@ lib/
 lib64/
 pyvenv.cfg
 
+.idea/
+.vscode/
+.env
+.env.*
+*.log
+
 server/messenger.db
 static/
 data/
