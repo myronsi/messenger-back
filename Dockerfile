@@ -9,7 +9,7 @@ COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt \
     && python -c "import uvicorn"
 
-COPY server /app/server
+COPY . /app
 
 RUN mkdir -p /app/static /app/data \
     && adduser --disabled-password --gecos "" --uid 1000 appuser \
