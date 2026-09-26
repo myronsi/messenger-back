@@ -6,6 +6,8 @@ venv
 bin
 lib
 lib64
+.env
+.env.*
 data
 static
 server/messenger.db

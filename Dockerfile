@@ -7,9 +7,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
-RUN pip install --no-cache-dir uvicorn
 
-COPY . /app
+COPY server /app/server
 
 RUN mkdir -p /app/static /app/data \
     && adduser --disabled-password --gecos "" --uid 1000 appuser \
