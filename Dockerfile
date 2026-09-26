@@ -10,8 +10,12 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 
 COPY . /app
 
-RUN mkdir -p /app/static /app/data
+RUN mkdir -p /app/static /app/data \
+    && adduser --disabled-password --gecos "" --uid 1000 appuser \
+    && chown -R appuser:appuser /app
 
 EXPOSE 8000
+
+USER appuser
 
 CMD ["uvicorn", "server.main:app", "--host", "0.0.0.0", "--port", "8000"]
