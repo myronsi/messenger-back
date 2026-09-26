@@ -83,6 +83,8 @@ at first line change `const BASE_URL = "http://ip:8000";` to yours ip addres
 `uvicorn server.main:app --host 0.0.0.0 --port 8000`
 
 ### Launch with Docker
+Run this command from the project root (where `Dockerfile`, `docker-compose.yml`, and `requirements.txt` are located):
+
 ```bash
 docker compose up --build
 ```

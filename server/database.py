@@ -4,9 +4,14 @@ from pathlib import Path
 from server.time_utils import utc_now_iso
 
 DB_PATH = os.getenv("MESSENGER_DB_PATH", "server/messenger.db")
-Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
+
+def _ensure_db_directory(path: str) -> None:
+    if path == ":memory:" or path.startswith("file:"):
+        return
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
 
 def get_connection():
+    _ensure_db_directory(DB_PATH)
     conn = sqlite3.connect(DB_PATH, timeout=30, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")  # Parallel work
