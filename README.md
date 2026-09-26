@@ -16,7 +16,7 @@ This project is a simple web-based messenger application designed for sending an
 ## Features
 - Real-time messaging using WebSocket.
 - User authentication and session management.
-- Message storage in a lightweight SQLite database.
+- Message storage in PostgreSQL.
 - RESTful API for user and chat management.
 - Simple and responsive web-based client interface.
 
@@ -24,8 +24,8 @@ This project is a simple web-based messenger application designed for sending an
 
 ## Technologies Used
 - **Frontend**: React, TypeScript
-- **Backend**: Python (FastAPI, SQLite, WebSocket)
-- **Database**: SQLite
+- **Backend**: Python (FastAPI, PostgreSQL, WebSocket)
+- **Database**: PostgreSQL
 
 ---
 
@@ -98,13 +98,20 @@ docker compose up --build -d
 ```
 
 The API is available at `http://localhost:8000`, with interactive API
-documentation at `http://localhost:8000/docs`. The `messenger_data` and
-`messenger_static` Docker volumes retain the SQLite database and uploaded files
+documentation at `http://localhost:8000/docs`. The `messenger_postgres` and
+`messenger_static` Docker volumes retain the PostgreSQL data and uploaded files
 across container recreation. Stop the backend with:
 
 ```bash
 docker compose down
 ```
+
+For a non-Docker deployment, set `DATABASE_URL` to a PostgreSQL connection URL,
+such as `postgresql://messenger:password@localhost:5432/messenger`. The
+application creates its schema at startup.
+
+See [the image storage plan](docs/image-storage-plan.md) for a staged approach
+to moving image bytes from static files into PostgreSQL.
 
 
 ## Project Structure

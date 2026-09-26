@@ -5,8 +5,14 @@ from server.websocket import router as websocket_router
 from starlette.responses import JSONResponse
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.staticfiles import StaticFiles
+from server.database import setup_database
 
 app = FastAPI()
+
+
+@app.on_event("startup")
+def initialize_database():
+    setup_database()
 
 # ALLOWED_IPS = {"192.168.178.29"}
 

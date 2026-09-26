@@ -8,6 +8,7 @@ jose
 python-jose
 websockets
 python-multipart
+psycopg[binary]
 ssss
 cryptography
 argon2-cffi

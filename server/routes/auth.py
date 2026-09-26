@@ -1,4 +1,3 @@
-import sqlite3
 from fastapi import APIRouter, HTTPException, Depends, status, File, UploadFile, Request, Response, Cookie
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel

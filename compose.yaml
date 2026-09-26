@@ -5,12 +5,28 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_PATH: /app/data/messenger.db
+      DATABASE_URL: postgresql://messenger:messenger@postgres:5432/messenger
     volumes:
-      - messenger_data:/app/data
       - messenger_static:/app/static
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: messenger
+      POSTGRES_USER: messenger
+      POSTGRES_PASSWORD: messenger
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U messenger -d messenger"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - messenger_postgres:/var/lib/postgresql/data
     restart: unless-stopped
 
 volumes:
-  messenger_data:
+  messenger_postgres:
   messenger_static:
