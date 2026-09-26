@@ -88,6 +88,24 @@ at first line change `const BASE_URL = "http://ip:8000";` to yours ip addres
 ### View messenger
 run `npm start` (in client directory)
 
+## Docker (Linux)
+
+Install Docker Engine and the Docker Compose plugin, then start the backend from
+the repository root:
+
+```bash
+docker compose up --build -d
+```
+
+The API is available at `http://localhost:8000`, with interactive API
+documentation at `http://localhost:8000/docs`. The `messenger_data` and
+`messenger_static` Docker volumes retain the SQLite database and uploaded files
+across container recreation. Stop the backend with:
+
+```bash
+docker compose down
+```
+
 
 ## Project Structure
 <pre>

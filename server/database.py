@@ -1,10 +1,12 @@
+import os
 import sqlite3
 from pathlib import Path
 from server.time_utils import utc_now_iso
 
-DB_PATH = "server/messenger.db"
+DB_PATH = os.environ.get("DATABASE_PATH", "server/messenger.db")
 
 def get_connection():
+    Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH, timeout=30, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")  # Parallel work
