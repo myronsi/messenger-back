@@ -12,7 +12,7 @@ RUN pip install --no-cache-dir -r /app/requirements.txt \
 COPY . /app
 
 RUN mkdir -p /app/static /app/data \
-    && adduser --disabled-password --gecos "" --uid 1000 appuser \
+    && adduser --disabled-password --gecos "" appuser \
     && chown -R appuser:appuser /app
 
 EXPOSE 8000
