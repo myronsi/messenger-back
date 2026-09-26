@@ -87,7 +87,8 @@ at first line change `const BASE_URL = "http://ip:8000";` to yours ip addres
 docker compose up --build
 ```
 
-The API will be available at `http://localhost:8000`, and data will persist in `./data/messenger.db`.
+The API will be available at `http://localhost:8000`.
+Database data persists in `./data/messenger.db`, and static files persist in `./static`.
 
 ### View swagger api
 `http://your_ip:8000/docs#/`
