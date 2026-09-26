@@ -17,6 +17,12 @@ class DatabaseQueryTests(unittest.TestCase):
             "INSERT INTO users (username) VALUES (%s) ON CONFLICT(username) DO UPDATE SET username = excluded.username",
         )
 
+    def test_translates_qualified_case_insensitive_ordering(self):
+        self.assertEqual(
+            translate_query("SELECT u.username FROM users u ORDER BY u.username COLLATE NOCASE"),
+            "SELECT u.username FROM users u ORDER BY LOWER(u.username)",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
