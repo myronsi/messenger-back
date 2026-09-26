@@ -4,7 +4,8 @@ from server.database import get_connection
 from server.routes.auth import get_current_user
 from server.websocket import manager
 from server.chat_summary import get_chat_unread_summary
-from server.privacy import can_invite_to_group, serialize_user
+from server.privacy import PERMISSION_APPROVAL_REQUIRED, PERMISSION_DENIED, group_invite_permission, serialize_user
+from server.routes.requests import create_group_invite_request
 import logging
 from pathlib import Path
 from uuid import uuid4
@@ -141,6 +142,46 @@ def _get_group_details(cursor, chat_id: int, current_user_id: int | None = None)
             "is_admin": role in {"owner", "admin"},
         })
 
+    cursor.execute(
+        """
+        SELECT
+            ar.id AS request_id,
+            ar.requester_id,
+            u.id,
+            u.username,
+            u.display_name,
+            u.avatar_url,
+            u.bio,
+            u.last_seen
+        FROM approval_requests ar
+        JOIN users u ON u.id = ar.recipient_id
+        WHERE ar.type = 'group_invite'
+          AND ar.chat_id = ?
+          AND ar.status = 'pending'
+        ORDER BY u.username COLLATE NOCASE
+        """,
+        (chat_id,),
+    )
+    pending_invites = []
+    for row in cursor.fetchall():
+        serialized_user = serialize_user(cursor, {
+            "id": row["id"],
+            "username": row["username"],
+            "display_name": row["display_name"],
+            "avatar_url": row["avatar_url"],
+            "bio": row["bio"],
+            "last_seen": row["last_seen"],
+        }, current_user_id)
+        pending_invites.append({
+            "request_id": row["request_id"],
+            "requester_id": row["requester_id"],
+            "id": serialized_user["id"],
+            "username": serialized_user["username"],
+            "display_name": serialized_user["display_name"],
+            "avatar_url": serialized_user["avatar_url"],
+            "status": "pending",
+        })
+
     group_dict = dict(group)
     current_user_role = current_user_role or (
         _get_member_role(cursor, chat_id, current_user_id) if current_user_id else None
@@ -157,6 +198,7 @@ def _get_group_details(cursor, chat_id: int, current_user_id: int | None = None)
         "current_user_role": current_user_role,
         "permissions": _permissions_for_role(current_user_role),
         "participants": participants,
+        "pending_invites": pending_invites,
     }
 
 
@@ -178,15 +220,22 @@ async def create_group(group: GroupCreate, current_user: dict = Depends(get_curr
     try:
         participant_ids = []
         participant_usernames = []
+        pending_invite_ids = []
+        pending_invite_usernames = []
         for username in group.participants:
             cursor.execute("SELECT id, username FROM users WHERE username = ?", (username,))
             user = cursor.fetchone()
             if not user:
                 raise HTTPException(status_code=404, detail=f"User {username} not found")
-            if not can_invite_to_group(cursor, current_user["id"], user["id"]):
+            permission = group_invite_permission(cursor, current_user["id"], user["id"])
+            if permission == PERMISSION_DENIED:
                 raise HTTPException(status_code=403, detail=f"User {username} does not allow group invites from you")
-            participant_ids.append(user["id"])
-            participant_usernames.append(user["username"])
+            if permission == PERMISSION_APPROVAL_REQUIRED:
+                pending_invite_ids.append(user["id"])
+                pending_invite_usernames.append(user["username"])
+            else:
+                participant_ids.append(user["id"])
+                participant_usernames.append(user["username"])
 
         creator_id = current_user["id"]
         creator_username = current_user["username"]
@@ -216,7 +265,22 @@ async def create_group(group: GroupCreate, current_user: dict = Depends(get_curr
                 (chat_id, user_id, role),
             )
 
+        pending_request_ids = []
+        pending_request_recipients = []
+        for user_id in set(pending_invite_ids):
+            request_id = create_group_invite_request(cursor, creator_id, user_id, chat_id)
+            pending_request_ids.append(request_id)
+            pending_request_recipients.append((user_id, request_id))
+
         conn.commit()
+
+        for user_id, request_id in pending_request_recipients:
+            await manager.send_to_user(user_id, {
+                "type": "approval_request_created",
+                "request_id": request_id,
+                "request_type": "group_invite",
+                "chat_id": chat_id,
+            })
 
         message = {
             "type": "group_created",
@@ -224,12 +288,19 @@ async def create_group(group: GroupCreate, current_user: dict = Depends(get_curr
                 "chat_id": chat_id,
                 "name": group_name,
                 "participants": list(set(participant_usernames)),
+                "pending_invites": list(set(pending_invite_usernames)),
             },
         }
         await manager.broadcast(0, message)
         logger.info(f"Sent group_created notification for chat_id={chat_id} to chat_id=0")
 
-        return {"chat_id": chat_id, "name": group_name, "message": "Group created successfully"}
+        return {
+            "chat_id": chat_id,
+            "name": group_name,
+            "message": "Group created successfully",
+            "pending_invites": list(set(pending_invite_usernames)),
+            "pending_request_ids": pending_request_ids,
+        }
     except HTTPException:
         raise
     except Exception as e:
@@ -389,8 +460,20 @@ async def add_group_participant(
         user = cursor.fetchone()
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
-        if not can_invite_to_group(cursor, current_user["id"], user["id"]):
+        permission = group_invite_permission(cursor, current_user["id"], user["id"])
+        if permission == PERMISSION_DENIED:
             raise HTTPException(status_code=403, detail="This user does not allow group invites from you")
+        if permission == PERMISSION_APPROVAL_REQUIRED:
+            request_id = create_group_invite_request(cursor, current_user["id"], user["id"], chat_id)
+            conn.commit()
+            await manager.send_to_user(user["id"], {
+                "type": "approval_request_created",
+                "request_id": request_id,
+                "request_type": "group_invite",
+                "chat_id": chat_id,
+            })
+            group = await _broadcast_group_update(cursor, chat_id)
+            return _get_group_details(cursor, chat_id, current_user["id"]) or group
 
         cursor.execute(
             "INSERT OR IGNORE INTO participants (chat_id, user_id, role) VALUES (?, ?, 'member')",

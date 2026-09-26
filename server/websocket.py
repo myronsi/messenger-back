@@ -4,7 +4,7 @@ from starlette.websockets import WebSocketState
 from server.database import get_connection
 from server.routes.auth import verify_token
 from server.presence import mark_user_connected, mark_user_disconnected, utc_now_iso
-from server.chat_summary import get_message_summary
+from server.chat_summary import get_chat_unread_summary, get_message_summary
 from server.privacy import DEFAULT_AVATAR, can_send_to_chat, read_receipts_enabled, serialize_user_snapshot, serialize_user
 import logging
 import sqlite3
@@ -149,6 +149,13 @@ def _can_delete_message(cursor, chat_id: int, sender_id: int, user_id: int) -> b
         return True
     role = _get_group_role(cursor, chat_id, user_id)
     return role in GROUP_ROLES_WITH_MESSAGE_MODERATION
+
+
+def _is_chat_participant(cursor, chat_id: int, user_id: int | None) -> bool:
+    if user_id is None:
+        return False
+    cursor.execute("SELECT 1 FROM participants WHERE chat_id = ? AND user_id = ?", (chat_id, user_id))
+    return cursor.fetchone() is not None
 
 
 def get_user_chat_ids(cursor, user_id: int) -> list[int]:
@@ -432,7 +439,9 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                         continue
 
                     cursor.execute("""
-                        SELECT id, sender_id, sender_name, content, timestamp, reply_to, reactions, read_by, delivery_error
+                        SELECT id, sender_id, sender_name, content, timestamp, reply_to, reactions, read_by, delivery_error,
+                               forwarded_from_message_id, forwarded_from_sender_id,
+                               forwarded_from_sender_name, forwarded_from_sender_username
                         FROM messages
                         WHERE id = ? AND chat_id = ?
                     """, (message_id, chat_id))
@@ -481,6 +490,12 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                             "delivery_error": None,
                             "reactions": _hydrate_user_items(cursor, _parse_json_list(message["reactions"]), recipient_id),
                             "read_by": _hydrate_user_items(cursor, _parse_json_list(message["read_by"]), recipient_id, respect_read_receipts=True),
+                            "forwarded_from": ({
+                                "message_id": message["forwarded_from_message_id"],
+                                "sender_id": message["forwarded_from_sender_id"],
+                                "sender_name": message["forwarded_from_sender_name"],
+                                "sender_username": message["forwarded_from_sender_username"],
+                            } if message["forwarded_from_message_id"] is not None else None),
                             "data": {
                                 "chat_id": chat_id,
                                 **(content_payload if message_kind == "file" else {"content": content_payload}),
@@ -521,10 +536,23 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
 
                     await manager.broadcast(chat_id, {
                         "type": "edit",
+                        "chat_id": chat_id,
                         "message_id": message_id,
                         "new_content": content,
                         "timestamp": timestamp,
                     })
+                    await manager.broadcast_personalized(0, lambda recipient_id: (
+                        {
+                            "type": "edit",
+                            "chat_id": chat_id,
+                            "message_id": message_id,
+                            "new_content": content,
+                            "timestamp": timestamp,
+                        }
+                        if _is_chat_participant(cursor, chat_id, recipient_id)
+                        and get_message_summary(cursor, message_id, recipient_id) is not None
+                        else None
+                    ))
 
                 elif message_type == "delete":
                     if not message_id:
@@ -548,9 +576,20 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
 
                     await manager.broadcast(chat_id, {
                         "type": "delete",
+                        "chat_id": chat_id,
                         "message_id": message_id,
                         "timestamp": utc_now_iso(),
                     })
+                    await manager.broadcast_personalized(0, lambda recipient_id: (
+                        {
+                            "type": "chat_list_delete",
+                            "chat_id": chat_id,
+                            "message_id": message_id,
+                            **get_chat_unread_summary(cursor, chat_id, recipient_id),
+                        }
+                        if _is_chat_participant(cursor, chat_id, recipient_id)
+                        else None
+                    ))
 
                 elif message_type == "reaction_add":
                     if not message_id or not reaction:

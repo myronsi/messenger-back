@@ -6,8 +6,10 @@ from server.routes.auth import get_current_user
 from server.websocket import manager
 from server.presence import is_user_online
 from server.time_utils import to_utc_iso, utc_now_iso
-from server.chat_summary import get_chat_unread_summary
-from server.privacy import DEFAULT_AVATAR, can_start_direct_chat, get_direct_chat_id, is_blocked_between, serialize_user
+from server.chat_summary import get_chat_unread_summary, message_visible_to
+from server.privacy import DEFAULT_AVATAR, PERMISSION_APPROVAL_REQUIRED, PERMISSION_DENIED, direct_chat_permission, get_direct_chat_id, is_blocked_between, serialize_user
+from server.privacy import read_receipts_enabled, serialize_user_snapshot
+from server.routes.requests import create_direct_message_request
 import logging
 
 router = APIRouter()
@@ -21,13 +23,34 @@ class ChatCreate(BaseModel):
     initial_message: str | None = None
 
 
+class MarkChatReadRequest(BaseModel):
+    message_ids: list[int] | None = None
+    mark_all: bool = False
+
+
+def _parse_read_by(read_by_value):
+    if not read_by_value:
+        return []
+    if isinstance(read_by_value, list):
+        return read_by_value
+    try:
+        parsed = json.loads(read_by_value)
+    except (json.JSONDecodeError, TypeError):
+        return []
+    return parsed if isinstance(parsed, list) else []
+
+
 def _ensure_chat_participant(cursor, chat_id: int, user_id: int):
-    cursor.execute("SELECT id FROM chats WHERE id = ?", (chat_id,))
-    if not cursor.fetchone():
+    cursor.execute("SELECT id, type, user1_id, user2_id FROM chats WHERE id = ?", (chat_id,))
+    chat = cursor.fetchone()
+    if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
     cursor.execute("SELECT 1 FROM participants WHERE chat_id = ? AND user_id = ?", (chat_id, user_id))
-    if not cursor.fetchone():
-        raise HTTPException(status_code=403, detail="You are not a member of this chat")
+    if cursor.fetchone():
+        return
+    if chat["type"] == "one-on-one" and user_id in (chat["user1_id"], chat["user2_id"]):
+        return
+    raise HTTPException(status_code=403, detail="You are not a member of this chat")
 
 
 def _is_chat_pinned(cursor, user_id: int, chat_id: int) -> bool:
@@ -64,7 +87,28 @@ async def create_chat(chat: ChatCreate, current_user: dict = Depends(get_current
                 "message": "Chat already exists"
             }
 
-        if not can_start_direct_chat(cursor, user1["id"], user2["id"]):
+        permission = direct_chat_permission(cursor, user1["id"], user2["id"])
+        if permission == PERMISSION_APPROVAL_REQUIRED:
+            request_id, already_pending = create_direct_message_request(cursor, user1["id"], user2["id"], chat.initial_message or "")
+            conn.commit()
+            if not already_pending:
+                await manager.send_to_user(user1["id"], {
+                    "type": "approval_request_created",
+                    "request_id": request_id,
+                    "request_type": "direct_message",
+                })
+                await manager.send_to_user(user2["id"], {
+                    "type": "approval_request_created",
+                    "request_id": request_id,
+                    "request_type": "direct_message",
+                })
+            return {
+                "approval_required": True,
+                "already_pending": already_pending,
+                "request_id": request_id,
+                "message": "Already waiting for user approval" if already_pending else "Waiting for user approval"
+            }
+        if permission == PERMISSION_DENIED:
             raise HTTPException(status_code=403, detail="This user does not allow direct messages from you")
 
         # Create chat
@@ -207,6 +251,62 @@ async def list_chats(username: str, current_user: dict = Depends(get_current_use
                 **get_chat_unread_summary(cursor, chat["id"], user_id["id"]),
             })
 
+        cursor.execute(
+            """
+            SELECT ar.id, ar.message_text, ar.created_at,
+                   u.id AS recipient_id, u.username, u.display_name, u.avatar_url, u.bio, u.last_seen
+            FROM approval_requests ar
+            JOIN users u ON u.id = ar.recipient_id
+            WHERE ar.type = 'direct_message'
+              AND ar.requester_id = ?
+              AND ar.status = 'pending'
+              AND NOT EXISTS (
+                SELECT 1
+                FROM chats c
+                WHERE c.type = 'one-on-one'
+                  AND (
+                    (c.user1_id = ar.requester_id AND c.user2_id = ar.recipient_id)
+                    OR (c.user1_id = ar.recipient_id AND c.user2_id = ar.requester_id)
+                  )
+              )
+            """,
+            (user_id["id"],),
+        )
+        for request in cursor.fetchall():
+            recipient = serialize_user(cursor, {
+                "id": request["recipient_id"],
+                "username": request["username"],
+                "display_name": request["display_name"],
+                "avatar_url": request["avatar_url"],
+                "bio": request["bio"],
+                "last_seen": request["last_seen"],
+            }, user_id["id"])
+            chat_list.append({
+                "id": -request["id"],
+                "name": request["username"],
+                "interlocutor_name": request["username"],
+                "interlocutor_display_name": recipient["display_name"],
+                "avatar_url": recipient["avatar_url"],
+                "interlocutor_is_online": recipient["is_online"],
+                "interlocutor_last_seen": recipient["last_seen"],
+                "interlocutor_deleted": False,
+                "is_pinned": False,
+                "pending_approval_request": True,
+                "pending_request_id": request["id"],
+                "last_message": {
+                    "id": -request["id"],
+                    "sender_id": user_id["id"],
+                    "sender_name": current_user["display_name"] or current_user["username"],
+                    "content": request["message_text"] or "",
+                    "type": "message",
+                    "timestamp": to_utc_iso(request["created_at"]),
+                    "read_by": [],
+                    "delivery_error": "Waiting for user approval",
+                },
+                "unread_count": 0,
+                "first_unread_message_id": None,
+            })
+
         return {"chats": chat_list}
     except Exception as e:
         logger.error(f"Error fetching chats: {str(e)}")
@@ -256,6 +356,115 @@ async def unpin_chat(chat_id: int, current_user: dict = Depends(get_current_user
         conn.rollback()
         logger.error(f"Error unpinning chat {chat_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error unpinning chat: {str(e)}")
+    finally:
+        conn.close()
+
+
+@router.post("/{chat_id}/read")
+@router.post("/{chat_id}/read/")
+async def mark_chat_read(chat_id: int, payload: MarkChatReadRequest | None = None, current_user: dict = Depends(get_current_user)):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        _ensure_chat_participant(cursor, chat_id, current_user["id"])
+
+        payload = payload or MarkChatReadRequest()
+
+        if payload.mark_all:
+            cursor.execute("""
+                SELECT id, sender_id, read_by, undelivered_to
+                FROM messages
+                WHERE chat_id = ? AND sender_id != ?
+                ORDER BY id ASC
+            """, (chat_id, current_user["id"]))
+        else:
+            message_ids = []
+            seen_ids = set()
+            for message_id in payload.message_ids or []:
+                if message_id > 0 and message_id not in seen_ids:
+                    seen_ids.add(message_id)
+                    message_ids.append(message_id)
+
+            if not message_ids:
+                summary = get_chat_unread_summary(cursor, chat_id, current_user["id"])
+                return {
+                    "chat_id": chat_id,
+                    "unread_count": summary["unread_count"],
+                    "first_unread_message_id": summary["first_unread_message_id"],
+                    "read_message_ids": [],
+                    "read_at": utc_now_iso(),
+                }
+
+            placeholders = ",".join(["?"] * len(message_ids))
+            cursor.execute(f"""
+                SELECT id, sender_id, read_by, undelivered_to
+                FROM messages
+                WHERE chat_id = ?
+                  AND sender_id != ?
+                  AND id IN ({placeholders})
+                ORDER BY id ASC
+            """, [chat_id, current_user["id"], *message_ids])
+
+        timestamp = utc_now_iso()
+        receipt_is_public = read_receipts_enabled(cursor, current_user["id"])
+        read_message_ids = []
+
+        for message in cursor.fetchall():
+            if not message_visible_to(message, current_user["id"]):
+                continue
+
+            read_by = _parse_read_by(message["read_by"])
+            if any(isinstance(read, dict) and read.get("user_id") == current_user["id"] for read in read_by):
+                continue
+
+            read_item = {**serialize_user_snapshot(cursor, current_user["id"], current_user["id"]), "read_at": timestamp}
+            if not receipt_is_public:
+                read_item["hidden"] = True
+
+            read_by.append(read_item)
+            cursor.execute("UPDATE messages SET read_by = ? WHERE id = ?", (json.dumps(read_by), message["id"]))
+            read_message_ids.append(message["id"])
+
+        conn.commit()
+        summary = get_chat_unread_summary(cursor, chat_id, current_user["id"])
+        response = {
+            "chat_id": chat_id,
+            "unread_count": summary["unread_count"],
+            "first_unread_message_id": summary["first_unread_message_id"],
+            "read_message_ids": read_message_ids,
+            "read_at": timestamp,
+        }
+
+        if read_message_ids and receipt_is_public:
+            await manager.broadcast_personalized(chat_id, lambda recipient_id: {
+                "type": "chat_read_batch",
+                "chat_id": chat_id,
+                "reader_user_id": current_user["id"],
+                "message_ids": read_message_ids,
+                **serialize_user_snapshot(cursor, current_user["id"], recipient_id),
+                "read_at": timestamp,
+                "timestamp": timestamp,
+            })
+
+        await manager.send_to_user(current_user["id"], {
+            "type": "chat_read_batch",
+            "chat_id": chat_id,
+            "reader_user_id": current_user["id"],
+            "message_ids": read_message_ids,
+            "unread_count": summary["unread_count"],
+            "first_unread_message_id": summary["first_unread_message_id"],
+            "read_at": timestamp,
+            "timestamp": timestamp,
+        })
+
+        return response
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Error marking chat {chat_id} as read: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error marking chat as read: {str(e)}")
     finally:
         conn.close()
 

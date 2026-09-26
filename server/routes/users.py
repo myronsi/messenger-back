@@ -67,7 +67,7 @@ async def get_user_avatar_history(username: str, current_user: dict = Depends(ge
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         settings = get_privacy_settings(cursor, user["id"])
-        if not visibility_allows(cursor, current_user["id"], user["id"], settings["avatar_visibility"]):
+        if not visibility_allows(cursor, current_user["id"], user["id"], settings["avatar_visibility"], "avatar_visibility"):
             return {"avatars": []}
         history = get_avatar_history(username)
         if history is None:

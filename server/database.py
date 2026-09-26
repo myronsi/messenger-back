@@ -111,6 +111,36 @@ def setup_database():
     """)
 
     cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_privacy_exceptions (
+            owner_id INTEGER NOT NULL,
+            setting_key TEXT NOT NULL,
+            target_user_id INTEGER NOT NULL,
+            effect TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (owner_id, setting_key, target_user_id),
+            FOREIGN KEY (owner_id) REFERENCES users (id),
+            FOREIGN KEY (target_user_id) REFERENCES users (id)
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS approval_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            type TEXT NOT NULL,
+            requester_id INTEGER NOT NULL,
+            recipient_id INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            message_text TEXT,
+            chat_id INTEGER,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            responded_at DATETIME,
+            FOREIGN KEY (requester_id) REFERENCES users (id),
+            FOREIGN KEY (recipient_id) REFERENCES users (id),
+            FOREIGN KEY (chat_id) REFERENCES chats (id)
+        )
+    """)
+
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS user_security_settings (
             user_id INTEGER PRIMARY KEY,
             session_duration_days INTEGER NOT NULL DEFAULT 90,
@@ -349,6 +379,12 @@ def setup_database():
             read_by TEXT DEFAULT '[]',
             delivery_error TEXT DEFAULT NULL,
             undelivered_to TEXT DEFAULT '[]',
+            audio_duration REAL DEFAULT NULL,
+            audio_waveform TEXT DEFAULT NULL,
+            forwarded_from_message_id INTEGER DEFAULT NULL,
+            forwarded_from_sender_id INTEGER DEFAULT NULL,
+            forwarded_from_sender_name TEXT DEFAULT NULL,
+            forwarded_from_sender_username TEXT DEFAULT NULL,
             FOREIGN KEY (chat_id) REFERENCES chats (id),
             FOREIGN KEY (reply_to) REFERENCES messages (id)
         )
@@ -361,7 +397,14 @@ def setup_database():
         ("reactions", "TEXT DEFAULT '[]'"),
         ("read_by", "TEXT DEFAULT '[]'"),
         ("delivery_error", "TEXT DEFAULT NULL"),
-        ("undelivered_to", "TEXT DEFAULT '[]'")
+        ("undelivered_to", "TEXT DEFAULT '[]'"),
+        ("audio_duration", "REAL DEFAULT NULL"),
+        ("audio_waveform", "TEXT DEFAULT NULL"),
+        ("forwarded_from_message_id", "INTEGER DEFAULT NULL"),
+        ("forwarded_from_sender_id", "INTEGER DEFAULT NULL"),
+        ("forwarded_from_sender_name", "TEXT DEFAULT NULL"),
+        ("forwarded_from_sender_username", "TEXT DEFAULT NULL"),
+        ("deleted_for", "TEXT DEFAULT '[]'")
     ]:
         try:
             cursor.execute(f"ALTER TABLE messages ADD COLUMN {column} {definition}")
