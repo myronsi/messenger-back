@@ -6,6 +6,7 @@ from starlette.responses import JSONResponse
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
+import os
 
 app = FastAPI()
 
@@ -23,8 +24,9 @@ app = FastAPI()
 
 #     return await call_next(request)
 
-Path("static").mkdir(parents=True, exist_ok=True)
-app.mount("/static", StaticFiles(directory="static"), name="static")
+STATIC_PATH = Path(os.getenv("MESSENGER_STATIC_PATH", "static"))
+STATIC_PATH.mkdir(parents=True, exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(STATIC_PATH)), name="static")
 
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(messages.router, prefix="/messages", tags=["messages"])

@@ -5,6 +5,7 @@ services:
     container_name: messenger-back
     environment:
       MESSENGER_DB_PATH: /app/data/messenger.db
+      MESSENGER_STATIC_PATH: /app/static
     ports:
       - "8000:8000"
     volumes:
