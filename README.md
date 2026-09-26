@@ -90,7 +90,7 @@ docker compose up --build
 ```
 
 The API will be available at `http://localhost:8000`.
-Database data persists in `./data/messenger.db`, and static files persist in `./static`.
+Database data and static files persist in Docker-managed volumes (`messenger_data` and `messenger_static`).
 
 ### View swagger api
 `http://your_ip:8000/docs#/`
