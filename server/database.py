@@ -32,7 +32,12 @@ class Row(dict):
 def translate_query(query: str) -> str:
     """Translate the small SQLite SQL dialect used by existing routes to PostgreSQL."""
     translated = re.sub(r"\bINSERT\s+OR\s+IGNORE\s+INTO\b", "INSERT INTO", query, flags=re.IGNORECASE)
-    translated = re.sub(r"\b(\w+)\s+COLLATE\s+NOCASE\b", r"LOWER(\1)", translated, flags=re.IGNORECASE)
+    translated = re.sub(
+        r"\b(?:(\w+)\.)?(\w+)\s+COLLATE\s+NOCASE\b",
+        lambda match: f"LOWER({match[1] + '.' if match[1] else ''}{match[2]})",
+        translated,
+        flags=re.IGNORECASE,
+    )
     translated = translated.replace("?", "%s")
     if re.match(r"^\s*INSERT\s+INTO\b", translated, flags=re.IGNORECASE) and "ON CONFLICT" not in translated.upper():
         translated = translated.rstrip().rstrip(";") + " ON CONFLICT DO NOTHING"
