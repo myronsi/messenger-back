@@ -15,7 +15,13 @@ class DockerConfigurationTests(unittest.TestCase):
         dockerfile = Path("Dockerfile").read_text(encoding="utf-8")
 
         self.assertIn("ffmpeg ssss", dockerfile)
-        self.assertIn('CMD ["uvicorn", "server.main:app"', dockerfile)
+        self.assertIn("COPY static ./static", dockerfile)
+        self.assertIn("COPY static /opt/default-static", dockerfile)
+        self.assertIn(
+            "cp -n /opt/default-static/avatars/default.jpg /app/static/avatars/default.jpg",
+            dockerfile,
+        )
+        self.assertIn("exec uvicorn server.main:app", dockerfile)
 
 
 if __name__ == "__main__":

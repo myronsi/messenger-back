@@ -6,5 +6,8 @@ __pycache__
 .venv
 venv
 static
+!static/
+!static/avatars/
+!static/avatars/default.jpg
 plan.txt
 start.sh

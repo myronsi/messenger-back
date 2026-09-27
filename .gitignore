@@ -4,3 +4,6 @@
 !docs/image-storage-plan.md
 !tests/
 !tests/test_database_queries.py
+!static/
+!static/avatars/
+!static/avatars/default.jpg

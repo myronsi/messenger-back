@@ -13,11 +13,11 @@ def record_user_avatar(user_id: int, avatar_url: str) -> None:
     cursor = conn.cursor()
     try:
         cursor.execute("UPDATE users SET avatar_url = ? WHERE id = ?", (avatar_url, user_id))
-        cursor.execute("UPDATE user_avatar_history SET is_current = 0 WHERE user_id = ?", (user_id,))
+        cursor.execute("UPDATE user_avatar_history SET is_current = FALSE WHERE user_id = ?", (user_id,))
         cursor.execute(
             """
             INSERT INTO user_avatar_history (user_id, avatar_url, created_at, is_current)
-            VALUES (?, ?, ?, 1)
+            VALUES (?, ?, ?, TRUE)
             """,
             (user_id, avatar_url, utc_now_iso()),
         )
