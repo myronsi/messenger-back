@@ -127,5 +127,71 @@ class PrivacySettingsTests(unittest.TestCase):
         self.assertEqual(parameters[1], 7)
 
 
+class MarkChatReadTests(unittest.TestCase):
+    def test_mark_all_uses_rows_fetched_before_other_cursor_queries(self):
+        from server.routes.chats import MarkChatReadRequest, mark_chat_read
+
+        class Cursor:
+            def __init__(self):
+                self.rows = []
+                self.updates = []
+
+            def execute(self, query, params=None):
+                if query.lstrip().startswith("UPDATE messages SET read_by"):
+                    self.updates.append(params)
+                self.rows = (
+                    [{"id": 5, "sender_id": 2, "read_by": "[]", "undelivered_to": "[]"}]
+                    if "FROM messages" in query
+                    else []
+                )
+
+            def fetchall(self):
+                return self.rows
+
+        class Connection:
+            def __init__(self):
+                self.cursor_instance = Cursor()
+
+            def cursor(self):
+                return self.cursor_instance
+
+            def commit(self):
+                pass
+
+            def rollback(self):
+                pass
+
+            def close(self):
+                pass
+
+        connection = Connection()
+
+        def read_receipts_enabled(cursor, user_id):
+            cursor.execute("SELECT read_receipts_enabled FROM privacy_settings WHERE user_id = ?", (user_id,))
+            return True
+
+        async def send_to_user(*args, **kwargs):
+            pass
+
+        async def broadcast_personalized(*args, **kwargs):
+            pass
+
+        with patch("server.routes.chats.get_connection", return_value=connection), patch(
+            "server.routes.chats._ensure_chat_participant"
+        ), patch("server.routes.chats.read_receipts_enabled", side_effect=read_receipts_enabled), patch(
+            "server.routes.chats.serialize_user_snapshot", return_value={"id": 1, "user_id": 1}
+        ), patch(
+            "server.routes.chats.get_chat_unread_summary",
+            return_value={"unread_count": 0, "first_unread_message_id": None},
+        ), patch("server.routes.chats.manager.send_to_user", send_to_user), patch(
+            "server.routes.chats.manager.broadcast_personalized", broadcast_personalized
+        ):
+            response = asyncio.run(
+                mark_chat_read(3, MarkChatReadRequest(mark_all=True), {"id": 1})
+            )
+
+        self.assertEqual(response["read_message_ids"], [5])
+        self.assertEqual(len(connection.cursor_instance.updates), 1)
+
 if __name__ == "__main__":
     unittest.main()
