@@ -415,7 +415,7 @@ async def mark_chat_read(chat_id: int, payload: MarkChatReadRequest | None = Non
                 continue
 
             read_by = _parse_read_by(message["read_by"])
-            if any(isinstance(read, dict) and read.get("user_id") == current_user["id"] for read in read_by):
+            if any(isinstance(read, dict) and (read.get("user_id") or read.get("id")) == current_user["id"] for read in read_by):
                 continue
 
             read_item = {**serialize_user_snapshot(cursor, current_user["id"], current_user["id"]), "read_at": timestamp}
