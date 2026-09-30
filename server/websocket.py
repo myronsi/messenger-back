@@ -115,7 +115,7 @@ def _hydrate_user_items(cursor, items, requester_id: int | None = None, respect_
     for item in items:
         if not isinstance(item, dict):
             continue
-        user_id = item.get("user_id")
+        user_id = item.get("user_id") or item.get("id")
         if not user_id:
             continue
         if item.get("hidden") and requester_id != user_id:
@@ -676,7 +676,7 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                             continue
 
                         read_by = _hydrate_user_items(cursor, _parse_json_list(message["read_by"]), user_id, respect_read_receipts=True)
-                        if any(r.get("user_id") == user_id for r in read_by):
+                        if any((r.get("user_id") or r.get("id")) == user_id for r in read_by):
                             continue
 
                         timestamp = utc_now_iso()

@@ -45,7 +45,11 @@ def _parse_json_list(value):
     return parsed if isinstance(parsed, list) else []
 
 def _hydrate_user_items(cursor, items, requester_id: int, respect_read_receipts: bool = False):
-    user_ids = sorted({item.get("user_id") for item in items if isinstance(item, dict) and item.get("user_id")})
+    user_ids = sorted({
+        item.get("user_id") or item.get("id")
+        for item in items
+        if isinstance(item, dict) and (item.get("user_id") or item.get("id"))
+    })
     if not user_ids:
         return [item for item in items if isinstance(item, dict)]
 
@@ -60,12 +64,14 @@ def _hydrate_user_items(cursor, items, requester_id: int, respect_read_receipts:
     for item in items:
         if not isinstance(item, dict):
             continue
-        user = users.get(item.get("user_id"))
+        item_user_id = item.get("user_id") or item.get("id")
+        user = users.get(item_user_id)
         if respect_read_receipts and user and not read_receipts_enabled(cursor, user["id"]):
             continue
-        snapshot = serialize_user_snapshot(cursor, item.get("user_id"), requester_id)
+        snapshot = serialize_user_snapshot(cursor, item_user_id, requester_id)
         hydrated.append({
             **item,
+            "user_id": item_user_id,
             "username": item.get("username") or snapshot["username"],
             "display_name": item.get("display_name") or snapshot["display_name"],
             "avatar_url": snapshot["avatar_url"],

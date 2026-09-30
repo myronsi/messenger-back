@@ -302,10 +302,11 @@ def serialize_user_snapshot(cursor, user_id: int, requester_id: int | None = Non
     if not user:
         return {
             "id": user_id,
+            "user_id": user_id,
             "username": "Deleted User",
             "display_name": "Deleted User",
             "avatar_url": DEFAULT_AVATAR,
             "is_online": False,
             "last_seen": None,
         }
-    return serialize_user(cursor, user, requester_id)
+    return {**serialize_user(cursor, user, requester_id), "user_id": user_id}

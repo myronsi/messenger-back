@@ -77,7 +77,7 @@ def get_chat_unread_summary(cursor, chat_id: int, user_id: int) -> dict:
         if not message_visible_to(message, user_id):
             continue
         if any(
-            isinstance(read, dict) and read.get("user_id") == user_id
+            isinstance(read, dict) and (read.get("user_id") or read.get("id")) == user_id
             for read in _parse_list(message["read_by"])
         ):
             continue
