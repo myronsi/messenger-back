@@ -12,7 +12,6 @@ import json
 
 router = APIRouter()
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 GROUP_ROLES_WITH_MESSAGE_MODERATION = {"owner", "admin", "moderator"}
@@ -42,14 +41,13 @@ class ConnectionManager:
 
     async def broadcast(self, chat_id: int, message: dict):
         if chat_id in self.active_chats:
-            logger.info(f"Broadcasting to chat {chat_id}: {message}, clients: {len(self.active_chats[chat_id])}")
+            logger.info(f"Broadcasting {message.get('type')} to chat {chat_id}, clients: {len(self.active_chats[chat_id])}")
             for websocket in list(self.active_chats[chat_id]):
                 if websocket.application_state != WebSocketState.CONNECTED:
                     self.disconnect(chat_id, websocket)
                     continue
                 try:
                     await websocket.send_text(json.dumps(message))
-                    logger.info(f"Sent message to client in chat {chat_id}")
                 except Exception as e:
                     self.disconnect(chat_id, websocket)
                     logger.error(f"Error broadcasting to chat {chat_id}: {e}")
@@ -311,19 +309,18 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
         connected_to_manager = True
         if mark_user_connected(user_id):
             await broadcast_presence_update(cursor, user_id, username, True, user.get("last_seen"))
-        logger.info(f"WebSocket CONNECTED for {username} in chat {chat_id}")
+        logger.info(f"WebSocket connected: user_id={user_id}, chat_id={chat_id}")
 
         try:
             while True:
                 if websocket.application_state != WebSocketState.CONNECTED:
-                    logger.info(f"WebSocket no longer connected for {username} in chat {chat_id}")
+                    logger.info(f"WebSocket no longer connected: user_id={user_id}, chat_id={chat_id}")
                     break
                 try:
                     data = await websocket.receive_text()
                 except RuntimeError as exc:
-                    logger.info(f"WebSocket receive stopped for {username} in chat {chat_id}: {exc}")
+                    logger.info(f"WebSocket receive stopped: user_id={user_id}, chat_id={chat_id}: {exc}")
                     break
-                logger.info(f"Received message in chat {chat_id} from {username}: {data}")
 
                 try:
                     parsed_data = json.loads(data)
@@ -337,6 +334,7 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                     file_type = parsed_data.get("file_type")
                     file_size = parsed_data.get("file_size")
                     reaction = parsed_data.get("reaction")
+                    logger.info(f"Received {message_type!r} event: user_id={user_id}, chat_id={chat_id}, message_id={message_id}")
                 except (json.JSONDecodeError, KeyError) as e:
                     await websocket.send_text(json.dumps({"type": "error", "message": "Invalid message format"}))
                     logger.error(f"JSON parsing error: {e}")
@@ -359,7 +357,7 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                         """, (chat_id, user_id, display_name, content, timestamp, reply_to, delivery_error, json.dumps(undelivered_to)))
                         conn.commit()
                         message_id = cursor.lastrowid
-                        logger.info(f"Message saved in db: {{'chat_id': {chat_id}, 'sender_name': '{display_name}', 'reply_to': {reply_to}}}, ID: {message_id}")
+                        logger.info(f"Message saved: chat_id={chat_id}, message_id={message_id}, user_id={user_id}")
                     except sqlite3.Error as e:
                         logger.error(f"Error while saving message to db: {e}")
                         err = {"type": "error", "message": "Failed to save message"}
@@ -413,7 +411,7 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                         }), timestamp, reply_to, delivery_error, json.dumps(undelivered_to)))
                         conn.commit()
                         message_id = cursor.lastrowid
-                        logger.info(f"File message saved in db: {{'chat_id': {chat_id}, 'sender_name': '{display_name}', 'file_url': '{file_url}'}}, ID: {message_id}")
+                        logger.info(f"File message saved: chat_id={chat_id}, message_id={message_id}, user_id={user_id}")
                     except sqlite3.Error as e:
                         logger.error(f"Error while saving file message to db: {e}")
                         err = {"type": "error", "message": "Failed to save file message"}
@@ -542,7 +540,7 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                         timestamp = utc_now_iso()
                         cursor.execute("UPDATE messages SET content = ?, edited_at = ? WHERE id = ?", (content, timestamp, message_id))
                         conn.commit()
-                        logger.info(f"Message edited: {{'message_id': {message_id}}}")
+                        logger.info(f"Message edited: chat_id={chat_id}, message_id={message_id}, user_id={user_id}")
                     except sqlite3.Error as e:
                         logger.error(f"Error while editing message: {e}")
                         await websocket.send_text(json.dumps({"type": "error", "message": "Failed to edit message"}))
@@ -590,7 +588,7 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
 
                         cursor.execute("DELETE FROM messages WHERE id = ?", (message_id,))
                         conn.commit()
-                        logger.info(f"Message deleted: {{'message_id': {message_id}}}")
+                        logger.info(f"Message deleted: chat_id={chat_id}, message_id={message_id}, user_id={user_id}")
                     except sqlite3.Error as e:
                         logger.error(f"Error while deleting message: {e}")
                         await websocket.send_text(json.dumps({"type": "error", "message": "Failed to delete message"}))
@@ -635,7 +633,7 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                         reactions.append(reaction_item)
                         cursor.execute("UPDATE messages SET reactions = ? WHERE id = ?", (json.dumps(reactions), message_id))
                         conn.commit()
-                        logger.info(f"Reaction added: {{'message_id': {message_id}, 'user_id': {user_id}, 'reaction': '{reaction}'}}")
+                        logger.info(f"Reaction added: message_id={message_id}, user_id={user_id}")
                     except sqlite3.Error as e:
                         logger.error(f"Error while adding reaction: {e}")
                         await websocket.send_text(json.dumps({"type": "error", "message": "Failed to add reaction"}))
@@ -669,7 +667,7 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                         new_reactions = [r for r in reactions if not (r.get("user_id") == user_id and r.get("reaction") == reaction)]
                         cursor.execute("UPDATE messages SET reactions = ? WHERE id = ?", (json.dumps(new_reactions), message_id))
                         conn.commit()
-                        logger.info(f"Reaction removed: {{'message_id': {message_id}, 'user_id': {user_id}, 'reaction': '{reaction}'}}")
+                        logger.info(f"Reaction removed: message_id={message_id}, user_id={user_id}")
                     except sqlite3.Error as e:
                         logger.error(f"Error while removing reaction: {e}")
                         await websocket.send_text(json.dumps({"type": "error", "message": "Failed to remove reaction"}))
@@ -712,7 +710,7 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                         read_by.append(read_item)
                         cursor.execute("UPDATE messages SET read_by = ? WHERE id = ?", (json.dumps(read_by), message_id))
                         conn.commit()
-                        logger.info(f"Message marked as read: {{'message_id': {message_id}, 'user_id': {user_id}}}")
+                        logger.info(f"Message marked as read: message_id={message_id}, user_id={user_id}")
 
                     except sqlite3.Error as e:
                         logger.error(f"Error while marking message as read: {e}")
@@ -741,10 +739,10 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                         await manager.broadcast(chat_id, parsed_data)
 
         except WebSocketDisconnect:
-            logger.info(f"{username} DISCONNECTED from {chat_id}")
+            logger.info(f"WebSocket disconnected: user_id={user_id}, chat_id={chat_id}")
             await handle_disconnect()
         except Exception as e:
-            logger.error(f"Unexpected error in WebSocket for {username} in chat {chat_id}: {e}")
+            logger.error(f"Unexpected error in WebSocket: user_id={user_id}, chat_id={chat_id}: {e}")
             await handle_disconnect()
             await safe_close_websocket(websocket, code=1000)
     finally:

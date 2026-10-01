@@ -48,7 +48,6 @@ except Exception:
     PasswordHasher = None
     VerifyMismatchError = VerificationError = Exception
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -457,38 +456,30 @@ def split_master_key(master_key_hex: str, shares: int = 3, threshold: int = 2):
         )
         if result.returncode != 0:
             raise Exception(f"ssss-split failed: {result.stderr}")
-        logger.info(f"ssss-split stdout: {result.stdout}")
-        logger.info(f"ssss-split stderr: {result.stderr}")
         all_lines = result.stdout.splitlines()
-        logger.info(f"All stdout lines: {all_lines}")
         # Filter out empty lines and header lines (lines that don't start with the key prefix or contain '-N-')
         shares_output = [line.strip() for line in all_lines if line.strip() and '-' in line]
-        logger.info(f"Parsed shares: {shares_output}")
         return shares_output
     except Exception as e:
         raise Exception(f"Error splitting master key: {e}")
 
 def combine_master_key(shares: list[str]):
     try:
-        logger.info(f"Combining shares: {shares}")
         shares_input = '\n'.join(shares) + '\n'
         result = subprocess.run(
             ['ssss-combine', '-t', '2'],
             input=shares_input, text=True, capture_output=True
         )
-        logger.info(f"ssss-combine stdout: {result.stdout}")
-        logger.info(f"ssss-combine stderr: {result.stderr}")
         if result.returncode != 0:
             raise Exception(f"ssss-combine failed: {result.stderr}")
         output = result.stdout + result.stderr
         for line in output.splitlines():
             if "Resulting secret: " in line:
                 master_key_hex = line.split("Resulting secret: ")[1].strip()
-                logger.info(f"Recovered master_key_hex: {master_key_hex}")
                 return master_key_hex
         raise Exception("Could not find master key in ssss-combine output")
     except Exception as e:
-        logger.error(f"Error combining master key: {str(e)}")
+        logger.error("Error combining master key: %s", type(e).__name__)
         raise Exception(f"Error combining master key: {e}")
 
 @router.post("/register", response_model=Token)
@@ -501,9 +492,8 @@ def register(user: RegisterUser, request: Request, response: Response):
         master_key = secrets.token_bytes(32)
         master_key_hex = master_key.hex()
         shares = split_master_key(master_key_hex)
-        logger.info(f"Generated shares: {shares}")
         if not isinstance(shares, list) or len(shares) < 3:
-            logger.error(f"Insufficient shares returned by split_master_key: {shares}")
+            logger.error("Insufficient shares returned by split_master_key")
             raise Exception(f"Insufficient shares returned by split_master_key: expected 3, got {len(shares) if hasattr(shares, '__len__') else 'unknown'}")
         device_part = shares[0]
         cloud_part = shares[1]
@@ -1172,24 +1162,21 @@ async def delete_account(current_user: dict = Depends(get_current_user)):
 
 @router.post("/recover")
 def recover_password(recovery: RecoveryRequest):
-    logger.info(f"Recovery request for username: {recovery.username}")
-    logger.info(f"Provided part1: {recovery.part1}")
-    logger.info(f"Provided part2: {recovery.part2}")
+    logger.info("Recovery requested")
     conn = get_connection()
     cursor = conn.cursor()
     try:
         cursor.execute("SELECT id, encrypted_cloud_part, salt, verification_ciphertext FROM users WHERE username = ?", (recovery.username,))
         user = cursor.fetchone()
         if not user:
-            logger.warning(f"User not found: {recovery.username}")
+            logger.warning("Recovery requested for an unknown user")
             raise HTTPException(status_code=404, detail="User not found")
         shares = [recovery.part1, recovery.part2]
         try:
             master_key_hex = combine_master_key(shares)
-            logger.info(f"Successfully combined master key: {master_key_hex}")
             master_key = bytes.fromhex(master_key_hex)
         except Exception as e:
-            logger.error(f"Failed to combine shares: {str(e)}")
+            logger.error("Failed to combine recovery shares")
             raise HTTPException(status_code=400, detail="Invalid parts provided")
         try:
             verification_data = base64.b64decode(user[3])
@@ -1201,12 +1188,11 @@ def recover_password(recovery: RecoveryRequest):
             unpadder = padding.PKCS7(128).unpadder()
             plaintext = unpadder.update(padded_plaintext) + unpadder.finalize()
             decrypted_username = plaintext.decode()
-            logger.info(f"Decrypted username: {decrypted_username}")
         except Exception as e:
-            logger.error(f"Decryption error: {str(e)}")
+            logger.error("Recovery verification could not be decrypted")
             raise HTTPException(status_code=400, detail="Invalid parts provided")
         if decrypted_username != recovery.username:
-            logger.warning(f"Decrypted username mismatch: expected {recovery.username}, got {decrypted_username}")
+            logger.warning("Recovery verification mismatch: user_id=%s", user[0])
             raise HTTPException(status_code=400, detail="Invalid parts provided")
         recovery_token = create_recovery_token(cursor, user[0])
         conn.commit()
@@ -1215,7 +1201,7 @@ def recover_password(recovery: RecoveryRequest):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Unexpected error during recovery: {str(e)}")
+        logger.error("Unexpected error during recovery: %s", type(e).__name__)
         raise HTTPException(status_code=500, detail=f"Error during password recovery: {str(e)}")
     finally:
         conn.close()
@@ -1250,15 +1236,12 @@ def reset_password(request: ResetPasswordRequest):
 async def get_cloud_part(username: str):
     conn = get_connection()
     cursor = conn.cursor()
-    logger.info(f"Fetching cloud part for username: {username}")
     cursor.execute("SELECT encrypted_cloud_part FROM users WHERE LOWER(username) = LOWER(?)", (username,))
     row = cursor.fetchone()
     conn.close()
     if not row:
-        logger.warning(f"No user found with username: {username}")
         raise HTTPException(status_code=404, detail="User not found")
     if not row[0]:
-        logger.warning(f"User found but encrypted_cloud_part is missing for username: {username}")
+        logger.warning("encrypted_cloud_part is missing for a user")
         raise HTTPException(status_code=404, detail="Cloud part not found")
-    logger.info(f"Successfully retrieved encrypted_cloud_part for username: {username}")
     return {"encrypted_cloud_part": row[0]}

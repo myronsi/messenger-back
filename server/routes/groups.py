@@ -12,7 +12,6 @@ from uuid import uuid4
 
 router = APIRouter()
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 GROUP_ROLES = {"owner", "admin", "moderator", "member"}

@@ -107,6 +107,23 @@ authenticator app (their recovery codes still work) and must re-enrol 2FA.
 Earlier versions shipped a publicly known default signing key; deployments that
 ran with it must set a new key and should treat existing sessions as compromised.
 
+## Logging
+
+Logging is configured once in `server/logging_config.py` (called from `server/main.py`); modules only use `logging.getLogger(__name__)`. Set `LOG_LEVEL` (default `INFO`) to change verbosity.
+
+Rules for log statements (enforced by `tests/test_log_hygiene.py`):
+
+- Never log recovery shares, master keys, tokens, passwords, TOTP secrets, usernames used for recovery, or message contents / file names.
+- Log event types and identifiers only (`chat_id`, `message_id`, `user_id`).
+- Do not use `print()` or `logging.basicConfig()` in `server/`.
+- Credentials sent in a URL query (e.g. `/ws/chat/0?token=...`) are masked in uvicorn's logs.
+
+### Existing logs may contain secrets
+
+Earlier versions wrote recovery shares, the recovered master key, recovery parts and full message payloads to the logs. After upgrading:
+
+1. Delete or archive-and-encrypt every log produced before this change (container logs: `docker compose logs` history, `docker logs` json files, any log shipping or aggregation system).
+2. Treat accounts that registered or recovered while the old logging was active as exposed: the logged shares are enough to recover the account, so ask those users to regenerate their recovery data, and rotate any JWT `SECRET_KEY` that may have been logged.
 ## Docker (Linux)
 
 Install Docker Engine and the Docker Compose plugin, create a `.env` file next to
@@ -161,8 +178,8 @@ messenger/
 │           ├── RegisterComponent.tsx
 │           └── .gitignore
 └── server/
-    ├── connection_manager.py
     ├── database.py
+    ├── logging_config.py
     ├── main.py
     ├── websocket.py
     └── routes/
