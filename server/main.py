@@ -6,6 +6,9 @@ from starlette.responses import JSONResponse
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.staticfiles import StaticFiles
 from server.database import setup_database
+from server.logging_config import configure_logging
+
+configure_logging()
 
 app = FastAPI()
 

@@ -22,7 +22,6 @@ from array import array
 
 router = APIRouter()
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 WAVEFORM_BAR_COUNT = 38
@@ -196,7 +195,7 @@ def _extract_voice_audio_metadata(file_path: Path) -> dict:
         if probe.returncode == 0:
             duration = float((probe.stdout or "").strip() or 0)
     except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
-        logger.warning(f"Could not read audio duration for {file_path}: {exc}")
+        logger.warning(f"Could not read audio duration: {type(exc).__name__}")
 
     try:
         decoded = subprocess.run(
@@ -254,7 +253,7 @@ def _extract_voice_audio_metadata(file_path: Path) -> dict:
             for value in raw_bars
         ]
     except (OSError, RuntimeError, subprocess.TimeoutExpired) as exc:
-        logger.warning(f"Could not extract waveform for {file_path}: {exc}")
+        logger.warning(f"Could not extract waveform: {type(exc).__name__}")
 
     if duration > 0:
         metadata["duration"] = round(duration, 3)
@@ -302,7 +301,6 @@ async def upload_file(
         raise HTTPException(status_code=400, detail="File size exceeds 10 MB limit")
 
     file_extension = Path(file.filename).suffix.lower()
-    logger.info(f"File extension: {file_extension}")
     file_type = None
     for type_, extensions in ALLOWED_FILE_TYPES.items():
         if file_extension in extensions:
@@ -383,7 +381,7 @@ async def upload_file(
                 "sender_id": current_user["id"],
                 "last_message": get_message_summary(cursor, message_id),
             })
-        logger.info(f"File uploaded and broadcasted: {file_name} to chat {chat_id}")
+        logger.info(f"File uploaded and broadcasted to chat {chat_id}")
 
         return {"message": "File uploaded successfully", "file_url": file_url}
     except HTTPException:
@@ -499,7 +497,7 @@ async def upload_voice_message(
                 "sender_id": current_user["id"],
                 "last_message": get_message_summary(cursor, message_id),
             })
-        logger.info(f"Voice message uploaded and broadcasted: {file_name} to chat {chat_id}")
+        logger.info(f"Voice message uploaded and broadcasted to chat {chat_id}")
 
         return {"message": "Voice message uploaded successfully", "file_url": file_url}
     except HTTPException:
@@ -1017,7 +1015,7 @@ async def get_message_history(
                             parsed_content = _with_audio_metadata(parsed_content, msg)
                             message_type = "file"
                     except json.JSONDecodeError as json_err:
-                        logger.error(f"Failed to parse JSON content for message {msg['id']}: {content}, error: {json_err}")
+                        logger.error(f"Failed to parse JSON content for message {msg['id']}: {type(json_err).__name__}")
                         parsed_content = content  # Keep as string if JSON is invalid
                         message_type = "message"
 
