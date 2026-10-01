@@ -2,6 +2,11 @@
 *
 !docs/
 !docs/image-storage-plan.md
+!docs/versioning.md
+!docs/releasing.md
+!CHANGELOG.md
+!server/
+!server/version.py
 !tests/
 !tests/test_database_queries.py
 !static/
