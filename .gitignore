@@ -7,8 +7,11 @@
 !CHANGELOG.md
 !server/
 !server/version.py
+!server/tokens.py
 !tests/
 !tests/test_database_queries.py
+!tests/test_auth_tokens.py
 !static/
 !static/avatars/
 !static/avatars/default.jpg
+!.env.example

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, status, File, UploadFile, Request, Response, Cookie
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
-from jose import JWTError, jwt
+from jose import JWTError
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 import secrets
@@ -11,12 +11,14 @@ import struct
 import time
 from urllib.parse import quote
 from server.database import get_connection
+from server import tokens
+from server.tokens import FERNET, TOKEN_ACCESS
 from pathlib import Path
 import subprocess
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
-from cryptography.fernet import Fernet
+from cryptography.fernet import InvalidToken
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import padding
 import base64
@@ -51,15 +53,12 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-SECRET_KEY = "supersecretkey"  # REPLACE THIS KEY!!!!!
-ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 15
 RECOVERY_TOKEN_EXPIRE_MINUTES = 5
 TWO_FACTOR_CHALLENGE_EXPIRE_MINUTES = 5
 REFRESH_COOKIE_NAME = "refresh_token"
 ALLOWED_SESSION_DURATIONS = {30, 90, 180, 365}
 DEFAULT_SESSION_DURATION_DAYS = 90
-SECURITY_KEY = base64.urlsafe_b64encode(hashlib.sha256(SECRET_KEY.encode()).digest())
 password_hasher = PasswordHasher() if PasswordHasher else None
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
@@ -207,33 +206,22 @@ def require_privacy_visibility(field: str, value: str | None, allowed_values: se
     return normalized
 
 def create_access_token(user_id: int, session_id: str):
-    expires_delta = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    payload = {
-        "sub": str(user_id),
-        "sid": session_id,
-        "exp": datetime.utcnow() + expires_delta
-    }
-    token = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
-    return token
+    return tokens.create_token(
+        TOKEN_ACCESS,
+        user_id,
+        timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
+        sid=session_id,
+    )
 
-def create_two_factor_challenge(user_id: int):
-    expires_delta = timedelta(minutes=TWO_FACTOR_CHALLENGE_EXPIRE_MINUTES)
-    payload = {
-        "sub": str(user_id),
-        "type": "2fa_login",
-        "exp": datetime.utcnow() + expires_delta,
-    }
-    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+def create_two_factor_challenge(cursor, user_id: int):
+    return tokens.issue_two_factor_challenge(
+        cursor, user_id, timedelta(minutes=TWO_FACTOR_CHALLENGE_EXPIRE_MINUTES)
+    )
 
-def create_recovery_token(user_id: int):
-    expires_delta = timedelta(minutes=RECOVERY_TOKEN_EXPIRE_MINUTES)
-    payload = {
-        "sub": str(user_id),
-        "type": "recovery",
-        "exp": datetime.utcnow() + expires_delta
-    }
-    token = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
-    return token
+def create_recovery_token(cursor, user_id: int):
+    return tokens.issue_recovery_token(
+        cursor, user_id, timedelta(minutes=RECOVERY_TOKEN_EXPIRE_MINUTES)
+    )
 
 def hash_secret(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
@@ -313,12 +301,17 @@ def get_user_security_settings(cursor, user_id: int):
 def encrypt_secret(value: str | None) -> str | None:
     if value is None:
         return None
-    return Fernet(SECURITY_KEY).encrypt(value.encode()).decode()
+    return FERNET.encrypt(value.encode()).decode()
 
 def decrypt_secret(value: str | None) -> str | None:
     if not value:
         return None
-    return Fernet(SECURITY_KEY).decrypt(value.encode()).decode()
+    try:
+        return FERNET.decrypt(value.encode()).decode()
+    except InvalidToken:
+        # Stored under a different key (e.g. after rotation); treat as no usable TOTP secret.
+        logger.warning("Stored TOTP secret cannot be decrypted with the current SECRET_KEY")
+        return None
 
 def generate_totp_secret() -> str:
     return base64.b32encode(secrets.token_bytes(20)).decode().rstrip("=")
@@ -383,7 +376,7 @@ def verify_two_factor_or_recovery(cursor, user_id: int, code: str) -> bool:
 
 def verify_token(token: str):
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = tokens.decode_token(token, TOKEN_ACCESS)
         user_id = payload.get("sub")
         session_id = payload.get("sid")
         if user_id is None or session_id is None:
@@ -414,25 +407,6 @@ def verify_token(token: str):
     except JWTError:
         return None    
 
-def verify_recovery_token(token: str):
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        if payload.get("type") != "recovery":
-            return None
-        user_id = payload.get("sub")
-        if user_id is None:
-            return None
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, username FROM users WHERE id = ?", (user_id,))
-        user = cursor.fetchone()
-        conn.close()
-        if user:
-            return {"id": user[0], "username": user[1]}
-        return None
-    except JWTError:
-        return None
-
 def get_user_by_id(user_id: int):
     conn = get_connection()
     cursor = conn.cursor()
@@ -454,7 +428,7 @@ def get_user_by_id(user_id: int):
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = tokens.decode_token(token, TOKEN_ACCESS)
         user_id = int(payload.get("sub"))
         session_id = payload.get("sid")
         if not session_id:
@@ -472,7 +446,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
             raise HTTPException(status_code=401, detail="Invalid token")
         user["session_id"] = session_id
         return user
-    except JWTError:
+    except (JWTError, ValueError):
         raise HTTPException(status_code=401, detail="Invalid token")
 
 def split_master_key(master_key_hex: str, shares: int = 3, threshold: int = 2):
@@ -587,12 +561,14 @@ def login(user: LoginUser, request: Request, response: Response):
         conn.commit()
     settings = get_user_security_settings(cursor, db_user["id"])
     if settings["two_factor_enabled"]:
+        login_challenge = create_two_factor_challenge(cursor, db_user["id"])
+        conn.commit()
         conn.close()
         return {
             "access_token": None,
             "token_type": "bearer",
             "two_factor_required": True,
-            "login_challenge": create_two_factor_challenge(db_user["id"]),
+            "login_challenge": login_challenge,
         }
     session_id, refresh_token, expires_at = create_session(cursor, db_user["id"], request)
     conn.commit()
@@ -603,19 +579,19 @@ def login(user: LoginUser, request: Request, response: Response):
 
 @router.post("/login/2fa", response_model=Token)
 def login_two_factor(payload: TwoFactorLoginRequest, request: Request, response: Response):
-    try:
-        challenge = jwt.decode(payload.login_challenge, SECRET_KEY, algorithms=[ALGORITHM])
-        if challenge.get("type") != "2fa_login":
-            raise HTTPException(status_code=401, detail="Invalid login challenge")
-        user_id = int(challenge.get("sub"))
-    except (JWTError, TypeError, ValueError):
-        raise HTTPException(status_code=401, detail="Invalid or expired login challenge")
-
     conn = get_connection()
     cursor = conn.cursor()
     try:
+        attempt = tokens.begin_two_factor_attempt(cursor, payload.login_challenge)
+        # Persist the attempt before verifying so failed guesses always count towards the limit.
+        conn.commit()
+        if not attempt:
+            raise HTTPException(status_code=401, detail="Invalid or expired login challenge")
+        user_id, challenge_hash = attempt
         if not verify_two_factor_or_recovery(cursor, user_id, payload.code):
+            conn.rollback()
             raise HTTPException(status_code=401, detail="Invalid verification code")
+        tokens.finish_two_factor_challenge(cursor, challenge_hash)
         session_id, refresh_token, expires_at = create_session(cursor, user_id, request)
         conn.commit()
         set_refresh_cookie(response, refresh_token, expires_at)
@@ -1232,7 +1208,8 @@ def recover_password(recovery: RecoveryRequest):
         if decrypted_username != recovery.username:
             logger.warning(f"Decrypted username mismatch: expected {recovery.username}, got {decrypted_username}")
             raise HTTPException(status_code=400, detail="Invalid parts provided")
-        recovery_token = create_recovery_token(user[0])
+        recovery_token = create_recovery_token(cursor, user[0])
+        conn.commit()
         logger.info(f"Recovery token generated for user ID {user[0]}")
         return {"message": "Password recovery successful.", "recovery_token": recovery_token}
     except HTTPException:
@@ -1249,14 +1226,15 @@ def reset_password(request: ResetPasswordRequest):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        user = verify_recovery_token(request.recovery_token)
-        if not user:
+        user_id = tokens.consume_recovery_token(cursor, request.recovery_token)
+        if user_id is None:
+            conn.rollback()
             raise HTTPException(status_code=401, detail="Invalid or expired recovery token")
         password_field = hash_password_with_salt(request.new_password)
-        cursor.execute("UPDATE users SET password = ? WHERE id = ?", (password_field, user["id"]))
+        cursor.execute("UPDATE users SET password = ? WHERE id = ?", (password_field, user_id))
         cursor.execute(
             "UPDATE user_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL",
-            (utc_now_iso(), user["id"]),
+            (utc_now_iso(), user_id),
         )
         conn.commit()
         return {"message": "Password reset successful."}
