@@ -150,3 +150,8 @@ messenger/
         ├── chats.py
         └── messages.py
 </pre>
+
+## Versioning and releases
+
+This project follows Semantic Versioning. See [docs/versioning.md](docs/versioning.md) for the scheme and [docs/releasing.md](docs/releasing.md) for the release checklist.
+

@@ -384,3 +384,9 @@ class DeleteMessageForMeEndpointTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class VersionTests(unittest.TestCase):
+    def test_version_is_semver_baseline(self):
+        from server.version import __version__
+
+        self.assertRegex(__version__, r"^\d+\.\d+\.\d+$")
