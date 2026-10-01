@@ -178,21 +178,65 @@ def _undelivered_recipients_for_send(cursor, chat_id: int, sender_id: int) -> tu
     return [other_id], "This message could not be delivered due to the recipient's privacy settings."
 
 
+def get_chat_participant_ids(cursor, chat_id: int) -> set[int]:
+    cursor.execute("SELECT user_id FROM participants WHERE chat_id = ?", (chat_id,))
+    return {row["user_id"] for row in cursor.fetchall()}
+
+
+def get_users_sharing_chat_with(cursor, user_id: int) -> set[int]:
+    cursor.execute(
+        """
+        SELECT DISTINCT other.user_id
+        FROM participants own
+        JOIN participants other ON other.chat_id = own.chat_id
+        WHERE own.user_id = ?
+        """,
+        (user_id,),
+    )
+    return {row["user_id"] for row in cursor.fetchall()} | {user_id}
+
+
+async def send_chat_list_message(cursor, chat_id: int, sender_id: int, message_id: int):
+    """Tell each member of the chat (on their chat-list socket only) about the new last message."""
+    members = get_chat_participant_ids(cursor, chat_id)
+
+    def build(recipient_id):
+        if recipient_id not in members:
+            return None
+        last_message = get_message_summary(cursor, message_id, recipient_id)
+        if last_message is None:
+            return None
+        return {
+            "type": "chat_list_message",
+            "chat_id": chat_id,
+            "sender_id": sender_id,
+            "last_message": last_message,
+        }
+
+    await manager.broadcast_personalized(0, build)
+
+
 async def broadcast_presence_update(cursor, user_id: int, username: str, is_online: bool, last_seen: str | None):
     cursor.execute("SELECT id, username, display_name, avatar_url, bio, last_seen FROM users WHERE id = ?", (user_id,))
     target_user = cursor.fetchone()
     if not target_user:
         return
-    chat_ids = set(get_user_chat_ids(cursor, user_id))
-    chat_ids.add(0)
-    for active_chat_id in chat_ids:
-        await manager.broadcast_personalized(active_chat_id, lambda recipient_id: {
+    audience = get_users_sharing_chat_with(cursor, user_id)
+
+    def build(recipient_id):
+        if recipient_id not in audience:
+            return None
+        visible = serialize_user(cursor, target_user, recipient_id)
+        return {
             "type": "presence_update",
             "user_id": user_id,
             "username": username,
-            "is_online": is_online if serialize_user(cursor, target_user, recipient_id)["is_online"] else False,
-            "last_seen": serialize_user(cursor, target_user, recipient_id)["last_seen"],
-        })
+            "is_online": is_online if visible["is_online"] else False,
+            "last_seen": visible["last_seen"],
+        }
+
+    for active_chat_id in set(get_user_chat_ids(cursor, user_id)) | {0}:
+        await manager.broadcast_personalized(active_chat_id, build)
 
 
 async def safe_close_websocket(websocket: WebSocket, code: int = 1000):
@@ -348,20 +392,7 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                         "timestamp": timestamp,
                     }
                     await manager.broadcast_personalized(chat_id, build_message)
-                    if undelivered_to:
-                        await manager.send_to_user(user_id, {
-                            "type": "chat_list_message",
-                            "chat_id": chat_id,
-                            "sender_id": user_id,
-                            "last_message": get_message_summary(cursor, message_id, user_id),
-                        })
-                    else:
-                        await manager.broadcast(0, {
-                            "type": "chat_list_message",
-                            "chat_id": chat_id,
-                            "sender_id": user_id,
-                            "last_message": get_message_summary(cursor, message_id),
-                        })
+                    await send_chat_list_message(cursor, chat_id, user_id, message_id)
 
                 elif message_type == "file":
                     if not file_url or not file_name or not file_type or not file_size:
@@ -418,20 +449,7 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                         "timestamp": timestamp,
                     }
                     await manager.broadcast_personalized(chat_id, build_file_message)
-                    if undelivered_to:
-                        await manager.send_to_user(user_id, {
-                            "type": "chat_list_message",
-                            "chat_id": chat_id,
-                            "sender_id": user_id,
-                            "last_message": get_message_summary(cursor, message_id, user_id),
-                        })
-                    else:
-                        await manager.broadcast(0, {
-                            "type": "chat_list_message",
-                            "chat_id": chat_id,
-                            "sender_id": user_id,
-                            "last_message": get_message_summary(cursor, message_id),
-                        })
+                    await send_chat_list_message(cursor, chat_id, user_id, message_id)
 
                 elif message_type == "resend":
                     if not message_id:
@@ -506,12 +524,7 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                         }
 
                     await manager.broadcast_personalized(chat_id, build_resend_message)
-                    await manager.broadcast(0, {
-                        "type": "chat_list_message",
-                        "chat_id": chat_id,
-                        "sender_id": user_id,
-                        "last_message": get_message_summary(cursor, message_id),
-                    })
+                    await send_chat_list_message(cursor, chat_id, user_id, message_id)
 
                 elif message_type == "edit":
                     if not message_id or not content:
