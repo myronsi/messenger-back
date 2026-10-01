@@ -16,9 +16,13 @@ def _parse_list(value) -> list:
 
 
 def message_visible_to(message, user_id: int) -> bool:
+    keys = message.keys()
+    deleted_for = message["deleted_for"] if "deleted_for" in keys else None
+    if user_id in _parse_list(deleted_for):
+        return False
     if message["sender_id"] == user_id:
         return True
-    undelivered_to = message["undelivered_to"] if "undelivered_to" in message.keys() else None
+    undelivered_to = message["undelivered_to"] if "undelivered_to" in keys else None
     return user_id not in _parse_list(undelivered_to)
 
 
@@ -37,7 +41,7 @@ def get_message_summary(cursor, message_id: int, requester_id: int | None = None
     cursor.execute(
         """
         SELECT id, chat_id, sender_id, sender_name, content, timestamp, edited_at,
-               reactions, read_by, delivery_error, undelivered_to
+               reactions, read_by, delivery_error, undelivered_to, deleted_for
         FROM messages
         WHERE id = ?
         """,
@@ -62,10 +66,28 @@ def get_message_summary(cursor, message_id: int, requester_id: int | None = None
     }
 
 
+def _latest_visible_message_id(cursor, chat_id: int, user_id: int, batch_size: int = 50) -> int | None:
+    before_id = None
+    while True:
+        query = "SELECT id, sender_id, undelivered_to, deleted_for FROM messages WHERE chat_id = ?"
+        params = [chat_id]
+        if before_id is not None:
+            query += " AND id < ?"
+            params.append(before_id)
+        cursor.execute(f"{query} ORDER BY id DESC LIMIT ?", (*params, batch_size))
+        rows = cursor.fetchall()
+        for row in rows:
+            if message_visible_to(row, user_id):
+                return row["id"]
+        if len(rows) < batch_size:
+            return None
+        before_id = rows[-1]["id"]
+
+
 def get_chat_unread_summary(cursor, chat_id: int, user_id: int) -> dict:
     cursor.execute(
         """
-        SELECT id, sender_id, read_by, undelivered_to
+        SELECT id, sender_id, read_by, undelivered_to, deleted_for
         FROM messages
         WHERE chat_id = ? AND sender_id != ?
         ORDER BY id ASC
@@ -83,21 +105,11 @@ def get_chat_unread_summary(cursor, chat_id: int, user_id: int) -> dict:
             continue
         unread_ids.append(message["id"])
 
-    cursor.execute(
-        """
-        SELECT id
-        FROM messages
-        WHERE chat_id = ?
-        ORDER BY id DESC
-        LIMIT 1
-        """,
-        (chat_id,),
-    )
-    latest_message = cursor.fetchone()
+    latest_message_id = _latest_visible_message_id(cursor, chat_id, user_id)
     return {
         "last_message": (
-            get_message_summary(cursor, latest_message["id"], user_id)
-            if latest_message
+            get_message_summary(cursor, latest_message_id, user_id)
+            if latest_message_id
             else None
         ),
         "unread_count": len(unread_ids),

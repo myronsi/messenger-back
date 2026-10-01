@@ -378,6 +378,7 @@ async def mark_chat_read(chat_id: int, payload: MarkChatReadRequest | None = Non
                 WHERE chat_id = ? AND sender_id != ?
                 ORDER BY id ASC
             """, (chat_id, current_user["id"]))
+            messages = cursor.fetchall()
         else:
             message_ids = []
             seen_ids = set()
@@ -405,12 +406,14 @@ async def mark_chat_read(chat_id: int, payload: MarkChatReadRequest | None = Non
                   AND id IN ({placeholders})
                 ORDER BY id ASC
             """, [chat_id, current_user["id"], *message_ids])
+            messages = cursor.fetchall()
 
+        # Rows must be fetched before any other query reuses the cursor.
         timestamp = utc_now_iso()
         receipt_is_public = read_receipts_enabled(cursor, current_user["id"])
         read_message_ids = []
 
-        for message in cursor.fetchall():
+        for message in messages:
             if not message_visible_to(message, current_user["id"]):
                 continue
 
