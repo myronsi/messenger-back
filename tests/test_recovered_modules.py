@@ -77,15 +77,11 @@ class AvatarUrlTests(unittest.TestCase):
         self.assertTrue(connection.closed)
 
     def test_default_avatar_static_route_returns_ok(self):
+        from starlette.testclient import TestClient
+
         from server.main import app
 
-        static_route = next(route for route in app.routes if route.path == "/static")
-        response = asyncio.run(
-            static_route.app.get_response(
-                "avatars/default.jpg",
-                {"type": "http", "method": "GET", "headers": []},
-            )
-        )
+        response = TestClient(app).get("/static/avatars/default.jpg")
 
         self.assertEqual(response.status_code, 200)
 

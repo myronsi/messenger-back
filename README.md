@@ -124,6 +124,17 @@ Earlier versions wrote recovery shares, the recovered master key, recovery parts
 
 1. Delete or archive-and-encrypt every log produced before this change (container logs: `docker compose logs` history, `docker logs` json files, any log shipping or aggregation system).
 2. Treat accounts that registered or recovered while the old logging was active as exposed: the logged shares are enough to recover the account, so ask those users to regenerate their recovery data, and rotate any JWT `SECRET_KEY` that may have been logged.
+## Media access
+
+Uploads, voice messages and avatars under `/static` are not public. `GET /static/<path>` needs a signed-in session, sent either as `Authorization: Bearer <access token>` or as the `media_session` cookie (set by login, 2FA login, registration and refresh, scoped to `/static`, httponly). The cookie is what lets plain `<img>`/`<audio>` tags work; `fetch()` calls to `/static` from another origin must use `credentials: 'include'` (or send the bearer header). The session is checked on every request, so logging out or revoking a session cuts access immediately.
+
+- Chat attachments (`uploads/`, `vm/`) are served only to members of a chat that has a message carrying the file, and only while that message is visible to them (not deleted for them, not undelivered to them). The link between file and message is stored in `message_attachments`, written by the upload, voice and forward endpoints. It is never inferred from message text, so a forged message cannot unlock someone else's file.
+- User avatars follow the owner's `avatar_visibility` privacy setting; the owner always sees their own.
+- Group avatars are served to the group's members and to users with a pending invite.
+- `avatars/default.jpg`, `avatars/group.png` and `avatars/deleted.jpg` are public placeholders.
+- Missing and forbidden files both answer `404`; requests without a valid session answer `401`. Files that are not images, audio, video or PDF are always sent as downloads with `X-Content-Type-Options: nosniff`.
+
+Files still live on local disk in `static/`. Object storage with signed URLs (see `docs/image-storage-plan.md`) is a possible later step.
 ## Docker (Linux)
 
 Install Docker Engine and the Docker Compose plugin, create a `.env` file next to

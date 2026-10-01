@@ -13,6 +13,7 @@ ALGORITHM = "HS256"
 MIN_SECRET_KEY_LENGTH = 32
 
 TOKEN_ACCESS = "access"
+TOKEN_MEDIA = "media"
 TOKEN_RECOVERY = "recovery"
 TOKEN_TWO_FACTOR = "2fa_login"
 _AUDIENCE_PREFIX = "messenger:"

@@ -12,7 +12,7 @@ import time
 from urllib.parse import quote
 from server.database import get_connection
 from server import tokens
-from server.tokens import FERNET, TOKEN_ACCESS
+from server.tokens import FERNET, TOKEN_ACCESS, TOKEN_MEDIA
 from pathlib import Path
 import subprocess
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -56,6 +56,8 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 15
 RECOVERY_TOKEN_EXPIRE_MINUTES = 5
 TWO_FACTOR_CHALLENGE_EXPIRE_MINUTES = 5
 REFRESH_COOKIE_NAME = "refresh_token"
+MEDIA_COOKIE_NAME = "media_session"
+MEDIA_COOKIE_PATH = "/static"
 ALLOWED_SESSION_DURATIONS = {30, 90, 180, 365}
 DEFAULT_SESSION_DURATION_DAYS = 90
 password_hasher = PasswordHasher() if PasswordHasher else None
@@ -274,6 +276,20 @@ def set_refresh_cookie(response: Response, refresh_token: str, expires_at: datet
 
 def clear_refresh_cookie(response: Response):
     response.delete_cookie(REFRESH_COOKIE_NAME, path="/auth")
+    response.delete_cookie(MEDIA_COOKIE_NAME, path=MEDIA_COOKIE_PATH)
+
+def set_media_cookie(response: Response, user_id: int, session_id: str, expires_at: datetime):
+    """Lets <img>/<audio> requests for /static files prove who is asking; the session is re-checked on every request."""
+    max_age = max(0, int((expires_at - utc_now()).total_seconds()))
+    response.set_cookie(
+        key=MEDIA_COOKIE_NAME,
+        value=tokens.create_token(TOKEN_MEDIA, user_id, timedelta(seconds=max_age), sid=session_id),
+        max_age=max_age,
+        httponly=True,
+        secure=False,
+        samesite="lax",
+        path=MEDIA_COOKIE_PATH,
+    )
 
 def get_active_session(cursor, user_id: int, session_id: str):
     cursor.execute("""
@@ -520,6 +536,7 @@ def register(user: RegisterUser, request: Request, response: Response):
         session_id, refresh_token, expires_at = create_session(cursor, user_id, request)
         conn.commit()
         set_refresh_cookie(response, refresh_token, expires_at)
+        set_media_cookie(response, user_id, session_id, expires_at)
     except sqlite3.IntegrityError:
         conn.close()
         raise HTTPException(status_code=400, detail="User already exists")
@@ -564,6 +581,7 @@ def login(user: LoginUser, request: Request, response: Response):
     conn.commit()
     conn.close()
     set_refresh_cookie(response, refresh_token, expires_at)
+    set_media_cookie(response, db_user["id"], session_id, expires_at)
     token = create_access_token(db_user["id"], session_id)
     return {"access_token": token, "token_type": "bearer"}
 
@@ -585,6 +603,7 @@ def login_two_factor(payload: TwoFactorLoginRequest, request: Request, response:
         session_id, refresh_token, expires_at = create_session(cursor, user_id, request)
         conn.commit()
         set_refresh_cookie(response, refresh_token, expires_at)
+        set_media_cookie(response, user_id, session_id, expires_at)
         return {"access_token": create_access_token(user_id, session_id), "token_type": "bearer"}
     except HTTPException:
         raise
@@ -642,6 +661,7 @@ async def refresh_access_token(
         ))
         conn.commit()
         set_refresh_cookie(response, new_refresh_token, expires_at)
+        set_media_cookie(response, session["user_id"], session["id"], expires_at)
         return {"access_token": create_access_token(session["user_id"], session["id"]), "token_type": "bearer"}
     finally:
         conn.close()

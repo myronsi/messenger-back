@@ -12,6 +12,7 @@ from server.chat_summary import (
     message_visible_to,
     not_deleted_for_sql,
 )
+from server.media_access import copy_attachments, record_attachment
 from server.privacy import DEFAULT_AVATAR, can_send_to_chat, read_receipts_enabled, serialize_user_snapshot
 from pathlib import Path
 import uuid
@@ -341,6 +342,7 @@ async def upload_file(
             VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (chat_id, current_user["id"], current_user["display_name"], json.dumps(message_content), utc_now_iso(), delivery_error, json.dumps(undelivered_to)))
         message_id = cursor.lastrowid
+        record_attachment(cursor, message_id, file_url)
         conn.commit()
 
         timestamp = utc_now_iso()
@@ -457,6 +459,7 @@ async def upload_voice_message(
             audio_waveform,
         ))
         message_id = cursor.lastrowid
+        record_attachment(cursor, message_id, file_url)
         conn.commit()
 
         timestamp = utc_now_iso()
@@ -606,6 +609,7 @@ async def forward_message(
                     forwarded_from["sender_username"],
                 ))
                 new_message_id = cursor.lastrowid
+                copy_attachments(cursor, source["id"], new_message_id)
                 conn.commit()
             except Exception as exc:
                 conn.rollback()

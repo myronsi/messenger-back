@@ -9,11 +9,13 @@
 !server/version.py
 !server/tokens.py
 !server/logging_config.py
+!server/media_access.py
 !tests/
 !tests/test_database_queries.py
 !tests/test_websocket_chat_list.py
 !tests/test_auth_tokens.py
 !tests/test_log_hygiene.py
+!tests/test_media_access.py
 !static/
 !static/avatars/
 !static/avatars/default.jpg

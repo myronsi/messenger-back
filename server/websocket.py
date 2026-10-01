@@ -5,6 +5,7 @@ from server.database import get_connection
 from server.routes.auth import verify_token
 from server.presence import mark_user_connected, mark_user_disconnected, utc_now_iso
 from server.chat_summary import deleted_for_user_ids, get_chat_unread_summary, get_message_summary, message_visible_to
+from server.media_access import attachment_path_from_url, can_access_attachment, record_attachment
 from server.privacy import DEFAULT_AVATAR, can_send_to_chat, read_receipts_enabled, serialize_user_snapshot, serialize_user
 import logging
 import sqlite3
@@ -397,6 +398,12 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                         await websocket.send_text(json.dumps({"type": "error", "message": "Missing file metadata"}))
                         continue
 
+                    # A client may only attach files it can already read, never someone else's upload.
+                    attachment_path = attachment_path_from_url(file_url)
+                    if not attachment_path or not can_access_attachment(cursor, user_id, attachment_path):
+                        await websocket.send_text(json.dumps({"type": "error", "message": "Invalid file"}))
+                        continue
+
                     undelivered_to, delivery_error = _undelivered_recipients_for_send(cursor, chat_id, user_id)
                     timestamp = utc_now_iso()
                     try:
@@ -409,8 +416,9 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                             "file_type": file_type,
                             "file_size": file_size,
                         }), timestamp, reply_to, delivery_error, json.dumps(undelivered_to)))
-                        conn.commit()
                         message_id = cursor.lastrowid
+                        record_attachment(cursor, message_id, file_url)
+                        conn.commit()
                         logger.info(f"File message saved: chat_id={chat_id}, message_id={message_id}, user_id={user_id}")
                     except sqlite3.Error as e:
                         logger.error(f"Error while saving file message to db: {e}")
