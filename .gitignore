@@ -10,6 +10,7 @@
 !server/tokens.py
 !tests/
 !tests/test_database_queries.py
+!tests/test_websocket_chat_list.py
 !tests/test_auth_tokens.py
 !static/
 !static/avatars/
