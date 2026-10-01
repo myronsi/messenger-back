@@ -193,5 +193,191 @@ class MarkChatReadTests(unittest.TestCase):
         self.assertEqual(response["read_message_ids"], [5])
         self.assertEqual(len(connection.cursor_instance.updates), 1)
 
+
+class DeleteForMeSummaryTests(unittest.TestCase):
+    def setUp(self):
+        import sqlite3
+
+        self.connection = sqlite3.connect(":memory:")
+        self.connection.row_factory = sqlite3.Row
+        self.cursor = self.connection.cursor()
+        self.cursor.execute(
+            """
+            CREATE TABLE messages (
+                id INTEGER PRIMARY KEY,
+                chat_id INTEGER,
+                sender_id INTEGER,
+                sender_name TEXT,
+                content TEXT,
+                timestamp TEXT,
+                edited_at TEXT,
+                reactions TEXT,
+                read_by TEXT,
+                delivery_error TEXT,
+                undelivered_to TEXT,
+                deleted_for TEXT
+            )
+            """
+        )
+
+    def tearDown(self):
+        self.connection.close()
+
+    def add_message(self, message_id, sender_id=2, deleted_for=None, undelivered_to=None):
+        import json
+
+        self.cursor.execute(
+            """
+            INSERT INTO messages (id, chat_id, sender_id, sender_name, content, timestamp,
+                                  reactions, read_by, undelivered_to, deleted_for)
+            VALUES (?, 1, ?, 'user', ?, '2024-01-01T00:00:00', '[]', '[]', ?, ?)
+            """,
+            (
+                message_id,
+                sender_id,
+                f"message {message_id}",
+                json.dumps(undelivered_to or []),
+                json.dumps(deleted_for or []),
+            ),
+        )
+
+    def test_message_visible_to_hides_messages_deleted_for_user(self):
+        from server.chat_summary import message_visible_to
+
+        self.add_message(1, deleted_for=[7])
+        self.add_message(2, sender_id=7, deleted_for=[7])
+        self.add_message(3, deleted_for=[8])
+        rows = {
+            row["id"]: row
+            for row in self.cursor.execute("SELECT * FROM messages").fetchall()
+        }
+
+        self.assertFalse(message_visible_to(rows[1], 7))
+        self.assertFalse(message_visible_to(rows[2], 7))
+        self.assertTrue(message_visible_to(rows[3], 7))
+        self.assertTrue(message_visible_to(rows[1], 8))
+
+    def test_message_visible_to_tolerates_rows_without_deleted_for(self):
+        from server.chat_summary import message_visible_to
+
+        self.assertTrue(message_visible_to({"sender_id": 2, "undelivered_to": "[]"}, 7))
+
+    def test_last_message_skips_messages_deleted_for_user(self):
+        from server.chat_summary import get_chat_unread_summary
+
+        self.add_message(1)
+        self.add_message(2)
+        self.add_message(3, deleted_for=[7])
+
+        summary = get_chat_unread_summary(self.cursor, 1, 7)
+        other_summary = get_chat_unread_summary(self.cursor, 1, 8)
+
+        self.assertEqual(summary["last_message"]["id"], 2)
+        self.assertEqual(other_summary["last_message"]["id"], 3)
+
+    def test_last_message_is_none_when_everything_is_deleted_for_user(self):
+        from server.chat_summary import get_chat_unread_summary
+
+        self.add_message(1, deleted_for=[7])
+        self.add_message(2, deleted_for=[7])
+
+        summary = get_chat_unread_summary(self.cursor, 1, 7)
+
+        self.assertIsNone(summary["last_message"])
+        self.assertEqual(summary["unread_count"], 0)
+
+    def test_last_message_search_spans_multiple_batches(self):
+        from server.chat_summary import get_chat_unread_summary
+
+        self.add_message(1)
+        for message_id in range(2, 130):
+            self.add_message(message_id, deleted_for=[7])
+
+        summary = get_chat_unread_summary(self.cursor, 1, 7)
+
+        self.assertEqual(summary["last_message"]["id"], 1)
+
+    def test_unread_count_excludes_messages_deleted_for_user(self):
+        from server.chat_summary import get_chat_unread_summary
+
+        self.add_message(1)
+        self.add_message(2, deleted_for=[7])
+        self.add_message(3)
+
+        summary = get_chat_unread_summary(self.cursor, 1, 7)
+
+        self.assertEqual(summary["unread_count"], 2)
+        self.assertEqual(summary["first_unread_message_id"], 1)
+
+
+class DeleteMessageForMeEndpointTests(unittest.TestCase):
+    def test_sends_updated_chat_summary_only_to_the_requesting_user(self):
+        import json
+        import sqlite3
+
+        from server.routes.messages import delete_message_for_me
+
+        connection = sqlite3.connect(":memory:")
+        connection.row_factory = sqlite3.Row
+        cursor = connection.cursor()
+        cursor.executescript(
+            """
+            CREATE TABLE chats (id INTEGER PRIMARY KEY, type TEXT);
+            CREATE TABLE participants (chat_id INTEGER, user_id INTEGER);
+            CREATE TABLE messages (
+                id INTEGER PRIMARY KEY, chat_id INTEGER, sender_id INTEGER, sender_name TEXT,
+                content TEXT, timestamp TEXT, edited_at TEXT, reactions TEXT, read_by TEXT,
+                delivery_error TEXT, undelivered_to TEXT, deleted_for TEXT
+            );
+            INSERT INTO chats VALUES (1, 'group');
+            INSERT INTO participants VALUES (1, 7), (1, 8);
+            INSERT INTO messages VALUES
+                (1, 1, 2, 'u', 'first', '2024-01-01T00:00:00', NULL, '[]', '[]', NULL, '[]', '[]'),
+                (2, 1, 2, 'u', 'second', '2024-01-01T00:00:01', NULL, '[]', '[]', NULL, '[]', '[]');
+            """
+        )
+        connection.commit()
+
+        class Connection:
+            def cursor(self):
+                return cursor
+
+            def commit(self):
+                connection.commit()
+
+            def rollback(self):
+                connection.rollback()
+
+            def close(self):
+                pass
+
+        sent_to_user = []
+        broadcasts = []
+
+        async def send_to_user(user_id, payload):
+            sent_to_user.append((user_id, payload))
+
+        async def broadcast_personalized(chat_id, build_message):
+            broadcasts.append((chat_id, {rid: build_message(rid) for rid in (7, 8)}))
+
+        with patch("server.routes.messages.get_connection", return_value=Connection()), patch(
+            "server.routes.messages.manager.send_to_user", send_to_user
+        ), patch("server.routes.messages.manager.broadcast_personalized", broadcast_personalized):
+            response = asyncio.run(delete_message_for_me(2, {"id": 7}))
+            repeated = asyncio.run(delete_message_for_me(2, {"id": 7}))
+
+        self.assertEqual(response, {"message": "Message deleted for you"})
+        self.assertEqual(repeated, {"message": "Message deleted for you"})
+        stored = cursor.execute("SELECT deleted_for FROM messages WHERE id = 2").fetchone()[0]
+        self.assertEqual(json.loads(stored), [7])
+        self.assertEqual(sent_to_user[0][1]["type"], "message_deleted_for_me")
+        self.assertEqual(broadcasts[0][0], 0)
+        payloads = broadcasts[0][1]
+        self.assertIsNone(payloads[8])
+        self.assertEqual(payloads[7]["type"], "chat_list_delete")
+        self.assertEqual(payloads[7]["message_id"], 2)
+        self.assertEqual(payloads[7]["last_message"]["id"], 1)
+        connection.close()
+
 if __name__ == "__main__":
     unittest.main()

@@ -5,7 +5,7 @@ from server.database import get_connection
 from server.routes.auth import get_current_user
 from server.websocket import manager
 from server.time_utils import to_utc_iso, utc_now_iso
-from server.chat_summary import get_message_summary
+from server.chat_summary import get_chat_unread_summary, get_message_summary
 from server.privacy import DEFAULT_AVATAR, can_send_to_chat, read_receipts_enabled, serialize_user_snapshot
 from pathlib import Path
 import uuid
@@ -1118,6 +1118,19 @@ async def delete_message_for_me(
             "message_id": message_id,
             "user_id": current_user["id"],
         })
+
+        chat_id = message["chat_id"]
+        user_id = current_user["id"]
+        await manager.broadcast_personalized(0, lambda recipient_id: (
+            {
+                "type": "chat_list_delete",
+                "chat_id": chat_id,
+                "message_id": message_id,
+                **get_chat_unread_summary(cursor, chat_id, user_id),
+            }
+            if recipient_id == user_id
+            else None
+        ))
 
         return {"message": "Message deleted for you"}
 
