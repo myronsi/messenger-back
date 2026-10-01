@@ -62,6 +62,15 @@ class ChatListIsolationTests(PostgresFixture, unittest.TestCase):
             if event.get("type") in types:
                 return event
 
+    def attach_file(self, file_url):
+        from server.media_access import record_attachment
+
+        message_id = self.add_message("file", sender_id=self.bob, content=json.dumps({"file_url": file_url}))
+        conn = self.database.get_connection()
+        record_attachment(conn.cursor(), message_id, file_url)
+        conn.commit()
+        conn.close()
+
     def list_socket(self, name):
         return self.client.websocket_connect(f"/ws/chat/0?token={name}-token")
 
@@ -81,7 +90,8 @@ class ChatListIsolationTests(PostgresFixture, unittest.TestCase):
             self.assertEqual(event["chat_id"], self.chat_id)
             self.assertEqual(event["last_message"]["content"], "secret for alice")
 
-            self.send(bob_room, type="file", file_url="/static/x.png", file_name="x.png", file_type="image/png", file_size=1)
+            self.attach_file("/static/uploads/x.png")
+            self.send(bob_room, type="file", file_url="/static/uploads/x.png", file_name="x.png", file_type="image/png", file_size=1)
             self.assertEqual(self.receive(alice_list, "chat_list_message")["last_message"]["type"], "file")
 
             # Carol's list gets her own chat's event next, never one from alice and bob's chat
@@ -89,6 +99,24 @@ class ChatListIsolationTests(PostgresFixture, unittest.TestCase):
             event = self.receive(carol_list, "chat_list_message")
             self.assertEqual(event["chat_id"], self.other_chat_id)
             self.assertEqual(event["last_message"]["content"], "hi carol")
+
+    def test_file_message_cannot_reference_a_file_the_sender_cannot_read(self):
+        # The file belongs to carol and dave's chat, so bob may not attach it to his own chat
+        conn = self.database.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO messages (chat_id, sender_id, sender_name, content) VALUES (?, ?, 'carol', ?)",
+            (self.other_chat_id, self.carol, json.dumps({"file_url": "/static/uploads/private.png"})),
+        )
+        from server.media_access import record_attachment
+
+        record_attachment(cursor, cursor.lastrowid, "/static/uploads/private.png")
+        conn.commit()
+        conn.close()
+        with self.room_socket("bob", self.chat_id) as bob_room:
+            for file_url in ("/static/uploads/private.png", "https://example.com/x.png", "/static/uploads/../x"):
+                self.send(bob_room, type="file", file_url=file_url, file_name="x.png", file_type="image/png", file_size=1)
+                self.assertEqual(self.receive(bob_room, "error")["message"], "Invalid file")
 
     def test_sender_and_recipient_both_get_their_own_chat_list_update(self):
         with self.list_socket("alice") as alice_list, \

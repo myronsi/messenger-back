@@ -1,10 +1,9 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from server.routes import auth, messages, chats, users, groups, requests as approval_requests
+from server.routes import auth, messages, chats, users, groups, media, requests as approval_requests
 from server.websocket import router as websocket_router
 from starlette.responses import JSONResponse
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.staticfiles import StaticFiles
 from server.database import setup_database
 from server.logging_config import configure_logging
 
@@ -31,7 +30,8 @@ def initialize_database():
 
 #     return await call_next(request)
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# /static is served by an authenticated route; files are never exposed without an access check.
+app.include_router(media.router)
 
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(messages.router, prefix="/messages", tags=["messages"])

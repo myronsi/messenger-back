@@ -275,6 +275,17 @@ def setup_database() -> None:
                 deleted_for TEXT DEFAULT '[]'
             )
         """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS message_attachments (
+                message_id BIGINT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+                file_path TEXT NOT NULL,
+                PRIMARY KEY (message_id, file_path)
+            )
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_message_attachments_file_path ON message_attachments (file_path)")
+        from server.media_access import backfill_message_attachments
+
+        backfill_message_attachments(cursor)
         conn.commit()
     finally:
         conn.close()
