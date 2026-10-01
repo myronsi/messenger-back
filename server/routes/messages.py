@@ -5,7 +5,13 @@ from server.database import get_connection
 from server.routes.auth import get_current_user
 from server.websocket import manager
 from server.time_utils import to_utc_iso, utc_now_iso
-from server.chat_summary import get_chat_unread_summary, get_message_summary
+from server.chat_summary import (
+    deleted_for_user_ids,
+    get_chat_unread_summary,
+    get_message_summary,
+    message_visible_to,
+    not_deleted_for_sql,
+)
 from server.privacy import DEFAULT_AVATAR, can_send_to_chat, read_receipts_enabled, serialize_user_snapshot
 from pathlib import Path
 import uuid
@@ -79,20 +85,11 @@ def _hydrate_user_items(cursor, items, requester_id: int, respect_read_receipts:
     return hydrated
 
 
-def _parse_undelivered_to(value):
-    if not value:
-        return []
-    try:
-        parsed = json.loads(value)
-    except (json.JSONDecodeError, TypeError):
-        return []
-    return parsed if isinstance(parsed, list) else []
+FILE_MESSAGE_LIKE_PATTERN = '%"file_url"%'
 
 
 def _message_visible_to(message, user_id: int) -> bool:
-    if message["sender_id"] == user_id:
-        return True
-    return user_id not in _parse_undelivered_to(message["undelivered_to"] if "undelivered_to" in message.keys() else None)
+    return message_visible_to(message, user_id)
 
 
 def _is_image_file(content: dict) -> bool:
@@ -536,7 +533,7 @@ async def forward_message(
     try:
         cursor.execute("""
             SELECT messages.id, messages.chat_id, messages.sender_id, messages.sender_name,
-                   messages.content, messages.undelivered_to,
+                   messages.content, messages.undelivered_to, messages.deleted_for,
                    messages.audio_duration, messages.audio_waveform,
                    messages.forwarded_from_message_id,
                    messages.forwarded_from_sender_id,
@@ -684,13 +681,14 @@ async def get_chat_photos(
         if not cursor.fetchone():
             raise HTTPException(status_code=403, detail="You are not a member of this chat")
 
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT id, sender_id, content, timestamp, undelivered_to
             FROM messages
             WHERE chat_id = ?
-              AND content LIKE '%"file_url"%'
+              AND content LIKE ?
+              AND {not_deleted_for_sql("deleted_for")}
             ORDER BY id DESC
-        """, (chat_id,))
+        """, (chat_id, FILE_MESSAGE_LIKE_PATTERN, current_user["id"]))
 
         photos = []
         for msg in cursor.fetchall():
@@ -740,13 +738,14 @@ async def get_chat_audios(
         if not cursor.fetchone():
             raise HTTPException(status_code=403, detail="You are not a member of this chat")
 
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT id, sender_id, content, timestamp, undelivered_to, audio_duration, audio_waveform
             FROM messages
             WHERE chat_id = ?
-              AND content LIKE '%"file_url"%'
+              AND content LIKE ?
+              AND {not_deleted_for_sql("deleted_for")}
             ORDER BY id DESC
-        """, (chat_id,))
+        """, (chat_id, FILE_MESSAGE_LIKE_PATTERN, current_user["id"]))
 
         audios = []
         for msg in cursor.fetchall():
@@ -804,7 +803,7 @@ async def search_chat_messages(
         if not cursor.fetchone():
             raise HTTPException(status_code=403, detail="You are not a member of this chat")
 
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT messages.id, messages.sender_id, messages.content, messages.timestamp,
                    messages.audio_duration, messages.audio_waveform,
                    messages.forwarded_from_message_id,
@@ -818,8 +817,9 @@ async def search_chat_messages(
             FROM messages
             LEFT JOIN users ON messages.sender_id = users.id
             WHERE messages.chat_id = ?
+              AND {not_deleted_for_sql()}
             ORDER BY messages.id DESC
-        """, (chat_id,))
+        """, (chat_id, current_user["id"]))
 
         results = []
         for msg in cursor.fetchall():
@@ -881,12 +881,13 @@ async def get_message_history(
             raise HTTPException(status_code=403, detail="You are not a member of this chat")
 
         history_limit = limit + 1
+        not_deleted_sql = not_deleted_for_sql()
         has_more_before = False
         has_more_after = False
         if around_id:
             before_limit = max(0, limit // 2)
             after_limit = max(0, limit - before_limit - 1)
-            cursor.execute("""
+            cursor.execute(f"""
                 SELECT messages.id, messages.sender_id, messages.content, messages.timestamp,
                        messages.audio_duration, messages.audio_waveform,
                        messages.forwarded_from_message_id,
@@ -896,18 +897,19 @@ async def get_message_history(
                        COALESCE(users.display_name, messages.sender_name) AS sender,
                        users.username AS sender_username,
                        messages.reply_to, messages.reactions, users.avatar_url, messages.read_by,
-                       messages.edited_at, messages.delivery_error, messages.undelivered_to, messages.deleted_for
+                       messages.edited_at, messages.delivery_error, messages.undelivered_to
                 FROM messages
                 LEFT JOIN users ON messages.sender_id = users.id
                 WHERE messages.chat_id = ? AND messages.id <= ?
+                  AND {not_deleted_sql}
                 ORDER BY messages.id DESC
                 LIMIT ?
-            """, (chat_id, around_id, before_limit + 2))
+            """, (chat_id, around_id, current_user["id"], before_limit + 2))
             before_rows = cursor.fetchall()
             has_more_before = len(before_rows) > before_limit + 1
             before_rows = list(reversed(before_rows[:before_limit + 1]))
 
-            cursor.execute("""
+            cursor.execute(f"""
                 SELECT messages.id, messages.sender_id, messages.content, messages.timestamp,
                        messages.audio_duration, messages.audio_waveform,
                        messages.forwarded_from_message_id,
@@ -917,19 +919,20 @@ async def get_message_history(
                        COALESCE(users.display_name, messages.sender_name) AS sender,
                        users.username AS sender_username,
                        messages.reply_to, messages.reactions, users.avatar_url, messages.read_by,
-                       messages.edited_at, messages.delivery_error, messages.undelivered_to, messages.deleted_for
+                       messages.edited_at, messages.delivery_error, messages.undelivered_to
                 FROM messages
                 LEFT JOIN users ON messages.sender_id = users.id
                 WHERE messages.chat_id = ? AND messages.id > ?
+                  AND {not_deleted_sql}
                 ORDER BY messages.id ASC
                 LIMIT ?
-            """, (chat_id, around_id, after_limit + 1))
+            """, (chat_id, around_id, current_user["id"], after_limit + 1))
             after_rows = cursor.fetchall()
             has_more_after = len(after_rows) > after_limit
             messages = before_rows + after_rows[:after_limit]
             has_more = has_more_before
         elif after_id:
-            cursor.execute("""
+            cursor.execute(f"""
                 SELECT messages.id, messages.sender_id, messages.content, messages.timestamp,
                        messages.audio_duration, messages.audio_waveform,
                        messages.forwarded_from_message_id,
@@ -939,19 +942,20 @@ async def get_message_history(
                        COALESCE(users.display_name, messages.sender_name) AS sender,
                        users.username AS sender_username,
                        messages.reply_to, messages.reactions, users.avatar_url, messages.read_by,
-                       messages.edited_at, messages.delivery_error, messages.undelivered_to, messages.deleted_for
+                       messages.edited_at, messages.delivery_error, messages.undelivered_to
                 FROM messages
                 LEFT JOIN users ON messages.sender_id = users.id
                 WHERE messages.chat_id = ? AND messages.id > ?
+                  AND {not_deleted_sql}
                 ORDER BY messages.id ASC
                 LIMIT ?
-            """, (chat_id, after_id, history_limit))
+            """, (chat_id, after_id, current_user["id"], history_limit))
             messages = cursor.fetchall()
             has_more_after = len(messages) > limit
             messages = messages[:limit]
             has_more = False
         elif before_id:
-            cursor.execute("""
+            cursor.execute(f"""
                 SELECT messages.id, messages.sender_id, messages.content, messages.timestamp,
                        messages.audio_duration, messages.audio_waveform,
                        messages.forwarded_from_message_id,
@@ -961,19 +965,20 @@ async def get_message_history(
                        COALESCE(users.display_name, messages.sender_name) AS sender,
                        users.username AS sender_username,
                        messages.reply_to, messages.reactions, users.avatar_url, messages.read_by,
-                       messages.edited_at, messages.delivery_error, messages.undelivered_to, messages.deleted_for
+                       messages.edited_at, messages.delivery_error, messages.undelivered_to
                 FROM messages
                 LEFT JOIN users ON messages.sender_id = users.id
                 WHERE messages.chat_id = ? AND messages.id < ?
+                  AND {not_deleted_sql}
                 ORDER BY messages.id DESC
                 LIMIT ?
-            """, (chat_id, before_id, history_limit))
+            """, (chat_id, before_id, current_user["id"], history_limit))
             messages = cursor.fetchall()
             has_more = len(messages) > limit
             has_more_before = has_more
             messages = list(reversed(messages[:limit]))
         else:
-            cursor.execute("""
+            cursor.execute(f"""
                 SELECT messages.id, messages.sender_id, messages.content, messages.timestamp,
                        messages.audio_duration, messages.audio_waveform,
                        messages.forwarded_from_message_id,
@@ -983,13 +988,14 @@ async def get_message_history(
                        COALESCE(users.display_name, messages.sender_name) AS sender,
                        users.username AS sender_username,
                        messages.reply_to, messages.reactions, users.avatar_url, messages.read_by,
-                       messages.edited_at, messages.delivery_error, messages.undelivered_to, messages.deleted_for
+                       messages.edited_at, messages.delivery_error, messages.undelivered_to
                 FROM messages
                 LEFT JOIN users ON messages.sender_id = users.id
                 WHERE messages.chat_id = ?
+                  AND {not_deleted_sql}
                 ORDER BY messages.id DESC
                 LIMIT ?
-            """, (chat_id, history_limit))
+            """, (chat_id, current_user["id"], history_limit))
             messages = cursor.fetchall()
             has_more = len(messages) > limit
             has_more_before = has_more
@@ -1029,7 +1035,6 @@ async def get_message_history(
                     "reactions": _hydrate_user_items(cursor, _parse_json_list(msg["reactions"]), current_user["id"]),
                     "read_by": _hydrate_user_items(cursor, _parse_json_list(msg["read_by"]), current_user["id"], respect_read_receipts=True),
                     "is_deleted": not bool(msg["content"]),
-                    "deleted_for": _parse_json_list(msg["deleted_for"]) if "deleted_for" in msg.keys() else [],
                     "type": message_type,
                     "forwarded_from": _forwarded_from_from_row(msg),
                     "delivery_error": msg["delivery_error"]
@@ -1070,7 +1075,7 @@ async def delete_message_for_me(
         # Fetch the message
         cursor.execute("""
             SELECT messages.id, messages.chat_id, messages.sender_id, messages.content,
-                   messages.deleted_for, chats.type AS chat_type
+                   messages.undelivered_to, messages.deleted_for, chats.type AS chat_type
             FROM messages
             LEFT JOIN chats ON messages.chat_id = chats.id
             WHERE messages.id = ?
@@ -1088,49 +1093,37 @@ async def delete_message_for_me(
         if not cursor.fetchone():
             raise HTTPException(status_code=403, detail="You are not a member of this chat")
 
-        # Check if user can see the message (visibility check)
-        if not _message_visible_to(message, current_user["id"]):
-            raise HTTPException(status_code=404, detail="Message not found")
+        user_id = current_user["id"]
+        chat_id = message["chat_id"]
+        deleted_for = deleted_for_user_ids(message)
 
-        # Parse existing deleted_for list
-        deleted_for = _parse_json_list(message["deleted_for"])
-        
-        # Add current user if not already deleted
-        if current_user["id"] not in deleted_for:
-            deleted_for.append(current_user["id"])
-            deleted_for_json = json.dumps(deleted_for)
-            
-            # Update the message
+        # Repeating the request is a no-op for messages the user already removed
+        if user_id not in deleted_for:
+            if not _message_visible_to(message, user_id):
+                raise HTTPException(status_code=404, detail="Message not found")
+
+            deleted_for.append(user_id)
             cursor.execute("""
                 UPDATE messages
                 SET deleted_for = ?
                 WHERE id = ?
-            """, (deleted_for_json, message_id))
+            """, (json.dumps(deleted_for), message_id))
             conn.commit()
 
-        # Notify all users in the chat that message was deleted for current user
-        # Send different notifications based on chat type
-        chat_type = message["chat_type"]
-        
-        await manager.send_to_user(current_user["id"], {
-            "type": "message_deleted_for_me",
-            "chat_id": message["chat_id"],
+        # Only the requesting user's sockets are told to drop the message; other
+        # participants keep seeing it. Clients simply handle a regular delete event.
+        await manager.broadcast_personalized(chat_id, lambda recipient_id: {
+            "type": "delete",
+            "chat_id": chat_id,
             "message_id": message_id,
-            "user_id": current_user["id"],
-        })
-
-        chat_id = message["chat_id"]
-        user_id = current_user["id"]
-        await manager.broadcast_personalized(0, lambda recipient_id: (
-            {
-                "type": "chat_list_delete",
-                "chat_id": chat_id,
-                "message_id": message_id,
-                **get_chat_unread_summary(cursor, chat_id, user_id),
-            }
-            if recipient_id == user_id
-            else None
-        ))
+            "timestamp": utc_now_iso(),
+        } if recipient_id == user_id else None)
+        await manager.broadcast_personalized(0, lambda recipient_id: {
+            "type": "chat_list_delete",
+            "chat_id": chat_id,
+            "message_id": message_id,
+            **get_chat_unread_summary(cursor, chat_id, user_id),
+        } if recipient_id == user_id else None)
 
         return {"message": "Message deleted for you"}
 
