@@ -4,7 +4,7 @@ from starlette.websockets import WebSocketState
 from server.database import get_connection
 from server.routes.auth import verify_token
 from server.presence import mark_user_connected, mark_user_disconnected, utc_now_iso
-from server.chat_summary import get_chat_unread_summary, get_message_summary
+from server.chat_summary import deleted_for_user_ids, get_chat_unread_summary, get_message_summary, message_visible_to
 from server.privacy import DEFAULT_AVATAR, can_send_to_chat, read_receipts_enabled, serialize_user_snapshot, serialize_user
 import logging
 import sqlite3
@@ -441,12 +441,12 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                     cursor.execute("""
                         SELECT id, sender_id, sender_name, content, timestamp, reply_to, reactions, read_by, delivery_error,
                                forwarded_from_message_id, forwarded_from_sender_id,
-                               forwarded_from_sender_name, forwarded_from_sender_username
+                               forwarded_from_sender_name, forwarded_from_sender_username, deleted_for
                         FROM messages
                         WHERE id = ? AND chat_id = ?
                     """, (message_id, chat_id))
                     message = cursor.fetchone()
-                    if not message or message["sender_id"] != user_id:
+                    if not message or message["sender_id"] != user_id or not message_visible_to(message, user_id):
                         await websocket.send_text(json.dumps({"type": "error", "message": "Message not found", "message_id": message_id}))
                         continue
                     if not message["delivery_error"]:
@@ -519,11 +519,12 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                         continue
 
                     try:
-                        cursor.execute("SELECT sender_id FROM messages WHERE id = ? AND chat_id = ?", (message_id, chat_id))
+                        cursor.execute("SELECT sender_id, deleted_for FROM messages WHERE id = ? AND chat_id = ?", (message_id, chat_id))
                         sender = cursor.fetchone()
-                        if not sender or sender["sender_id"] != user_id:
+                        if not sender or sender["sender_id"] != user_id or not message_visible_to(sender, user_id):
                             await websocket.send_text(json.dumps({"type": "error", "message": "You are not the author of this message"}))
                             continue
+                        deleted_for = deleted_for_user_ids(sender)
 
                         timestamp = utc_now_iso()
                         cursor.execute("UPDATE messages SET content = ?, edited_at = ? WHERE id = ?", (content, timestamp, message_id))
@@ -534,13 +535,17 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                         await websocket.send_text(json.dumps({"type": "error", "message": "Failed to edit message"}))
                         continue
 
-                    await manager.broadcast(chat_id, {
-                        "type": "edit",
-                        "chat_id": chat_id,
-                        "message_id": message_id,
-                        "new_content": content,
-                        "timestamp": timestamp,
-                    })
+                    await manager.broadcast_personalized(chat_id, lambda recipient_id: (
+                        {
+                            "type": "edit",
+                            "chat_id": chat_id,
+                            "message_id": message_id,
+                            "new_content": content,
+                            "timestamp": timestamp,
+                        }
+                        if recipient_id not in deleted_for
+                        else None
+                    ))
                     await manager.broadcast_personalized(0, lambda recipient_id: (
                         {
                             "type": "edit",
@@ -560,9 +565,13 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                         continue
 
                     try:
-                        cursor.execute("SELECT sender_id FROM messages WHERE id = ? AND chat_id = ?", (message_id, chat_id))
+                        cursor.execute("SELECT sender_id, deleted_for FROM messages WHERE id = ? AND chat_id = ?", (message_id, chat_id))
                         message = cursor.fetchone()
-                        if not message or not _can_delete_message(cursor, chat_id, message["sender_id"], user_id):
+                        if (
+                            not message
+                            or not message_visible_to(message, user_id)
+                            or not _can_delete_message(cursor, chat_id, message["sender_id"], user_id)
+                        ):
                             await websocket.send_text(json.dumps({"type": "error", "message": "You do not have permission to delete this message"}))
                             continue
 
@@ -597,11 +606,12 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                         continue
 
                     try:
-                        cursor.execute("SELECT reactions FROM messages WHERE id = ? AND chat_id = ?", (message_id, chat_id))
+                        cursor.execute("SELECT reactions, deleted_for FROM messages WHERE id = ? AND chat_id = ?", (message_id, chat_id))
                         result = cursor.fetchone()
-                        if not result:
+                        if not result or user_id in deleted_for_user_ids(result):
                             await websocket.send_text(json.dumps({"type": "error", "message": "Message not found"}))
                             continue
+                        deleted_for = deleted_for_user_ids(result)
 
                         reactions = _hydrate_user_items(cursor, _parse_json_list(result["reactions"]), user_id)
                         if any(r.get("user_id") == user_id and r.get("reaction") == reaction for r in reactions):
@@ -623,7 +633,7 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                         "message_id": message_id,
                         **{**_user_snapshot(cursor, user_id, recipient_id), "reaction": reaction},
                         "timestamp": utc_now_iso(),
-                    })
+                    } if recipient_id not in deleted_for else None)
 
                 elif message_type == "reaction_remove":
                     if not message_id or not reaction:
@@ -631,11 +641,12 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                         continue
 
                     try:
-                        cursor.execute("SELECT reactions FROM messages WHERE id = ? AND chat_id = ?", (message_id, chat_id))
+                        cursor.execute("SELECT reactions, deleted_for FROM messages WHERE id = ? AND chat_id = ?", (message_id, chat_id))
                         result = cursor.fetchone()
-                        if not result:
+                        if not result or user_id in deleted_for_user_ids(result):
                             await websocket.send_text(json.dumps({"type": "error", "message": "Message not found"}))
                             continue
+                        deleted_for = deleted_for_user_ids(result)
 
                         reactions = _hydrate_user_items(cursor, _parse_json_list(result["reactions"]), user_id)
                         if not any(r.get("user_id") == user_id and r.get("reaction") == reaction for r in reactions):
@@ -657,7 +668,7 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                         **_user_snapshot(cursor, user_id, recipient_id),
                         "reaction": reaction,
                         "timestamp": utc_now_iso(),
-                    })
+                    } if recipient_id not in deleted_for else None)
 
                 elif message_type == "is_read":
                     if not message_id:
@@ -665,11 +676,12 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                         continue
 
                     try:
-                        cursor.execute("SELECT id, sender_id, read_by FROM messages WHERE id = ? AND chat_id = ?", (message_id, chat_id))
+                        cursor.execute("SELECT id, sender_id, read_by, deleted_for FROM messages WHERE id = ? AND chat_id = ?", (message_id, chat_id))
                         message = cursor.fetchone()
-                        if not message:
+                        if not message or user_id in deleted_for_user_ids(message):
                             await websocket.send_text(json.dumps({"type": "error", "message": "Message not found"}))
                             continue
+                        deleted_for = deleted_for_user_ids(message)
 
                         if message["sender_id"] == user_id:
                             await websocket.send_text(json.dumps({"type": "error", "message": "Cannot mark own message as read"}))
@@ -701,7 +713,7 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                             **_user_snapshot(cursor, user_id, recipient_id),
                             "read_at": timestamp,
                             "timestamp": timestamp,
-                        })
+                        } if recipient_id not in deleted_for else None)
                     await manager.send_to_user(user_id, {
                         "type": "chat_list_read",
                         "chat_id": chat_id,

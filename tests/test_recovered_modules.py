@@ -311,7 +311,7 @@ class DeleteForMeSummaryTests(unittest.TestCase):
 
 
 class DeleteMessageForMeEndpointTests(unittest.TestCase):
-    def test_sends_updated_chat_summary_only_to_the_requesting_user(self):
+    def test_notifies_only_the_requesting_user(self):
         import json
         import sqlite3
 
@@ -351,18 +351,14 @@ class DeleteMessageForMeEndpointTests(unittest.TestCase):
             def close(self):
                 pass
 
-        sent_to_user = []
         broadcasts = []
-
-        async def send_to_user(user_id, payload):
-            sent_to_user.append((user_id, payload))
 
         async def broadcast_personalized(chat_id, build_message):
             broadcasts.append((chat_id, {rid: build_message(rid) for rid in (7, 8)}))
 
         with patch("server.routes.messages.get_connection", return_value=Connection()), patch(
-            "server.routes.messages.manager.send_to_user", send_to_user
-        ), patch("server.routes.messages.manager.broadcast_personalized", broadcast_personalized):
+            "server.routes.messages.manager.broadcast_personalized", broadcast_personalized
+        ):
             response = asyncio.run(delete_message_for_me(2, {"id": 7}))
             repeated = asyncio.run(delete_message_for_me(2, {"id": 7}))
 
@@ -370,13 +366,20 @@ class DeleteMessageForMeEndpointTests(unittest.TestCase):
         self.assertEqual(repeated, {"message": "Message deleted for you"})
         stored = cursor.execute("SELECT deleted_for FROM messages WHERE id = 2").fetchone()[0]
         self.assertEqual(json.loads(stored), [7])
-        self.assertEqual(sent_to_user[0][1]["type"], "message_deleted_for_me")
-        self.assertEqual(broadcasts[0][0], 0)
-        payloads = broadcasts[0][1]
-        self.assertIsNone(payloads[8])
-        self.assertEqual(payloads[7]["type"], "chat_list_delete")
-        self.assertEqual(payloads[7]["message_id"], 2)
-        self.assertEqual(payloads[7]["last_message"]["id"], 1)
+
+        room_chat_id, room_payloads = broadcasts[0]
+        self.assertEqual(room_chat_id, 1)
+        self.assertIsNone(room_payloads[8])
+        self.assertEqual(room_payloads[7]["type"], "delete")
+        self.assertEqual(room_payloads[7]["chat_id"], 1)
+        self.assertEqual(room_payloads[7]["message_id"], 2)
+
+        list_chat_id, list_payloads = broadcasts[1]
+        self.assertEqual(list_chat_id, 0)
+        self.assertIsNone(list_payloads[8])
+        self.assertEqual(list_payloads[7]["type"], "chat_list_delete")
+        self.assertEqual(list_payloads[7]["message_id"], 2)
+        self.assertEqual(list_payloads[7]["last_message"]["id"], 1)
         connection.close()
 
 if __name__ == "__main__":

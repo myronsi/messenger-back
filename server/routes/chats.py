@@ -373,7 +373,7 @@ async def mark_chat_read(chat_id: int, payload: MarkChatReadRequest | None = Non
 
         if payload.mark_all:
             cursor.execute("""
-                SELECT id, sender_id, read_by, undelivered_to
+                SELECT id, sender_id, read_by, undelivered_to, deleted_for
                 FROM messages
                 WHERE chat_id = ? AND sender_id != ?
                 ORDER BY id ASC
@@ -399,7 +399,7 @@ async def mark_chat_read(chat_id: int, payload: MarkChatReadRequest | None = Non
 
             placeholders = ",".join(["?"] * len(message_ids))
             cursor.execute(f"""
-                SELECT id, sender_id, read_by, undelivered_to
+                SELECT id, sender_id, read_by, undelivered_to, deleted_for
                 FROM messages
                 WHERE chat_id = ?
                   AND sender_id != ?

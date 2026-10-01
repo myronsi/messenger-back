@@ -15,10 +15,23 @@ def _parse_list(value) -> list:
     return parsed if isinstance(parsed, list) else []
 
 
+NOT_DELETED_FOR_SQL = (
+    "NOT (COALESCE(NULLIF({column}, ''), '[]')::jsonb @> to_jsonb(CAST(? AS BIGINT)))"
+)
+
+
+def not_deleted_for_sql(column: str = "messages.deleted_for") -> str:
+    """SQL condition (one `?` for the user id) that excludes messages the user deleted for themselves."""
+    return NOT_DELETED_FOR_SQL.format(column=column)
+
+
+def deleted_for_user_ids(message) -> list:
+    return _parse_list(message["deleted_for"]) if "deleted_for" in message.keys() else []
+
+
 def message_visible_to(message, user_id: int) -> bool:
     keys = message.keys()
-    deleted_for = message["deleted_for"] if "deleted_for" in keys else None
-    if user_id in _parse_list(deleted_for):
+    if user_id in deleted_for_user_ids(message):
         return False
     if message["sender_id"] == user_id:
         return True
