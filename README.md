@@ -101,11 +101,11 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"
 
 Keep it out of version control (see `.env.example`). Changing the key
 invalidates every issued access token, recovery token and 2FA challenge, so all
-users have to log in again. Stored TOTP secrets are re-encrypted automatically
-only from the old built-in placeholder key; if you rotate a real key, 2FA users
-need to re-enrol. Deployments that ran with the former placeholder
-(`supersecretkey`) must set a new key, and anyone who held that value could have
-forged tokens, so treat existing sessions as compromised.
+users have to log in again. Stored TOTP secrets are encrypted with a key derived
+from `SECRET_KEY` too, so after a rotation 2FA users can no longer use their
+authenticator app (their recovery codes still work) and must re-enrol 2FA.
+Earlier versions shipped a publicly known default signing key; deployments that
+ran with it must set a new key and should treat existing sessions as compromised.
 
 ## Docker (Linux)
 

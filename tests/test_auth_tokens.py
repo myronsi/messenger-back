@@ -20,7 +20,7 @@ class SecretKeyTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             load_secret_key({})
         with self.assertRaises(RuntimeError):
-            load_secret_key({"SECRET_KEY": "supersecretkey"})
+            load_secret_key({"SECRET_KEY": "too-short"})
         self.assertEqual(load_secret_key({"SECRET_KEY": "x" * 32}), "x" * 32)
 
     def test_application_import_fails_without_secret_key(self):
@@ -37,13 +37,21 @@ class SecretKeyTests(unittest.TestCase):
     def test_encryption_key_differs_from_signing_key(self):
         import base64
 
-        from server.tokens import SECRET_KEY, derive_fernet_key, legacy_fernet_key
+        from server.tokens import SECRET_KEY, derive_fernet_key
 
         derived = derive_fernet_key(SECRET_KEY)
         self.assertNotEqual(derived, base64.urlsafe_b64encode(SECRET_KEY.encode()[:32].ljust(32)))
-        self.assertNotEqual(derived, legacy_fernet_key())
         self.assertEqual(derived, derive_fernet_key(SECRET_KEY))
         self.assertNotEqual(derived, derive_fernet_key(SECRET_KEY + "x"))
+
+    def test_totp_secret_encrypted_under_another_key_is_unusable_not_fatal(self):
+        from cryptography.fernet import Fernet
+
+        from server.routes import auth
+
+        foreign = Fernet(Fernet.generate_key()).encrypt(b"JBSWY3DPEHPK3PXP").decode()
+        self.assertIsNone(auth.decrypt_secret(foreign))
+        self.assertEqual(auth.decrypt_secret(auth.encrypt_secret("JBSWY3DPEHPK3PXP")), "JBSWY3DPEHPK3PXP")
 
 
 class TokenFormatTests(unittest.TestCase):
@@ -84,7 +92,7 @@ class TokenFormatTests(unittest.TestCase):
 
         forged = jwt.encode(
             {"sub": "1", "type": "access", "aud": "messenger:access", "exp": 4102444800},
-            "supersecretkey",
+            "some-other-key-that-the-attacker-guessed-0123",
             algorithm=tokens.ALGORITHM,
         )
         with self.assertRaises(JWTError):
@@ -177,25 +185,6 @@ class ServerSideTokenRecordTests(unittest.TestCase):
         forged = tokens.create_token(tokens.TOKEN_TWO_FACTOR, self.user_id, timedelta(minutes=5), jti="never-issued")
         self.assertIsNone(tokens.begin_two_factor_attempt(self.cursor, forged))
 
-    def test_legacy_totp_secrets_are_reencrypted_once(self):
-        from cryptography.fernet import Fernet
-
-        from server.routes import auth
-        from server.tokens import FERNET, legacy_fernet_key
-
-        legacy_value = Fernet(legacy_fernet_key()).encrypt(b"JBSWY3DPEHPK3PXP").decode()
-        self.cursor.execute(
-            "INSERT INTO user_security_settings (user_id, two_factor_secret) VALUES (?, ?)",
-            (self.user_id, legacy_value),
-        )
-        self.conn.commit()
-
-        auth.migrate_legacy_totp_secrets()
-        auth.migrate_legacy_totp_secrets()
-
-        self.cursor.execute("SELECT two_factor_secret FROM user_security_settings WHERE user_id = ?", (self.user_id,))
-        stored = self.cursor.fetchone()[0]
-        self.assertEqual(FERNET.decrypt(stored.encode()), b"JBSWY3DPEHPK3PXP")
 
 
 @unittest.skipUnless(TEST_DATABASE_URL, "TEST_DATABASE_URL is not set")

@@ -18,7 +18,7 @@ import subprocess
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import InvalidToken
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import padding
 import base64
@@ -306,34 +306,12 @@ def encrypt_secret(value: str | None) -> str | None:
 def decrypt_secret(value: str | None) -> str | None:
     if not value:
         return None
-    return FERNET.decrypt(value.encode()).decode()
-
-def migrate_legacy_totp_secrets():
-    """Re-encrypt TOTP secrets that were stored under the key derived from the old hardcoded placeholder."""
-    legacy = Fernet(tokens.legacy_fernet_key())
-    conn = get_connection()
     try:
-        cursor = conn.cursor()
-        for column in ("two_factor_secret", "pending_two_factor_secret"):
-            cursor.execute(f"SELECT user_id, {column} AS value FROM user_security_settings WHERE {column} IS NOT NULL")
-            for row in cursor.fetchall():
-                try:
-                    FERNET.decrypt(row["value"].encode())
-                    continue
-                except InvalidToken:
-                    pass
-                try:
-                    plain = legacy.decrypt(row["value"].encode())
-                except InvalidToken:
-                    logger.warning("Cannot decrypt %s for user %s with any known key", column, row["user_id"])
-                    continue
-                cursor.execute(
-                    f"UPDATE user_security_settings SET {column} = ? WHERE user_id = ?",
-                    (FERNET.encrypt(plain).decode(), row["user_id"]),
-                )
-        conn.commit()
-    finally:
-        conn.close()
+        return FERNET.decrypt(value.encode()).decode()
+    except InvalidToken:
+        # Stored under a different key (e.g. after rotation); treat as no usable TOTP secret.
+        logger.warning("Stored TOTP secret cannot be decrypted with the current SECRET_KEY")
+        return None
 
 def generate_totp_secret() -> str:
     return base64.b32encode(secrets.token_bytes(20)).decode().rstrip("=")

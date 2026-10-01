@@ -11,8 +11,6 @@ from jose import JWTError, jwt
 
 ALGORITHM = "HS256"
 MIN_SECRET_KEY_LENGTH = 32
-# The value that used to be hardcoded in source; only used to migrate data encrypted with it.
-LEGACY_PLACEHOLDER_KEY = "supersecretkey"
 
 TOKEN_ACCESS = "access"
 TOKEN_RECOVERY = "recovery"
@@ -41,10 +39,6 @@ def derive_fernet_key(secret_key: str) -> bytes:
         info=b"messenger-totp-encryption-v1",
     ).derive(secret_key.encode())
     return base64.urlsafe_b64encode(derived)
-
-
-def legacy_fernet_key() -> bytes:
-    return base64.urlsafe_b64encode(hashlib.sha256(LEGACY_PLACEHOLDER_KEY.encode()).digest())
 
 
 SECRET_KEY = load_secret_key()

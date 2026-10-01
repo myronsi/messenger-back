@@ -13,7 +13,6 @@ app = FastAPI()
 @app.on_event("startup")
 def initialize_database():
     setup_database()
-    auth.migrate_legacy_totp_secrets()
 
 # ALLOWED_IPS = {"192.168.178.29"}
 
