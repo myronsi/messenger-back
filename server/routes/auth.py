@@ -623,6 +623,18 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         "last_seen": to_utc_iso(current_user["last_seen"])
     }
 
+@router.post("/media-session", status_code=204)
+def start_media_session(response: Response, current_user: dict = Depends(get_current_user)):
+    """Issue the media cookie for a session that predates it (the access token is still valid, so /refresh was never called)."""
+    conn = get_connection()
+    try:
+        session = get_active_session(conn.cursor(), current_user["id"], current_user["session_id"])
+    finally:
+        conn.close()
+    if not session:
+        raise HTTPException(status_code=401, detail="Invalid session")
+    set_media_cookie(response, current_user["id"], current_user["session_id"], parse_datetime(session["expires_at"]))
+
 @router.post("/refresh", response_model=Token)
 async def refresh_access_token(
     request: Request,

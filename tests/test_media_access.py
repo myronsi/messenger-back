@@ -186,6 +186,21 @@ class MediaAccessTests(PostgresFixture, unittest.TestCase):
         for path in ("/static/%2e%2e/secret", "/static/uploads/%2e%2e/avatars/alice/me.png", "/static/uploads/..%2f..%2fsecret", "/static//etc/passwd"):
             self.assertIn(self.get(path, self.carol).status_code, (401, 404), path)
 
+    def test_existing_session_can_obtain_the_media_cookie(self):
+        from server.routes import auth
+
+        self.client.app.include_router(auth.router, prefix="/auth")
+        self.send_file(self.bob, UPLOAD_URL)
+        bearer, _, _ = self.login(self.alice)
+
+        self.assertEqual(self.client.post("/auth/media-session").status_code, 401)
+        response = self.client.post("/auth/media-session", headers=bearer)
+        self.assertEqual(response.status_code, 204)
+        self.assertIn("media_session=", response.headers["set-cookie"])
+        self.assertIn("Path=/static", response.headers["set-cookie"])
+        # The cookie alone now opens the file, as <img> tags will send it
+        self.assertEqual(self.client.get(UPLOAD_URL).status_code, 200)
+
     def test_path_normalisation_rejects_escapes(self):
         from server.media_access import normalize_media_path
 
