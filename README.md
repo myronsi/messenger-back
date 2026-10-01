@@ -88,10 +88,30 @@ at first line change `const BASE_URL = "http://ip:8000";` to yours ip addres
 ### View messenger
 run `npm start` (in client directory)
 
+## Configuration: `SECRET_KEY`
+
+The server signs login, recovery and two-factor tokens with `SECRET_KEY` and
+derives the key that encrypts stored TOTP secrets from it. There is no default:
+the server refuses to start unless `SECRET_KEY` is set to a random value of at
+least 32 characters. Generate one with:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+Keep it out of version control (see `.env.example`). Changing the key
+invalidates every issued access token, recovery token and 2FA challenge, so all
+users have to log in again. Stored TOTP secrets are re-encrypted automatically
+only from the old built-in placeholder key; if you rotate a real key, 2FA users
+need to re-enrol. Deployments that ran with the former placeholder
+(`supersecretkey`) must set a new key, and anyone who held that value could have
+forged tokens, so treat existing sessions as compromised.
+
 ## Docker (Linux)
 
-Install Docker Engine and the Docker Compose plugin, then start the backend from
-the repository root:
+Install Docker Engine and the Docker Compose plugin, create a `.env` file next to
+`compose.yaml` containing `SECRET_KEY=<generated value>`, then start the backend
+from the repository root:
 
 ```bash
 docker compose up --build -d

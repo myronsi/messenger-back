@@ -11,6 +11,7 @@ import threading
 import unittest
 from unittest.mock import patch
 
+os.environ.setdefault("SECRET_KEY", "test-only-secret-key-not-for-production-use")
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
 
 

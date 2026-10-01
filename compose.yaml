@@ -5,6 +5,7 @@ services:
     ports:
       - "8000:8000"
     environment:
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env (see README)}
       DATABASE_URL: postgresql://messenger:messenger@postgres:5432/messenger
     volumes:
       - messenger_static:/app/static

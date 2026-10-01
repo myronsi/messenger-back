@@ -1,6 +1,9 @@
 import asyncio
+import os
 import unittest
 from unittest.mock import patch
+
+os.environ.setdefault("SECRET_KEY", "test-only-secret-key-not-for-production-use")
 
 
 class TimeUtilityTests(unittest.TestCase):
