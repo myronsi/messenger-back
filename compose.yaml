@@ -4,9 +4,10 @@ services:
       context: .
     # Deploys set BACKEND_IMAGE in .env to the released GHCR image.
     image: ${BACKEND_IMAGE:-messenger-back:local}
-    # Only the reverse proxy (nginx) should be able to reach the backend.
+    # Only the reverse proxy (nginx) should be able to reach the backend. For local testing from
+    # another device on the network, set BACKEND_BIND=0.0.0.0 in .env.
     ports:
-      - "127.0.0.1:8000:8000"
+      - "${BACKEND_BIND:-127.0.0.1}:8000:8000"
     environment:
       SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env (see README)}
       # Set when a reverse proxy serves the API under a prefix such as /api (see README).
