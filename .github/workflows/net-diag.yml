@@ -1,0 +1,15 @@
+name: net-diag
+on:
+  pull_request:
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "runner ip: $(curl -s https://api.ipify.org)"
+          for h in 54.82.49.84 messenger.viserix.com; do
+            for p in 22 443; do
+              timeout 10 bash -c "echo > /dev/tcp/$h/$p" && echo "$h:$p OPEN" || echo "$h:$p BLOCKED"
+            done
+          done
+          getent hosts messenger.viserix.com
