@@ -2,8 +2,11 @@ services:
   backend:
     build:
       context: .
+    # Deploys set BACKEND_IMAGE in .env to the released GHCR image.
+    image: ${BACKEND_IMAGE:-messenger-back:local}
+    # Only the reverse proxy (nginx) should be able to reach the backend.
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env (see README)}
       DATABASE_URL: postgresql://messenger:messenger@postgres:5432/messenger

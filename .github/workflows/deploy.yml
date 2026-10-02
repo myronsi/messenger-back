@@ -1,0 +1,58 @@
+name: Deploy
+
+# Runs after every release, or manually to deploy or roll back to any released tag.
+on:
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Released tag to deploy, for example v0.5.0
+        required: true
+        type: string
+
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      TAG: ${{ inputs.tag }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      APP_DIR: ${{ vars.BACKEND_DEPLOY_PATH || '/opt/messenger' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf 'Host deploy\n  HostName %s\n  User %s\n  IdentityFile ~/.ssh/id_deploy\n  StrictHostKeyChecking yes\n' "$SSH_HOST" "$SSH_USER" > ~/.ssh/config
+      - name: Upload compose file and deploy script
+        run: scp compose.yaml deploy/deploy.sh "deploy:$APP_DIR/"
+      - name: Log in to GHCR on the server
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_ACTOR: ${{ github.actor }}
+        run: printf '%s' "$GH_TOKEN" | ssh deploy "docker login ghcr.io -u '$GH_ACTOR' --password-stdin"
+      - name: Deploy
+        env:
+          IMAGE_REPO: ghcr.io/${{ github.repository }}
+        run: ssh deploy "bash '$APP_DIR/deploy.sh' '$APP_DIR' '$IMAGE_REPO:$TAG'"

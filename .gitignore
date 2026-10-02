@@ -21,3 +21,11 @@
 !static/avatars/
 !static/avatars/default.jpg
 !.env.example
+!.github/
+!.github/workflows/
+!.github/workflows/*.yml
+!deploy/
+!deploy/deploy.sh
+!release-please-config.json
+!.release-please-manifest.json
+!.gitattributes
