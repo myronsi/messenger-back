@@ -1,14 +1,12 @@
-from fastapi import UploadFile, File, APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from server.database import get_connection
 from server.routes.auth import get_current_user
 from server.presence import is_user_online
 from server.time_utils import to_utc_iso
-from server.avatar_history import get_avatar_history, make_avatar_url, record_user_avatar
+from server.avatar_history import get_avatar_history
 from server.privacy import DEFAULT_AVATAR, can_target_be_searched, get_privacy_settings, serialize_user, visibility_allows
 import os
-import secrets
-from pathlib import Path
 
 router = APIRouter()
 
@@ -24,25 +22,6 @@ def normalize_contact_display_name(value: str | None) -> str | None:
     if len(normalized) > 50:
         raise HTTPException(status_code=400, detail="Custom name must be 50 characters or less")
     return normalized
-
-@router.post("/users/me/avatar")
-async def upload_avatar(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-    username = user["username"]
-    upload_dir = Path(f"static/avatars/{username}")
-    upload_dir.mkdir(parents=True, exist_ok=True)
-
-    original_filename = Path(file.filename or "avatar.jpg").name
-    filename = f"{secrets.token_hex(8)}_{original_filename}"
-    file_path = upload_dir / filename
-    with file_path.open("wb") as buffer:
-        buffer.write(await file.read())
-
-    avatar_url = make_avatar_url(username, filename)
-    record_user_avatar(user["id"], avatar_url)
-    return {"avatar_url": avatar_url}
 
 @router.get("/avatar/{username}")
 async def get_user_avatar(username: str, current_user: dict = Depends(get_current_user)):

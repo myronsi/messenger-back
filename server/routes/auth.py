@@ -27,6 +27,7 @@ import logging
 from server.presence import is_user_online
 from server.time_utils import to_utc_iso, utc_now_iso
 from server.avatar_history import make_avatar_url, record_user_avatar
+from server.upload_security import AVATAR_MAX_BYTES, process_avatar
 from server.privacy import (
     AVATAR_PROFILE_VISIBILITY_SCOPES,
     DEFAULT_PRIVACY_SETTINGS,
@@ -1138,15 +1139,15 @@ async def update_user_profile(update: UserUpdate = None, current_user: dict = De
 
 @router.post("/me/avatar")
 async def upload_avatar(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
+    content = await file.read(AVATAR_MAX_BYTES + 1)
+    image_bytes, extension = process_avatar(content)
+
     username = current_user["username"]
     upload_dir = Path(f"static/avatars/{username}")
     upload_dir.mkdir(parents=True, exist_ok=True)
 
-    original_filename = Path(file.filename or "avatar.jpg").name
-    filename = f"{secrets.token_hex(8)}_{original_filename}"
-    file_path = upload_dir / filename
-    with file_path.open("wb") as buffer:
-        buffer.write(await file.read())
+    filename = f"{secrets.token_hex(16)}{extension}"
+    (upload_dir / filename).write_bytes(image_bytes)
 
     avatar_url = make_avatar_url(username, filename)
     record_user_avatar(current_user["id"], avatar_url)

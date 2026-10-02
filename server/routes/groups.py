@@ -4,6 +4,7 @@ from server.database import get_connection
 from server.routes.auth import get_current_user
 from server.websocket import manager, broadcast_to_chat_list, get_chat_participant_ids
 from server.chat_summary import get_chat_unread_summary
+from server.upload_security import AVATAR_MAX_BYTES, process_avatar
 from server.privacy import PERMISSION_APPROVAL_REQUIRED, PERMISSION_DENIED, group_invite_permission, serialize_user
 from server.routes.requests import create_group_invite_request
 import logging
@@ -422,12 +423,11 @@ async def upload_group_avatar(
     try:
         _ensure_role(cursor, chat_id, current_user["id"], {"owner", "admin"}, "Only owners and admins can update this group")
 
-        suffix = Path(file.filename or "group-avatar").suffix
-        safe_name = f"group_{chat_id}_{uuid4().hex}{suffix}"
+        image_bytes, extension = process_avatar(await file.read(AVATAR_MAX_BYTES + 1))
+        safe_name = f"group_{chat_id}_{uuid4().hex}{extension}"
         upload_dir = Path("static/avatars/groups")
         upload_dir.mkdir(parents=True, exist_ok=True)
-        file_path = upload_dir / safe_name
-        file_path.write_bytes(await file.read())
+        (upload_dir / safe_name).write_bytes(image_bytes)
 
         avatar_url = f"/static/avatars/groups/{safe_name}"
         cursor.execute("UPDATE chats SET avatar_url = ? WHERE id = ? AND type = 'group'", (avatar_url, chat_id))

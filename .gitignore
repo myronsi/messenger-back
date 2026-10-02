@@ -10,6 +10,7 @@
 !server/tokens.py
 !server/logging_config.py
 !server/media_access.py
+!server/upload_security.py
 !server/routes/media.py
 !tests/
 !tests/test_database_queries.py
@@ -17,6 +18,8 @@
 !tests/test_auth_tokens.py
 !tests/test_log_hygiene.py
 !tests/test_media_access.py
+!tests/test_upload_security.py
+!tests/test_upload_routes.py
 !tests/test_cookie_paths.py
 !static/
 !static/avatars/
