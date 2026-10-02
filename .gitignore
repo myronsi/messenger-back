@@ -12,6 +12,8 @@
 !server/media_access.py
 !server/upload_security.py
 !server/usernames.py
+!server/rate_limit.py
+!server/recovery_shares.py
 !server/routes/media.py
 !tests/
 !tests/test_database_queries.py
@@ -22,6 +24,7 @@
 !tests/test_upload_security.py
 !tests/test_upload_routes.py
 !tests/test_usernames.py
+!tests/test_recovery_security.py
 !tests/test_cookie_paths.py
 !static/
 !static/avatars/
