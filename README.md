@@ -134,6 +134,8 @@ Uploads, voice messages and avatars under `/static` are not public. `GET /static
 - `avatars/default.jpg`, `avatars/group.png` and `avatars/deleted.jpg` are public placeholders.
 - Missing and forbidden files both answer `404`; requests without a valid session answer `401`. Files that are not images, audio, video or PDF are always sent as downloads with `X-Content-Type-Options: nosniff`.
 
+**Behind a reverse proxy.** Browsers only send a cookie when its `Path` covers the public URL. If nginx serves the API under a prefix (for example `location /api/`), set `COOKIE_PATH_PREFIX=/api` in `.env` so the `media_session` and `refresh_token` cookies are scoped to `/api/static` and `/api/auth`; without it media returns `401` and sessions cannot refresh. Also set `COOKIE_SECURE=true` when the site is served over HTTPS. Both default to the local-development behaviour (no prefix, not `Secure`). After changing them, users need to sign in again once.
+
 Files still live on local disk in `static/`. Object storage with signed URLs (see `docs/image-storage-plan.md`) is a possible later step.
 ## Docker (Linux)
 

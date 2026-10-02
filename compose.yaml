@@ -9,6 +9,9 @@ services:
       - "127.0.0.1:8000:8000"
     environment:
       SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env (see README)}
+      # Set when a reverse proxy serves the API under a prefix such as /api (see README).
+      COOKIE_PATH_PREFIX: ${COOKIE_PATH_PREFIX:-}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
       DATABASE_URL: postgresql://messenger:messenger@postgres:5432/messenger
     volumes:
       - messenger_static:/app/static
