@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.4.4](https://github.com/myronsi/messenger-back/compare/v0.4.3...v0.4.4) (2026-10-02)
+
+
+### Bug Fixes
+
+* **auth:** harden password recovery and throttle auth endpoints ([00aec04](https://github.com/myronsi/messenger-back/commit/00aec042ead224458c4495ce8c5002b58637d5e1))
+* **auth:** recover password with one user-held part ([3d86be0](https://github.com/myronsi/messenger-back/commit/3d86be06c430ebfe4d91dd35d621b9a42b076908))
+* **auth:** validate usernames and stop using them as file paths ([d74e124](https://github.com/myronsi/messenger-back/commit/d74e124bddb6e2d07f785047b572017f1eb0ef57))
+* **auth:** validate usernames and stop using them as file paths ([e75be0d](https://github.com/myronsi/messenger-back/commit/e75be0daa644132ffd5853ea993b3fcc100ef000))
+* **security:** configure CORS and trusted hosts from the environment ([727ee05](https://github.com/myronsi/messenger-back/commit/727ee054bd61b4010c5bba57041647886da5a682))
+* **security:** configure CORS and trusted hosts from the environment ([5ffc282](https://github.com/myronsi/messenger-back/commit/5ffc2829396845989169ab8370824a5f0c38b86e))
+* **security:** validate uploads by content and re-encode avatars ([67341e5](https://github.com/myronsi/messenger-back/commit/67341e55321ccd8f276aed0bc195f7d1353c4be8))
+* **security:** validate uploads by content and re-encode avatars ([f71a326](https://github.com/myronsi/messenger-back/commit/f71a32654df62389eb0b9e1a02b57c41086140f2))
+* **users:** make username search case-insensitive ([1c39d3e](https://github.com/myronsi/messenger-back/commit/1c39d3eb00142d266773c87aacaeaf91d1c75129))
+* **users:** make username search case-insensitive ([d10a0d1](https://github.com/myronsi/messenger-back/commit/d10a0d1cffe2431be7542aa330a9b139b830b732))
+* **ws:** stop leaking chat-list events to non-members ([6844d6a](https://github.com/myronsi/messenger-back/commit/6844d6a26f2f195f2dcf70ea77d528a7087971f0))
+* **ws:** stop leaking chat-list events to non-members ([f7ab522](https://github.com/myronsi/messenger-back/commit/f7ab522f7ae2564385b83862bc1600f7de9a58e6))
+
 ## [0.4.3](https://github.com/myronsi/messenger-back/compare/v0.4.2...v0.4.3) (2026-10-02)
 
 
