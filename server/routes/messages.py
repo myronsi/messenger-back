@@ -13,6 +13,7 @@ from server.chat_summary import (
     not_deleted_for_sql,
 )
 from server.media_access import copy_attachments, record_attachment
+from server.upload_security import ensure_inline_content_is_genuine, safe_filename
 from server.privacy import DEFAULT_AVATAR, can_send_to_chat, read_receipts_enabled, serialize_user_snapshot
 from pathlib import Path
 import uuid
@@ -301,7 +302,9 @@ async def upload_file(
     if file_size > MAX_FILE_SIZE:
         raise HTTPException(status_code=400, detail="File size exceeds 10 MB limit")
 
+    file.filename = safe_filename(file.filename)
     file_extension = Path(file.filename).suffix.lower()
+    ensure_inline_content_is_genuine(file_extension, content)
     file_type = None
     for type_, extensions in ALLOWED_FILE_TYPES.items():
         if file_extension in extensions:
@@ -391,6 +394,7 @@ async def upload_voice_message(
     MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
     ALLOWED_FILE_TYPES = [".opus", ".webm"]
 
+    file.filename = safe_filename(file.filename, "voice.webm")
     file_extension = Path(file.filename).suffix.lower()
     if file_extension not in ALLOWED_FILE_TYPES:
         raise HTTPException(status_code=400, detail="Only Opus voice recordings are allowed")
@@ -399,6 +403,7 @@ async def upload_voice_message(
     file_size = len(content)
     if file_size > MAX_FILE_SIZE:
         raise HTTPException(status_code=400, detail="File size exceeds 10 MB limit")
+    ensure_inline_content_is_genuine(file_extension, content)
 
     conn = get_connection()
     cursor = conn.cursor()

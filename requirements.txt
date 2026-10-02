@@ -12,3 +12,4 @@ psycopg[binary]
 ssss
 cryptography
 argon2-cffi
+pillow

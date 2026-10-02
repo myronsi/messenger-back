@@ -14,15 +14,18 @@ from server.media_access import (
 )
 from server.routes.auth import MEDIA_COOKIE_NAME, get_active_session
 from server.tokens import TOKEN_ACCESS, TOKEN_MEDIA
+from server.upload_security import INLINE_EXTENSIONS, content_matches_extension
 
 router = APIRouter()
 
 STATIC_ROOT = Path("static")
-INLINE_SUFFIXES = {
-    ".jpg", ".jpeg", ".png", ".gif", ".webp",
-    ".mp3", ".wav", ".ogg", ".opus", ".webm", ".mp4", ".mov",
-    ".pdf",
-}
+# Defence in depth: even if a script-capable file were rendered, it could not run or reach the API.
+SANDBOX_CSP = "default-src 'none'; sandbox"
+
+
+def _read_head(path: Path) -> bytes:
+    with path.open("rb") as handle:
+        return handle.read(32)
 
 
 def _bearer_token(request: Request) -> str | None:
@@ -88,11 +91,18 @@ def serve_media(file_path: str, request: Request):
         headers["Cache-Control"] = "private, no-cache"
         headers["Vary"] = "Authorization, Cookie"
 
-    as_attachment = request.query_params.get("download") == "1" or path.suffix.lower() not in INLINE_SUFFIXES
+    suffix = path.suffix.lower()
+    # Only render inline when the bytes really are the media type the extension claims (covers legacy uploads).
+    inline_safe = suffix in INLINE_EXTENSIONS and content_matches_extension(suffix, _read_head(path))
+    if not (inline_safe and suffix == ".pdf"):
+        # A sandbox CSP stops browsers' built-in PDF viewer, so PDFs are the one exception.
+        headers["Content-Security-Policy"] = SANDBOX_CSP
+    as_attachment = request.query_params.get("download") == "1" or not inline_safe
     download_name = path.name.split("_", 1)[1] if is_attachment_path(rel_path) and "_" in path.name else path.name
     return FileResponse(
         path,
         headers=headers,
+        media_type=None if inline_safe else "application/octet-stream",
         filename=download_name if as_attachment else None,
         content_disposition_type="attachment" if as_attachment else "inline",
     )

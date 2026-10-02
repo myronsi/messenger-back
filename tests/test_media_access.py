@@ -33,6 +33,8 @@ class MediaAccessTests(PostgresFixture, unittest.TestCase):
         for rel_path, body in {
             "uploads/aaaa_photo.png": b"photo-bytes",
             "uploads/cccc_page.html": b"<script>1</script>",
+            "uploads/dddd_disguised.png": b"<html><script>1</script></html>",
+            "uploads/eeee_real.png": b"\x89PNG\r\n\x1a\n" + b"0" * 24,
             "vm/bbbb.webm": b"voice-bytes",
             "avatars/default.jpg": b"default-avatar",
             "avatars/alice/me.png": b"alice-avatar",
@@ -198,6 +200,21 @@ class MediaAccessTests(PostgresFixture, unittest.TestCase):
         response = self.get("/static/uploads/cccc_page.html", self.alice)
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.headers["content-disposition"].startswith("attachment"))
+
+    def test_html_disguised_as_an_image_is_never_rendered(self):
+        self.send_file(self.bob, "/static/uploads/dddd_disguised.png")
+        response = self.get("/static/uploads/dddd_disguised.png", self.alice)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.headers["content-disposition"].startswith("attachment"))
+        self.assertEqual(response.headers["content-type"], "application/octet-stream")
+        self.assertEqual(response.headers["x-content-type-options"], "nosniff")
+        self.assertIn("sandbox", response.headers["content-security-policy"])
+
+    def test_genuine_images_stay_inline(self):
+        self.send_file(self.bob, "/static/uploads/eeee_real.png")
+        response = self.get("/static/uploads/eeee_real.png", self.alice)
+        self.assertNotIn("attachment", response.headers.get("content-disposition", ""))
+        self.assertEqual(response.headers["content-type"], "image/png")
 
     def test_default_avatar_is_public(self):
         response = self.get("/static/avatars/default.jpg")
