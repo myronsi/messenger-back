@@ -26,7 +26,8 @@ import base64
 import logging
 from server.presence import is_user_online
 from server.time_utils import to_utc_iso, utc_now_iso
-from server.avatar_history import make_avatar_url, record_user_avatar
+from server.avatar_history import record_user_avatar, store_user_avatar
+from server.usernames import normalize_username
 from server.upload_security import AVATAR_MAX_BYTES, process_avatar
 from server.privacy import (
     AVATAR_PROFILE_VISIBILITY_SCOPES,
@@ -517,11 +518,15 @@ def combine_master_key(shares: list[str]):
 
 @router.post("/register", response_model=Token)
 def register(user: RegisterUser, request: Request, response: Response):
+    username = normalize_username(user.username)
     display_name = validate_display_name(user.display_name)
     validate_password(user.password)
     conn = get_connection()
     cursor = conn.cursor()
     try:
+        cursor.execute("SELECT 1 FROM users WHERE LOWER(username) = LOWER(?)", (username,))
+        if cursor.fetchone():
+            raise HTTPException(status_code=400, detail="User already exists")
         master_key = secrets.token_bytes(32)
         master_key_hex = master_key.hex()
         shares = split_master_key(master_key_hex)
@@ -534,7 +539,7 @@ def register(user: RegisterUser, request: Request, response: Response):
         cloud_part_plain = cloud_part
         salt = secrets.token_bytes(16)
         padder = padding.PKCS7(128).padder()
-        padded_data = padder.update(user.username.encode()) + padder.finalize()
+        padded_data = padder.update(username.encode()) + padder.finalize()
         iv = secrets.token_bytes(16)
         cipher = Cipher(algorithms.AES(master_key), modes.CBC(iv), backend=default_backend())
         encryptor = cipher.encryptor()
@@ -544,16 +549,21 @@ def register(user: RegisterUser, request: Request, response: Response):
         now = utc_now_iso()
         cursor.execute(
             "INSERT INTO users (username, display_name, password, bio, created_at, last_seen, encrypted_cloud_part, salt, verification_ciphertext) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (user.username, display_name, password_field, user.bio or "", now, now, cloud_part_plain, salt, verification_ciphertext)
+            (username, display_name, password_field, user.bio or "", now, now, cloud_part_plain, salt, verification_ciphertext)
         )
-        conn.commit()
         user_id = cursor.lastrowid
+        if user_id is None:
+            conn.rollback()
+            raise HTTPException(status_code=400, detail="User already exists")
+        conn.commit()
         ensure_privacy_settings(cursor, user_id)
         cursor.execute("INSERT OR IGNORE INTO user_security_settings (user_id) VALUES (?)", (user_id,))
         session_id, refresh_token, expires_at = create_session(cursor, user_id, request)
         conn.commit()
         set_refresh_cookie(response, refresh_token, expires_at)
         set_media_cookie(response, user_id, session_id, expires_at)
+    except HTTPException:
+        raise
     except sqlite3.IntegrityError:
         conn.close()
         raise HTTPException(status_code=400, detail="User already exists")
@@ -575,7 +585,10 @@ def register(user: RegisterUser, request: Request, response: Response):
 def login(user: LoginUser, request: Request, response: Response):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, password FROM users WHERE username = ?", (user.username,))
+    cursor.execute(
+        "SELECT id, password FROM users WHERE LOWER(username) = LOWER(?) ORDER BY (username = ?) DESC LIMIT 1",
+        (user.username, user.username),
+    )
     db_user = cursor.fetchone()
     if not db_user or not verify_password(db_user[1], user.password):
         conn.close()
@@ -1142,14 +1155,7 @@ async def upload_avatar(file: UploadFile = File(...), current_user: dict = Depen
     content = await file.read(AVATAR_MAX_BYTES + 1)
     image_bytes, extension = process_avatar(content)
 
-    username = current_user["username"]
-    upload_dir = Path(f"static/avatars/{username}")
-    upload_dir.mkdir(parents=True, exist_ok=True)
-
-    filename = f"{secrets.token_hex(16)}{extension}"
-    (upload_dir / filename).write_bytes(image_bytes)
-
-    avatar_url = make_avatar_url(username, filename)
+    avatar_url = store_user_avatar(current_user["id"], image_bytes, extension)
     record_user_avatar(current_user["id"], avatar_url)
     return {"avatar_url": avatar_url}
 
@@ -1203,7 +1209,11 @@ def recover_password(recovery: RecoveryRequest):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute("SELECT id, encrypted_cloud_part, salt, verification_ciphertext FROM users WHERE username = ?", (recovery.username,))
+        cursor.execute(
+            "SELECT id, encrypted_cloud_part, salt, verification_ciphertext, username FROM users "
+            "WHERE LOWER(username) = LOWER(?) ORDER BY (username = ?) DESC LIMIT 1",
+            (recovery.username, recovery.username),
+        )
         user = cursor.fetchone()
         if not user:
             logger.warning("Recovery requested for an unknown user")
@@ -1228,7 +1238,7 @@ def recover_password(recovery: RecoveryRequest):
         except Exception as e:
             logger.error("Recovery verification could not be decrypted")
             raise HTTPException(status_code=400, detail="Invalid parts provided")
-        if decrypted_username != recovery.username:
+        if decrypted_username != user[4]:
             logger.warning("Recovery verification mismatch: user_id=%s", user[0])
             raise HTTPException(status_code=400, detail="Invalid parts provided")
         recovery_token = create_recovery_token(cursor, user[0])

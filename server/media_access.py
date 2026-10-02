@@ -1,5 +1,6 @@
 """Authorization rules for files under /static (chat attachments, voice messages, avatars)."""
 import json
+import re
 from pathlib import PurePosixPath
 
 from server.chat_summary import message_visible_to
@@ -105,9 +106,20 @@ def can_access_attachment(cursor, user_id: int, rel_path: str) -> bool:
     return any(message_visible_to(message, user_id) for message in cursor.fetchall())
 
 
-def can_access_user_avatar(cursor, viewer_id: int, username: str) -> bool:
-    cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
+def _avatar_owner(cursor, directory: str):
+    """Avatar directories are the owner's id ('id-7'); older uploads live in a directory named after the username."""
+    cursor.execute("SELECT id FROM users WHERE username = ?", (directory,))
     owner = cursor.fetchone()
+    if not owner:
+        by_id = re.fullmatch(r"id-(\d+)", directory)
+        if by_id:
+            cursor.execute("SELECT id FROM users WHERE id = ?", (int(by_id.group(1)),))
+            owner = cursor.fetchone()
+    return owner
+
+
+def can_access_user_avatar(cursor, viewer_id: int, directory: str) -> bool:
+    owner = _avatar_owner(cursor, directory)
     if not owner:
         return False
     if owner["id"] == viewer_id:
