@@ -6,6 +6,8 @@ from collections.abc import Sequence
 import psycopg
 from psycopg.rows import dict_row
 
+from server.recovery_shares import encrypt_legacy_cloud_parts
+
 logger = logging.getLogger(__name__)
 
 DATABASE_URL = os.environ.get(
@@ -293,6 +295,7 @@ def setup_database() -> None:
         from server.media_access import backfill_message_attachments
 
         backfill_message_attachments(cursor)
+        encrypt_legacy_cloud_parts(cursor)
         conn.commit()
     finally:
         conn.close()

@@ -5,6 +5,7 @@ from jose import JWTError
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 import os
+import re
 import secrets
 import hashlib
 import hmac
@@ -28,6 +29,8 @@ from server.presence import is_user_online
 from server.time_utils import to_utc_iso, utc_now_iso
 from server.avatar_history import record_user_avatar, store_user_avatar
 from server.usernames import normalize_username
+from server import rate_limit
+from server.recovery_shares import decrypt_cloud_part, encrypt_cloud_part
 from server.upload_security import AVATAR_MAX_BYTES, process_avatar
 from server.privacy import (
     AVATAR_PROFILE_VISIBILITY_SCOPES,
@@ -125,7 +128,7 @@ class Token(BaseModel):
 class RecoveryRequest(BaseModel):
     username: str
     part1: str
-    part2: str
+    part2: Optional[str] = None
 
 class ResetPasswordRequest(BaseModel):
     recovery_token: str
@@ -173,6 +176,15 @@ def hash_password_with_salt(password: str) -> str:
     pwd_salm_b64 = base64.b64encode(pwd_salm).decode()
     hashed_password_b64 = base64.b64encode(hashed_password).decode()
     return f"{pwd_salm_b64}:{hashed_password_b64}"
+
+_DUMMY_PASSWORD_HASH = None
+
+def _dummy_password_hash() -> str:
+    # Lets logins for unknown usernames spend the same hashing time as real ones.
+    global _DUMMY_PASSWORD_HASH
+    if _DUMMY_PASSWORD_HASH is None:
+        _DUMMY_PASSWORD_HASH = hash_password_with_salt(secrets.token_urlsafe(16))
+    return _DUMMY_PASSWORD_HASH
 
 def verify_password(stored_password: str, provided_password: str) -> bool:
     if stored_password.startswith("argon2$"):
@@ -536,7 +548,7 @@ def register(user: RegisterUser, request: Request, response: Response):
         device_part = shares[0]
         cloud_part = shares[1]
         qr_part = shares[2]
-        cloud_part_plain = cloud_part
+        cloud_part_stored = encrypt_cloud_part(cloud_part)
         salt = secrets.token_bytes(16)
         padder = padding.PKCS7(128).padder()
         padded_data = padder.update(username.encode()) + padder.finalize()
@@ -549,7 +561,7 @@ def register(user: RegisterUser, request: Request, response: Response):
         now = utc_now_iso()
         cursor.execute(
             "INSERT INTO users (username, display_name, password, bio, created_at, last_seen, encrypted_cloud_part, salt, verification_ciphertext) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (username, display_name, password_field, user.bio or "", now, now, cloud_part_plain, salt, verification_ciphertext)
+            (username, display_name, password_field, user.bio or "", now, now, cloud_part_stored, salt, verification_ciphertext)
         )
         user_id = cursor.lastrowid
         if user_id is None:
@@ -583,6 +595,10 @@ def register(user: RegisterUser, request: Request, response: Response):
 
 @router.post("/login", response_model=Token)
 def login(user: LoginUser, request: Request, response: Response):
+    ip_key = rate_limit.client_ip(request)
+    user_key = user.username.strip().lower()
+    rate_limit.enforce(rate_limit.LOGIN_IP, ip_key)
+    rate_limit.enforce(rate_limit.LOGIN_USER, user_key)
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
@@ -590,9 +606,14 @@ def login(user: LoginUser, request: Request, response: Response):
         (user.username, user.username),
     )
     db_user = cursor.fetchone()
-    if not db_user or not verify_password(db_user[1], user.password):
+    stored_hash = db_user[1] if db_user else _dummy_password_hash()
+    password_ok = verify_password(stored_hash, user.password)
+    if not db_user or not password_ok:
         conn.close()
+        rate_limit.LOGIN_IP.hit(ip_key)
+        rate_limit.LOGIN_USER.hit(user_key)
         raise HTTPException(status_code=401, detail="Incorrect username or password")
+    rate_limit.LOGIN_USER.reset(user_key)
     if password_needs_rehash(db_user["password"]):
         cursor.execute("UPDATE users SET password = ? WHERE id = ?", (hash_password_with_salt(user.password), db_user["id"]))
         conn.commit()
@@ -617,6 +638,8 @@ def login(user: LoginUser, request: Request, response: Response):
 
 @router.post("/login/2fa", response_model=Token)
 def login_two_factor(payload: TwoFactorLoginRequest, request: Request, response: Response):
+    ip_key = rate_limit.client_ip(request)
+    rate_limit.enforce(rate_limit.TWO_FACTOR_IP, ip_key)
     conn = get_connection()
     cursor = conn.cursor()
     try:
@@ -624,11 +647,17 @@ def login_two_factor(payload: TwoFactorLoginRequest, request: Request, response:
         # Persist the attempt before verifying so failed guesses always count towards the limit.
         conn.commit()
         if not attempt:
+            rate_limit.TWO_FACTOR_IP.hit(ip_key)
             raise HTTPException(status_code=401, detail="Invalid or expired login challenge")
         user_id, challenge_hash = attempt
+        user_key = str(user_id)
+        rate_limit.enforce(rate_limit.TWO_FACTOR_USER, user_key)
         if not verify_two_factor_or_recovery(cursor, user_id, payload.code):
             conn.rollback()
+            rate_limit.TWO_FACTOR_IP.hit(ip_key)
+            rate_limit.TWO_FACTOR_USER.hit(user_key)
             raise HTTPException(status_code=401, detail="Invalid verification code")
+        rate_limit.TWO_FACTOR_USER.reset(user_key)
         tokens.finish_two_factor_challenge(cursor, challenge_hash)
         session_id, refresh_token, expires_at = create_session(cursor, user_id, request)
         conn.commit()
@@ -1203,9 +1232,20 @@ async def delete_account(current_user: dict = Depends(get_current_user)):
         conn.close()
     return {"message": "Account deleted"}
 
+SHARE_PATTERN = re.compile(r"^[0-9]{1,3}-[0-9]{1,3}-[0-9a-fA-F]{1,128}$")
+RECOVERY_FAILED_DETAIL = "Recovery failed. Check the username and the recovery part."
+
+def _recovery_failed() -> HTTPException:
+    return HTTPException(status_code=400, detail=RECOVERY_FAILED_DETAIL)
+
 @router.post("/recover")
-def recover_password(recovery: RecoveryRequest):
-    logger.info("Recovery requested")
+def recover_password(recovery: RecoveryRequest, request: Request):
+    ip_key = rate_limit.client_ip(request)
+    user_key = recovery.username.strip().lower()
+    rate_limit.enforce(rate_limit.RECOVER_IP, ip_key)
+    rate_limit.enforce(rate_limit.RECOVER_USER, user_key)
+    rate_limit.RECOVER_IP.hit(ip_key)
+    rate_limit.RECOVER_USER.hit(user_key)
     conn = get_connection()
     cursor = conn.cursor()
     try:
@@ -1215,16 +1255,18 @@ def recover_password(recovery: RecoveryRequest):
             (recovery.username, recovery.username),
         )
         user = cursor.fetchone()
-        if not user:
-            logger.warning("Recovery requested for an unknown user")
-            raise HTTPException(status_code=404, detail="User not found")
-        shares = [recovery.part1, recovery.part2]
+        part1 = recovery.part1.strip()
+        part2 = recovery.part2.strip() if recovery.part2 else None
+        if not SHARE_PATTERN.match(part1) or (part2 is not None and not SHARE_PATTERN.match(part2)):
+            raise _recovery_failed()
+        # The user supplies one share; the server adds its own share unless a second user-held one is given.
+        second_share = part2 or (decrypt_cloud_part(user[1]) if user else None) or part1
         try:
-            master_key_hex = combine_master_key(shares)
-            master_key = bytes.fromhex(master_key_hex)
-        except Exception as e:
-            logger.error("Failed to combine recovery shares")
-            raise HTTPException(status_code=400, detail="Invalid parts provided")
+            master_key = bytes.fromhex(combine_master_key([part1, second_share]))
+        except Exception:
+            raise _recovery_failed()
+        if not user:
+            raise _recovery_failed()
         try:
             verification_data = base64.b64decode(user[3])
             iv = verification_data[:16]
@@ -1235,26 +1277,28 @@ def recover_password(recovery: RecoveryRequest):
             unpadder = padding.PKCS7(128).unpadder()
             plaintext = unpadder.update(padded_plaintext) + unpadder.finalize()
             decrypted_username = plaintext.decode()
-        except Exception as e:
-            logger.error("Recovery verification could not be decrypted")
-            raise HTTPException(status_code=400, detail="Invalid parts provided")
-        if decrypted_username != user[4]:
+        except Exception:
+            raise _recovery_failed()
+        if not hmac.compare_digest(decrypted_username.encode(), str(user[4]).encode()):
             logger.warning("Recovery verification mismatch: user_id=%s", user[0])
-            raise HTTPException(status_code=400, detail="Invalid parts provided")
+            raise _recovery_failed()
         recovery_token = create_recovery_token(cursor, user[0])
         conn.commit()
-        logger.info(f"Recovery token generated for user ID {user[0]}")
+        rate_limit.RECOVER_USER.reset(user_key)
+        logger.info("Recovery token generated for user ID %s", user[0])
         return {"message": "Password recovery successful.", "recovery_token": recovery_token}
     except HTTPException:
         raise
     except Exception as e:
         logger.error("Unexpected error during recovery: %s", type(e).__name__)
-        raise HTTPException(status_code=500, detail=f"Error during password recovery: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error during password recovery")
     finally:
         conn.close()
 
 @router.post("/reset-password")
-def reset_password(request: ResetPasswordRequest):
+def reset_password(request: ResetPasswordRequest, http_request: Request):
+    ip_key = rate_limit.client_ip(http_request)
+    rate_limit.enforce(rate_limit.RESET_IP, ip_key)
     validate_password(request.new_password)
     conn = get_connection()
     cursor = conn.cursor()
@@ -1262,6 +1306,7 @@ def reset_password(request: ResetPasswordRequest):
         user_id = tokens.consume_recovery_token(cursor, request.recovery_token)
         if user_id is None:
             conn.rollback()
+            rate_limit.RESET_IP.hit(ip_key)
             raise HTTPException(status_code=401, detail="Invalid or expired recovery token")
         password_field = hash_password_with_salt(request.new_password)
         cursor.execute("UPDATE users SET password = ? WHERE id = ?", (password_field, user_id))
@@ -1270,6 +1315,7 @@ def reset_password(request: ResetPasswordRequest):
             (utc_now_iso(), user_id),
         )
         conn.commit()
+        logger.warning("Password reset via recovery completed: user_id=%s ip=%s; all sessions revoked", user_id, ip_key)
         return {"message": "Password reset successful."}
     except HTTPException:
         raise
@@ -1278,17 +1324,3 @@ def reset_password(request: ResetPasswordRequest):
         raise HTTPException(status_code=500, detail=f"Error resetting password: {str(e)}")
     finally:
         conn.close()
-
-@router.get("/get-cloud-part")
-async def get_cloud_part(username: str):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT encrypted_cloud_part FROM users WHERE LOWER(username) = LOWER(?)", (username,))
-    row = cursor.fetchone()
-    conn.close()
-    if not row:
-        raise HTTPException(status_code=404, detail="User not found")
-    if not row[0]:
-        logger.warning("encrypted_cloud_part is missing for a user")
-        raise HTTPException(status_code=404, detail="Cloud part not found")
-    return {"encrypted_cloud_part": row[0]}
