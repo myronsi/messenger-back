@@ -4,6 +4,7 @@ from server.database import get_connection
 from server.routes.auth import get_current_user
 from server.presence import is_user_online
 from server.time_utils import to_utc_iso
+from server.usernames import escape_like
 from server.avatar_history import get_avatar_history
 from server.privacy import DEFAULT_AVATAR, can_target_be_searched, get_privacy_settings, serialize_user, visibility_allows
 import os
@@ -127,8 +128,8 @@ async def search_users(q: str, current_user: dict = Depends(get_current_user)):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        like_q = f"%{q}%"
-        cursor.execute("SELECT id, username, display_name, avatar_url, bio, created_at, last_seen FROM users WHERE LOWER(username) LIKE LOWER(?) LIMIT 20", (like_q,))
+        like_q = f"%{escape_like(q)}%"
+        cursor.execute("SELECT id, username, display_name, avatar_url, bio, created_at, last_seen FROM users WHERE LOWER(username) LIKE LOWER(?) ESCAPE '\\' LIMIT 20", (like_q,))
         rows = cursor.fetchall()
         results = []
         for row in rows:

@@ -72,7 +72,7 @@ class UploadRouteTests(PostgresFixture, unittest.TestCase):
         from server.routes.auth import upload_avatar
 
         result = self.avatar(upload_avatar, "<svg onload=x>.svg", make_image("PNG"), current_user=self.user)
-        saved = next(Path("static/avatars/alice").iterdir())
+        saved = next(Path(f"static/avatars/id-{self.alice}").iterdir())
         self.assertEqual(saved.suffix, ".jpg")
         self.assertTrue(saved.read_bytes().startswith(b"\xff\xd8\xff"))
         self.assertTrue(result["avatar_url"].endswith(saved.name))
@@ -89,7 +89,7 @@ class UploadRouteTests(PostgresFixture, unittest.TestCase):
             with self.assertRaises(HTTPException, msg=name) as raised:
                 self.avatar(upload_avatar, name, body, current_user=self.user)
             self.assertEqual(raised.exception.status_code, 400)
-        self.assertFalse(Path("static/avatars/alice").exists())
+        self.assertFalse(Path(f"static/avatars/id-{self.alice}").exists())
 
     def test_group_avatar_is_validated_and_reencoded(self):
         from server.routes import groups
