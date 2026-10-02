@@ -42,6 +42,8 @@ jobs:
       - name: Install system tools used by the backend
         run: sudo apt-get update && sudo apt-get install --no-install-recommends -y ffmpeg ssss
       - run: pip install -r requirements.txt
+      # Required by starlette's TestClient; used by tests only, not shipped in the image.
+      - run: pip install httpx2
       - run: python -m unittest discover -s tests -v
 
   docker-build:
