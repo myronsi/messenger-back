@@ -149,7 +149,7 @@ async def search_users(q: str, current_user: dict = Depends(get_current_user)):
     cursor = conn.cursor()
     try:
         like_q = f"%{q}%"
-        cursor.execute("SELECT id, username, display_name, avatar_url, bio, created_at, last_seen FROM users WHERE username LIKE ? LIMIT 20", (like_q,))
+        cursor.execute("SELECT id, username, display_name, avatar_url, bio, created_at, last_seen FROM users WHERE LOWER(username) LIKE LOWER(?) LIMIT 20", (like_q,))
         rows = cursor.fetchall()
         results = []
         for row in rows:
