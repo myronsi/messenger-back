@@ -3,7 +3,7 @@ from pydantic import BaseModel
 import json
 from server.database import get_connection
 from server.routes.auth import get_current_user
-from server.websocket import manager
+from server.websocket import manager, broadcast_to_chat_list
 from server.presence import is_user_online
 from server.time_utils import to_utc_iso, utc_now_iso
 from server.chat_summary import get_chat_unread_summary, message_visible_to
@@ -138,8 +138,8 @@ async def create_chat(chat: ChatCreate, current_user: dict = Depends(get_current
                 "user2_avatar_url": DEFAULT_AVATAR
             }
         }
-        await manager.broadcast(0, chat_data)
-        logger.info(f"Sent chat_created notification for chat_id={chat_id} to chat_id=0")
+        await broadcast_to_chat_list({user1["id"], user2["id"]}, chat_data)
+        logger.info(f"Sent chat_created notification for chat_id={chat_id} to its participants")
 
         # If an initial message was provided, save it and broadcast to the chat
         initial_msg_id = None
@@ -496,8 +496,8 @@ async def delete_chat(chat_id: int, current_user: dict = Depends(get_current_use
             "type": "chat_deleted",
             "chat_id": chat_id
         }
-        await manager.broadcast(0, message)
-        logger.info(f"Sent chat_deleted notification for chat_id={chat_id} to chat_id=0")
+        await broadcast_to_chat_list({chat["user1_id"], chat["user2_id"]}, message)
+        logger.info(f"Sent chat_deleted notification for chat_id={chat_id} to its participants")
 
         return {"message": "Chat deleted successfully"}
     except HTTPException:

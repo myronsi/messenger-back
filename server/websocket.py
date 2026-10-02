@@ -215,6 +215,12 @@ async def send_chat_list_message(cursor, chat_id: int, sender_id: int, message_i
     await manager.broadcast_personalized(0, build)
 
 
+async def broadcast_to_chat_list(user_ids, message: dict):
+    """Send an event only to the chat-list sockets of the given users."""
+    allowed = set(user_ids)
+    await manager.broadcast_personalized(0, lambda recipient_id: message if recipient_id in allowed else None)
+
+
 async def broadcast_presence_update(cursor, user_id: int, username: str, is_online: bool, last_seen: str | None):
     cursor.execute("SELECT id, username, display_name, avatar_url, bio, last_seen FROM users WHERE id = ?", (user_id,))
     target_user = cursor.fetchone()
@@ -339,6 +345,11 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                 except (json.JSONDecodeError, KeyError) as e:
                     await websocket.send_text(json.dumps({"type": "error", "message": "Invalid message format"}))
                     logger.error(f"JSON parsing error: {e}")
+                    continue
+
+                # The chat-list socket (chat 0) is receive-only: clients must not push events through it
+                if chat_id == 0:
+                    await websocket.send_text(json.dumps({"type": "error", "message": "This connection is read-only"}))
                     continue
 
                 if message_type == "message":
@@ -740,11 +751,6 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                         "reader_user_id": user_id,
                         "timestamp": timestamp,
                     })
-
-                elif message_type == "group_created":
-                    if chat_id == 0:
-                        logger.info(f"Received group_created for chat {parsed_data.get('chat_id')}")
-                        await manager.broadcast(chat_id, parsed_data)
 
         except WebSocketDisconnect:
             logger.info(f"WebSocket disconnected: user_id={user_id}, chat_id={chat_id}")
