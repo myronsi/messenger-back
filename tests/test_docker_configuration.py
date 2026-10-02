@@ -17,11 +17,24 @@ class DockerConfigurationTests(unittest.TestCase):
         self.assertIn("ffmpeg ssss", dockerfile)
         self.assertIn("COPY static ./static", dockerfile)
         self.assertIn("COPY static /opt/default-static", dockerfile)
-        self.assertIn(
-            "cp -n /opt/default-static/avatars/default.jpg /app/static/avatars/default.jpg",
-            dockerfile,
-        )
+        for name in ("default.jpg", "deleted.jpg", "group.png"):
+            self.assertIn(f"/opt/default-static/avatars/{name}", dockerfile)
+        self.assertIn("cp -f", dockerfile)
         self.assertIn("exec uvicorn server.main:app", dockerfile)
+
+    def test_builtin_avatars_are_valid_images(self):
+        from server.media_access import PUBLIC_FILES
+
+        signatures = {
+            ".jpg": b"\xff\xd8\xff",
+            ".png": b"\x89PNG\r\n\x1a\n",
+        }
+        for relative in sorted(PUBLIC_FILES):
+            path = Path("static") / relative
+            self.assertTrue(path.is_file(), f"{path} is missing")
+            data = path.read_bytes()
+            self.assertGreater(len(data), 2000, f"{path} looks like a stub")
+            self.assertTrue(data.startswith(signatures[path.suffix]), f"{path} has a wrong signature")
 
 
 if __name__ == "__main__":
