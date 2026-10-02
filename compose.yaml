@@ -13,6 +13,8 @@ services:
       # Set when a reverse proxy serves the API under a prefix such as /api (see README).
       COOKIE_PATH_PREFIX: ${COOKIE_PATH_PREFIX:-}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-}
       DATABASE_URL: postgresql://messenger:messenger@postgres:5432/messenger
     volumes:
       - messenger_static:/app/static
