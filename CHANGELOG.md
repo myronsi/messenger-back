@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.2](https://github.com/myronsi/messenger-back/compare/v0.4.1...v0.4.2) (2026-10-02)
+
+
+### Bug Fixes
+
+* scope session cookies to the proxy path so media and refresh work behind /api ([554dcfe](https://github.com/myronsi/messenger-back/commit/554dcfe454f716a159299fbfe084676ac8ac363a))
+* scope session cookies to the proxy path so media and refresh work behind /api ([e07c146](https://github.com/myronsi/messenger-back/commit/e07c1465a56ef4cf2532eddc7a8f916fd467708f))
+
 ## [0.4.1](https://github.com/myronsi/messenger-back/compare/v0.4.0...v0.4.1) (2026-10-02)
 
 
