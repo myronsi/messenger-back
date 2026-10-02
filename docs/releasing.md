@@ -13,7 +13,7 @@ The backend always deploys first and stays compatible with the previous frontend
 1. All PRs for the release are merged to `master` with Conventional Commit titles and CI is green.
 2. Check that every issue in the milestone is closed or moved to the next milestone.
 3. Release: create the tag and the GitHub Release (`vX.Y.Z`, notes from `CHANGELOG.md`). Once release-please is set up (MSGC-58) merging its release PR does this.
-4. Deploy: happens automatically after the release (deploy.yml, environment `production`). It uploads `compose.yaml`, backs up the database with `pg_dump` (the last 10 backups are kept in `backups/`), pulls `ghcr.io/myronsi/messenger-back:vX.Y.Z`, restarts the stack and checks `http://127.0.0.1:8000/`. If the check fails the previous image is restored automatically and the workflow fails.
+4. Deploy: happens automatically after the release: the release workflow moves the `edge` branch to the release commit and dispatches `deploy.yml` on it (environment `production` only accepts deployments from `edge`). It uploads `compose.yaml`, backs up the database with `pg_dump` (the last 10 backups are kept in `backups/`), pulls `ghcr.io/myronsi/messenger-back:vX.Y.Z`, restarts the stack and checks `http://127.0.0.1:8000/`. If the check fails the previous image is restored automatically and the workflow fails.
 5. Check the version shown in the app (Profile → About) and the logs after the deployment.
 
 ## Starting a new release train
@@ -22,13 +22,13 @@ Add a `Release-As: X.Y.0` footer to a commit so that `MAJOR.MINOR` matches the f
 
 ## Rollback
 
-1. Run the **Deploy** workflow manually (Actions → Deploy → Run workflow) with the previous tag, for example `v0.5.0`.
+1. Run the **Deploy** workflow manually (Actions → Deploy → Run workflow, branch `edge`) with the previous tag, for example `v0.5.0`.
 2. If the release changed the database schema, restore the backup made before the deployment or apply the down migration.
 3. Fix forward with a `fix:` commit; never move or delete a published tag.
 
 ## CI/CD setup
 
-Workflows in `.github/workflows/`: `ci.yml` (tests against PostgreSQL and a Docker build on every PR), `pr-title.yml`, `release.yml` (release-please, GHCR image `vX.Y.Z` + `latest`, then deploy) and `deploy.yml` (SSH deploy, also runnable manually for rollbacks).
+Workflows in `.github/workflows/`: `ci.yml` (tests against PostgreSQL and a Docker build on every PR), `pr-title.yml`, `release.yml` (release-please, GHCR image `vX.Y.Z` + `latest`, then promote to `edge` and deploy) and `deploy.yml` (SSH deploy, also runnable manually for rollbacks).
 
 One-time setup:
 
