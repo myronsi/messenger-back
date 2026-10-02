@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 from server.database import get_connection
 from server.routes.auth import get_current_user
-from server.websocket import manager
+from server.websocket import manager, broadcast_to_chat_list, get_chat_participant_ids
 from server.chat_summary import get_chat_unread_summary
 from server.privacy import PERMISSION_APPROVAL_REQUIRED, PERMISSION_DENIED, group_invite_permission, serialize_user
 from server.routes.requests import create_group_invite_request
@@ -206,7 +206,13 @@ async def _broadcast_group_update(cursor, chat_id: int, removed_username: str | 
     payload = {"type": "group_updated", "group": group}
     if removed_username:
         payload["removed_username"] = removed_username
-    await manager.broadcast(0, {"type": "group_updated", "group": group})
+    audience = get_chat_participant_ids(cursor, chat_id)
+    if removed_username:
+        cursor.execute("SELECT id FROM users WHERE username = ?", (removed_username,))
+        removed = cursor.fetchone()
+        if removed:
+            audience.add(removed["id"])
+    await broadcast_to_chat_list(audience, {"type": "group_updated", "group": group})
     await manager.broadcast(chat_id, payload)
     return group
 
@@ -290,8 +296,8 @@ async def create_group(group: GroupCreate, current_user: dict = Depends(get_curr
                 "pending_invites": list(set(pending_invite_usernames)),
             },
         }
-        await manager.broadcast(0, message)
-        logger.info(f"Sent group_created notification for chat_id={chat_id} to chat_id=0")
+        await broadcast_to_chat_list(set(participant_ids), message)
+        logger.info(f"Sent group_created notification for chat_id={chat_id} to its members")
 
         return {
             "chat_id": chat_id,
@@ -652,6 +658,7 @@ async def delete_group(chat_id: int, current_user: dict = Depends(get_current_us
 
     try:
         _ensure_role(cursor, chat_id, current_user["id"], {"owner"}, "Only the group owner can delete the group")
+        member_ids = get_chat_participant_ids(cursor, chat_id)
 
         cursor.execute("DELETE FROM participants WHERE chat_id = ?", (chat_id,))
         cursor.execute("DELETE FROM messages WHERE chat_id = ?", (chat_id,))
@@ -661,7 +668,7 @@ async def delete_group(chat_id: int, current_user: dict = Depends(get_current_us
         conn.commit()
 
         message = {"type": "chat_deleted", "chat_id": chat_id}
-        await manager.broadcast(0, message)
+        await broadcast_to_chat_list(member_ids, message)
         await manager.broadcast(chat_id, message)
         logger.info(f"Sent chat_deleted notification for chat_id={chat_id}")
 

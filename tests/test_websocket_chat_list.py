@@ -142,6 +142,67 @@ class ChatListIsolationTests(PostgresFixture, unittest.TestCase):
                     event = self.next_presence_from_others(carol_list, "carol")
                     self.assertEqual(event["username"], "dave")
                     self.assertTrue(event["is_online"])
+
+    def test_chat_list_socket_is_receive_only(self):
+        with self.list_socket("carol") as carol_list, \
+                self.list_socket("alice") as alice_list, \
+                self.room_socket("bob", self.chat_id) as bob_room:
+            for payload in (
+                {"type": "message", "content": "injected"},
+                {"type": "group_created", "chat_id": self.chat_id, "name": "fake"},
+            ):
+                self.send(carol_list, **payload)
+                self.assertEqual(self.receive(carol_list, "error")["message"], "This connection is read-only")
+
+            # Nothing injected reached alice: her next event is bob's real message
+            self.send(bob_room, type="message", content="real")
+            event = self.receive(alice_list, "chat_list_message", "group_created")
+            self.assertEqual(event["type"], "chat_list_message")
+            self.assertEqual(event["last_message"]["content"], "real")
+
+    def test_broadcast_to_chat_list_only_reaches_listed_users(self):
+        from server.websocket import broadcast_to_chat_list
+
+        with self.list_socket("alice") as alice_list, \
+                self.list_socket("carol") as carol_list, \
+                self.room_socket("carol", self.other_chat_id) as carol_room:
+            # Flush presence events produced by the connections above
+            self.send(carol_room, type="message", content="sync")
+            self.receive(carol_list, "chat_list_message")
+
+            self.client.portal.call(broadcast_to_chat_list, {self.alice, self.bob}, {"type": "chat_created", "chat_id": 99})
+            self.assertEqual(self.receive(alice_list, "chat_created")["chat_id"], 99)
+
+            self.send(carol_room, type="message", content="after")
+            event = self.receive(carol_list, "chat_created", "chat_list_message")
+            self.assertEqual(event["type"], "chat_list_message")
+
+    def test_http_notifications_are_delivered_only_to_members(self):
+        from server.routes.messages import ForwardMessageRequest, forward_message
+
+        message_id = self.add_message("forward me", sender_id=self.alice)
+        delivered = []
+
+        async def broadcast_personalized(chat_id, build_message):
+            for user_id in (self.alice, self.bob, self.carol, self.dave):
+                payload = build_message(user_id)
+                if chat_id == 0 and payload is not None:
+                    delivered.append((user_id, payload["type"], payload.get("chat_id")))
+
+        async def forward():
+            return await forward_message(
+                ForwardMessageRequest(source_message_id=message_id, target_chat_ids=[self.chat_id]),
+                {"id": self.alice, "display_name": "Alice", "username": "alice"},
+            )
+
+        with patch("server.websocket.manager.broadcast_personalized", broadcast_personalized), \
+                patch("server.websocket.manager.send_to_user", side_effect=AssertionError("unexpected direct send")):
+            self.client.portal.call(forward)
+
+        recipients = {user_id for user_id, kind, chat_id in delivered if kind == "chat_list_message"}
+        self.assertTrue(recipients)
+        self.assertTrue(recipients <= {self.alice, self.bob})
+
 
 if __name__ == "__main__":
     unittest.main()

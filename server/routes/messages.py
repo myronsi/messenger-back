@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, Depends, status, UploadFile, File,
 from pydantic import BaseModel
 from server.database import get_connection
 from server.routes.auth import get_current_user
-from server.websocket import manager
+from server.websocket import manager, send_chat_list_message
 from server.time_utils import to_utc_iso, utc_now_iso
 from server.chat_summary import (
     deleted_for_user_ids,
@@ -369,20 +369,7 @@ async def upload_file(
             },
             "timestamp": timestamp,
         })
-        if undelivered_to:
-            await manager.send_to_user(current_user["id"], {
-                "type": "chat_list_message",
-                "chat_id": chat_id,
-                "sender_id": current_user["id"],
-                "last_message": get_message_summary(cursor, message_id, current_user["id"]),
-            })
-        else:
-            await manager.broadcast(0, {
-                "type": "chat_list_message",
-                "chat_id": chat_id,
-                "sender_id": current_user["id"],
-                "last_message": get_message_summary(cursor, message_id),
-            })
+        await send_chat_list_message(cursor, chat_id, current_user["id"], message_id)
         logger.info(f"File uploaded and broadcasted to chat {chat_id}")
 
         return {"message": "File uploaded successfully", "file_url": file_url}
@@ -486,20 +473,7 @@ async def upload_voice_message(
             },
             "timestamp": timestamp,
         })
-        if undelivered_to:
-            await manager.send_to_user(current_user["id"], {
-                "type": "chat_list_message",
-                "chat_id": chat_id,
-                "sender_id": current_user["id"],
-                "last_message": get_message_summary(cursor, message_id, current_user["id"]),
-            })
-        else:
-            await manager.broadcast(0, {
-                "type": "chat_list_message",
-                "chat_id": chat_id,
-                "sender_id": current_user["id"],
-                "last_message": get_message_summary(cursor, message_id),
-            })
+        await send_chat_list_message(cursor, chat_id, current_user["id"], message_id)
         logger.info(f"Voice message uploaded and broadcasted to chat {chat_id}")
 
         return {"message": "Voice message uploaded successfully", "file_url": file_url}
@@ -645,20 +619,7 @@ async def forward_message(
                 }
 
             await manager.broadcast_personalized(target_chat_id, build_forwarded_message)
-            if undelivered_to:
-                await manager.send_to_user(current_user["id"], {
-                    "type": "chat_list_message",
-                    "chat_id": target_chat_id,
-                    "sender_id": current_user["id"],
-                    "last_message": get_message_summary(cursor, new_message_id, current_user["id"]),
-                })
-            else:
-                await manager.broadcast(0, {
-                    "type": "chat_list_message",
-                    "chat_id": target_chat_id,
-                    "sender_id": current_user["id"],
-                    "last_message": get_message_summary(cursor, new_message_id),
-                })
+            await send_chat_list_message(cursor, target_chat_id, current_user["id"], new_message_id)
 
         return {"forwarded": forwarded, "failed": failed}
     except HTTPException:
