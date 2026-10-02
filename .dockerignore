@@ -9,5 +9,7 @@ static
 !static/
 !static/avatars/
 !static/avatars/default.jpg
+!static/avatars/deleted.jpg
+!static/avatars/group.png
 plan.txt
 start.sh

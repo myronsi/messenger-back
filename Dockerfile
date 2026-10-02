@@ -15,11 +15,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY server ./server
 COPY static ./static
 
-# Keep an immutable copy so the fallback avatar is restored when /app/static is a volume.
+# Keep an immutable copy so the built-in avatars are restored when /app/static is a volume.
 COPY static /opt/default-static
 
 RUN mkdir -p /app/static
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "mkdir -p /app/static/avatars && cp -n /opt/default-static/avatars/default.jpg /app/static/avatars/default.jpg && exec uvicorn server.main:app --host 0.0.0.0 --port 8000"]
+CMD ["sh", "-c", "mkdir -p /app/static/avatars && cp -f /opt/default-static/avatars/default.jpg /opt/default-static/avatars/deleted.jpg /opt/default-static/avatars/group.png /app/static/avatars/ && exec uvicorn server.main:app --host 0.0.0.0 --port 8000"]
