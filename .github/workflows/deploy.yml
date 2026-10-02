@@ -1,12 +1,8 @@
 name: Deploy
 
-# Runs after every release, or manually to deploy or roll back to any released tag.
+# Dispatched on the edge branch by the release workflow (the production environment only
+# accepts deployments from edge). Run it manually, with branch edge, to roll back to a tag.
 on:
-  workflow_call:
-    inputs:
-      tag:
-        required: true
-        type: string
   workflow_dispatch:
     inputs:
       tag:
