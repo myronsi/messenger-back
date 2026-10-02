@@ -17,6 +17,7 @@
 !tests/test_auth_tokens.py
 !tests/test_log_hygiene.py
 !tests/test_media_access.py
+!tests/test_cookie_paths.py
 !static/
 !static/avatars/
 !static/avatars/default.jpg

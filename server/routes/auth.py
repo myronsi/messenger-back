@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from jose import JWTError
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+import os
 import secrets
 import hashlib
 import hmac
@@ -57,7 +58,22 @@ RECOVERY_TOKEN_EXPIRE_MINUTES = 5
 TWO_FACTOR_CHALLENGE_EXPIRE_MINUTES = 5
 REFRESH_COOKIE_NAME = "refresh_token"
 MEDIA_COOKIE_NAME = "media_session"
+REFRESH_COOKIE_PATH = "/auth"
 MEDIA_COOKIE_PATH = "/static"
+
+def cookie_path(path: str) -> str:
+    """Behind a reverse proxy that mounts the API under a prefix (e.g. /api) browsers only send a
+    cookie whose Path includes that prefix, so COOKIE_PATH_PREFIX must match the proxy location."""
+    prefix = os.environ.get("COOKIE_PATH_PREFIX", "").strip().rstrip("/")
+    if prefix and not prefix.startswith("/"):
+        prefix = "/" + prefix
+    return prefix + path
+
+
+def cookie_secure() -> bool:
+    return os.environ.get("COOKIE_SECURE", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 ALLOWED_SESSION_DURATIONS = {30, 90, 180, 365}
 DEFAULT_SESSION_DURATION_DAYS = 90
 password_hasher = PasswordHasher() if PasswordHasher else None
@@ -269,14 +285,14 @@ def set_refresh_cookie(response: Response, refresh_token: str, expires_at: datet
         value=refresh_token,
         max_age=max_age,
         httponly=True,
-        secure=False,
+        secure=cookie_secure(),
         samesite="lax",
-        path="/auth",
+        path=cookie_path(REFRESH_COOKIE_PATH),
     )
 
 def clear_refresh_cookie(response: Response):
-    response.delete_cookie(REFRESH_COOKIE_NAME, path="/auth")
-    response.delete_cookie(MEDIA_COOKIE_NAME, path=MEDIA_COOKIE_PATH)
+    response.delete_cookie(REFRESH_COOKIE_NAME, path=cookie_path(REFRESH_COOKIE_PATH))
+    response.delete_cookie(MEDIA_COOKIE_NAME, path=cookie_path(MEDIA_COOKIE_PATH))
 
 def set_media_cookie(response: Response, user_id: int, session_id: str, expires_at: datetime):
     """Lets <img>/<audio> requests for /static files prove who is asking; the session is re-checked on every request."""
@@ -286,9 +302,9 @@ def set_media_cookie(response: Response, user_id: int, session_id: str, expires_
         value=tokens.create_token(TOKEN_MEDIA, user_id, timedelta(seconds=max_age), sid=session_id),
         max_age=max_age,
         httponly=True,
-        secure=False,
+        secure=cookie_secure(),
         samesite="lax",
-        path=MEDIA_COOKIE_PATH,
+        path=cookie_path(MEDIA_COOKIE_PATH),
     )
 
 def get_active_session(cursor, user_id: int, session_id: str):
