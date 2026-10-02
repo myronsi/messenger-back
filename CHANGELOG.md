@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.4.3](https://github.com/myronsi/messenger-back/compare/v0.4.2...v0.4.3) (2026-10-02)
+
+
+### Bug Fixes
+
+* ship valid built-in avatars (default, group, deleted) ([9ad112e](https://github.com/myronsi/messenger-back/commit/9ad112e9c15c2de85026dcbf6360a88c44838457))
+* ship valid built-in avatars (default, group, deleted) ([f0e4849](https://github.com/myronsi/messenger-back/commit/f0e48491ff637eb32d7876c2c214e7335e970c88))
+* use proper silhouette artwork for built-in avatars ([f609c09](https://github.com/myronsi/messenger-back/commit/f609c094c9a22de7aa6eff483f4b1b18f3a60352))
+* use proper silhouette artwork for built-in avatars ([5a36844](https://github.com/myronsi/messenger-back/commit/5a36844f3756c7d4e65b2e44c61b722e1723a909))
+
 ## [0.4.2](https://github.com/myronsi/messenger-back/compare/v0.4.1...v0.4.2) (2026-10-02)
 
 
