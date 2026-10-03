@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/myronsi/messenger-back/compare/v0.5.0...v0.5.1) (2026-10-03)
+
+
+### Features
+
+* add GET /version endpoint ([#94](https://github.com/myronsi/messenger-back/issues/94)) ([3496ef2](https://github.com/myronsi/messenger-back/commit/3496ef27675a31c20aed821e80958ca1a0329b49))
+
 ## [0.5.0](https://github.com/myronsi/messenger-back/compare/v0.4.6...v0.5.0) (2026-10-03)
 
 
