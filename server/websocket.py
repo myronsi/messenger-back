@@ -2,12 +2,13 @@ from fastapi import WebSocket, WebSocketDisconnect, Query
 from fastapi.routing import APIRouter
 from starlette.websockets import WebSocketState
 from server.database import get_connection
-from server.routes.auth import verify_token, verify_ws_ticket
+from server.routes.auth import get_active_session, verify_token, verify_ws_ticket
 from server.config import ws_allow_query_token
 from server.presence import mark_user_connected, mark_user_disconnected, utc_now_iso
 from server.chat_summary import deleted_for_user_ids, get_chat_unread_summary, get_message_summary, message_visible_to
 from server.media_access import attachment_metadata, attachment_path_from_url, attachment_url, find_attachment_source, record_attachment
 from server.privacy import DEFAULT_AVATAR, can_send_to_chat, read_receipts_enabled, serialize_user_snapshot, serialize_user
+import asyncio
 import logging
 import sqlite3
 import json
@@ -27,18 +28,21 @@ MAX_FILE_URL_CHARS = 1024
 MAX_FILE_NAME_CHARS = 255
 MAX_FILE_TYPE_CHARS = 100
 WS_POLICY_VIOLATION = 1008
+SESSION_RECHECK_SECONDS = 60
 
 
 class ConnectionManager:
     def __init__(self):
         self.active_chats = {}  # { chat_id: [websockets] }
         self.websocket_users = {}
+        self.websocket_sessions = {}
 
-    async def connect(self, chat_id: int, websocket: WebSocket, user_id: int):
+    async def connect(self, chat_id: int, websocket: WebSocket, user_id: int, session_id: str | None = None):
         if chat_id not in self.active_chats:
             self.active_chats[chat_id] = []
         self.active_chats[chat_id].append(websocket)
         self.websocket_users[websocket] = user_id
+        self.websocket_sessions[websocket] = session_id
         logger.info(f"Connected to chat {chat_id}. Active connections: {len(self.active_chats[chat_id])}")
 
     def disconnect(self, chat_id: int, websocket: WebSocket):
@@ -47,6 +51,7 @@ class ConnectionManager:
                 return
             self.active_chats[chat_id].remove(websocket)
             self.websocket_users.pop(websocket, None)
+            self.websocket_sessions.pop(websocket, None)
             if not self.active_chats[chat_id]:
                 del self.active_chats[chat_id]
             logger.info(f"Disconnected from chat {chat_id}. Active connections: {len(self.active_chats.get(chat_id, []))}")
@@ -92,14 +97,27 @@ class ConnectionManager:
         except Exception as e:
             logger.debug(f"WebSocket already closed while dropping it: {e}")
 
-    async def close_user_sockets(self, user_id: int, chat_id: int | None = None):
-        """Cut a user off from one chat (or from every chat) after they lose access to it."""
+    async def close_user_sockets(
+        self,
+        user_id: int,
+        chat_id: int | None = None,
+        *,
+        session_id: str | None = None,
+        except_session_id: str | None = None,
+    ):
+        """Cut a user off from one chat (or from every chat), or end the sockets of some of their sessions."""
         for active_chat_id, sockets in list(self.active_chats.items()):
             if chat_id is not None and active_chat_id != chat_id:
                 continue
             for websocket in list(sockets):
-                if self.websocket_users.get(websocket) == user_id:
-                    await self._drop(active_chat_id, websocket)
+                if self.websocket_users.get(websocket) != user_id:
+                    continue
+                socket_session = self.websocket_sessions.get(websocket)
+                if session_id is not None and socket_session != session_id:
+                    continue
+                if except_session_id is not None and socket_session == except_session_id:
+                    continue
+                await self._drop(active_chat_id, websocket)
 
     async def close_chat_sockets(self, chat_id: int):
         for websocket in list(self.active_chats.get(chat_id, [])):
@@ -329,6 +347,21 @@ async def broadcast_presence_update(cursor, user_id: int, username: str, is_onli
         await manager.broadcast_personalized(active_chat_id, build)
 
 
+async def _watch_session(websocket: WebSocket, chat_id: int, user_id: int, session_id: str):
+    """Sessions can lapse (expiry) without any request touching the socket, so look at them periodically."""
+    while True:
+        await asyncio.sleep(SESSION_RECHECK_SECONDS)
+        conn = get_connection()
+        try:
+            active = get_active_session(conn.cursor(), user_id, session_id) is not None
+        finally:
+            conn.close()
+        if not active:
+            logger.info(f"Session ended for user {user_id}; closing socket for chat {chat_id}")
+            await manager.close_user_sockets(user_id, chat_id, session_id=session_id)
+            return
+
+
 async def safe_close_websocket(websocket: WebSocket, code: int = 1000):
     if websocket.application_state != WebSocketState.CONNECTED:
         return
@@ -363,6 +396,7 @@ async def websocket_endpoint(
     conn = get_connection()
     cursor = conn.cursor()
     connected_to_manager = False
+    session_watcher = None
 
     async def handle_disconnect():
         nonlocal connected_to_manager
@@ -406,8 +440,11 @@ async def websocket_endpoint(
         user_info = _user_snapshot(cursor, user_id, user_id)
         avatar_url = user_info["avatar_url"]
 
-        await manager.connect(chat_id, websocket, user_id)
+        session_id = user.get("session_id")
+        await manager.connect(chat_id, websocket, user_id, session_id)
         connected_to_manager = True
+        if session_id:
+            session_watcher = asyncio.create_task(_watch_session(websocket, chat_id, user_id, session_id))
         if mark_user_connected(user_id):
             await broadcast_presence_update(cursor, user_id, username, True, user.get("last_seen"))
         logger.info(f"WebSocket connected: user_id={user_id}, chat_id={chat_id}")
@@ -450,6 +487,12 @@ async def websocket_endpoint(
                     await websocket.send_text(json.dumps({"type": "error", "message": "Invalid message format"}))
                     logger.error(f"JSON parsing error: {e}")
                     continue
+
+                if user.get("session_id") and not get_active_session(cursor, user_id, user["session_id"]):
+                    await websocket.send_text(json.dumps({"type": "error", "message": "Session ended"}))
+                    await handle_disconnect()
+                    await safe_close_websocket(websocket, code=WS_POLICY_VIOLATION)
+                    break
 
                 # The chat-list socket (chat 0) is receive-only: clients must not push events through it
                 if chat_id == 0:
@@ -528,9 +571,9 @@ async def websocket_endpoint(
                         await websocket.send_text(json.dumps({"type": "error", "message": "Missing file metadata"}))
                         continue
 
-                    # A client may only attach files it can already read, never someone else's upload.
+                    # Only a file this user uploaded themselves can be attached; anything else is rejected.
                     attachment_path = attachment_path_from_url(file_url)
-                    source = find_attachment_source(cursor, user_id, attachment_path) if attachment_path else None
+                    source = find_attachment_source(cursor, user_id, attachment_path, own_upload_only=True) if attachment_path else None
                     if source is None or not _reply_target_is_valid(cursor, chat_id, user_id, reply_to):
                         err = {"type": "error", "message": "Invalid file"}
                         if client_temp_id is not None:
@@ -895,5 +938,7 @@ async def websocket_endpoint(
             await handle_disconnect()
             await safe_close_websocket(websocket, code=1000)
     finally:
+        if session_watcher:
+            session_watcher.cancel()
         await handle_disconnect()
         conn.close()

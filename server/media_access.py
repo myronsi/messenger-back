@@ -91,8 +91,11 @@ def backfill_message_attachments(cursor) -> None:
             record_attachment(cursor, row["id"], content.get("file_url"))
 
 
-def find_attachment_source(cursor, user_id: int, rel_path: str):
-    """A message the user can still see, in a chat they belong to, that carries the file."""
+def find_attachment_source(cursor, user_id: int, rel_path: str, own_upload_only: bool = False):
+    """A message the user can still see, in a chat they belong to, that carries the file.
+
+    With own_upload_only the message must be one the user sent when uploading the file, not a forward.
+    """
     cursor.execute(
         """
         SELECT m.sender_id, m.undelivered_to, m.deleted_for, m.content
@@ -100,8 +103,8 @@ def find_attachment_source(cursor, user_id: int, rel_path: str):
         JOIN messages m ON m.id = a.message_id
         JOIN participants p ON p.chat_id = m.chat_id AND p.user_id = ?
         WHERE a.file_path = ?
-        """,
-        (user_id, rel_path),
+        """ + ("AND m.sender_id = ? AND m.forwarded_from_message_id IS NULL" if own_upload_only else ""),
+        (user_id, rel_path, user_id) if own_upload_only else (user_id, rel_path),
     )
     return next((message for message in cursor.fetchall() if message_visible_to(message, user_id)), None)
 

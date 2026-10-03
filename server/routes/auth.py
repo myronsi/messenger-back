@@ -755,9 +755,11 @@ async def logout(response: Response, current_user: dict = Depends(get_current_us
         )
         conn.commit()
         clear_refresh_cookie(response)
-        return {"message": "Logged out"}
     finally:
         conn.close()
+    from server.websocket import manager
+    await manager.close_user_sockets(current_user["id"], session_id=current_user["session_id"])
+    return {"message": "Logged out"}
 
 @router.get("/me/security")
 async def get_security_settings(current_user: dict = Depends(get_current_user)):
@@ -837,9 +839,11 @@ async def revoke_other_sessions(current_user: dict = Depends(get_current_user)):
             WHERE user_id = ? AND id != ? AND revoked_at IS NULL
         """, (utc_now_iso(), current_user["id"], current_user["session_id"]))
         conn.commit()
-        return {"message": "Other sessions revoked"}
     finally:
         conn.close()
+    from server.websocket import manager
+    await manager.close_user_sockets(current_user["id"], except_session_id=current_user["session_id"])
+    return {"message": "Other sessions revoked"}
 
 @router.delete("/me/sessions/{session_id}")
 async def revoke_session(session_id: str, response: Response, current_user: dict = Depends(get_current_user)):
@@ -854,9 +858,11 @@ async def revoke_session(session_id: str, response: Response, current_user: dict
         conn.commit()
         if session_id == current_user["session_id"]:
             clear_refresh_cookie(response)
-        return {"message": "Session revoked"}
     finally:
         conn.close()
+    from server.websocket import manager
+    await manager.close_user_sockets(current_user["id"], session_id=session_id)
+    return {"message": "Session revoked"}
 
 @router.post("/me/password")
 async def change_password(payload: PasswordChangeRequest, current_user: dict = Depends(get_current_user)):
@@ -875,11 +881,13 @@ async def change_password(payload: PasswordChangeRequest, current_user: dict = D
             WHERE user_id = ? AND id != ? AND revoked_at IS NULL
         """, (utc_now_iso(), current_user["id"], current_user["session_id"]))
         conn.commit()
-        return {"message": "Password changed"}
     except HTTPException:
         raise
     finally:
         conn.close()
+    from server.websocket import manager
+    await manager.close_user_sockets(current_user["id"], except_session_id=current_user["session_id"])
+    return {"message": "Password changed"}
 
 @router.post("/me/2fa/setup")
 async def setup_two_factor(current_user: dict = Depends(get_current_user)):
@@ -1317,7 +1325,7 @@ def recover_password(recovery: RecoveryRequest, request: Request):
         conn.close()
 
 @router.post("/reset-password")
-def reset_password(request: ResetPasswordRequest, http_request: Request):
+async def reset_password(request: ResetPasswordRequest, http_request: Request):
     ip_key = rate_limit.client_ip(http_request)
     rate_limit.enforce(rate_limit.RESET_IP, ip_key)
     validate_password(request.new_password)
@@ -1337,7 +1345,6 @@ def reset_password(request: ResetPasswordRequest, http_request: Request):
         )
         conn.commit()
         logger.warning("Password reset via recovery completed: user_id=%s ip=%s; all sessions revoked", user_id, ip_key)
-        return {"message": "Password reset successful."}
     except HTTPException:
         raise
     except Exception as e:
@@ -1345,3 +1352,6 @@ def reset_password(request: ResetPasswordRequest, http_request: Request):
         raise HTTPException(status_code=500, detail=f"Error resetting password: {str(e)}")
     finally:
         conn.close()
+    from server.websocket import manager
+    await manager.close_user_sockets(user_id)
+    return {"message": "Password reset successful."}

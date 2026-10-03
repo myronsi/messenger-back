@@ -86,7 +86,7 @@ class WebSocketAuthorizationTests(PostgresFixture, unittest.TestCase):
         app.include_router(groups.router, prefix="/groups")
         app.include_router(auth.router, prefix="/auth")
         self.current_user = self.users["alice-token"]
-        app.dependency_overrides[auth.get_current_user] = lambda: {**self.current_user, "session_id": "s1"}
+        app.dependency_overrides[auth.get_current_user] = lambda: {"session_id": "s1", **self.current_user}
         self.client = TestClient(app)
         self.client.__enter__()
         self.addCleanup(self.client.__exit__, None, None, None)
@@ -213,6 +213,89 @@ class WebSocketAuthorizationTests(PostgresFixture, unittest.TestCase):
             event = self.receive(bob, "file")
         self.assertEqual({k: event["data"][k] for k in original}, original)
         self.assertEqual(json.loads(self.stored_messages()[-1]["content"]), original)
+
+    def test_file_message_must_reuse_the_senders_own_upload(self):
+        from server.media_access import record_attachment
+
+        content = json.dumps({"file_url": "/static/uploads/a.png", "file_name": "a.png", "file_type": "image", "file_size": 3})
+        alices = self.add_message("file", sender_id=self.alice, content=content)
+        conn = self.database.get_connection()
+        cursor = conn.cursor()
+        record_attachment(cursor, alices, "/static/uploads/a.png")
+        cursor.execute("INSERT INTO messages (chat_id, sender_id, sender_name, content, forwarded_from_message_id) VALUES (?, ?, 'bob', ?, ?)",
+                       (self.chat_id, self.bob, content.replace("a.png", "b.png"), alices))
+        forwarded = cursor.lastrowid
+        record_attachment(cursor, forwarded, "/static/uploads/b.png")
+        conn.commit()
+        conn.close()
+        with self.room("bob") as bob:
+            for path in ("/static/uploads/a.png", "/static/uploads/b.png"):
+                self.send(bob, type="file", file_url=path, file_name="x", file_type="image", file_size=3, client_temp_id="t")
+                self.assertEqual(self.receive(bob, "error")["message"], "Invalid file")
+        self.assertEqual(len(self.stored_messages()), 2)
+
+    def session_socket(self, user, session_id):
+        conn = self.database.get_connection()
+        conn.cursor().execute(
+            "INSERT INTO user_sessions (id, user_id, refresh_token_hash, expires_at) VALUES (?, ?, 'h', '2999-01-01T00:00:00+00:00')",
+            (session_id, self.users[f"{user}-token"]["id"]),
+        )
+        conn.commit()
+        conn.close()
+        self.users[f"{session_id}-token"] = {**self.users[f"{user}-token"], "session_id": session_id}
+        return self.room(session_id)
+
+    def revoke_in_db(self, session_id):
+        conn = self.database.get_connection()
+        conn.cursor().execute("UPDATE user_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE id = ?", (session_id,))
+        conn.commit()
+        conn.close()
+
+    def assert_closed(self, websocket):
+        from starlette.websockets import WebSocketDisconnect
+
+        with self.assertRaises(WebSocketDisconnect):
+            while True:
+                self.receive(websocket, "never")
+
+    def assert_alive(self, websocket, text):
+        self.send(websocket, type="message", content=text)
+        self.assertEqual(self.receive(websocket, "message")["data"]["content"], text)
+
+    def test_logout_closes_only_that_sessions_sockets(self):
+        with self.session_socket("bob", "bob-a") as here, self.session_socket("bob", "bob-b") as other:
+            self.current_user = self.users["bob-a-token"]
+            self.assertEqual(self.client.post("/auth/logout").status_code, 200)
+            self.assert_closed(here)
+            self.assert_alive(other, "other device")
+
+    def test_revoking_other_sessions_closes_their_sockets(self):
+        with self.session_socket("bob", "bob-a") as keep, self.session_socket("bob", "bob-b") as gone:
+            self.current_user = self.users["bob-a-token"]
+            self.assertEqual(self.client.delete("/auth/me/sessions/others").status_code, 200)
+            self.assert_closed(gone)
+            self.assert_alive(keep, "still here")
+
+    def test_revoking_one_session_closes_its_sockets(self):
+        with self.session_socket("bob", "bob-a") as keep, self.session_socket("bob", "bob-b") as gone:
+            self.current_user = self.users["bob-a-token"]
+            self.assertEqual(self.client.delete("/auth/me/sessions/bob-b").status_code, 200)
+            self.assert_closed(gone)
+            self.assert_alive(keep, "still here")
+
+    def test_revoked_session_cannot_send_even_if_the_socket_was_missed(self):
+        with self.session_socket("bob", "bob-a") as bob:
+            self.assert_alive(bob, "before")
+            self.revoke_in_db("bob-a")
+            self.send(bob, type="message", content="after")
+            self.assertEqual(self.receive(bob, "error")["message"], "Session ended")
+        self.assertEqual([m["content"] for m in self.stored_messages()], ["before"])
+
+    def test_idle_socket_is_closed_when_its_session_expires(self):
+        with patch("server.websocket.SESSION_RECHECK_SECONDS", 0.05):
+            with self.session_socket("bob", "bob-a") as bob:
+                self.revoke_in_db("bob-a")
+                self.assert_closed(bob)
 
     def test_oversized_and_malformed_events_are_rejected_without_closing_the_socket(self):
         from server.websocket import MAX_FRAME_CHARS, MAX_MESSAGE_CHARS
