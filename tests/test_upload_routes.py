@@ -65,6 +65,45 @@ class UploadRouteTests(PostgresFixture, unittest.TestCase):
         self.assertTrue(saved[0].name.endswith("_photo.png"))
         self.assertTrue(result["file_url"].startswith("/static/uploads/"))
 
+    def test_image_upload_records_dimensions_and_a_thumbnail_bound_to_the_message(self):
+        import json
+
+        from server.database import get_connection
+
+        result = self.send("big.jpg", make_image("JPEG", size=(2000, 1000)))
+        conn = get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, content FROM messages WHERE chat_id = ?", (self.chat_id,))
+            message = cursor.fetchone()
+            content = json.loads(message["content"])
+            self.assertEqual((content["image_width"], content["image_height"]), (2000, 1000))
+            self.assertTrue(content["thumbnail_url"].startswith("/static/uploads/"))
+            self.assertNotEqual(content["thumbnail_url"], result["file_url"])
+            self.assertTrue((Path("static") / content["thumbnail_url"].removeprefix("/static/")).is_file())
+            cursor.execute("SELECT file_path FROM message_attachments WHERE message_id = ?", (message["id"],))
+            recorded = {row["file_path"] for row in cursor.fetchall()}
+            self.assertEqual(recorded, {result["file_url"].removeprefix("/static/"), content["thumbnail_url"].removeprefix("/static/")})
+        finally:
+            conn.close()
+
+    def test_small_image_upload_has_dimensions_but_no_thumbnail(self):
+        import json
+
+        from server.database import get_connection
+
+        self.send("small.png", make_image("PNG", size=(40, 20)))
+        conn = get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT content FROM messages WHERE chat_id = ?", (self.chat_id,))
+            content = json.loads(cursor.fetchone()["content"])
+        finally:
+            conn.close()
+        self.assertEqual((content["image_width"], content["image_height"]), (40, 20))
+        self.assertNotIn("thumbnail_url", content)
+        self.assertEqual(len(list(Path("static/uploads").iterdir())), 1)
+
     def avatar(self, route, name, body, **kwargs):
         return run(route(file=self.upload(name, body), **kwargs))
 

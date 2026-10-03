@@ -3,6 +3,7 @@ import json
 import re
 from pathlib import PurePosixPath
 
+from server.image_metadata import IMAGE_METADATA_KEYS
 from server.chat_summary import message_visible_to
 from server.privacy import get_privacy_settings, visibility_allows
 
@@ -121,7 +122,8 @@ def attachment_metadata(source_message) -> dict:
         return {}
     if not isinstance(content, dict):
         return {}
-    return {key: content[key] for key in ("file_name", "file_type", "file_size") if content.get(key) is not None}
+    keys = ("file_name", "file_type", "file_size", *IMAGE_METADATA_KEYS)
+    return {key: content[key] for key in keys if content.get(key) is not None}
 
 
 def _avatar_owner(cursor, directory: str):
