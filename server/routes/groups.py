@@ -615,6 +615,7 @@ async def remove_group_participant(
         conn.commit()
 
         group_details = await _broadcast_group_update(cursor, chat_id, removed_username=username)
+        await manager.close_user_sockets(user["id"], chat_id)
         return _get_group_details(cursor, chat_id, current_user["id"]) or group_details
     except HTTPException:
         raise
@@ -640,6 +641,7 @@ async def leave_group(chat_id: int, current_user: dict = Depends(get_current_use
         conn.commit()
 
         group_details = await _broadcast_group_update(cursor, chat_id, removed_username=current_user["username"])
+        await manager.close_user_sockets(current_user["id"], chat_id)
         return {"message": "Left group successfully", "group": group_details}
     except HTTPException:
         raise
@@ -670,6 +672,7 @@ async def delete_group(chat_id: int, current_user: dict = Depends(get_current_us
         message = {"type": "chat_deleted", "chat_id": chat_id}
         await broadcast_to_chat_list(member_ids, message)
         await manager.broadcast(chat_id, message)
+        await manager.close_chat_sockets(chat_id)
         logger.info(f"Sent chat_deleted notification for chat_id={chat_id}")
 
         return {"message": "Group deleted successfully"}

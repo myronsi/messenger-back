@@ -30,6 +30,7 @@ from server.time_utils import to_utc_iso, utc_now_iso
 from server.avatar_history import record_user_avatar, store_user_avatar
 from server.usernames import normalize_username
 from server import rate_limit
+from server.ws_tickets import tickets as ws_tickets
 from server.recovery_shares import decrypt_cloud_part, encrypt_cloud_part
 from server.upload_security import AVATAR_MAX_BYTES, process_avatar
 from server.privacy import (
@@ -419,38 +420,49 @@ def verify_two_factor_or_recovery(cursor, user_id: int, code: str) -> bool:
         return True
     return use_recovery_code(cursor, user_id, code)
 
-def verify_token(token: str):
+def _load_session_user(user_id, session_id):
+    conn = get_connection()
     try:
-        payload = tokens.decode_token(token, TOKEN_ACCESS)
-        user_id = payload.get("sub")
-        session_id = payload.get("sid")
-        if user_id is None or session_id is None:
-            return None
-        conn = get_connection()
         cursor = conn.cursor()
         if not get_active_session(cursor, int(user_id), session_id):
-            conn.close()
             return None
         cursor.execute("UPDATE user_sessions SET last_active_at = ? WHERE id = ?", (utc_now_iso(), session_id))
         conn.commit()
         cursor.execute("SELECT id, username, display_name, avatar_url, bio, created_at, last_seen FROM users WHERE id = ?", (user_id,))
         user = cursor.fetchone()
+    finally:
         conn.close()
-        if user:
-            return {
-                "id": user[0],
-                "username": user[1],
-                "display_name": user[2],
-                "avatar_url": user[3],
-                "bio": user[4],
-                "created_at": to_utc_iso(user[5]),
-                "last_seen": to_utc_iso(user[6]),
-                "is_online": is_user_online(user[0]),
-                "session_id": session_id,
-            }
+    if not user:
         return None
+    return {
+        "id": user[0],
+        "username": user[1],
+        "display_name": user[2],
+        "avatar_url": user[3],
+        "bio": user[4],
+        "created_at": to_utc_iso(user[5]),
+        "last_seen": to_utc_iso(user[6]),
+        "is_online": is_user_online(user[0]),
+        "session_id": session_id,
+    }
+
+def verify_token(token: str):
+    try:
+        payload = tokens.decode_token(token, TOKEN_ACCESS)
     except JWTError:
-        return None    
+        return None
+    user_id = payload.get("sub")
+    session_id = payload.get("sid")
+    if user_id is None or session_id is None:
+        return None
+    return _load_session_user(user_id, session_id)
+
+def verify_ws_ticket(ticket: str):
+    """Redeem a one-time WebSocket ticket; the session it was issued for must still be active."""
+    claim = ws_tickets.consume(ticket)
+    if not claim:
+        return None
+    return _load_session_user(*claim)
 
 def get_user_by_id(user_id: int):
     conn = get_connection()
@@ -681,6 +693,13 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         "is_online": current_user["is_online"],
         "last_seen": to_utc_iso(current_user["last_seen"])
     }
+
+@router.post("/ws-ticket")
+async def create_ws_ticket(current_user: dict = Depends(get_current_user)):
+    ticket = ws_tickets.issue(current_user["id"], current_user["session_id"])
+    if ticket is None:
+        raise HTTPException(status_code=429, detail="Too many pending WebSocket tickets")
+    return {"ticket": ticket, "expires_in": 30}
 
 @router.post("/refresh", response_model=Token)
 async def refresh_access_token(
@@ -1230,6 +1249,8 @@ async def delete_account(current_user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=f"Error deleting account: {str(e)}")
     finally:
         conn.close()
+    from server.websocket import manager
+    await manager.close_user_sockets(current_user["id"])
     return {"message": "Account deleted"}
 
 SHARE_PATTERN = re.compile(r"^[0-9]{1,3}-[0-9]{1,3}-[0-9a-fA-F]{1,128}$")

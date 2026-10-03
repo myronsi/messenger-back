@@ -2,10 +2,11 @@ from fastapi import WebSocket, WebSocketDisconnect, Query
 from fastapi.routing import APIRouter
 from starlette.websockets import WebSocketState
 from server.database import get_connection
-from server.routes.auth import verify_token
+from server.routes.auth import verify_token, verify_ws_ticket
+from server.config import ws_allow_query_token
 from server.presence import mark_user_connected, mark_user_disconnected, utc_now_iso
 from server.chat_summary import deleted_for_user_ids, get_chat_unread_summary, get_message_summary, message_visible_to
-from server.media_access import attachment_path_from_url, can_access_attachment, record_attachment
+from server.media_access import attachment_metadata, attachment_path_from_url, attachment_url, find_attachment_source, record_attachment
 from server.privacy import DEFAULT_AVATAR, can_send_to_chat, read_receipts_enabled, serialize_user_snapshot, serialize_user
 import logging
 import sqlite3
@@ -16,6 +17,16 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 GROUP_ROLES_WITH_MESSAGE_MODERATION = {"owner", "admin", "moderator"}
+
+# A frame is checked after it is received, so uvicorn's --ws-max-size is the real memory cap.
+MAX_FRAME_CHARS = 64 * 1024
+MAX_MESSAGE_CHARS = 10_000
+MAX_REACTION_CHARS = 64
+MAX_TEMP_ID_CHARS = 100
+MAX_FILE_URL_CHARS = 1024
+MAX_FILE_NAME_CHARS = 255
+MAX_FILE_TYPE_CHARS = 100
+WS_POLICY_VIOLATION = 1008
 
 
 class ConnectionManager:
@@ -71,6 +82,28 @@ class ConnectionManager:
                 except Exception as e:
                     self.disconnect(chat_id, websocket)
                     logger.error(f"Error broadcasting personalized message to chat {chat_id}: {e}")
+
+    async def _drop(self, chat_id: int, websocket: WebSocket):
+        self.disconnect(chat_id, websocket)
+        if websocket.application_state != WebSocketState.CONNECTED:
+            return
+        try:
+            await websocket.close(code=WS_POLICY_VIOLATION)
+        except Exception as e:
+            logger.debug(f"WebSocket already closed while dropping it: {e}")
+
+    async def close_user_sockets(self, user_id: int, chat_id: int | None = None):
+        """Cut a user off from one chat (or from every chat) after they lose access to it."""
+        for active_chat_id, sockets in list(self.active_chats.items()):
+            if chat_id is not None and active_chat_id != chat_id:
+                continue
+            for websocket in list(sockets):
+                if self.websocket_users.get(websocket) == user_id:
+                    await self._drop(active_chat_id, websocket)
+
+    async def close_chat_sockets(self, chat_id: int):
+        for websocket in list(self.active_chats.get(chat_id, [])):
+            await self._drop(chat_id, websocket)
 
     async def send_to_user(self, user_id: int, message: dict):
         for websocket, websocket_user_id in list(self.websocket_users.items()):
@@ -148,6 +181,58 @@ def _can_delete_message(cursor, chat_id: int, sender_id: int, user_id: int) -> b
         return True
     role = _get_group_role(cursor, chat_id, user_id)
     return role in GROUP_ROLES_WITH_MESSAGE_MODERATION
+
+
+def _is_int(value) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _text_ok(value, limit: int) -> bool:
+    return value is None or (isinstance(value, str) and len(value) <= limit)
+
+
+def _validate_event_fields(event: dict) -> str | None:
+    """Return an error message if any client-controlled field has the wrong type or is oversized."""
+    if not isinstance(event.get("type", "message"), str):
+        return "Invalid message format"
+    temp_id = event.get("client_temp_id")
+    if temp_id is not None and not (_is_int(temp_id) or (isinstance(temp_id, str) and len(temp_id) <= MAX_TEMP_ID_CHARS)):
+        return "Invalid message format"
+    if not _text_ok(event.get("content"), MAX_MESSAGE_CHARS):
+        return "Message is too long" if isinstance(event.get("content"), str) else "Invalid message format"
+    for key in ("message_id", "reply_to"):
+        if event.get(key) is not None and not _is_int(event[key]):
+            return "Invalid message format"
+    size = event.get("file_size")
+    if size is not None and (isinstance(size, bool) or not isinstance(size, (int, float)) or size < 0):
+        return "Invalid message format"
+    limits = (("reaction", MAX_REACTION_CHARS), ("file_url", MAX_FILE_URL_CHARS),
+              ("file_name", MAX_FILE_NAME_CHARS), ("file_type", MAX_FILE_TYPE_CHARS))
+    if not all(_text_ok(event.get(key), limit) for key, limit in limits):
+        return "Invalid message format"
+    return None
+
+
+def _looks_like_file_payload(content) -> bool:
+    """Text that parses as an attachment descriptor would be rendered as a file, so only uploads may produce it."""
+    if not isinstance(content, str) or not content.lstrip().startswith("{"):
+        return False
+    try:
+        parsed = json.loads(content)
+    except ValueError:
+        return False
+    return isinstance(parsed, dict) and "file_url" in parsed
+
+
+def _reply_target_is_valid(cursor, chat_id: int, user_id: int, reply_to) -> bool:
+    if reply_to is None:
+        return True
+    cursor.execute(
+        "SELECT sender_id, undelivered_to, deleted_for FROM messages WHERE id = ? AND chat_id = ?",
+        (reply_to, chat_id),
+    )
+    target = cursor.fetchone()
+    return target is not None and message_visible_to(target, user_id)
 
 
 def _is_chat_participant(cursor, chat_id: int, user_id: int | None) -> bool:
@@ -254,8 +339,17 @@ async def safe_close_websocket(websocket: WebSocket, code: int = 1000):
 
 
 @router.websocket("/ws/chat/{chat_id}")
-async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Query(...)):
-    user = verify_token(token)
+async def websocket_endpoint(
+    websocket: WebSocket,
+    chat_id: int,
+    ticket: str | None = Query(None),
+    token: str | None = Query(None),
+):
+    user = None
+    if ticket:
+        user = verify_ws_ticket(ticket)
+    elif token and ws_allow_query_token():
+        user = verify_token(token)
     if not user:
         await websocket.accept()
         await websocket.send_text(json.dumps({"type": "error", "message": "Invalid token"}))
@@ -329,8 +423,18 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                     logger.info(f"WebSocket receive stopped: user_id={user_id}, chat_id={chat_id}: {exc}")
                     break
 
+                if len(data) > MAX_FRAME_CHARS:
+                    await websocket.send_text(json.dumps({"type": "error", "message": "Message is too large"}))
+                    continue
+
                 try:
                     parsed_data = json.loads(data)
+                    if not isinstance(parsed_data, dict):
+                        raise ValueError("Event must be a JSON object")
+                    field_error = _validate_event_fields(parsed_data)
+                    if field_error:
+                        await websocket.send_text(json.dumps({"type": "error", "message": field_error}))
+                        continue
                     message_type = parsed_data.get("type", "message")
                     client_temp_id = parsed_data.get("client_temp_id")
                     content = parsed_data.get("content")
@@ -342,7 +446,7 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                     file_size = parsed_data.get("file_size")
                     reaction = parsed_data.get("reaction")
                     logger.info(f"Received {message_type!r} event: user_id={user_id}, chat_id={chat_id}, message_id={message_id}")
-                except (json.JSONDecodeError, KeyError) as e:
+                except (ValueError, KeyError) as e:
                     await websocket.send_text(json.dumps({"type": "error", "message": "Invalid message format"}))
                     logger.error(f"JSON parsing error: {e}")
                     continue
@@ -352,9 +456,24 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                     await websocket.send_text(json.dumps({"type": "error", "message": "This connection is read-only"}))
                     continue
 
+                # Membership can change while the socket stays open (removed, left, chat deleted)
+                if not _is_chat_participant(cursor, chat_id, user_id):
+                    logger.info(f"User {user_id} lost access to chat {chat_id}; closing socket")
+                    await websocket.send_text(json.dumps({"type": "error", "message": "You are not a member of this chat"}))
+                    await handle_disconnect()
+                    await safe_close_websocket(websocket, code=WS_POLICY_VIOLATION)
+                    break
+
                 if message_type == "message":
                     if not content or not content.strip():
                         err = {"type": "error", "message": "Empty message"}
+                        if client_temp_id is not None:
+                            err["client_temp_id"] = client_temp_id
+                        await websocket.send_text(json.dumps(err))
+                        continue
+
+                    if _looks_like_file_payload(content) or not _reply_target_is_valid(cursor, chat_id, user_id, reply_to):
+                        err = {"type": "error", "message": "Invalid message"}
                         if client_temp_id is not None:
                             err["client_temp_id"] = client_temp_id
                         await websocket.send_text(json.dumps(err))
@@ -411,9 +530,18 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
 
                     # A client may only attach files it can already read, never someone else's upload.
                     attachment_path = attachment_path_from_url(file_url)
-                    if not attachment_path or not can_access_attachment(cursor, user_id, attachment_path):
-                        await websocket.send_text(json.dumps({"type": "error", "message": "Invalid file"}))
+                    source = find_attachment_source(cursor, user_id, attachment_path) if attachment_path else None
+                    if source is None or not _reply_target_is_valid(cursor, chat_id, user_id, reply_to):
+                        err = {"type": "error", "message": "Invalid file"}
+                        if client_temp_id is not None:
+                            err["client_temp_id"] = client_temp_id
+                        await websocket.send_text(json.dumps(err))
                         continue
+                    file_url = attachment_url(attachment_path)
+                    recorded = attachment_metadata(source)
+                    file_name = recorded.get("file_name", file_name)
+                    file_type = recorded.get("file_type", file_type)
+                    file_size = recorded.get("file_size", file_size)
 
                     undelivered_to, delivery_error = _undelivered_recipients_for_send(cursor, chat_id, user_id)
                     timestamp = utc_now_iso()
@@ -548,11 +676,18 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, token: str = Qu
                         await websocket.send_text(json.dumps({"type": "error", "message": "Missing message_id or content"}))
                         continue
 
+                    if _looks_like_file_payload(content):
+                        await websocket.send_text(json.dumps({"type": "error", "message": "Invalid message"}))
+                        continue
+
                     try:
-                        cursor.execute("SELECT sender_id, deleted_for FROM messages WHERE id = ? AND chat_id = ?", (message_id, chat_id))
+                        cursor.execute("SELECT sender_id, deleted_for, content FROM messages WHERE id = ? AND chat_id = ?", (message_id, chat_id))
                         sender = cursor.fetchone()
                         if not sender or sender["sender_id"] != user_id or not message_visible_to(sender, user_id):
                             await websocket.send_text(json.dumps({"type": "error", "message": "You are not the author of this message"}))
+                            continue
+                        if _looks_like_file_payload(sender["content"]):
+                            await websocket.send_text(json.dumps({"type": "error", "message": "File messages cannot be edited"}))
                             continue
                         deleted_for = deleted_for_user_ids(sender)
 

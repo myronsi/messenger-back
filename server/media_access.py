@@ -91,11 +91,11 @@ def backfill_message_attachments(cursor) -> None:
             record_attachment(cursor, row["id"], content.get("file_url"))
 
 
-def can_access_attachment(cursor, user_id: int, rel_path: str) -> bool:
-    """True if a message the user can still see, in a chat they belong to, carries the file."""
+def find_attachment_source(cursor, user_id: int, rel_path: str):
+    """A message the user can still see, in a chat they belong to, that carries the file."""
     cursor.execute(
         """
-        SELECT m.sender_id, m.undelivered_to, m.deleted_for
+        SELECT m.sender_id, m.undelivered_to, m.deleted_for, m.content
         FROM message_attachments a
         JOIN messages m ON m.id = a.message_id
         JOIN participants p ON p.chat_id = m.chat_id AND p.user_id = ?
@@ -103,7 +103,22 @@ def can_access_attachment(cursor, user_id: int, rel_path: str) -> bool:
         """,
         (user_id, rel_path),
     )
-    return any(message_visible_to(message, user_id) for message in cursor.fetchall())
+    return next((message for message in cursor.fetchall() if message_visible_to(message, user_id)), None)
+
+
+def can_access_attachment(cursor, user_id: int, rel_path: str) -> bool:
+    return find_attachment_source(cursor, user_id, rel_path) is not None
+
+
+def attachment_metadata(source_message) -> dict:
+    """The name, type and size recorded when the file was first sent, so a client cannot misdescribe it."""
+    try:
+        content = json.loads(source_message["content"])
+    except (TypeError, ValueError):
+        return {}
+    if not isinstance(content, dict):
+        return {}
+    return {key: content[key] for key in ("file_name", "file_type", "file_size") if content.get(key) is not None}
 
 
 def _avatar_owner(cursor, directory: str):

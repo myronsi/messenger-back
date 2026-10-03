@@ -497,6 +497,7 @@ async def delete_chat(chat_id: int, current_user: dict = Depends(get_current_use
             "chat_id": chat_id
         }
         await broadcast_to_chat_list({chat["user1_id"], chat["user2_id"]}, message)
+        await manager.close_chat_sockets(chat_id)
         logger.info(f"Sent chat_deleted notification for chat_id={chat_id} to its participants")
 
         return {"message": "Chat deleted successfully"}

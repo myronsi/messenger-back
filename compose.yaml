@@ -15,6 +15,7 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       CORS_ORIGINS: ${CORS_ORIGINS:-}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-}
+      WS_ALLOW_QUERY_TOKEN: ${WS_ALLOW_QUERY_TOKEN:-true}
       DATABASE_URL: postgresql://messenger:messenger@postgres:5432/messenger
     volumes:
       - messenger_static:/app/static
