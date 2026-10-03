@@ -18,7 +18,7 @@ The backend always deploys first and stays compatible with the previous frontend
 
 ## Starting a new release train
 
-Add a `Release-As: X.Y.0` footer to a commit so that `MAJOR.MINOR` matches the frontend.
+Add a `Release-As: X.Y.0` footer to a commit so that `MAJOR.MINOR` matches the frontend. Pull requests are squash-merged using the PR description as the commit message, so put the footer on its own line at the end of the PR description.
 
 ## Rollback
 
