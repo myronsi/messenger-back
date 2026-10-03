@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/myronsi/messenger-back/compare/v0.4.6...v0.5.0) (2026-10-03)
+
+
+### Miscellaneous Chores
+
+* release 0.5.0 ([#92](https://github.com/myronsi/messenger-back/issues/92)) ([ea4915e](https://github.com/myronsi/messenger-back/commit/ea4915e644ef12dfb0dfa0647a1d10621567cdc6))
+
 ## [0.4.6](https://github.com/myronsi/messenger-back/compare/v0.4.5...v0.4.6) (2026-10-03)
 
 
