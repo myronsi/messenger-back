@@ -8,6 +8,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from server.database import setup_database
 from server.config import allowed_hosts, cors_origins
 from server.logging_config import configure_logging
+from server.version import __version__
 
 configure_logging()
 
@@ -44,3 +45,8 @@ app.add_middleware(
 @app.get("/")
 def root():
     return {"Server is running"}
+
+
+@app.get("/version")
+def version():
+    return {"version": __version__}

@@ -5,7 +5,7 @@ The backend always deploys first and stays compatible with the previous frontend
 ## Release order
 
 1. Backend: merge the release PR, deploy the new version.
-2. Verify the deployed backend (health check, `GET /version` once available).
+2. Verify the deployed backend (health check, `GET /api/version` returns the deployed version).
 3. Frontend: merge its release PR (see `messenger-front/docs/releasing.md`) and deploy.
 
 ## Checklist
