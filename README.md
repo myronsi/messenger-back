@@ -138,6 +138,8 @@ Uploads, voice messages and avatars under `/static` are not public. `GET /static
 
 **WebSocket authentication.** The client asks `POST /auth/ws-ticket` for a single-use ticket (valid 30 seconds, kept in memory) and connects with `/ws/chat/{id}?ticket=…`, so the access token never appears in proxy or access logs. For clients that predate tickets, `?token=` is still accepted while `WS_ALLOW_QUERY_TOKEN=true` (the default); set it to `false` once everyone has reloaded the frontend. Membership is re-checked on every event, sockets are closed when a user is removed from or leaves a chat (or the chat or account is deleted) and when their session ends (logout, revoked session, password change or reset, or expiry, checked every minute), `reply_to` must point at a visible message of the same chat, and `file` messages can only reference files the sender uploaded themselves, not forwards or other people's files (name, type and size come from the original upload). Frames are limited to 128 KiB (`--ws-max-size`) and message text to 10,000 characters.
 
+**Image metadata.** Uploaded JPEG, PNG, GIF and WebP images get `image_width` and `image_height` (after EXIF rotation) in the message content, so clients can reserve space before the image loads. Static images larger than 640 px also get a `thumbnail_url` (a JPEG, or a PNG when transparent) stored next to the original and bound to the same message, so it has the same access rules. Animated GIFs and images that cannot be decoded safely get no thumbnail. Images uploaded before this change have no metadata and clients fall back to the full file.
+
 Files still live on local disk in `static/`. Object storage with signed URLs (see `docs/image-storage-plan.md`) is a possible later step.
 ## Docker (Linux)
 
