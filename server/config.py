@@ -33,3 +33,9 @@ def allowed_hosts(environ=None) -> list[str] | None:
     value = (environ if environ is not None else os.environ).get("ALLOWED_HOSTS", "")
     hosts = _split(value)
     return hosts or None
+
+
+def ws_allow_query_token(environ=None) -> bool:
+    """Whether /ws/chat still accepts the access token in the URL (legacy clients) besides one-time tickets."""
+    value = (environ if environ is not None else os.environ).get("WS_ALLOW_QUERY_TOKEN", "true")
+    return value.strip().lower() not in {"0", "false", "no", "off"}
