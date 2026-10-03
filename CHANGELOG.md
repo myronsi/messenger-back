@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.6](https://github.com/myronsi/messenger-back/compare/v0.4.5...v0.4.6) (2026-10-03)
+
+
+### Features
+
+* **media:** store image dimensions and thumbnails for chat images ([12485f1](https://github.com/myronsi/messenger-back/commit/12485f199cd7db578dca81e5ee9881fb9092d123))
+* **media:** store image dimensions and thumbnails for chat images ([ce55558](https://github.com/myronsi/messenger-back/commit/ce55558526e33904ba48df60e101c053e8916767))
+
+
+### Bug Fixes
+
+* track image_metadata module and its tests ([35e3c64](https://github.com/myronsi/messenger-back/commit/35e3c6429db145de644fc7e1f0881e04278f6399))
+
 ## [0.4.5](https://github.com/myronsi/messenger-back/compare/v0.4.4...v0.4.5) (2026-10-03)
 
 
