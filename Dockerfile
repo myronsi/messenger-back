@@ -20,6 +20,10 @@ COPY static /opt/default-static
 
 RUN mkdir -p /app/static
 
+# Set by CI (github.sha); shown by GET /version.
+ARG COMMIT=unknown
+ENV APP_COMMIT=$COMMIT
+
 EXPOSE 8000
 
 CMD ["sh", "-c", "mkdir -p /app/static/avatars && cp -f /opt/default-static/avatars/default.jpg /opt/default-static/avatars/deleted.jpg /opt/default-static/avatars/group.png /app/static/avatars/ && exec uvicorn server.main:app --host 0.0.0.0 --port 8000 --ws-max-size 131072"]
