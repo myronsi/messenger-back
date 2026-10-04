@@ -127,7 +127,7 @@ jobs:
   # The production environment only accepts deployments from `edge`, so the release
   # commit is moved there and the deploy workflow is dispatched on that branch.
   promote:
-    needs: [release-please, image]
+    needs: [release-please, image, contract, stack]
     runs-on: ubuntu-latest
     permissions:
       contents: write

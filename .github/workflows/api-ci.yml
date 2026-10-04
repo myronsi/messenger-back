@@ -41,42 +41,47 @@ jobs:
       - name: Types can be generated
         run: npm run build
       - uses: ./.github/actions/setup-oasdiff
-      # The baseline is the contract of the latest stable release on npm. Before the first
-      # stable release it is the contract on the base branch.
-      - name: Get the last released contract
+      # Two baselines: the contract of the latest stable release on npm, and the contract on the
+      # base branch. A pre-release (2.0.0-alpha.N) is also compared with the base branch, so every
+      # change to it needs a higher pre-release version even when a stable release exists.
+      - name: Get the last released contract and the base branch contract
         id: baseline
         env:
           BASE_REF: ${{ github.base_ref || 'master' }}
         run: |
           set -euo pipefail
+          if git cat-file -e "origin/${BASE_REF}:api/openapi.yaml" 2>/dev/null; then
+            mkdir "$RUNNER_TEMP/base"
+            git -C "$GITHUB_WORKSPACE" archive "origin/${BASE_REF}" api | tar -x -C "$RUNNER_TEMP/base"
+            echo "base_dir=$RUNNER_TEMP/base/api" >> "$GITHUB_OUTPUT"
+          fi
           latest="$(npm view @myronsi/messenger-api dist-tags.latest 2>/dev/null || true)"
           if [ -n "$latest" ]; then
             npm pack "@myronsi/messenger-api@${latest}" --pack-destination "$RUNNER_TEMP" >/dev/null
             tar -xzf "$RUNNER_TEMP"/myronsi-messenger-api-*.tgz -C "$RUNNER_TEMP" package/dist
             {
-              echo "dir=$RUNNER_TEMP/package/dist"
-              echo "source=npm @myronsi/messenger-api@${latest}"
+              echo "release_dir=$RUNNER_TEMP/package/dist"
+              echo "release_source=npm @myronsi/messenger-api@${latest}"
             } >> "$GITHUB_OUTPUT"
-          elif git cat-file -e "origin/${BASE_REF}:api/openapi.yaml" 2>/dev/null; then
-            mkdir "$RUNNER_TEMP/base"
-            git -C "$GITHUB_WORKSPACE" archive "origin/${BASE_REF}" api | tar -x -C "$RUNNER_TEMP/base"
-            {
-              echo "dir=$RUNNER_TEMP/base/api"
-              echo "source=${BASE_REF} branch"
-            } >> "$GITHUB_OUTPUT"
-          else
-            echo "source=none" >> "$GITHUB_OUTPUT"
           fi
-      # Compares the REST contract and the WebSocket schemas.
+      # Compares the REST contract, the WebSocket schemas, websocket.md and the examples.
       - name: Breaking changes and info.version bump
-        if: steps.baseline.outputs.source != 'none'
+        if: steps.baseline.outputs.release_dir != '' || steps.baseline.outputs.base_dir != ''
         env:
-          BASELINE_DIR: ${{ steps.baseline.outputs.dir }}
-          BASELINE_SOURCE: ${{ steps.baseline.outputs.source }}
+          RELEASE_DIR: ${{ steps.baseline.outputs.release_dir }}
+          RELEASE_SOURCE: ${{ steps.baseline.outputs.release_source }}
+          BASE_DIR: ${{ steps.baseline.outputs.base_dir }}
         run: |
-          echo "Baseline: $BASELINE_SOURCE"
-          node scripts/check-version-bump.mjs "$BASELINE_DIR" .
-
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          if [ -n "$RELEASE_DIR" ]; then
+            echo "Baseline: $RELEASE_SOURCE"
+            node scripts/check-version-bump.mjs "$RELEASE_DIR" .
+          fi
+          if [ -n "$BASE_DIR" ] && { [ -z "$RELEASE_DIR" ] || [[ "$version" == *-* ]]; }; then
+            echo "Baseline: base branch"
+            node scripts/check-version-bump.mjs "$BASE_DIR" .
+          fi
   # The Go server does not exist yet. As soon as a go.mod is added, the generated code must be current.
   go-generated:
     runs-on: ubuntu-latest

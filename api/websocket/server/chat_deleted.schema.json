@@ -16,8 +16,7 @@
     "data": {
       "type": "object",
       "properties": {},
-      "required": [],
-      "additionalProperties": false
+      "required": []
     }
   },
   "required": [
@@ -25,6 +24,5 @@
     "event_id",
     "chat_id",
     "data"
-  ],
-  "additionalProperties": false
+  ]
 }

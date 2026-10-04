@@ -30,8 +30,7 @@
         "message_id",
         "user_id",
         "read_at"
-      ],
-      "additionalProperties": false
+      ]
     }
   },
   "required": [
@@ -39,6 +38,5 @@
     "event_id",
     "chat_id",
     "data"
-  ],
-  "additionalProperties": false
+  ]
 }

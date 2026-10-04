@@ -1,6 +1,7 @@
 // Checks that info.version was bumped as far as the changes require.
 //   node check-version-bump.mjs <baseline contract dir> <new contract dir>
-// A contract dir is api/ (openapi.yaml + websocket/) or an unpacked package dist/ (openapi.yaml + ws-events.schema.json).
+// A contract dir is api/ (openapi.yaml + websocket/ + websocket.md) or an unpacked package dist/
+// (openapi.yaml + ws-events.schema.json + ws-docs.json).
 // Breaking change -> MAJOR, any other API change -> MINOR, docs-only change -> PATCH.
 // While the baseline is a pre-release (2.0.0-alpha.N) every change only needs a higher version.
 import { execFileSync } from "node:child_process";
@@ -78,7 +79,9 @@ if (wsComparable) {
 const breaking = changes.filter((c) => c.level === 3);
 
 const strip = (doc) => { const copy = structuredClone(doc); delete copy.info.version; return copy; };
-const docsChanged = stable(strip(base)) !== stable(strip(next)) || (wsComparable && stable(baseContract.ws) !== stable(newContract.ws));
+// websocket.md and the example payloads count as documentation too
+const wsDocsChanged = baseContract.wsDocs && newContract.wsDocs && stable(baseContract.wsDocs) !== stable(newContract.wsDocs);
+const docsChanged = stable(strip(base)) !== stable(strip(next)) || (wsComparable && stable(baseContract.ws) !== stable(newContract.ws)) || Boolean(wsDocsChanged);
 
 let required = "none";
 if (breaking.length) required = "major";

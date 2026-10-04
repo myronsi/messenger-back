@@ -37,8 +37,7 @@
         "user_id",
         "is_online",
         "last_seen"
-      ],
-      "additionalProperties": false
+      ]
     }
   },
   "required": [
@@ -46,6 +45,5 @@
     "event_id",
     "chat_id",
     "data"
-  ],
-  "additionalProperties": false
+  ]
 }

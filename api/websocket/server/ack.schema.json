@@ -44,8 +44,7 @@
           ]
         }
       },
-      "required": [],
-      "additionalProperties": false
+      "required": []
     },
     "client_temp_id": {
       "$ref": "../../openapi.yaml#/components/schemas/ClientTempId"
@@ -57,6 +56,5 @@
     "chat_id",
     "data",
     "client_temp_id"
-  ],
-  "additionalProperties": false
+  ]
 }

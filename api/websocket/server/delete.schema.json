@@ -30,8 +30,7 @@
       "required": [
         "message_id",
         "scope"
-      ],
-      "additionalProperties": false
+      ]
     }
   },
   "required": [
@@ -39,6 +38,5 @@
     "event_id",
     "chat_id",
     "data"
-  ],
-  "additionalProperties": false
+  ]
 }

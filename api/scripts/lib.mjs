@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
@@ -67,16 +67,38 @@ export function bundle(spec, events) {
   return defs;
 }
 
-// A contract directory is either this source directory (openapi.yaml + websocket/) or an
-// unpacked package (dist/: openapi.yaml + ws-events.schema.json). Packages published before
-// the WebSocket schemas were included have no WebSocket part (ws is null).
+// websocket.md and the example payloads. They are not part of the schemas but a change to them is
+// a documentation change of the contract (PATCH).
+export function loadWsDocs(dir) {
+  const examples = {};
+  const walk = (d, prefix) => {
+    for (const f of readdirSync(d).sort()) {
+      const p = join(d, f);
+      if (statSync(p).isDirectory()) walk(p, `${prefix}${f}/`);
+      else if (f.endsWith(".json")) examples[prefix + f] = readJson(p);
+    }
+  };
+  const examplesDir = join(dir, "websocket", "examples");
+  if (existsSync(examplesDir)) walk(examplesDir, "");
+  const mdFile = join(dir, "websocket.md");
+  const markdown = existsSync(mdFile) ? readFileSync(mdFile, "utf8").replace(/\r\n/g, "\n") : "";
+  return { markdown, examples };
+}
+
+// A contract directory is either this source directory (openapi.yaml + websocket/ + websocket.md)
+// or an unpacked package (dist/: openapi.yaml + ws-events.schema.json + ws-docs.json). Packages
+// published before the WebSocket schemas (or the docs) were included lack that part (null).
 export function loadContract(dir) {
   const spec = readSpec(join(dir, "openapi.yaml"));
   const bundled = join(dir, "ws-events.schema.json");
   let ws = null;
   if (existsSync(bundled)) ws = readJson(bundled).$defs;
   else if (existsSync(join(dir, "websocket"))) ws = bundle(spec, loadEventsFrom(dir));
-  return { spec, ws };
+  const docsFile = join(dir, "ws-docs.json");
+  let wsDocs = null;
+  if (existsSync(docsFile)) wsDocs = readJson(docsFile);
+  else if (existsSync(join(dir, "websocket"))) wsDocs = loadWsDocs(dir);
+  return { spec, ws, wsDocs };
 }
 
 function loadEventsFrom(dir) {

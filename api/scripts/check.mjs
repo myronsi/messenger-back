@@ -47,6 +47,26 @@ const negative = [
   ["ClientMessageEvent", { type: "message", client_temp_id: "c-1", chat_id: "42", data: { type: "file", attachment_id: null } }],
   ["ServerHelloEvent", { type: "hello", event_id: "1", chat_id: "42", data: { api_version: "2.0.0", min_client_api_version: "2.0.0", user_id: "1" } }],
 ];
+const sendMessage = (body) => ({ client_temp_id: "c-1", ...body });
+negative.push(
+  ["SendMessageRequest", sendMessage({ type: "text" })],
+  ["SendMessageRequest", sendMessage({ type: "text", content: null })],
+  ["SendMessageRequest", sendMessage({ type: "text", content: "" })],
+  ["SendMessageRequest", sendMessage({ type: "text", content: "x", attachment_id: "5" })],
+  ["SendMessageRequest", sendMessage({ type: "file" })],
+  ["SendMessageRequest", sendMessage({ type: "file", attachment_id: null })],
+);
+// Compatible MINOR releases add fields to server events; clients must be able to ignore them.
+const positive = [
+  ["SendMessageRequest", sendMessage({ type: "text", content: "x" })],
+  ["SendMessageRequest", sendMessage({ type: "file", attachment_id: "5" })],
+  ["SendMessageRequest", sendMessage({ type: "voice", attachment_id: "5", content: null })],
+  ["ServerHelloEvent", { type: "hello", event_id: "1", chat_id: null, new_envelope_field: 1, data: { api_version: "2.1.0", min_client_api_version: "2.0.0", user_id: "1", new_field: true } }],
+];
+for (const [title, payload] of positive) {
+  const validateOk = ajv.compile({ $defs: defs, $ref: `#/$defs/${title}` });
+  if (!validateOk(payload)) errors.push(`${title} rejected a valid payload: ${ajv.errorsText(validateOk.errors)}`);
+}
 for (const [title, payload] of negative) {
   if (ajv.compile({ $defs: defs, $ref: `#/$defs/${title}` })(payload)) errors.push(`${title} accepted an invalid payload`);
 }

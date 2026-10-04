@@ -26,8 +26,7 @@
       "required": [
         "message_id",
         "reaction"
-      ],
-      "additionalProperties": false
+      ]
     }
   },
   "required": [
@@ -35,6 +34,5 @@
     "event_id",
     "chat_id",
     "data"
-  ],
-  "additionalProperties": false
+  ]
 }

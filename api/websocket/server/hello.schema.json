@@ -30,8 +30,7 @@
         "api_version",
         "min_client_api_version",
         "user_id"
-      ],
-      "additionalProperties": false
+      ]
     }
   },
   "required": [
@@ -39,6 +38,5 @@
     "event_id",
     "chat_id",
     "data"
-  ],
-  "additionalProperties": false
+  ]
 }

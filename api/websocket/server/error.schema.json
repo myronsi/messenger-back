@@ -32,8 +32,7 @@
       },
       "required": [
         "code"
-      ],
-      "additionalProperties": false
+      ]
     },
     "client_temp_id": {
       "$ref": "../../openapi.yaml#/components/schemas/ClientTempId"
@@ -44,6 +43,5 @@
     "event_id",
     "chat_id",
     "data"
-  ],
-  "additionalProperties": false
+  ]
 }
