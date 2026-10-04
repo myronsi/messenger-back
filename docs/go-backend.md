@@ -14,7 +14,7 @@ The Go backend replaces the Python one (`server/`). Its skeleton is in place; fe
 | `internal/observability` | JSON `slog` logger with redaction, Prometheus metrics, optional OpenTelemetry tracing |
 | `internal/httpapi` | router, middleware, health checks, generated server (`api.gen.go`) |
 | `internal/realtime` | WebSocket registry and graceful "reconnect" close (code 1012) |
-| `internal/store/{postgres,redis,scylla,elastic}` | lazy store clients with `Ping` for `/readyz` |
+| `internal/store/{postgres,redis,scylla,elastic}` | store clients with `Ping` for `/readyz`; PostgreSQL also has the repositories ([schema](postgres-schema.md)) |
 | `internal/{auth,users,chats,groups,messages,media,search}` | domain packages, empty for now |
 | `migrations/{postgres,scylla}` | schema migrations (`make migrate`, applied automatically by the dev stack) |
 | `compose.dev.yaml`, `deploy/dev` | development stack and its init steps, see [dev-environment.md](dev-environment.md); production notes are in [deployment.md](deployment.md) |
@@ -28,7 +28,7 @@ make run               # or only the API from source on :8080, against stores th
 make test              # go test -race ./...
 make lint              # golangci-lint + go vet
 make vuln              # govulncheck
-make generate          # regenerate the server from api/openapi.yaml
+make generate          # regenerate the server (api/openapi.yaml) and the sqlc queries
 make migrate           # DATABASE_URL and SCYLLA_* must be set
 make docker            # distroless, non-root image from go.Dockerfile
 ```
@@ -46,4 +46,4 @@ make docker            # distroless, non-root image from go.Dockerfile
 
 ## CI
 
-`.github/workflows/go.yml`: golangci-lint, `go vet`, `go mod tidy` and `go generate` drift checks, `go test -race ./...`, `govulncheck`, an image build, and `dev-stack`, which starts `compose.dev.yaml` and checks that `/readyz` reports every store ready.
+`.github/workflows/go.yml`: golangci-lint, `go vet`, `go mod tidy` and `go generate` drift checks, `go test -race ./...` (with a PostgreSQL service for the database tests), `migrations` (up, down and up again with the real tool), `govulncheck`, an image build, and `dev-stack`, which starts `compose.dev.yaml` and checks that `/readyz` reports every store ready.

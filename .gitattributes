@@ -1,4 +1,7 @@
 *.sh text eol=lf
 *.go text eol=lf
 Makefile text eol=lf
+*.sql text eol=lf
+sqlc.yaml text eol=lf
 *.gen.go linguist-generated
+internal/store/postgres/sqlcdb/*.go linguist-generated

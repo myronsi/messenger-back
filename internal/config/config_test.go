@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+	"time"
 )
 
 const testKey = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=" // 32 bytes, base64
@@ -28,6 +29,9 @@ func TestLoadDefaults(t *testing.T) {
 	}
 	if cfg.HTTP.Addr != ":8080" || cfg.HTTP.BasePath != "/api/v2" || cfg.Env != "development" {
 		t.Fatalf("unexpected defaults: %+v", cfg.HTTP)
+	}
+	if cfg.Postgres.MaxConns != 10 || cfg.Postgres.QueryTimeout != 5*time.Second {
+		t.Fatalf("unexpected postgres defaults: %+v", cfg.Postgres)
 	}
 	if len(cfg.ScyllaHosts) != 2 {
 		t.Fatalf("hosts = %v", cfg.ScyllaHosts)
@@ -63,6 +67,9 @@ func TestValidation(t *testing.T) {
 		"cors wildcard":       {"CORS_ORIGINS": "*"},
 		"cors with path":      {"CORS_ORIGINS": "https://a.example/app"},
 		"zero timeout":        {"HTTP_REQUEST_TIMEOUT": "0s"},
+		"zero pool size":      {"POSTGRES_MAX_CONNS": "0"},
+		"negative pool size":  {"POSTGRES_MAX_CONNS": "-1"},
+		"zero query timeout":  {"POSTGRES_QUERY_TIMEOUT": "0s"},
 		"bad base path":       {"API_BASE_PATH": "api/"},
 		"root base path":      {"API_BASE_PATH": "/"},
 		"cors userinfo":       {"CORS_ORIGINS": "https://user@app.example.com"},
