@@ -57,26 +57,31 @@ func TestRequiredSecrets(t *testing.T) {
 
 func TestValidation(t *testing.T) {
 	tests := map[string]map[string]string{
-		"short jwt secret":    {"JWT_SECRET": "short"},
-		"short pepper":        {"RECOVERY_PEPPER": "short"},
-		"encryption not b64":  {"ENCRYPTION_KEY": "!!!"},
-		"encryption too long": {"ENCRYPTION_KEY": strings.Repeat("A", 64)},
-		"bad env":             {"APP_ENV": "staging"},
-		"bad log level":       {"LOG_LEVEL": "loud"},
-		"bad database url":    {"DATABASE_URL": "mysql://x/y"},
-		"cors wildcard":       {"CORS_ORIGINS": "*"},
-		"cors with path":      {"CORS_ORIGINS": "https://a.example/app"},
-		"zero timeout":        {"HTTP_REQUEST_TIMEOUT": "0s"},
-		"zero pool size":      {"POSTGRES_MAX_CONNS": "0"},
-		"negative pool size":  {"POSTGRES_MAX_CONNS": "-1"},
-		"zero query timeout":  {"POSTGRES_QUERY_TIMEOUT": "0s"},
-		"bad base path":       {"API_BASE_PATH": "api/"},
-		"root base path":      {"API_BASE_PATH": "/"},
-		"cors userinfo":       {"CORS_ORIGINS": "https://user@app.example.com"},
-		"cors query":          {"CORS_ORIGINS": "https://app.example.com?x=1"},
-		"cors fragment":       {"CORS_ORIGINS": "https://app.example.com#x"},
-		"cors localhost fake": {"APP_ENV": "production", "CORS_ORIGINS": "http://localhost.attacker.example"},
-		"cors http in prod":   {"APP_ENV": "production", "CORS_ORIGINS": "http://app.example.com"},
+		"short jwt secret":     {"JWT_SECRET": "short"},
+		"short pepper":         {"RECOVERY_PEPPER": "short"},
+		"encryption not b64":   {"ENCRYPTION_KEY": "!!!"},
+		"encryption too long":  {"ENCRYPTION_KEY": strings.Repeat("A", 64)},
+		"bad env":              {"APP_ENV": "staging"},
+		"bad log level":        {"LOG_LEVEL": "loud"},
+		"bad database url":     {"DATABASE_URL": "mysql://x/y"},
+		"cors wildcard":        {"CORS_ORIGINS": "*"},
+		"cors with path":       {"CORS_ORIGINS": "https://a.example/app"},
+		"zero timeout":         {"HTTP_REQUEST_TIMEOUT": "0s"},
+		"zero pool size":       {"POSTGRES_MAX_CONNS": "0"},
+		"negative pool size":   {"POSTGRES_MAX_CONNS": "-1"},
+		"zero query timeout":   {"POSTGRES_QUERY_TIMEOUT": "0s"},
+		"bad base path":        {"API_BASE_PATH": "api/"},
+		"root base path":       {"API_BASE_PATH": "/"},
+		"cors userinfo":        {"CORS_ORIGINS": "https://user@app.example.com"},
+		"cors query":           {"CORS_ORIGINS": "https://app.example.com?x=1"},
+		"cors fragment":        {"CORS_ORIGINS": "https://app.example.com#x"},
+		"cors localhost fake":  {"APP_ENV": "production", "CORS_ORIGINS": "http://localhost.attacker.example"},
+		"cors http in prod":    {"APP_ENV": "production", "CORS_ORIGINS": "http://app.example.com"},
+		"insecure cookie prod": {"APP_ENV": "production", "COOKIE_SECURE": "false"},
+		"relative cookie path": {"REFRESH_COOKIE_PATH": "auth"},
+		"zero cache ttl":       {"SESSION_CACHE_TTL": "0s"},
+		"negative grace":       {"REFRESH_REUSE_GRACE": "-1s"},
+		"zero hash workers":    {"PASSWORD_HASH_CONCURRENCY": "0"},
 	}
 	for name, override := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -88,6 +93,23 @@ func TestValidation(t *testing.T) {
 				t.Fatal("expected a validation error")
 			}
 		})
+	}
+}
+
+func TestAuthDefaults(t *testing.T) {
+	cfg, err := LoadFrom(validEnv())
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := cfg.Auth
+	if !a.CookieSecure || a.RefreshCookiePath != "" || a.SessionCacheTTL != 30*time.Second || a.RefreshReuseGrace != 10*time.Second || a.PasswordHashConcurrency != 4 {
+		t.Fatalf("unexpected defaults: %+v", a)
+	}
+	e := validEnv()
+	e["COOKIE_SECURE"] = "false"
+	e["REFRESH_REUSE_GRACE"] = "0s"
+	if cfg, err = LoadFrom(e); err != nil || cfg.Auth.CookieSecure || cfg.Auth.RefreshReuseGrace != 0 {
+		t.Fatalf("overrides not applied: %v %+v", err, cfg.Auth)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/myronsi/messenger-back/internal/store/postgres/sqlcdb"
@@ -82,6 +83,68 @@ func (r userRepo) SetPasswordHash(ctx context.Context, id int64, passwordHash st
 	defer cancel()
 	n, err := r.s.q.SetPasswordHash(ctx, sqlcdb.SetPasswordHashParams{ID: id, PasswordHash: passwordHash})
 	return affected(n, err)
+}
+
+func (r userRepo) Register(ctx context.Context, username, displayName, passwordHash string) (User, error) {
+	var out User
+	err := r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
+		u, err := q.CreateUser(ctx, sqlcdb.CreateUserParams{Username: username, DisplayName: displayName, PasswordHash: passwordHash})
+		if err != nil {
+			return err
+		}
+		if err := q.EnsureSecuritySettings(ctx, u.ID); err != nil {
+			return err
+		}
+		if err := q.EnsurePrivacySettings(ctx, u.ID); err != nil {
+			return err
+		}
+		out = userFrom(u)
+		return nil
+	})
+	if err != nil {
+		return User{}, err
+	}
+	return out, nil
+}
+
+func (r userRepo) CredentialsByID(ctx context.Context, id int64) (Credentials, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	u, err := r.s.q.GetUser(ctx, id)
+	if err != nil {
+		return Credentials{}, mapError(err)
+	}
+	return Credentials{UserID: u.ID, PasswordHash: u.PasswordHash}, nil
+}
+
+func (r userRepo) RehashPassword(ctx context.Context, id int64, oldHash, newHash string) (bool, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	n, err := r.s.q.RehashPassword(ctx, sqlcdb.RehashPasswordParams{ID: id, OldHash: oldHash, NewHash: newHash})
+	return n == 1, mapError(err)
+}
+
+func (r userRepo) ChangePassword(ctx context.Context, id int64, oldHash, newHash string, keepID uuid.UUID) ([]uuid.UUID, error) {
+	var revoked []uuid.UUID
+	err := r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
+		revoked = nil // the transaction can be retried
+		if _, err := q.LockUser(ctx, id); err != nil {
+			return err
+		}
+		n, err := q.RehashPassword(ctx, sqlcdb.RehashPasswordParams{ID: id, OldHash: oldHash, NewHash: newHash})
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return ErrConflict
+		}
+		revoked, err = q.RevokeOtherSessions(ctx, sqlcdb.RevokeOtherSessionsParams{UserID: id, KeepID: keepID})
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return revoked, nil
 }
 
 func (r userRepo) TouchLastSeen(ctx context.Context, id int64) error {

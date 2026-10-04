@@ -57,6 +57,7 @@ type Config struct {
 	ScyllaKeyspace   string `env:"SCYLLA_KEYSPACE"`
 	ElasticsearchURL Secret `env:"ELASTICSEARCH_URL,required,notEmpty"`
 
+	Auth    Auth
 	Tracing Tracing
 
 	// WorkerAddr is where the worker serves /healthz and /metrics.
@@ -90,6 +91,24 @@ type HTTP struct {
 	CORSOrigins []string `env:"CORS_ORIGINS" envSeparator:","`
 	// ReadinessTimeout bounds every dependency check of /readyz.
 	ReadinessTimeout time.Duration `env:"READINESS_TIMEOUT" envDefault:"2s"`
+}
+
+// Auth configures sessions and the refresh cookie.
+type Auth struct {
+	// CookieSecure marks the refresh cookie Secure. Only turn it off for plain-HTTP local development;
+	// production refuses to start without it.
+	CookieSecure bool `env:"COOKIE_SECURE" envDefault:"true"`
+	// RefreshCookiePath overrides the cookie path, which defaults to <API_BASE_PATH>/auth/refresh. During
+	// the migration from the Python backend (MSGC-77) set it to the old path (/auth) so the browser sends
+	// the existing cookie and the first refresh replaces it.
+	RefreshCookiePath string `env:"REFRESH_COOKIE_PATH"`
+	// SessionCacheTTL is how long Redis caches "this session is active"; revocations apply immediately.
+	SessionCacheTTL time.Duration `env:"SESSION_CACHE_TTL" envDefault:"30s"`
+	// RefreshReuseGrace tolerates the previous refresh token for this long after a rotation, so two tabs
+	// refreshing together are not mistaken for token theft. 0 disables the tolerance.
+	RefreshReuseGrace time.Duration `env:"REFRESH_REUSE_GRACE" envDefault:"10s"`
+	// PasswordHashConcurrency bounds simultaneous Argon2 hashes (each uses 64 MiB).
+	PasswordHashConcurrency int `env:"PASSWORD_HASH_CONCURRENCY" envDefault:"4"`
 }
 
 // Tracing configures optional OpenTelemetry tracing. The exporter itself is configured with the
@@ -219,11 +238,32 @@ func (c Config) Validate() error {
 		add("POSTGRES_QUERY_TIMEOUT must be positive")
 	}
 	problems = append(problems, c.HTTP.validate()...)
+	problems = append(problems, c.Auth.validate(c.Env == "production")...)
 
 	if len(problems) > 0 {
 		return fmt.Errorf("invalid configuration: %s", strings.Join(problems, "; "))
 	}
 	return nil
+}
+
+func (a Auth) validate(production bool) []string {
+	var problems []string
+	if production && !a.CookieSecure {
+		problems = append(problems, "COOKIE_SECURE must be true in production")
+	}
+	if a.RefreshCookiePath != "" && (!strings.HasPrefix(a.RefreshCookiePath, "/") || strings.ContainsAny(a.RefreshCookiePath, ";, \r\n")) {
+		problems = append(problems, "REFRESH_COOKIE_PATH must be an absolute path")
+	}
+	if a.SessionCacheTTL <= 0 {
+		problems = append(problems, "SESSION_CACHE_TTL must be positive")
+	}
+	if a.RefreshReuseGrace < 0 {
+		problems = append(problems, "REFRESH_REUSE_GRACE must not be negative")
+	}
+	if a.PasswordHashConcurrency <= 0 {
+		problems = append(problems, "PASSWORD_HASH_CONCURRENCY must be positive")
+	}
+	return problems
 }
 
 func (h HTTP) validate() []string {

@@ -18,6 +18,7 @@ x-go-app: &go-app
   restart: unless-stopped
   environment:
     APP_ENV: development
+    COOKIE_SECURE: "false"
     LOG_LEVEL: ${LOG_LEVEL:-debug}
     JWT_SECRET: ${JWT_SECRET:?required}
     ENCRYPTION_KEY: ${ENCRYPTION_KEY:?required}

@@ -50,6 +50,15 @@ func (q *Queries) DeleteUser(ctx context.Context, id int64) (int64, error) {
 	return result.RowsAffected(), nil
 }
 
+const ensurePrivacySettings = `-- name: EnsurePrivacySettings :exec
+INSERT INTO user_privacy_settings (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING
+`
+
+func (q *Queries) EnsurePrivacySettings(ctx context.Context, userID int64) error {
+	_, err := q.db.Exec(ctx, ensurePrivacySettings, userID)
+	return err
+}
+
 const getUser = `-- name: GetUser :one
 SELECT id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at FROM users WHERE id = $1
 `
@@ -124,6 +133,25 @@ func (q *Queries) LockUserShared(ctx context.Context, id int64) (int64, error) {
 	var id_2 int64
 	err := row.Scan(&id_2)
 	return id_2, err
+}
+
+const rehashPassword = `-- name: RehashPassword :execrows
+UPDATE users SET password_hash = $1 WHERE id = $2 AND password_hash = $3
+`
+
+type RehashPasswordParams struct {
+	NewHash string
+	ID      int64
+	OldHash string
+}
+
+// Only replaces the hash that was verified, so a password change in between is never overwritten.
+func (q *Queries) RehashPassword(ctx context.Context, arg RehashPasswordParams) (int64, error) {
+	result, err := q.db.Exec(ctx, rehashPassword, arg.NewHash, arg.ID, arg.OldHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const setPasswordHash = `-- name: SetPasswordHash :execrows
