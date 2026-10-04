@@ -77,6 +77,9 @@ func (r sessionRepo) Rotate(ctx context.Context, req RotateRequest) (RotateResul
 			return err
 		}
 		old, err := q.LockSession(ctx, used.SessionID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil // the session was purged or deleted in the meantime
+		}
 		if err != nil {
 			return err
 		}

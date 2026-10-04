@@ -89,6 +89,8 @@ func TestVerifyRejectsMalformedHashes(t *testing.T) {
 	for _, stored := range []string{
 		"",
 		"plaintext",
+		"c2FsdHNhbHQ=:AA==", // a one-byte PBKDF2 hash would accept 1 password in 256
+		"c2FsdHNhbHQ=:" + base64.StdEncoding.EncodeToString(make([]byte, 31)),
 		"argon2$",
 		"$argon2id$v=19$m=65536,t=3,p=4$onlysalt",
 		"$argon2id$v=18$m=65536,t=3,p=4$c2FsdHNhbHQ$aGFzaGhhc2hoYXNoaGFzaA",

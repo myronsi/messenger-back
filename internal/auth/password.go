@@ -33,6 +33,7 @@ const (
 	maxKeyLen  = 64
 
 	legacyPBKDF2Iterations = 100_000
+	legacyPBKDF2KeyLen     = 32
 	// v1Prefix marks hashes written by the Python backend: "argon2$" followed by the PHC string.
 	v1Prefix = "argon2$"
 )
@@ -173,7 +174,7 @@ func parseLegacyPBKDF2(stored string) (salt, hash []byte, ok bool) {
 	}
 	salt, err1 := base64.StdEncoding.DecodeString(s)
 	hash, err2 := base64.StdEncoding.DecodeString(h)
-	if err1 != nil || err2 != nil || len(salt) == 0 || len(hash) == 0 {
+	if err1 != nil || err2 != nil || len(salt) == 0 || len(hash) != legacyPBKDF2KeyLen {
 		return nil, nil, false
 	}
 	return salt, hash, true
