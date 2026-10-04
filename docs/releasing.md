@@ -34,7 +34,7 @@ Add a `Release-As: X.Y.0` footer to a commit so that `MAJOR.MINOR` matches the f
 
 ## Raising the minimum client version
 
-`MIN_CLIENT_API_VERSION` (environment, default `1.0.0`) is the oldest client API contract version still served. Raise it only deliberately, once the request counts per `X-Client-Api-Version` (`GET /metrics` with `METRICS_ENABLED=true`, or the `First request from client API version` log lines) show that old clients are gone, and mention it in the release notes.
+`MIN_CLIENT_API_VERSION` (environment, default `1.0.0`) is the oldest client API contract version still served. Raise it only deliberately, once the request counts per `X-Client-Api-Version` (`GET /metrics` with `METRICS_ENABLED=true`, or the `First request from client API version` log lines) show that old clients are gone, and mention it in the release notes. The value must be a valid version with the backend's major version and not above its `API_VERSION`; otherwise the server refuses to start.
 
 ## Rollback
 

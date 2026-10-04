@@ -12,6 +12,7 @@ from server.client_version import (
     check_client_api_version,
     hello_event,
     parse_version,
+    validate_configuration,
     version_info,
 )
 from server.config import metrics_enabled, min_client_api_version
@@ -35,10 +36,25 @@ class VersionTests(unittest.TestCase):
         self.assertTrue(metrics_enabled({"METRICS_ENABLED": "true"}))
 
     def test_parse_version(self):
-        self.assertEqual(parse_version("2.4.0"), (2, 4, 0))
-        self.assertEqual(parse_version("2.0.0-alpha.3"), (2, 0, 0))
-        for bad in (None, "", "2.4", "latest", "2.4.0\nx", "a.b.c"):
+        self.assertEqual(parse_version("2.4.0")[:3], (2, 4, 0))
+        self.assertEqual(parse_version("2.0.0-alpha.3")[:3], (2, 0, 0))
+        self.assertEqual(parse_version("1.0.0+build.5"), parse_version("1.0.0"))
+        for bad in (None, "", "2.4", "latest", "2.4.0\nx", "a.b.c", "1.0.0-", "1.0.0-a..b", "1." + "0" * 80 + ".0"):
             self.assertIsNone(parse_version(bad))
+
+    def test_prereleases_sort_below_their_release_by_semver_precedence(self):
+        ordered = ["1.0.0-alpha", "1.0.0-alpha.1", "1.0.0-alpha.beta", "1.0.0-beta", "1.0.0-beta.2",
+                   "1.0.0-beta.11", "1.0.0-rc.1", "1.0.0", "1.0.1", "1.1.0"]
+        keys = [parse_version(value) for value in ordered]
+        self.assertEqual(keys, sorted(keys))
+        self.assertEqual(len(set(keys)), len(keys))
+
+    def test_invalid_minimum_is_rejected_at_startup(self):
+        validate_configuration({})
+        validate_configuration({"MIN_CLIENT_API_VERSION": "1.0.0"})
+        for bad in ("1.2", "latest", "2.0.0", "0.9.0", "1.99.0"):
+            with self.assertRaises(ValueError, msg=bad):
+                validate_configuration({"MIN_CLIENT_API_VERSION": bad})
 
     def test_hello_event(self):
         self.assertEqual(
@@ -54,6 +70,9 @@ class CompatibilityTests(unittest.TestCase):
         self.assertIsNone(check_client_api_version("1.9.4", env))
         self.assertIn("older", check_client_api_version("1.1.9", env))
         self.assertIn("major", check_client_api_version("2.0.0", env))
+        self.assertIn("older", check_client_api_version("1.2.0-rc.1", env))
+        self.assertIn("older", check_client_api_version("1.0.0-alpha.3", {}))
+        self.assertIsNone(check_client_api_version("1.0.0+build.7", {}))
         self.assertEqual(check_client_api_version("nonsense", env), "invalid")
 
 
@@ -64,6 +83,17 @@ class CounterTests(unittest.TestCase):
             counter.record(value)
         self.assertEqual(counter.snapshot(), {"1.0.0": 2, "none": 1, "other": 3})
         self.assertIn('client_api_version="1.0.0"} 2', counter.render_prometheus())
+
+    def test_each_new_client_pair_is_logged_once_with_both_versions(self):
+        counter = ClientVersionCounter()
+        with self.assertLogs("server.client_version", level="INFO") as logs:
+            counter.record("1.0.0", "0.6.1")
+            counter.record("1.0.0", "0.6.1")
+            counter.record("1.0.0", "0.6.2")
+            counter.record("1.0.0", "bad value")
+        self.assertEqual(len(logs.output), 3)
+        self.assertIn("client_version=0.6.1 client_api_version=1.0.0", logs.output[0])
+        self.assertIn("client_version=invalid", logs.output[2])
 
 
 class MiddlewareTests(unittest.TestCase):

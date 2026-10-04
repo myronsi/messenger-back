@@ -8,10 +8,11 @@ from server.websocket import router as websocket_router
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from server.database import setup_database
 from server.config import allowed_hosts, cors_origins, metrics_enabled
-from server.client_version import ClientVersionMiddleware, client_versions, version_info
+from server.client_version import ClientVersionMiddleware, client_versions, validate_configuration, version_info
 from server.logging_config import configure_logging
 
 configure_logging()
+validate_configuration()
 
 
 @asynccontextmanager

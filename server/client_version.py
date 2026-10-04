@@ -13,17 +13,45 @@ logger = logging.getLogger(__name__)
 CLIENT_VERSION_HEADER = "x-client-version"
 CLIENT_API_VERSION_HEADER = "x-client-api-version"
 
-_VERSION_RE = re.compile(r"^(\d{1,6})\.(\d{1,6})\.(\d{1,6})(?:[-+][0-9A-Za-z.+-]{0,64})?$")
+_VERSION_RE = re.compile(
+    r"^(\d{1,6})\.(\d{1,6})\.(\d{1,6})(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
+)
+MAX_VERSION_CHARS = 64
 MAX_TRACKED_VERSIONS = 50
+MAX_TRACKED_CLIENTS = 200
 # Endpoints a client must always be able to reach to find out why it is rejected.
 EXEMPT_PATHS = {"/", "/version", "/metrics"}
 
 
-def parse_version(value: str | None) -> tuple[int, int, int] | None:
-    match = _VERSION_RE.match((value or "").strip())
+def parse_version(value: str | None) -> tuple | None:
+    """Parse a SemVer string into a key that sorts by SemVer precedence: (major, minor, patch, prerelease).
+
+    A pre-release sorts below its release (1.0.0-alpha.3 < 1.0.0); build metadata is ignored.
+    """
+    value = (value or "").strip()
+    match = _VERSION_RE.match(value) if len(value) <= MAX_VERSION_CHARS else None
     if not match:
         return None
-    return tuple(int(part) for part in match.groups())
+    major, minor, patch, prerelease = match.groups()
+    if prerelease is None:
+        pre_key = (1,)
+    else:
+        identifiers = tuple((0, int(part)) if part.isdigit() else (1, part) for part in prerelease.split("."))
+        pre_key = (0, *identifiers)
+    return int(major), int(minor), int(patch), pre_key
+
+
+def validate_configuration(environ=None) -> None:
+    """Fail at startup when MIN_CLIENT_API_VERSION could not be applied, instead of erroring on requests."""
+    raw = min_client_api_version(environ)
+    minimum = parse_version(raw)
+    server = parse_version(API_VERSION)
+    if minimum is None:
+        raise ValueError(f"MIN_CLIENT_API_VERSION must look like 1.0.0, got {raw!r}")
+    if minimum[0] != server[0] or minimum > server:
+        raise ValueError(
+            f"MIN_CLIENT_API_VERSION {raw} must have major version {server[0]} and not be above API version {API_VERSION}"
+        )
 
 
 def version_info() -> dict:
@@ -46,6 +74,8 @@ def check_client_api_version(value: str, environ=None) -> str | None:
         return "invalid"
     server = parse_version(API_VERSION)
     minimum = parse_version(min_client_api_version(environ))
+    if minimum is None:
+        raise ValueError("MIN_CLIENT_API_VERSION is not a valid version")
     if client[0] != server[0]:
         return f"API major version {client[0]} is not supported, this server speaks {server[0]}.x"
     if client < minimum:
@@ -56,20 +86,31 @@ def check_client_api_version(value: str, environ=None) -> str | None:
 class ClientVersionCounter:
     """Requests per client API version. Values come from the client, so the number of series is capped."""
 
-    def __init__(self, limit: int = MAX_TRACKED_VERSIONS):
+    def __init__(self, limit: int = MAX_TRACKED_VERSIONS, client_limit: int = MAX_TRACKED_CLIENTS):
         self._limit = limit
+        self._client_limit = client_limit
         self._counts: Counter = Counter()
+        self._clients: set = set()
         self._lock = Lock()
 
-    def record(self, value: str | None) -> str:
-        label = "none" if not value else value if parse_version(value) else "invalid"
+    @staticmethod
+    def _label(value: str | None) -> str:
+        return "none" if not value else value if parse_version(value) else "invalid"
+
+    def record(self, api_version: str | None, app_version: str | None = None) -> str:
+        """Count a request and log every new (app version, API version) pair once, whether accepted or not."""
+        label = self._label(api_version)
+        app_label = self._label(app_version)
         with self._lock:
             if label not in self._counts and len(self._counts) >= self._limit:
                 label = "other"
-            first_seen = label not in self._counts
             self._counts[label] += 1
+            pair = (app_label, label)
+            first_seen = pair not in self._clients and len(self._clients) < self._client_limit
+            if first_seen:
+                self._clients.add(pair)
         if first_seen:
-            logger.info("First request from client API version %s", label)
+            logger.info("New client seen: client_version=%s client_api_version=%s", app_label, label)
         return label
 
     def snapshot(self) -> dict[str, int]:
@@ -121,7 +162,7 @@ class ClientVersionMiddleware:
         headers = {key.decode("latin-1").lower(): value.decode("latin-1") for key, value in scope["headers"]}
         api_version = headers.get(CLIENT_API_VERSION_HEADER)
         app_version = headers.get(CLIENT_VERSION_HEADER)
-        label = client_versions.record(api_version)
+        label = client_versions.record(api_version, app_version)
         if scope["path"] in EXEMPT_PATHS or api_version is None:
             await self.app(scope, receive, send)
             return
@@ -133,7 +174,7 @@ class ClientVersionMiddleware:
 
         logger.warning(
             "Rejected %s %s: client_api_version=%s client_version=%s",
-            scope["method"], scope["path"], label, (app_version or "none")[:32],
+            scope["method"], scope["path"], label, ClientVersionCounter._label(app_version),
         )
         if reason == "invalid":
             status, code, title = 400, "invalid_client_version", "Invalid client version"
