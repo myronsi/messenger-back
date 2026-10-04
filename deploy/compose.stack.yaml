@@ -18,7 +18,7 @@ services:
       WS_ALLOW_QUERY_TOKEN: "true"
       MIN_CLIENT_API_VERSION: ${MIN_CLIENT_API_VERSION:-1.0.0}
       METRICS_ENABLED: "true"
-      DATABASE_URL: postgresql://messenger:messenger@postgres:5432/messenger
+      DATABASE_URL: postgresql://messenger@postgres:5432/messenger
     depends_on:
       postgres:
         condition: service_healthy
@@ -27,7 +27,8 @@ services:
     environment:
       POSTGRES_DB: messenger
       POSTGRES_USER: messenger
-      POSTGRES_PASSWORD: messenger
+      # No password: the database is reachable only from the backend container (no published port).
+      POSTGRES_HOST_AUTH_METHOD: trust
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U messenger -d messenger"]
       interval: 5s

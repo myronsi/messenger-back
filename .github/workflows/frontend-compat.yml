@@ -109,8 +109,8 @@ jobs:
       - if: steps.smoke.outputs.present == 'true'
         working-directory: frontend
         run: |
-          npm ci
-          npx playwright install --with-deps chromium
+          npm ci --ignore-scripts
+          ./node_modules/.bin/playwright install --with-deps chromium
           npm run test:smoke
         env:
           VITE_BASE_URL: http://127.0.0.1:8000

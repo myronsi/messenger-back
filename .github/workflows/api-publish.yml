@@ -48,7 +48,7 @@ jobs:
           registry-url: https://registry.npmjs.org
           cache: npm
           cache-dependency-path: api/package-lock.json
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npm run check
       - run: npm run build
       - name: Decide version and dist-tag

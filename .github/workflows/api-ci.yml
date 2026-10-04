@@ -33,9 +33,9 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: api/package-lock.json
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - name: Lint openapi.yaml
-        run: npx redocly lint openapi.yaml
+        run: npm run lint
       - name: Package version equals info.version, WebSocket examples match their schemas
         run: npm run check
       - name: Types can be generated
