@@ -13,6 +13,7 @@
 !server/upload_security.py
 !server/usernames.py
 !server/config.py
+!server/client_version.py
 !server/rate_limit.py
 !server/recovery_shares.py
 !server/ws_tickets.py
@@ -30,6 +31,7 @@
 !tests/test_image_metadata.py
 !tests/test_usernames.py
 !tests/test_cors_config.py
+!tests/test_client_version.py
 !tests/test_recovery_security.py
 !tests/test_cookie_paths.py
 !static/

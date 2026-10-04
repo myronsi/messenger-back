@@ -4,6 +4,7 @@ from starlette.websockets import WebSocketState
 from server.database import get_connection
 from server.routes.auth import get_active_session, verify_token, verify_ws_ticket
 from server.config import ws_allow_query_token
+from server.client_version import hello_event
 from server.presence import mark_user_connected, mark_user_disconnected, utc_now_iso
 from server.chat_summary import deleted_for_user_ids, get_chat_unread_summary, get_message_summary, message_visible_to
 from server.image_metadata import IMAGE_METADATA_KEYS
@@ -420,6 +421,7 @@ async def websocket_endpoint(
             return
 
         await websocket.accept()
+        await websocket.send_text(json.dumps(hello_event()))
 
         if chat_id != 0:
             cursor.execute("SELECT id FROM chats WHERE id = ?", (chat_id,))

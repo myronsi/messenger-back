@@ -39,3 +39,18 @@ def ws_allow_query_token(environ=None) -> bool:
     """Whether /ws/chat still accepts the access token in the URL (legacy clients) besides one-time tickets."""
     value = (environ if environ is not None else os.environ).get("WS_ALLOW_QUERY_TOKEN", "true")
     return value.strip().lower() not in {"0", "false", "no", "off"}
+
+
+DEFAULT_MIN_CLIENT_API_VERSION = "1.0.0"
+
+
+def min_client_api_version(environ=None) -> str:
+    """Oldest client API contract version still served; raise it deliberately and mention it in the release notes."""
+    value = (environ if environ is not None else os.environ).get("MIN_CLIENT_API_VERSION", "")
+    return value.strip() or DEFAULT_MIN_CLIENT_API_VERSION
+
+
+def metrics_enabled(environ=None) -> bool:
+    """Whether GET /metrics is served; keep it off the public proxy."""
+    value = (environ if environ is not None else os.environ).get("METRICS_ENABLED", "false")
+    return value.strip().lower() in {"1", "true", "yes", "on"}
