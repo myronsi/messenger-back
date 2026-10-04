@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.2](https://github.com/myronsi/messenger-back/compare/v0.5.1...v0.5.2) (2026-10-04)
+
+
+### Features
+
+* **api:** define API contract v2 and publish it as @myronsi/messenger-api ([#99](https://github.com/myronsi/messenger-back/issues/99)) ([b6120a7](https://github.com/myronsi/messenger-back/commit/b6120a73a5c5dcd42cc5c5a2bc85b769d670693a))
+* **api:** expose versions, reject outdated clients and publish release images ([#96](https://github.com/myronsi/messenger-back/issues/96)) ([ce009b1](https://github.com/myronsi/messenger-back/commit/ce009b12e078f3e117d64f6a90043e0e80a1e287))
+
 ## [0.5.1](https://github.com/myronsi/messenger-back/compare/v0.5.0...v0.5.1) (2026-10-03)
 
 
