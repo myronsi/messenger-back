@@ -679,9 +679,12 @@ func (s *Service) Refresh(ctx context.Context, c Client, refreshToken string) (*
 	switch res.Outcome {
 	case postgres.RotateOK:
 	case postgres.RotateReuse:
-		_ = s.revokeInCache(ctx, res.Session.ID) // logged; the caller gets a 401 either way
+		cacheErr := s.revokeInCache(ctx, res.Session.ID)
 		s.log.WarnContext(ctx, "refresh token reuse detected, session revoked", "user_id", res.Session.UserID, "session_id", res.Session.ID)
 		s.event(ctx, res.Session.UserID, "refresh_reuse_detected", c, map[string]any{"session_id": res.Session.ID})
+		if cacheErr != nil {
+			return nil, cacheErr
+		}
 		return nil, ErrInvalidRefreshToken
 	case postgres.RotateStale:
 		return nil, ErrRefreshSuperseded

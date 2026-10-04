@@ -344,6 +344,15 @@ func TestRevocationFailsClosedWhenTheCacheIsDown(t *testing.T) {
 	if !errors.Is(err, ErrRevocationIncomplete) {
 		t.Fatalf("a revocation the cache never saw must be reported, got %v", err)
 	}
+
+	// Token reuse revokes the session; a cache that cannot be told is reported there as well.
+	e.svc.grace = 0
+	if _, err := e.svc.Refresh(ctx, c, ts.RefreshToken); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.Refresh(ctx, c, ts.RefreshToken); !errors.Is(err, ErrRevocationIncomplete) {
+		t.Fatalf("reuse with a broken cache: got %v", err)
+	}
 }
 
 func TestTwoFactorLogin(t *testing.T) {

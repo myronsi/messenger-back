@@ -278,7 +278,7 @@ func (a *AuthServer) RefreshToken(w http.ResponseWriter, r *http.Request, _ Refr
 	}
 	ts, err := a.svc.Refresh(r.Context(), a.clientOf(r), cookie.Value)
 	if err != nil {
-		if errors.Is(err, auth.ErrInvalidRefreshToken) {
+		if errors.Is(err, auth.ErrInvalidRefreshToken) || errors.Is(err, auth.ErrRevocationIncomplete) {
 			a.clearRefreshCookie(w)
 		}
 		a.fail(w, r, err, false)
