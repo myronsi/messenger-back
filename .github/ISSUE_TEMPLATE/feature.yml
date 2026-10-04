@@ -1,0 +1,44 @@
+name: Feature
+description: A feature or change, possibly with a counterpart issue in the other repository
+labels: [feature]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What should change and why?
+    validations:
+      required: true
+  - type: input
+    id: counterpart
+    attributes:
+      label: Counterpart issue
+      description: Issue in the other repository, for example `myronsi/messenger-front#12`. Write `none` if this work is one-sided.
+      placeholder: myronsi/messenger-front#12
+    validations:
+      required: true
+  - type: dropdown
+    id: api-change
+    attributes:
+      label: API change?
+      description: Choose "yes" if the HTTP/WebSocket contract changes. Then add the label `api-change` (and `breaking-change` if existing clients break) and describe the change below.
+      options:
+        - "no"
+        - "yes"
+    validations:
+      required: true
+  - type: textarea
+    id: contract
+    attributes:
+      label: Contract change
+      description: Endpoints, events or fields that change, and the new contract version (only if API change is "yes").
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: |
+        Set the **milestone** to the release (0.5, 1.0 or 1.1). Work that touches both repositories gets one parent issue in `messenger-back` (label `epic`) with sub-issues for contract, backend and frontend; see `docs/project-workflow.md`.
