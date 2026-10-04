@@ -102,6 +102,9 @@ var (
 	ErrInvalidTwoFactorCode = errors.New("invalid two-factor code")
 	ErrInvalidChallenge     = errors.New("invalid or expired login challenge")
 	ErrInvalidRefreshToken  = errors.New("invalid refresh token")
+	// ErrRevocationIncomplete means sessions were revoked in PostgreSQL but the cache could not be told, so
+	// access tokens may still be accepted for up to SESSION_CACHE_TTL.
+	ErrRevocationIncomplete = errors.New("session revocation not fully applied")
 	// ErrRefreshSuperseded means the token was replaced a moment ago by a parallel refresh. The client holds
 	// (or is about to receive) the new token, so it must keep its cookie.
 	ErrRefreshSuperseded   = errors.New("refresh token superseded by a concurrent refresh")
@@ -330,12 +333,22 @@ func (s *Service) clear(ctx context.Context, r Rule, subject string) {
 	}
 }
 
-func (s *Service) revokeInCache(ctx context.Context, ids ...uuid.UUID) {
-	if err := s.cache.Revoke(ctx, ids...); err != nil {
-		// The database is authoritative; without the cache entry the revocation still holds once the
-		// cached verdict (a few seconds) has expired.
-		s.log.WarnContext(ctx, "session cache unavailable", "err", err)
+// revokeInCache writes the revocation tombstones, retrying briefly. If it cannot, a cached "active"
+// verdict could keep an access token alive until it expires, so the failure is returned and the request
+// fails instead of reporting an immediate sign-out that did not fully happen.
+func (s *Service) revokeInCache(ctx context.Context, ids ...uuid.UUID) error {
+	var err error
+	for attempt := range 3 {
+		if err = s.cache.Revoke(ctx, ids...); err == nil {
+			return nil
+		}
+		if ctx.Err() != nil {
+			break
+		}
+		time.Sleep(time.Duration(attempt+1) * 25 * time.Millisecond)
 	}
+	s.log.ErrorContext(ctx, "session revoked in the database but not in the cache", "sessions", len(ids), "err", err)
+	return fmt.Errorf("%w: %w", ErrRevocationIncomplete, err)
 }
 
 func normalizeUsername(u string) string { return strings.ToLower(strings.TrimSpace(u)) }
@@ -666,7 +679,7 @@ func (s *Service) Refresh(ctx context.Context, c Client, refreshToken string) (*
 	switch res.Outcome {
 	case postgres.RotateOK:
 	case postgres.RotateReuse:
-		s.revokeInCache(ctx, res.Session.ID)
+		_ = s.revokeInCache(ctx, res.Session.ID) // logged; the caller gets a 401 either way
 		s.log.WarnContext(ctx, "refresh token reuse detected, session revoked", "user_id", res.Session.UserID, "session_id", res.Session.ID)
 		s.event(ctx, res.Session.UserID, "refresh_reuse_detected", c, map[string]any{"session_id": res.Session.ID})
 		return nil, ErrInvalidRefreshToken
@@ -696,11 +709,11 @@ func (s *Service) Logout(ctx context.Context, c Client, p Principal) error {
 	if err != nil {
 		return err
 	}
-	s.revokeInCache(ctx, p.SessionID)
+	cacheErr := s.revokeInCache(ctx, p.SessionID)
 	if revoked {
 		s.event(ctx, p.UserID, "logout", c, nil)
 	}
-	return nil
+	return cacheErr
 }
 
 // LogoutByRefreshToken ends the session a refresh token belongs to. It succeeds for unknown tokens, so
@@ -825,9 +838,9 @@ func (s *Service) ChangePassword(ctx context.Context, c Client, p Principal, cur
 	if err != nil {
 		return err
 	}
-	s.revokeInCache(ctx, revoked...)
+	cacheErr := s.revokeInCache(ctx, revoked...)
 	s.event(ctx, p.UserID, "password_changed", c, map[string]any{"sessions_revoked": len(revoked)})
-	return nil
+	return cacheErr
 }
 
 // ---------------------------------------------------------------- sessions
@@ -854,9 +867,9 @@ func (s *Service) RevokeSession(ctx context.Context, c Client, p Principal, id u
 	if err != nil {
 		return err
 	}
-	s.revokeInCache(ctx, id)
+	cacheErr := s.revokeInCache(ctx, id)
 	s.event(ctx, p.UserID, "session_revoked", c, map[string]any{"session_id": id})
-	return nil
+	return cacheErr
 }
 
 // RevokeOtherSessions signs out every device but the current one.
@@ -865,11 +878,11 @@ func (s *Service) RevokeOtherSessions(ctx context.Context, c Client, p Principal
 	if err != nil {
 		return err
 	}
-	s.revokeInCache(ctx, ids...)
+	cacheErr := s.revokeInCache(ctx, ids...)
 	if len(ids) > 0 {
 		s.event(ctx, p.UserID, "other_sessions_revoked", c, map[string]any{"count": len(ids)})
 	}
-	return nil
+	return cacheErr
 }
 
 // ---------------------------------------------------------------- security settings and two-factor
@@ -954,7 +967,16 @@ func (s *Service) ConfirmTwoFactor(ctx context.Context, c Client, p Principal, c
 	if err != nil {
 		return nil, ErrNoPendingTwoFactor
 	}
-	if _, ok := VerifyTOTP(secret, strings.TrimSpace(code), s.now()); !ok {
+	step, ok := VerifyTOTP(secret, strings.TrimSpace(code), s.now())
+	if !ok {
+		return nil, ErrInvalidTwoFactorCode
+	}
+	// Claim the step so the code that enabled 2FA cannot be replayed to answer the first login challenge.
+	fresh, err := s.replay.Claim(ctx, p.UserID, step)
+	if err != nil {
+		return nil, err
+	}
+	if !fresh {
 		return nil, ErrInvalidTwoFactorCode
 	}
 	attempt.release(ctx)
@@ -1047,9 +1069,9 @@ func (s *Service) ResetPassword(ctx context.Context, c Client, token, newPasswor
 	if err != nil {
 		return err
 	}
-	s.revokeInCache(ctx, res.RevokedSessions...)
+	cacheErr := s.revokeInCache(ctx, res.RevokedSessions...)
 	s.event(ctx, res.UserID, "password_reset", c, map[string]any{"sessions_revoked": len(res.RevokedSessions)})
-	return nil
+	return cacheErr
 }
 
 // ---------------------------------------------------------------- WebSocket tickets

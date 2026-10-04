@@ -19,6 +19,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/pquerna/otp/totp"
+	goredis "github.com/redis/go-redis/v9"
 
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 )
@@ -301,6 +302,47 @@ func TestRefreshGraceWindowAllowsParallelTabs(t *testing.T) {
 	}
 	if _, err := e.svc.Authenticate(ctx, ts.AccessToken); err != nil {
 		t.Fatalf("a refresh race must not sign the user out: %v", err)
+	}
+}
+
+func TestConfirmationCodeCannotBeReplayedAtLogin(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	c := e.client("10.0.0.7")
+	ts := e.register(t, "gina", "correct horse")
+	setup, err := e.svc.SetupTwoFactor(ctx, principal(ts), "correct horse")
+	if err != nil {
+		t.Fatal(err)
+	}
+	code := e.totpCode(t, setup.Secret)
+	if _, err := e.svc.ConfirmTwoFactor(ctx, c, principal(ts), code); err != nil {
+		t.Fatal(err)
+	}
+	res, err := e.svc.Login(ctx, c, "gina", "correct horse")
+	if err != nil || res.Challenge == "" {
+		t.Fatalf("login: %v %+v", err, res)
+	}
+	if _, err := e.svc.LoginTwoFactor(ctx, c, res.Challenge, code); !errors.Is(err, ErrInvalidTwoFactorCode) {
+		t.Fatalf("the code that enabled 2FA must not log in: got %v", err)
+	}
+}
+
+func TestRevocationFailsClosedWhenTheCacheIsDown(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	c := e.client("10.0.0.8")
+	ts := e.register(t, "hank", "correct horse")
+	other, err := e.svc.Login(ctx, c, "hank", "correct horse")
+	if err != nil || other.Tokens == nil {
+		t.Fatalf("login: %v", err)
+	}
+
+	down := goredis.NewClient(&goredis.Options{Addr: "127.0.0.1:1", DialTimeout: 50 * time.Millisecond, MaxRetries: -1})
+	defer down.Close()
+	e.svc.cache = NewSessionCache(down, "x", time.Minute)
+	err = e.svc.RevokeSession(ctx, c, principal(ts), other.Tokens.SessionID)
+	if !errors.Is(err, ErrRevocationIncomplete) {
+		t.Fatalf("a revocation the cache never saw must be reported, got %v", err)
 	}
 }
 
