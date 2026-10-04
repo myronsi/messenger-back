@@ -21,30 +21,37 @@
       ]
     },
     "data": {
-      "type": "object",
-      "properties": {
-        "message_id": {
-          "oneOf": [
-            {
+      "description": "Result of the client event. A `message` is answered with the stored `message_id` and `created_at`; every other event with an empty object.",
+      "oneOf": [
+        {
+          "type": "object",
+          "title": "MessageAckData",
+          "properties": {
+            "message_id": {
               "$ref": "../../openapi.yaml#/components/schemas/Id"
             },
-            {
-              "type": "null"
+            "created_at": {
+              "$ref": "../../openapi.yaml#/components/schemas/Timestamp"
             }
+          },
+          "required": [
+            "message_id",
+            "created_at"
           ]
         },
-        "created_at": {
-          "oneOf": [
-            {
-              "$ref": "../../openapi.yaml#/components/schemas/Timestamp"
+        {
+          "type": "object",
+          "title": "EmptyAckData",
+          "properties": {
+            "message_id": {
+              "not": {}
             },
-            {
-              "type": "null"
+            "created_at": {
+              "not": {}
             }
-          ]
+          }
         }
-      },
-      "required": []
+      ]
     },
     "client_temp_id": {
       "$ref": "../../openapi.yaml#/components/schemas/ClientTempId"

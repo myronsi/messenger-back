@@ -8,7 +8,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadContract, wsAsOpenApi } from "./lib.mjs";
+import { apiDir, loadContract, wsAsOpenApi } from "./lib.mjs";
 
 const [baseDir, newDir] = process.argv.slice(2);
 if (!baseDir || !newDir) {
@@ -60,8 +60,12 @@ if (next.servers?.[0]?.url !== `/api/v${newVersion.major}`) {
   problems.push(`servers[0].url must be /api/v${newVersion.major} to match the MAJOR of info.version (found ${next.servers?.[0]?.url})`);
 }
 
+// oasdiff-levels.txt maps oasdiff checks to docs/api-compatibility.md: ERR and WARN are breaking
+// (a WARN is a change oasdiff cannot prove harmless, and stricter validation is breaking here),
+// while adding a value to a response enum is allowed because clients handle unknown values.
+const levelsFile = join(apiDir, "oasdiff-levels.txt");
 const changelog = (a, b) => {
-  const out = execFileSync(oasdiff, ["changelog", a, b, "--format", "json"], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  const out = execFileSync(oasdiff, ["changelog", a, b, "--severity-levels", levelsFile, "--format", "json"], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
   return (out.trim() ? JSON.parse(out) : []).filter((c) => c.id !== "api-version-not-bumped");
 };
 const changes = changelog(join(baseDir, "openapi.yaml"), join(newDir, "openapi.yaml"));
@@ -76,7 +80,7 @@ if (wsComparable) {
 } else {
   console.warn("::notice::The baseline has no WebSocket schemas, only the REST contract was compared");
 }
-const breaking = changes.filter((c) => c.level === 3);
+const breaking = changes.filter((c) => c.level >= 2);
 
 const strip = (doc) => { const copy = structuredClone(doc); delete copy.info.version; return copy; };
 // websocket.md and the example payloads count as documentation too

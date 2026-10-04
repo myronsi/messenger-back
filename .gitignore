@@ -65,6 +65,7 @@
 !api/package-lock.json
 !api/redocly.yaml
 !api/oapi-codegen.yaml
+!api/oasdiff-levels.txt
 !api/README.md
 !api/CHANGELOG.md
 !api/websocket.md

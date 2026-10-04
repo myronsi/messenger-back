@@ -195,6 +195,8 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "204":
           description: Signed out; the refresh cookie is cleared
+          headers:
+            Set-Cookie: { $ref: "#/components/headers/RefreshCookie" }
         "401": { $ref: "#/components/responses/Unauthorized" }
   /auth/recover:
     parameters:
@@ -1510,7 +1512,7 @@ components:
 
   headers:
     RefreshCookie:
-      description: HttpOnly, Secure, SameSite refresh cookie scoped to `/api/v2/auth`.
+      description: HttpOnly, Secure, SameSite refresh cookie scoped to `/api/v2/auth`. Login and refresh set it; logout clears it (expired cookie).
       schema: { type: string }
 
   parameters:

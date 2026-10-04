@@ -49,6 +49,9 @@ const negative = [
 ];
 const sendMessage = (body) => ({ client_temp_id: "c-1", ...body });
 negative.push(
+  ["ServerAckEvent", { type: "ack", event_id: "1", chat_id: "42", client_temp_id: "c-1", data: { message_id: "7" } }],
+  ["ServerAckEvent", { type: "ack", event_id: "1", chat_id: "42", client_temp_id: "c-1", data: { message_id: "7", created_at: null } }],
+  ["ServerAckEvent", { type: "ack", event_id: "1", chat_id: "42", client_temp_id: "c-1", data: { message_id: null, created_at: null } }],
   ["SendMessageRequest", sendMessage({ type: "text" })],
   ["SendMessageRequest", sendMessage({ type: "text", content: null })],
   ["SendMessageRequest", sendMessage({ type: "text", content: "" })],
@@ -58,6 +61,7 @@ negative.push(
 );
 // Compatible MINOR releases add fields to server events; clients must be able to ignore them.
 const positive = [
+  ["ServerAckEvent", { type: "ack", event_id: "1", chat_id: "42", client_temp_id: "c-1", data: {} }],
   ["SendMessageRequest", sendMessage({ type: "text", content: "x" })],
   ["SendMessageRequest", sendMessage({ type: "file", attachment_id: "5" })],
   ["SendMessageRequest", sendMessage({ type: "voice", attachment_id: "5", content: null })],
