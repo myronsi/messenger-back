@@ -1,0 +1,49 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - ineffassign
+    - unused
+    - bodyclose
+    - errorlint
+    - gosec
+    - misspell
+    - noctx
+    - sloglint
+    - unconvert
+    - usestdlibvars
+  settings:
+    sloglint:
+      # Attributes are key-value pairs, and keys are snake_case, so they are searchable.
+      no-mixed-args: true
+      kv-only: true
+      attr-only: false
+      key-naming-case: snake
+      context: scope
+  exclusions:
+    generated: strict
+    paths:
+      - internal/httpapi/api.gen.go
+    rules:
+      - path: _test\.go
+        linters:
+          - gosec
+          - errcheck
+          - noctx
+          - sloglint
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/myronsi/messenger-back

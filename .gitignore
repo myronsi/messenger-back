@@ -6,6 +6,7 @@
 !docs/releasing.md
 !docs/project-workflow.md
 !docs/api-compatibility.md
+!docs/go-backend.md
 !CHANGELOG.md
 !server/
 !server/version.py
@@ -74,3 +75,18 @@
 !api/websocket/
 !api/websocket/**/
 !api/websocket/**/*.json
+
+# Go backend
+!go.mod
+!go.sum
+!Makefile
+!.golangci.yml
+!go.Dockerfile
+!go.Dockerfile.dockerignore
+!cmd/
+!cmd/**
+!internal/
+!internal/**
+!migrations/
+!migrations/**
+bin/

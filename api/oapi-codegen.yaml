@@ -1,9 +1,9 @@
 # oapi-codegen configuration for the Go server (strict server interfaces).
-# Run from the Go module root with the directive
-#   //go:generate go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -config api/oapi-codegen.yaml api/openapi.yaml
-# and keep the generated file committed: CI runs `go generate ./... && git diff --exit-code`.
-package: api
-output: internal/api/api.gen.go
+# Run by `go generate ./...` (the directive is in internal/httpapi/generate.go), so the output path is
+# relative to internal/httpapi. Keep the generated file committed: CI runs
+# `go generate ./... && git diff --exit-code`.
+package: httpapi
+output: api.gen.go
 generate:
   models: true
   std-http-server: true
