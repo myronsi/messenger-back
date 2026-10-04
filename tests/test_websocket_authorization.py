@@ -130,6 +130,14 @@ class WebSocketAuthorizationTests(PostgresFixture, unittest.TestCase):
         conn.commit()
         conn.close()
 
+    def test_hello_is_the_first_event_with_the_api_versions(self):
+        from server.version import API_VERSION
+
+        with self.room("bob") as bob:
+            first = json.loads(bob.receive_text())
+        self.assertEqual(first["type"], "hello")
+        self.assertEqual(first["api_version"], API_VERSION)
+        self.assertEqual(first["min_client_api_version"], "1.0.0")
     def test_removed_member_cannot_send_on_an_open_socket(self):
         with self.room("bob") as bob:
             self.send(bob, type="message", content="before")

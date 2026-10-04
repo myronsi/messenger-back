@@ -21,6 +21,8 @@ class DockerConfigurationTests(unittest.TestCase):
             self.assertIn(f"/opt/default-static/avatars/{name}", dockerfile)
         self.assertIn("cp -f", dockerfile)
         self.assertIn("exec uvicorn server.main:app", dockerfile)
+        self.assertIn("ARG COMMIT", dockerfile)
+        self.assertIn("ENV APP_COMMIT=$COMMIT", dockerfile)
 
     def test_builtin_avatars_are_valid_images(self):
         from server.media_access import PUBLIC_FILES

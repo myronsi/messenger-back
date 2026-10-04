@@ -16,6 +16,9 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-}
       WS_ALLOW_QUERY_TOKEN: ${WS_ALLOW_QUERY_TOKEN:-true}
+      # Raise only deliberately and mention it in the release notes (docs/versioning.md).
+      MIN_CLIENT_API_VERSION: ${MIN_CLIENT_API_VERSION:-1.0.0}
+      METRICS_ENABLED: ${METRICS_ENABLED:-false}
       DATABASE_URL: postgresql://messenger:messenger@postgres:5432/messenger
     volumes:
       - messenger_static:/app/static
