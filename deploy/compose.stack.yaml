@@ -1,0 +1,38 @@
+# Backend and its stores from published images only (no build step).
+# Attached to every GitHub Release with the image tag pinned to that release, so a frontend
+# can start a matching backend:
+#   docker compose -f compose.stack.yaml up -d
+# Override the image with BACKEND_IMAGE, e.g. ghcr.io/myronsi/messenger-back:sha-abc1234.
+# Development defaults only: do not expose this stack to a network or use it in production.
+name: messenger-stack
+
+services:
+  backend:
+    image: ${BACKEND_IMAGE:-ghcr.io/myronsi/messenger-back:master}
+    ports:
+      - "${BACKEND_BIND:-127.0.0.1}:${BACKEND_PORT:-8000}:8000"
+    environment:
+      SECRET_KEY: ${SECRET_KEY:-development-only-secret-change-me-0123456789abcdef}
+      COOKIE_SECURE: "false"
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+      WS_ALLOW_QUERY_TOKEN: "true"
+      MIN_CLIENT_API_VERSION: ${MIN_CLIENT_API_VERSION:-1.0.0}
+      METRICS_ENABLED: "true"
+      DATABASE_URL: postgresql://messenger@postgres:5432/messenger
+    depends_on:
+      postgres:
+        condition: service_healthy
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: messenger
+      POSTGRES_USER: messenger
+      # No password: the database is reachable only from the backend container (no published port).
+      POSTGRES_HOST_AUTH_METHOD: trust
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U messenger -d messenger"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    tmpfs:
+      - /var/lib/postgresql/data

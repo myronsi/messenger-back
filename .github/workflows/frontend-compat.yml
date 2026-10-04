@@ -1,0 +1,129 @@
+name: frontend-compat
+
+# Starts the backend built from this pull request and runs the messenger-front Playwright smoke suite
+# (messenger-front `npm run test:smoke`) against it:
+#   - against the latest frontend release on every pull request (protects users of the deployed frontend);
+#   - against the frontend `main` nightly and on pull requests labelled api-change.
+# While the frontend has no `test:smoke` script, the check reports a notice and passes.
+on:
+  pull_request:
+    branches: [master]
+    types: [opened, synchronize, reopened, labeled]
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-compat-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  FRONTEND_REPO: myronsi/messenger-front
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      targets: ${{ steps.targets.outputs.targets }}
+    steps:
+      - id: targets
+        env:
+          EVENT: ${{ github.event_name }}
+          ACTION: ${{ github.event.action }}
+          LABEL: ${{ github.event.label.name }}
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: |
+          set -euo pipefail
+          targets='["release"]'
+          case "$EVENT" in
+            schedule|workflow_dispatch) targets='["release","main"]' ;;
+            pull_request)
+              case ",$LABELS," in *,api-change,*) targets='["release","main"]' ;; esac
+              # Adding an unrelated label must not start the whole suite again.
+              if [ "$ACTION" = "labeled" ] && [ "$LABEL" != "api-change" ]; then targets='[]'; fi
+              ;;
+          esac
+          echo "targets=$targets" >> "$GITHUB_OUTPUT"
+
+  frontend-compat:
+    needs: plan
+    if: ${{ needs.plan.outputs.targets != '[]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        frontend: ${{ fromJSON(needs.plan.outputs.targets) }}
+    env:
+      BACKEND_URL: http://127.0.0.1:8000
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Build the backend from this commit
+        run: docker build --build-arg COMMIT="$GITHUB_SHA" -t messenger-back:compat .
+      - name: Start the stack
+        run: |
+          BACKEND_IMAGE=messenger-back:compat docker compose -f deploy/compose.stack.yaml up -d
+          for _ in $(seq 1 60); do
+            curl -fsS "$BACKEND_URL/version" && exit 0
+            sleep 2
+          done
+          docker compose -f deploy/compose.stack.yaml logs
+          echo "::error::The backend did not become ready"
+          exit 1
+      - name: Pick the frontend version
+        id: ref
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET: ${{ matrix.frontend }}
+        run: |
+          if [ "$TARGET" = "release" ]; then
+            ref="$(gh release view --repo "$FRONTEND_REPO" --json tagName --jq .tagName)"
+          else
+            ref=main
+          fi
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "Frontend: $FRONTEND_REPO@$ref"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: ${{ env.FRONTEND_REPO }}
+          ref: ${{ steps.ref.outputs.ref }}
+          path: frontend
+      - name: Does this frontend have a smoke suite?
+        id: smoke
+        working-directory: frontend
+        run: |
+          if node -e "process.exit(require('./package.json').scripts?.['test:smoke'] ? 0 : 1)"; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::${FRONTEND_REPO}@${{ steps.ref.outputs.ref }} has no test:smoke script yet, nothing to run"
+          fi
+      - if: steps.smoke.outputs.present == 'true'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - if: steps.smoke.outputs.present == 'true'
+        working-directory: frontend
+        run: |
+          npm ci --ignore-scripts
+          ./node_modules/.bin/playwright install --with-deps chromium
+          npm run test:smoke
+        env:
+          VITE_BASE_URL: http://127.0.0.1:8000
+          VITE_WS_URL: ws://127.0.0.1:8000
+      - if: failure()
+        run: docker compose -f deploy/compose.stack.yaml logs --tail 200
+      - if: failure() && steps.smoke.outputs.present == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: playwright-report-${{ matrix.frontend }}
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+          if-no-files-found: ignore
+      - if: always()
+        run: docker compose -f deploy/compose.stack.yaml down -v

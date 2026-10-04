@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ServerAckEvent",
+  "description": "The server accepted the client event with this `client_temp_id`.",
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "ack"
+    },
+    "event_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "chat_id": {
+      "oneOf": [
+        {
+          "$ref": "../../openapi.yaml#/components/schemas/Id"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "data": {
+      "description": "Result of the client event. A `message` is answered with the stored `message_id` and `created_at`; every other event with an empty object.",
+      "oneOf": [
+        {
+          "type": "object",
+          "title": "MessageAckData",
+          "properties": {
+            "message_id": {
+              "$ref": "../../openapi.yaml#/components/schemas/Id"
+            },
+            "created_at": {
+              "$ref": "../../openapi.yaml#/components/schemas/Timestamp"
+            }
+          },
+          "required": [
+            "message_id",
+            "created_at"
+          ]
+        },
+        {
+          "type": "object",
+          "title": "EmptyAckData",
+          "properties": {
+            "message_id": {
+              "not": {}
+            },
+            "created_at": {
+              "not": {}
+            }
+          }
+        }
+      ]
+    },
+    "client_temp_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/ClientTempId"
+    }
+  },
+  "required": [
+    "type",
+    "event_id",
+    "chat_id",
+    "data",
+    "client_temp_id"
+  ]
+}

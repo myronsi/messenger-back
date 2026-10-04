@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ClientTypingEvent",
+  "description": "Tell the chat that you are (not) typing. Not acknowledged, so it carries no `client_temp_id`.",
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "typing"
+    },
+    "chat_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "is_typing": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "is_typing"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "type",
+    "chat_id",
+    "data"
+  ],
+  "additionalProperties": false
+}

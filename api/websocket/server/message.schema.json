@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ServerMessageEvent",
+  "description": "A new message in a chat.",
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "message"
+    },
+    "event_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "chat_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "$ref": "../../openapi.yaml#/components/schemas/Message"
+        }
+      },
+      "required": [
+        "message"
+      ]
+    }
+  },
+  "required": [
+    "type",
+    "event_id",
+    "chat_id",
+    "data"
+  ]
+}

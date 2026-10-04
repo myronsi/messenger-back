@@ -1,0 +1,2334 @@
+openapi: 3.1.0
+info:
+  title: Messenger API
+  version: 2.0.0-alpha.1
+  summary: REST contract of the Messenger backend (v2).
+  description: |
+    Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
+    `websocket.md`; the entity schemas below are shared by both.
+
+    ## Conventions
+
+    - Base path `/api/v2`. Breaking changes need a new MAJOR version with a new base path
+      (see `docs/api-compatibility.md`).
+    - All IDs are **strings** in JSON. Message IDs are 64-bit Snowflake IDs, larger than
+      JavaScript's safe integer limit (2^53), so they must never be parsed as numbers.
+    - Timestamps are RFC 3339 UTC (`2026-10-04T12:00:00Z`).
+    - Errors are `application/problem+json` (RFC 9457) with a stable `code`; clients switch on
+      `code`, never on `title` or `detail`.
+    - Lists use cursor pagination: `limit` plus `before`, `after` or `around`, and responses
+      return `next_cursor` (and `prev_cursor` for messages). Cursors are opaque to clients
+      except for message history, where they are message IDs.
+    - Enums can grow in a MINOR version; clients must handle unknown values with a fallback.
+    - Clients send `X-Client-Version` (app version) and `X-Client-Api-Version` (the contract
+      version they were built with). A different MAJOR or a version below
+      `min_client_api_version` gets `426` with `code: client_outdated`.
+    - Files are never referenced by a client-supplied URL: upload with `POST /attachments`,
+      then refer to the returned `attachment_id`.
+  license:
+    name: MIT
+    identifier: MIT
+servers:
+  - url: /api/v2
+    description: Same origin as the web app (reverse proxy)
+security:
+  - bearerAuth: []
+tags:
+  - name: meta
+    description: Versions of the backend and the contract
+  - name: auth
+    description: Registration, login, tokens and account recovery
+  - name: me
+    description: The current user's profile, security and privacy
+  - name: users
+    description: Other users
+  - name: chats
+    description: Direct chats, pinning, read state and message history
+  - name: groups
+    description: Group chats and their members
+  - name: messages
+    description: Edit, delete and forward messages
+  - name: attachments
+    description: File and voice uploads
+  - name: requests
+    description: Approval requests (direct messages and group invites)
+  - name: websocket
+    description: Realtime connection (see `websocket.md`)
+
+paths:
+  /meta:
+    get:
+      tags: [meta]
+      operationId: getMeta
+      summary: Backend and contract versions
+      description: No authentication. Cacheable for 60 seconds.
+      security: []
+      responses:
+        "200":
+          description: Versions
+          headers:
+            Cache-Control:
+              description: "`public, max-age=60`"
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Meta" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  # ---------------------------------------------------------------- auth
+  /auth/register:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    post:
+      tags: [auth]
+      operationId: register
+      summary: Create an account
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "201":
+          description: Account created and signed in
+          headers:
+            Set-Cookie: { $ref: "#/components/headers/RefreshCookie" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RegisterResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /auth/login:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    post:
+      tags: [auth]
+      operationId: login
+      summary: Sign in with username and password
+      description: Answers with a login challenge instead of tokens when two-factor authentication is enabled.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "200":
+          description: Signed in, or a two-factor challenge
+          headers:
+            Set-Cookie: { $ref: "#/components/headers/RefreshCookie" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoginResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /auth/login/2fa:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    post:
+      tags: [auth]
+      operationId: loginTwoFactor
+      summary: Finish a login with a two-factor code
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TwoFactorLoginRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "200":
+          description: Signed in
+          headers:
+            Set-Cookie: { $ref: "#/components/headers/RefreshCookie" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /auth/refresh:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    post:
+      tags: [auth]
+      operationId: refreshToken
+      summary: Get a new access token
+      description: Uses the HttpOnly refresh cookie and rotates it.
+      security:
+        - cookieAuth: []
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: New access token
+          headers:
+            Set-Cookie: { $ref: "#/components/headers/RefreshCookie" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /auth/logout:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    post:
+      tags: [auth]
+      operationId: logout
+      summary: End the current session
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Signed out; the refresh cookie is cleared
+          headers:
+            Set-Cookie: { $ref: "#/components/headers/RefreshCookie" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /auth/recover:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    post:
+      tags: [auth]
+      operationId: startRecovery
+      summary: Start account recovery (temporary)
+      description: Temporary port of the Python recovery flow; it is redesigned in release 1.1.
+      x-temporary: true
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RecoveryRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "200":
+          description: Recovery token
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecoveryResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /auth/reset-password:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    post:
+      tags: [auth]
+      operationId: resetPassword
+      summary: Set a new password with a recovery token (temporary)
+      x-temporary: true
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ResetPasswordRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "204":
+          description: Password changed; all sessions are revoked
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /ws/ticket:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    post:
+      tags: [websocket]
+      operationId: createWebSocketTicket
+      summary: Get a one-time ticket for the WebSocket
+      description: |
+        The ticket is valid for a few seconds and can be used once at
+        `/api/v2/ws?ticket=…`; it replaces tokens in the URL.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "201":
+          description: Ticket
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WebSocketTicket" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  # ------------------------------------------------------------------ me
+  /me:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    get:
+      tags: [me]
+      operationId: getMe
+      summary: Current user
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: The current user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    patch:
+      tags: [me]
+      operationId: updateMe
+      summary: Update the profile
+      description: Replaces `PUT /me` and `POST /me/bio` of v1. Only the sent fields change.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateMeRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+    delete:
+      tags: [me]
+      operationId: deleteMe
+      summary: Delete the account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PasswordConfirmation" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Account deleted
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /me/avatar:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    put:
+      tags: [me]
+      operationId: setMyAvatar
+      summary: Set the avatar from an uploaded attachment
+      description: "Replaces both avatar routes of v1. Upload the image with `POST /attachments` (`purpose: avatar`) first."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SetAvatarRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /me/password:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    put:
+      tags: [me]
+      operationId: changePassword
+      summary: Change the password
+      description: Revokes all other sessions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ChangePasswordRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "204":
+          description: Password changed
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /me/security:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    get:
+      tags: [me]
+      operationId: getSecuritySettings
+      summary: Security settings
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Settings
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SecuritySettings" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    patch:
+      tags: [me]
+      operationId: updateSecuritySettings
+      summary: Change the session duration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateSecuritySettingsRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Settings
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SecuritySettings" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+  /me/sessions:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    get:
+      tags: [me]
+      operationId: listSessions
+      summary: Signed-in devices
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Sessions of the current user
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Session" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    delete:
+      tags: [me]
+      operationId: revokeOtherSessions
+      summary: Sign out everywhere except this device
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Other sessions revoked
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /me/sessions/{session_id}:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/SessionId"
+    delete:
+      tags: [me]
+      operationId: revokeSession
+      summary: Sign out one device
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Session revoked
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /me/2fa/setup:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    post:
+      tags: [me]
+      operationId: setupTwoFactor
+      summary: Start two-factor setup
+      description: Returns the secret and an `otpauth://` URI; two-factor stays off until confirmed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PasswordConfirmation" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Secret to add to an authenticator app
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TwoFactorSetup" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /me/2fa/confirm:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    post:
+      tags: [me]
+      operationId: confirmTwoFactor
+      summary: Turn two-factor on with a code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TwoFactorCode" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "204":
+          description: Two-factor authentication enabled
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /me/2fa/disable:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    post:
+      tags: [me]
+      operationId: disableTwoFactor
+      summary: Turn two-factor off
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DisableTwoFactorRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "204":
+          description: Two-factor authentication disabled
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /me/privacy:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    get:
+      tags: [me]
+      operationId: getPrivacySettings
+      summary: Privacy settings and exceptions
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Settings
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PrivacySettings" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    patch:
+      tags: [me]
+      operationId: updatePrivacySettings
+      summary: Update privacy settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdatePrivacySettingsRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Settings
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PrivacySettings" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+  /me/privacy/exceptions/{setting_key}/{effect}:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - name: setting_key
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [avatar_visibility, profile_visibility, presence_visibility, group_invites]
+      - name: effect
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [allow, deny]
+    put:
+      tags: [me]
+      operationId: replacePrivacyExceptions
+      summary: Replace the exception list of one setting
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PrivacyExceptionsRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Settings
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PrivacySettings" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+  /me/blocked-users:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    get:
+      tags: [me]
+      operationId: listBlockedUsers
+      summary: Blocked users
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/After"
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: A page of blocked users
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /me/blocked-users/{user_id}:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/UserId"
+    put:
+      tags: [me]
+      operationId: blockUser
+      summary: Block a user
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Blocked (also when already blocked)
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [me]
+      operationId: unblockUser
+      summary: Unblock a user
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Unblocked (also when not blocked)
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # --------------------------------------------------------------- users
+  /users:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    get:
+      tags: [users]
+      operationId: searchUsers
+      summary: Search users by username or display name
+      description: Users whose `search_visibility` is `nobody` are not returned.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 2, maxLength: 64 }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/After"
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: A page of users
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+  /usernames/{username}:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    get:
+      tags: [users]
+      operationId: getUserByUsername
+      summary: Profile by username
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/Username" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: The user, as visible to the current user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /users/{user_id}:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/UserId"
+    get:
+      tags: [users]
+      operationId: getUser
+      summary: Profile by ID
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: The user, as visible to the current user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /users/{user_id}/avatar:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/UserId"
+    get:
+      tags: [users]
+      operationId: getUserAvatar
+      summary: Current avatar image
+      description: Respects the avatar visibility of the user; falls back to the default avatar.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Image
+          content:
+            image/*:
+              schema: { type: string, format: binary }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /users/{user_id}/avatars:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/UserId"
+    get:
+      tags: [users]
+      operationId: listUserAvatars
+      summary: Avatar history
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/After"
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: A page of previous avatars, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/AvatarVersion" }
+                  next_cursor: { $ref: "#/components/schemas/Cursor" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /users/{user_id}/contact-name:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/UserId"
+    put:
+      tags: [users]
+      operationId: setContactName
+      summary: Set your own display name for a user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ContactNameRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: The user with the contact name applied
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+    delete:
+      tags: [users]
+      operationId: removeContactName
+      summary: Remove your display name for a user
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Removed
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # --------------------------------------------------------- attachments
+  /attachments:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    post:
+      tags: [attachments]
+      operationId: uploadAttachment
+      summary: Upload a file, image, audio or voice message
+      description: |
+        The server checks the content, not the file name or the client's content type. The
+        returned `attachment_id` is used in messages (`type: file` or `voice`) or for
+        avatars. Attachments that are not used within 24 hours are deleted.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: "#/components/schemas/UploadAttachmentRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "201":
+          description: Uploaded
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Attachment" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /attachments/{attachment_id}/content:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/AttachmentId"
+    get:
+      tags: [attachments]
+      operationId: getAttachmentContent
+      summary: Download an attachment
+      description: Only participants of the chat the attachment was sent to (and its uploader) can download it.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: File content
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # --------------------------------------------------------------- chats
+  /chats:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    get:
+      tags: [chats]
+      operationId: listChats
+      summary: My chats with last message and unread count
+      description: One request replaces `GET /chats/list/{username}` and `GET /groups/list/{username}`; pinned chats come first.
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/After"
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: A page of chats
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChatPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [chats]
+      operationId: createChat
+      summary: Start a direct chat
+      description: |
+        Respects the other user's `direct_messages` privacy setting. When approval is needed
+        the answer is `202` with the pending request instead of a chat. Returns the existing
+        chat (`200`) if there already is one.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateChatRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "200":
+          description: The chat already existed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Chat" }
+        "201":
+          description: Chat created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Chat" }
+        "202":
+          description: Waiting for the other user's approval
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApprovalRequest" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /chats/{chat_id}:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ChatId"
+    get:
+      tags: [chats]
+      operationId: getChat
+      summary: One chat
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: The chat
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Chat" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [chats]
+      operationId: deleteChat
+      summary: Delete a direct chat for yourself
+      description: For groups use `DELETE /groups/{chat_id}` (owner) or `POST /groups/{chat_id}/leave`.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Deleted
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /chats/{chat_id}/pin:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ChatId"
+    put:
+      tags: [chats]
+      operationId: pinChat
+      summary: Pin a chat
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Pinned
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+    delete:
+      tags: [chats]
+      operationId: unpinChat
+      summary: Unpin a chat
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Unpinned
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /chats/{chat_id}/read:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ChatId"
+    post:
+      tags: [chats]
+      operationId: markChatRead
+      summary: Mark messages as read up to a message
+      description: Replaces the duplicate `/read` and `/read/` routes of v1.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MarkReadRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: New unread count
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [unread_count]
+                properties:
+                  unread_count: { type: integer, minimum: 0 }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /chats/{chat_id}/messages:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ChatId"
+    get:
+      tags: [chats]
+      operationId: listMessages
+      summary: Message history
+      description: |
+        Replaces `GET /messages/history/{chat_id}`. Without a cursor the newest messages are
+        returned. Items are always ordered oldest to newest. Send at most one of `before`,
+        `after` and `around` (message IDs).
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - name: before
+          in: query
+          description: Messages older than this message ID
+          schema: { $ref: "#/components/schemas/Id" }
+        - name: after
+          in: query
+          description: Messages newer than this message ID
+          schema: { $ref: "#/components/schemas/Id" }
+        - name: around
+          in: query
+          description: A window containing this message ID
+          schema: { $ref: "#/components/schemas/Id" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: A page of messages
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MessagePage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+    post:
+      tags: [chats]
+      operationId: sendMessage
+      summary: Send a message over HTTP
+      description: |
+        Same as the WebSocket `message` event, for clients without a connection. Sending the
+        same `client_temp_id` again returns the existing message instead of creating a copy.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SendMessageRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "201":
+          description: Message created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Message" }
+        "200":
+          description: Already created for this `client_temp_id`
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Message" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /chats/{chat_id}/messages/search:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ChatId"
+    get:
+      tags: [chats]
+      operationId: searchMessages
+      summary: Search messages in a chat
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 2, maxLength: 128 }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/After"
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Matches, newest first
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MessageSearchPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+  /chats/{chat_id}/media:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ChatId"
+    get:
+      tags: [chats]
+      operationId: listChatMedia
+      summary: Photos or audio of a chat
+      description: Replaces `GET /messages/photos/{chat_id}` and `GET /messages/audios/{chat_id}`.
+      parameters:
+        - name: kind
+          in: query
+          required: true
+          schema: { $ref: "#/components/schemas/MediaKind" }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/After"
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Messages with matching attachments, newest first
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MessageSearchPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  # ------------------------------------------------------------ messages
+  /messages/{message_id}:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/MessageId"
+    patch:
+      tags: [messages]
+      operationId: editMessage
+      summary: Edit your text message
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EditMessageRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Edited message
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Message" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+    delete:
+      tags: [messages]
+      operationId: deleteMessage
+      summary: Delete a message
+      description: |
+        `scope=me` hides it for the current user only (any message). `scope=everyone` removes
+        it for all participants (own messages, and any message for group admins).
+      parameters:
+        - name: scope
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [me, everyone]
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Deleted
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+  /messages/{message_id}/forward:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/MessageId"
+    post:
+      tags: [messages]
+      operationId: forwardMessage
+      summary: Forward a message to other chats
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ForwardMessageRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "201":
+          description: One new message per target chat
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Message" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  # ------------------------------------------------------------ requests
+  /requests:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    get:
+      tags: [requests]
+      operationId: listApprovalRequests
+      summary: Inbox of approval requests
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/After"
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: A page of pending requests
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/ApprovalRequest" }
+                  next_cursor: { $ref: "#/components/schemas/Cursor" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /requests/{request_id}/approve:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/RequestId"
+    post:
+      tags: [requests]
+      operationId: approveRequest
+      summary: Approve a request
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Approved; the chat or group membership now exists
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Chat" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /requests/{request_id}/reject:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/RequestId"
+    post:
+      tags: [requests]
+      operationId: rejectRequest
+      summary: Reject a request
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Rejected
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  # -------------------------------------------------------------- groups
+  /groups:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    get:
+      tags: [groups]
+      operationId: listGroups
+      summary: My groups
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/After"
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: A page of group chats
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChatPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [groups]
+      operationId: createGroup
+      summary: Create a group
+      description: Members whose `group_invites` setting requires approval get an approval request instead of being added.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateGroupRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "201":
+          description: Group created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Group" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /groups/{chat_id}:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ChatId"
+    get:
+      tags: [groups]
+      operationId: getGroup
+      summary: Group details and members
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: The group
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Group" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [groups]
+      operationId: updateGroup
+      summary: Change name or description
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateGroupRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Updated group
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Group" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+    delete:
+      tags: [groups]
+      operationId: deleteGroup
+      summary: Delete the group (owner only)
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Deleted for all members
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /groups/{chat_id}/avatar:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ChatId"
+    put:
+      tags: [groups]
+      operationId: setGroupAvatar
+      summary: Set the group avatar from an uploaded attachment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SetAvatarRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Updated group
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Group" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /groups/{chat_id}/participants:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ChatId"
+    post:
+      tags: [groups]
+      operationId: addGroupParticipant
+      summary: Add a participant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AddParticipantRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Updated group (the user may still be pending approval)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Group" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /groups/{chat_id}/participants/{user_id}:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ChatId"
+      - $ref: "#/components/parameters/UserId"
+    patch:
+      tags: [groups]
+      operationId: updateGroupParticipantRole
+      summary: Change a participant's role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateRoleRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Updated group
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Group" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+    delete:
+      tags: [groups]
+      operationId: removeGroupParticipant
+      summary: Remove a participant
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Removed
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /groups/{chat_id}/transfer-owner:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ChatId"
+    post:
+      tags: [groups]
+      operationId: transferGroupOwnership
+      summary: Make another member the owner
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TransferOwnerRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Updated group
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Group" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /groups/{chat_id}/leave:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ChatId"
+    post:
+      tags: [groups]
+      operationId: leaveGroup
+      summary: Leave the group
+      description: The owner has to transfer ownership first.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Left
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Short-lived access token from login or refresh.
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: refresh_token
+      description: HttpOnly refresh cookie set by login; scoped to `/api/v2/auth`.
+
+  headers:
+    RefreshCookie:
+      description: HttpOnly, Secure, SameSite refresh cookie scoped to `/api/v2/auth`. Login and refresh set it; logout clears it (expired cookie).
+      schema: { type: string }
+
+  parameters:
+    Limit:
+      name: limit
+      in: query
+      description: Page size
+      schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+    After:
+      name: after
+      in: query
+      description: Opaque `next_cursor` of the previous page
+      schema: { $ref: "#/components/schemas/Cursor" }
+    ChatId:
+      name: chat_id
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/Id" }
+    MessageId:
+      name: message_id
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/Id" }
+    UserId:
+      name: user_id
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/Id" }
+    RequestId:
+      name: request_id
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/Id" }
+    AttachmentId:
+      name: attachment_id
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/Id" }
+    SessionId:
+      name: session_id
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/Id" }
+
+    ClientVersion:
+      name: X-Client-Version
+      in: header
+      required: false
+      description: Version of the client app, for logs and the per-client metric.
+      schema: { type: string }
+    ClientApiVersion:
+      name: X-Client-Api-Version
+      in: header
+      required: false
+      description: Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+      schema: { type: string }
+
+  responses:
+    ClientOutdated:
+      description: "The `X-Client-Api-Version` header has another MAJOR version than the server or is below `min_client_api_version` (`client_outdated`). Not returned by `/meta`, which clients use to find out the current versions."
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    BadRequest:
+      description: Malformed request, or a malformed `X-Client-Api-Version` header (`invalid_client_version`)
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    Unauthorized:
+      description: Missing, invalid or expired credentials
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    Forbidden:
+      description: Authenticated but not allowed
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    NotFound:
+      description: Does not exist or is not visible to the current user
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    Conflict:
+      description: The state of the resource does not allow this
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    PayloadTooLarge:
+      description: Upload exceeds the size limit
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    UnsupportedMediaType:
+      description: The content type is not allowed
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    ValidationFailed:
+      description: Syntactically valid but rejected values; `errors` lists the fields
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    TooManyRequests:
+      description: Rate limit exceeded
+      headers:
+        Retry-After:
+          description: Seconds until the next attempt is allowed
+          schema: { type: integer, minimum: 0 }
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+
+  schemas:
+    # ---------------------------------------------------------- basics
+    Id:
+      type: string
+      pattern: "^[0-9]{1,19}$"
+      description: Decimal ID as a string (Snowflake IDs exceed 2^53).
+      examples: ["7217400317439950848"]
+    Cursor:
+      type: [string, "null"]
+      maxLength: 256
+      description: Opaque cursor; `null` when there are no more results.
+    Timestamp:
+      type: string
+      format: date-time
+    Username:
+      type: string
+      pattern: "^[A-Za-z0-9_]{3,32}$"
+    ClientTempId:
+      type: string
+      minLength: 1
+      maxLength: 64
+      description: Client-generated ID that makes sending idempotent and ties acks and errors to the send.
+    ErrorCode:
+      type: string
+      description: |
+        Stable machine-readable error code. New codes can appear in MINOR versions; unknown
+        codes must be treated like `internal_error`.
+      enum:
+        - invalid_request
+        - validation_failed
+        - unauthenticated
+        - invalid_credentials
+        - two_factor_required
+        - invalid_two_factor_code
+        - token_expired
+        - forbidden
+        - not_found
+        - conflict
+        - already_exists
+        - payload_too_large
+        - unsupported_media_type
+        - rate_limited
+        - client_outdated
+        - invalid_client_version
+        - blocked_by_user
+        - approval_required
+        - internal_error
+    Problem:
+      type: object
+      description: RFC 9457 problem details. `426 Upgrade Required` (`client_outdated`) uses the same format.
+      required: [type, title, status, code]
+      properties:
+        type:
+          type: string
+          description: URI reference identifying the problem type (`about:blank` when `code` says it all).
+          default: about:blank
+        title: { type: string }
+        status: { type: integer, minimum: 400, maximum: 599 }
+        detail: { type: string }
+        instance: { type: string }
+        code: { $ref: "#/components/schemas/ErrorCode" }
+        errors:
+          type: array
+          description: Field errors for `validation_failed`.
+          items:
+            type: object
+            required: [field, message]
+            properties:
+              field:
+                type: string
+                description: JSON pointer into the request body, or the parameter name.
+              message: { type: string }
+        min_client_api_version:
+          type: string
+          description: Present when `code` is `client_outdated`.
+        api_version:
+          type: string
+          description: Present when `code` is `client_outdated`.
+      additionalProperties: true
+    Meta:
+      type: object
+      required: [backend_version, commit, api_version, min_client_api_version]
+      properties:
+        backend_version: { type: string, examples: ["1.0.3"] }
+        commit: { type: string, examples: ["abc1234"] }
+        api_version: { type: string, examples: ["2.0.0"] }
+        min_client_api_version: { type: string, examples: ["2.0.0"] }
+
+    # ------------------------------------------------------------ auth
+    RegisterRequest:
+      type: object
+      required: [username, display_name, password]
+      properties:
+        username: { $ref: "#/components/schemas/Username" }
+        display_name: { type: string, minLength: 1, maxLength: 64 }
+        password: { type: string, minLength: 8, maxLength: 128, writeOnly: true }
+        bio: { type: [string, "null"], maxLength: 500 }
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username: { $ref: "#/components/schemas/Username" }
+        password: { type: string, maxLength: 128, writeOnly: true }
+    TwoFactorLoginRequest:
+      type: object
+      required: [login_challenge, code]
+      properties:
+        login_challenge: { type: string }
+        code: { type: string, pattern: "^[0-9]{6}$" }
+    TokenResponse:
+      type: object
+      required: [access_token, token_type, expires_in]
+      properties:
+        access_token: { type: string }
+        token_type: { type: string, const: Bearer }
+        expires_in:
+          type: integer
+          minimum: 1
+          description: Seconds until the access token expires
+    RegisterResponse:
+      allOf:
+        - $ref: "#/components/schemas/TokenResponse"
+        - type: object
+          description: Recovery parts of the temporary recovery flow (redesigned in release 1.1).
+          properties:
+            device_part: { type: string }
+            qr_part: { type: string }
+    TwoFactorChallenge:
+      type: object
+      required: [two_factor_required, login_challenge]
+      properties:
+        two_factor_required: { type: boolean, const: true }
+        login_challenge: { type: string }
+    LoginResponse:
+      oneOf:
+        - $ref: "#/components/schemas/TokenResponse"
+        - $ref: "#/components/schemas/TwoFactorChallenge"
+    RecoveryRequest:
+      type: object
+      required: [username]
+      properties:
+        username: { $ref: "#/components/schemas/Username" }
+        device_part: { type: string }
+        qr_part: { type: string }
+    RecoveryResponse:
+      type: object
+      required: [recovery_token]
+      properties:
+        recovery_token: { type: string }
+    ResetPasswordRequest:
+      type: object
+      required: [recovery_token, new_password]
+      properties:
+        recovery_token: { type: string }
+        new_password: { type: string, minLength: 8, maxLength: 128, writeOnly: true }
+    WebSocketTicket:
+      type: object
+      required: [ticket, expires_in]
+      properties:
+        ticket: { type: string }
+        expires_in:
+          type: integer
+          minimum: 1
+          description: Seconds the ticket stays valid
+
+    # -------------------------------------------------------------- me
+    PasswordConfirmation:
+      type: object
+      required: [password]
+      properties:
+        password: { type: string, maxLength: 128, writeOnly: true }
+    ChangePasswordRequest:
+      type: object
+      required: [current_password, new_password]
+      properties:
+        current_password: { type: string, maxLength: 128, writeOnly: true }
+        new_password: { type: string, minLength: 8, maxLength: 128, writeOnly: true }
+    UpdateMeRequest:
+      type: object
+      minProperties: 1
+      properties:
+        display_name: { type: string, minLength: 1, maxLength: 64 }
+        bio: { type: [string, "null"], maxLength: 500 }
+    SetAvatarRequest:
+      type: object
+      required: [attachment_id]
+      properties:
+        attachment_id: { $ref: "#/components/schemas/Id" }
+    SecuritySettings:
+      type: object
+      required: [session_duration_days, two_factor_enabled]
+      properties:
+        session_duration_days: { type: integer, minimum: 1, maximum: 365 }
+        two_factor_enabled: { type: boolean }
+    UpdateSecuritySettingsRequest:
+      type: object
+      required: [session_duration_days]
+      properties:
+        session_duration_days: { type: integer, minimum: 1, maximum: 365 }
+    Session:
+      type: object
+      required: [id, created_at, last_used_at, is_current]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        device:
+          type: [string, "null"]
+          description: Sanitised user agent
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        last_used_at: { $ref: "#/components/schemas/Timestamp" }
+        expires_at: { $ref: "#/components/schemas/Timestamp" }
+        is_current: { type: boolean }
+    TwoFactorSetup:
+      type: object
+      required: [secret, otpauth_uri]
+      properties:
+        secret: { type: string }
+        otpauth_uri: { type: string }
+    TwoFactorCode:
+      type: object
+      required: [code]
+      properties:
+        code: { type: string, pattern: "^[0-9]{6}$" }
+    DisableTwoFactorRequest:
+      type: object
+      required: [password, code]
+      properties:
+        password: { type: string, maxLength: 128, writeOnly: true }
+        code: { type: string, pattern: "^[0-9]{6}$" }
+    Visibility:
+      type: string
+      description: Who may see the item. `*_except` scopes use the exception lists.
+      enum: [everyone, contacts, everyone_except, nobody_except, nobody]
+    DirectMessagePolicy:
+      type: string
+      enum: [everyone, shared_chats, wait_approval]
+    GroupInvitePolicy:
+      type: string
+      enum: [everyone, contacts, everyone_except, nobody_except, nobody, wait_approval]
+    SearchVisibility:
+      type: string
+      enum: [everyone, nobody]
+    PrivacyExceptions:
+      type: object
+      description: User IDs per setting; `allow` applies to `nobody_except`, `deny` to `everyone_except`.
+      additionalProperties:
+        type: object
+        required: [allow, deny]
+        properties:
+          allow:
+            type: array
+            items: { $ref: "#/components/schemas/Id" }
+          deny:
+            type: array
+            items: { $ref: "#/components/schemas/Id" }
+    PrivacySettings:
+      type: object
+      required:
+        - avatar_visibility
+        - profile_visibility
+        - presence_visibility
+        - read_receipts_enabled
+        - direct_messages
+        - group_invites
+        - search_visibility
+        - exceptions
+      properties:
+        avatar_visibility: { $ref: "#/components/schemas/Visibility" }
+        profile_visibility: { $ref: "#/components/schemas/Visibility" }
+        presence_visibility: { $ref: "#/components/schemas/Visibility" }
+        read_receipts_enabled: { type: boolean }
+        direct_messages: { $ref: "#/components/schemas/DirectMessagePolicy" }
+        group_invites: { $ref: "#/components/schemas/GroupInvitePolicy" }
+        search_visibility: { $ref: "#/components/schemas/SearchVisibility" }
+        exceptions: { $ref: "#/components/schemas/PrivacyExceptions" }
+    UpdatePrivacySettingsRequest:
+      type: object
+      minProperties: 1
+      properties:
+        avatar_visibility: { $ref: "#/components/schemas/Visibility" }
+        profile_visibility: { $ref: "#/components/schemas/Visibility" }
+        presence_visibility: { $ref: "#/components/schemas/Visibility" }
+        read_receipts_enabled: { type: boolean }
+        direct_messages: { $ref: "#/components/schemas/DirectMessagePolicy" }
+        group_invites: { $ref: "#/components/schemas/GroupInvitePolicy" }
+        search_visibility: { $ref: "#/components/schemas/SearchVisibility" }
+    PrivacyExceptionsRequest:
+      type: object
+      required: [user_ids]
+      properties:
+        user_ids:
+          type: array
+          maxItems: 500
+          items: { $ref: "#/components/schemas/Id" }
+
+    # ----------------------------------------------------------- users
+    User:
+      type: object
+      description: A user as visible to the requesting user; hidden fields are `null`.
+      required: [id, username, display_name, avatar_url, bio, is_online, last_seen, is_deleted]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        username: { $ref: "#/components/schemas/Username" }
+        display_name: { type: string }
+        contact_name:
+          type: [string, "null"]
+          description: The requesting user's own name for this user, if set.
+        avatar_url:
+          type: [string, "null"]
+          description: Path of the avatar, always same-origin (`/api/v2/users/{id}/avatar`).
+        bio: { type: [string, "null"] }
+        is_online: { type: boolean }
+        last_seen:
+          oneOf:
+            - $ref: "#/components/schemas/Timestamp"
+            - type: "null"
+        is_deleted: { type: boolean }
+    Me:
+      allOf:
+        - $ref: "#/components/schemas/User"
+        - type: object
+          required: [created_at]
+          properties:
+            created_at: { $ref: "#/components/schemas/Timestamp" }
+    UserPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/User" }
+        next_cursor: { $ref: "#/components/schemas/Cursor" }
+    AvatarVersion:
+      type: object
+      required: [id, url, created_at]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        url: { type: string }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+    ContactNameRequest:
+      type: object
+      required: [contact_name]
+      properties:
+        contact_name: { type: string, minLength: 1, maxLength: 64 }
+
+    # ----------------------------------------------------- attachments
+    AttachmentKind:
+      type: string
+      enum: [image, audio, voice, video, file]
+    UploadPurpose:
+      type: string
+      enum: [message, avatar]
+    UploadAttachmentRequest:
+      type: object
+      required: [file, purpose]
+      properties:
+        file:
+          type: string
+          format: binary
+        purpose: { $ref: "#/components/schemas/UploadPurpose" }
+        kind: { $ref: "#/components/schemas/AttachmentKind" }
+        duration_ms:
+          type: integer
+          minimum: 0
+          description: Length of a voice message
+        waveform:
+          type: array
+          description: Amplitude samples (0-255) of a voice message
+          maxItems: 128
+          items: { type: integer, minimum: 0, maximum: 255 }
+    Attachment:
+      type: object
+      required: [id, kind, filename, content_type, size, url]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        kind: { $ref: "#/components/schemas/AttachmentKind" }
+        filename: { type: string }
+        content_type:
+          type: string
+          description: Detected by the server
+        size:
+          type: integer
+          minimum: 0
+          description: Bytes
+        url:
+          type: string
+          description: Same-origin path (`/api/v2/attachments/{id}/content`) set by the server.
+          readOnly: true
+        width: { type: [integer, "null"], minimum: 1 }
+        height: { type: [integer, "null"], minimum: 1 }
+        thumbnail_url: { type: [string, "null"], readOnly: true }
+        duration_ms: { type: [integer, "null"], minimum: 0 }
+        waveform:
+          type: [array, "null"]
+          items: { type: integer, minimum: 0, maximum: 255 }
+    MediaKind:
+      type: string
+      enum: [image, audio]
+
+    # -------------------------------------------------------- messages
+    MessageType:
+      type: string
+      enum: [text, file, voice, system]
+    Reaction:
+      type: object
+      required: [emoji, user_id]
+      properties:
+        emoji: { type: string, minLength: 1, maxLength: 32 }
+        user_id: { $ref: "#/components/schemas/Id" }
+    ReadReceipt:
+      type: object
+      required: [user_id, read_at]
+      properties:
+        user_id: { $ref: "#/components/schemas/Id" }
+        read_at: { $ref: "#/components/schemas/Timestamp" }
+    ForwardedFrom:
+      type: object
+      required: [message_id, sender_id, sender_name]
+      properties:
+        message_id: { $ref: "#/components/schemas/Id" }
+        sender_id:
+          oneOf:
+            - $ref: "#/components/schemas/Id"
+            - type: "null"
+        sender_name: { type: string }
+    Message:
+      type: object
+      required:
+        - id
+        - chat_id
+        - type
+        - sender
+        - content
+        - attachment
+        - reply_to
+        - forwarded_from
+        - reactions
+        - read_by
+        - created_at
+        - edited_at
+        - is_deleted
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        chat_id: { $ref: "#/components/schemas/Id" }
+        type: { $ref: "#/components/schemas/MessageType" }
+        sender:
+          description: "`null` for system messages."
+          oneOf:
+            - $ref: "#/components/schemas/User"
+            - type: "null"
+        content:
+          type: [string, "null"]
+          maxLength: 4096
+          description: Text, or the caption of a file; `null` when deleted.
+        attachment:
+          oneOf:
+            - $ref: "#/components/schemas/Attachment"
+            - type: "null"
+        reply_to:
+          oneOf:
+            - $ref: "#/components/schemas/Id"
+            - type: "null"
+        forwarded_from:
+          oneOf:
+            - $ref: "#/components/schemas/ForwardedFrom"
+            - type: "null"
+        reactions:
+          type: array
+          items: { $ref: "#/components/schemas/Reaction" }
+        read_by:
+          type: array
+          items: { $ref: "#/components/schemas/ReadReceipt" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        edited_at:
+          oneOf:
+            - $ref: "#/components/schemas/Timestamp"
+            - type: "null"
+        is_deleted: { type: boolean }
+        client_temp_id: { $ref: "#/components/schemas/ClientTempId" }
+    MessagePage:
+      type: object
+      required: [items, next_cursor, prev_cursor]
+      properties:
+        items:
+          type: array
+          description: Oldest to newest
+          items: { $ref: "#/components/schemas/Message" }
+        next_cursor:
+          description: |
+            Continues in the direction of the request: pass it as `before` (older) for the
+            default, `before` and `around` requests, or as `after` (newer) for `after` requests.
+          oneOf:
+            - $ref: "#/components/schemas/Id"
+            - type: "null"
+        prev_cursor:
+          description: The opposite direction (`after` for the default request, `before` for an `after` request).
+          oneOf:
+            - $ref: "#/components/schemas/Id"
+            - type: "null"
+    SearchHit:
+      type: object
+      required: [message]
+      properties:
+        message: { $ref: "#/components/schemas/Message" }
+        highlight:
+          type: [string, "null"]
+          description: Plain-text excerpt; never HTML.
+    MessageSearchPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/SearchHit" }
+        next_cursor: { $ref: "#/components/schemas/Cursor" }
+    SendMessageRequest:
+      type: object
+      required: [client_temp_id, type]
+      properties:
+        client_temp_id: { $ref: "#/components/schemas/ClientTempId" }
+        type:
+          type: string
+          enum: [text, file, voice]
+        content:
+          type: [string, "null"]
+          maxLength: 4096
+        attachment_id:
+          description: Required and not null for `file` and `voice`; never a URL.
+          oneOf:
+            - $ref: "#/components/schemas/Id"
+            - type: "null"
+        reply_to:
+          oneOf:
+            - $ref: "#/components/schemas/Id"
+            - type: "null"
+      if:
+        properties:
+          type: { enum: [file, voice] }
+      then:
+        required: [attachment_id]
+        properties:
+          attachment_id: { $ref: "#/components/schemas/Id" }
+      else:
+        required: [content]
+        properties:
+          content: { type: string, minLength: 1, maxLength: 4096 }
+          attachment_id: { not: {} }
+    EditMessageRequest:
+      type: object
+      required: [content]
+      properties:
+        content: { type: string, minLength: 1, maxLength: 4096 }
+    ForwardMessageRequest:
+      type: object
+      required: [chat_ids]
+      properties:
+        chat_ids:
+          type: array
+          minItems: 1
+          maxItems: 20
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/Id" }
+    MarkReadRequest:
+      type: object
+      required: [message_id]
+      properties:
+        message_id:
+          description: Everything up to and including this message is read.
+          $ref: "#/components/schemas/Id"
+
+    # ------------------------------------------------- chats and groups
+    ChatType:
+      type: string
+      enum: [direct, group]
+    GroupRole:
+      type: string
+      enum: [owner, admin, member]
+    Chat:
+      type: object
+      required:
+        - id
+        - type
+        - name
+        - avatar_url
+        - peer
+        - is_pinned
+        - unread_count
+        - last_message
+        - created_at
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        type: { $ref: "#/components/schemas/ChatType" }
+        name:
+          type: string
+          description: Display name of the peer or the group
+        avatar_url: { type: [string, "null"] }
+        peer:
+          description: The other user of a direct chat; `null` for groups.
+          oneOf:
+            - $ref: "#/components/schemas/User"
+            - type: "null"
+        is_pinned: { type: boolean }
+        unread_count: { type: integer, minimum: 0 }
+        last_message:
+          oneOf:
+            - $ref: "#/components/schemas/Message"
+            - type: "null"
+        my_role:
+          description: Only for groups.
+          oneOf:
+            - $ref: "#/components/schemas/GroupRole"
+            - type: "null"
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+    ChatPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Chat" }
+        next_cursor: { $ref: "#/components/schemas/Cursor" }
+    CreateChatRequest:
+      type: object
+      required: [user_id]
+      properties:
+        user_id: { $ref: "#/components/schemas/Id" }
+        initial_message:
+          type: [string, "null"]
+          maxLength: 4096
+    GroupMember:
+      type: object
+      required: [user, role, joined_at]
+      properties:
+        user: { $ref: "#/components/schemas/User" }
+        role: { $ref: "#/components/schemas/GroupRole" }
+        joined_at: { $ref: "#/components/schemas/Timestamp" }
+    Group:
+      type: object
+      required: [id, name, description, avatar_url, owner_id, my_role, members, created_at]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        name: { type: string, minLength: 1, maxLength: 64 }
+        description: { type: [string, "null"], maxLength: 500 }
+        avatar_url: { type: [string, "null"] }
+        owner_id: { $ref: "#/components/schemas/Id" }
+        my_role: { $ref: "#/components/schemas/GroupRole" }
+        members:
+          type: array
+          items: { $ref: "#/components/schemas/GroupMember" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+    CreateGroupRequest:
+      type: object
+      required: [name, member_ids]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 64 }
+        description: { type: [string, "null"], maxLength: 500 }
+        member_ids:
+          type: array
+          maxItems: 200
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/Id" }
+    UpdateGroupRequest:
+      type: object
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 64 }
+        description: { type: [string, "null"], maxLength: 500 }
+    AddParticipantRequest:
+      type: object
+      required: [user_id]
+      properties:
+        user_id: { $ref: "#/components/schemas/Id" }
+    UpdateRoleRequest:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+          enum: [admin, member]
+    TransferOwnerRequest:
+      type: object
+      required: [user_id]
+      properties:
+        user_id: { $ref: "#/components/schemas/Id" }
+
+    # -------------------------------------------------------- requests
+    ApprovalRequestType:
+      type: string
+      enum: [direct_message, group_invite]
+    ApprovalRequestStatus:
+      type: string
+      enum: [pending, approved, rejected]
+    ApprovalRequest:
+      type: object
+      required: [id, type, status, requester, created_at]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        type: { $ref: "#/components/schemas/ApprovalRequestType" }
+        status: { $ref: "#/components/schemas/ApprovalRequestStatus" }
+        requester: { $ref: "#/components/schemas/User" }
+        group_name:
+          type: [string, "null"]
+          description: Only for `group_invite`
+        preview:
+          type: [string, "null"]
+          description: First message of a direct-message request
+        created_at: { $ref: "#/components/schemas/Timestamp" }

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ServerReactionAddEvent",
+  "description": "A reaction was added.",
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "reaction_add"
+    },
+    "event_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "chat_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "message_id": {
+          "$ref": "../../openapi.yaml#/components/schemas/Id"
+        },
+        "reaction": {
+          "$ref": "../../openapi.yaml#/components/schemas/Reaction"
+        }
+      },
+      "required": [
+        "message_id",
+        "reaction"
+      ]
+    }
+  },
+  "required": [
+    "type",
+    "event_id",
+    "chat_id",
+    "data"
+  ]
+}

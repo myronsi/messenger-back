@@ -1,0 +1,103 @@
+name: API contract
+
+on:
+  pull_request:
+    paths:
+      - "api/**"
+      - ".github/workflows/api-ci.yml"
+      - ".github/actions/setup-oasdiff/**"
+  push:
+    branches: [master]
+    paths:
+      - "api/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: api-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+      - run: npm ci --ignore-scripts
+      - name: Lint openapi.yaml
+        run: npm run lint
+      - name: Package version equals info.version, WebSocket examples match their schemas
+        run: npm run check
+      - name: Types can be generated
+        run: npm run build
+      - uses: ./.github/actions/setup-oasdiff
+      # Two baselines: the contract of the latest stable release on npm, and the contract on the
+      # base branch. A pre-release (2.0.0-alpha.N) is also compared with the base branch, so every
+      # change to it needs a higher pre-release version even when a stable release exists.
+      - name: Get the last released contract and the base branch contract
+        id: baseline
+        env:
+          BASE_REF: ${{ github.base_ref || 'master' }}
+        run: |
+          set -euo pipefail
+          if git cat-file -e "origin/${BASE_REF}:api/openapi.yaml" 2>/dev/null; then
+            mkdir "$RUNNER_TEMP/base"
+            git -C "$GITHUB_WORKSPACE" archive "origin/${BASE_REF}" api | tar -x -C "$RUNNER_TEMP/base"
+            echo "base_dir=$RUNNER_TEMP/base/api" >> "$GITHUB_OUTPUT"
+          fi
+          latest="$(npm view @myronsi/messenger-api dist-tags.latest 2>/dev/null || true)"
+          if [ -n "$latest" ]; then
+            npm pack "@myronsi/messenger-api@${latest}" --pack-destination "$RUNNER_TEMP" >/dev/null
+            tar -xzf "$RUNNER_TEMP"/myronsi-messenger-api-*.tgz -C "$RUNNER_TEMP" package/dist
+            {
+              echo "release_dir=$RUNNER_TEMP/package/dist"
+              echo "release_source=npm @myronsi/messenger-api@${latest}"
+            } >> "$GITHUB_OUTPUT"
+          fi
+      # Compares the REST contract, the WebSocket schemas, websocket.md and the examples.
+      - name: Breaking changes and info.version bump
+        if: steps.baseline.outputs.release_dir != '' || steps.baseline.outputs.base_dir != ''
+        env:
+          RELEASE_DIR: ${{ steps.baseline.outputs.release_dir }}
+          RELEASE_SOURCE: ${{ steps.baseline.outputs.release_source }}
+          BASE_DIR: ${{ steps.baseline.outputs.base_dir }}
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          if [ -n "$RELEASE_DIR" ]; then
+            echo "Baseline: $RELEASE_SOURCE"
+            node scripts/check-version-bump.mjs "$RELEASE_DIR" .
+          fi
+          if [ -n "$BASE_DIR" ] && { [ -z "$RELEASE_DIR" ] || [[ "$version" == *-* ]]; }; then
+            echo "Baseline: base branch"
+            node scripts/check-version-bump.mjs "$BASE_DIR" .
+          fi
+  # The Go server does not exist yet. As soon as a go.mod is added, the generated code must be current.
+  go-generated:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - id: go
+        run: |
+          if [ -f go.mod ]; then echo "present=true" >> "$GITHUB_OUTPUT"; else echo "::notice::No go.mod yet, skipping the generated-code check"; fi
+      - if: steps.go.outputs.present == 'true'
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - if: steps.go.outputs.present == 'true'
+        name: go generate must not change anything
+        run: |
+          go generate ./...
+          git diff --exit-code
+          # git diff ignores files that generation created and the PR did not commit
+          test -z "$(git ls-files --others --exclude-standard)"

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ClientEvent",
+  "description": "Every event a client may send.",
+  "oneOf": [
+    {
+      "$ref": "client/message.schema.json"
+    },
+    {
+      "$ref": "client/resend.schema.json"
+    },
+    {
+      "$ref": "client/edit.schema.json"
+    },
+    {
+      "$ref": "client/delete.schema.json"
+    },
+    {
+      "$ref": "client/read.schema.json"
+    },
+    {
+      "$ref": "client/reaction_add.schema.json"
+    },
+    {
+      "$ref": "client/reaction_remove.schema.json"
+    },
+    {
+      "$ref": "client/typing.schema.json"
+    }
+  ]
+}

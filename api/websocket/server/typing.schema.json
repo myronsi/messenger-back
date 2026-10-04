@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ServerTypingEvent",
+  "description": "A user started or stopped typing.",
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "typing"
+    },
+    "event_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "chat_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "$ref": "../../openapi.yaml#/components/schemas/Id"
+        },
+        "is_typing": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "user_id",
+        "is_typing"
+      ]
+    }
+  },
+  "required": [
+    "type",
+    "event_id",
+    "chat_id",
+    "data"
+  ]
+}

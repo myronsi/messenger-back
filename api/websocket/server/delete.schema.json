@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ServerDeleteEvent",
+  "description": "A message was deleted for everyone (deleting for yourself is only sent to your other devices).",
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "delete"
+    },
+    "event_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "chat_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "message_id": {
+          "$ref": "../../openapi.yaml#/components/schemas/Id"
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "me",
+            "everyone"
+          ]
+        }
+      },
+      "required": [
+        "message_id",
+        "scope"
+      ]
+    }
+  },
+  "required": [
+    "type",
+    "event_id",
+    "chat_id",
+    "data"
+  ]
+}

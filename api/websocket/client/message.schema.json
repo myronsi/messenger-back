@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ClientMessageEvent",
+  "description": "Send a message. Idempotent per `client_temp_id`; answered with `ack` or `error`.",
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "message"
+    },
+    "client_temp_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/ClientTempId"
+    },
+    "chat_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "data": {
+      "oneOf": [
+        {
+          "type": "object",
+          "title": "TextMessageData",
+          "properties": {
+            "type": {
+              "const": "text"
+            },
+            "content": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            "reply_to": {
+              "oneOf": [
+                {
+                  "$ref": "../../openapi.yaml#/components/schemas/Id"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "content"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "title": "AttachmentMessageData",
+          "description": "`file` and `voice` messages reference an uploaded attachment by ID, never by URL.",
+          "properties": {
+            "type": {
+              "enum": [
+                "file",
+                "voice"
+              ]
+            },
+            "content": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 4096,
+              "description": "Optional caption"
+            },
+            "attachment_id": {
+              "$ref": "../../openapi.yaml#/components/schemas/Id"
+            },
+            "reply_to": {
+              "oneOf": [
+                {
+                  "$ref": "../../openapi.yaml#/components/schemas/Id"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "attachment_id"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+  "required": [
+    "type",
+    "client_temp_id",
+    "chat_id",
+    "data"
+  ],
+  "additionalProperties": false
+}

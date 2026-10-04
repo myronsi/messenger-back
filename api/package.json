@@ -1,0 +1,54 @@
+{
+  "name": "@myronsi/messenger-api",
+  "version": "2.0.0-alpha.1",
+  "description": "API contract of the Messenger backend: OpenAPI document, WebSocket event schemas and generated TypeScript types",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/myronsi/messenger-back.git",
+    "directory": "api"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./openapi.yaml": "./dist/openapi.yaml",
+    "./schema": {
+      "types": "./dist/schema.d.ts"
+    },
+    "./ws-events": {
+      "types": "./dist/ws-events.d.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "lint": "redocly lint openapi.yaml",
+    "check": "node scripts/check.mjs",
+    "build": "node scripts/build.mjs",
+    "prepublishOnly": "npm run check && npm run build"
+  },
+  "devDependencies": {
+    "@redocly/cli": "^2.0.0",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "json-schema-to-typescript": "^15.0.4",
+    "openapi-typescript": "^7.9.1",
+    "typescript": "^5.9.0",
+    "yaml": "^2.8.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ServerEvent",
+  "description": "Every event the server may send.",
+  "oneOf": [
+    {
+      "$ref": "server/hello.schema.json"
+    },
+    {
+      "$ref": "server/ack.schema.json"
+    },
+    {
+      "$ref": "server/error.schema.json"
+    },
+    {
+      "$ref": "server/message.schema.json"
+    },
+    {
+      "$ref": "server/edit.schema.json"
+    },
+    {
+      "$ref": "server/delete.schema.json"
+    },
+    {
+      "$ref": "server/reaction_add.schema.json"
+    },
+    {
+      "$ref": "server/reaction_remove.schema.json"
+    },
+    {
+      "$ref": "server/read.schema.json"
+    },
+    {
+      "$ref": "server/typing.schema.json"
+    },
+    {
+      "$ref": "server/chat_created.schema.json"
+    },
+    {
+      "$ref": "server/chat_deleted.schema.json"
+    },
+    {
+      "$ref": "server/group_created.schema.json"
+    },
+    {
+      "$ref": "server/group_updated.schema.json"
+    },
+    {
+      "$ref": "server/approval_request_created.schema.json"
+    },
+    {
+      "$ref": "server/chat_list_update.schema.json"
+    },
+    {
+      "$ref": "server/presence.schema.json"
+    }
+  ]
+}

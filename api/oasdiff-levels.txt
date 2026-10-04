@@ -1,0 +1,3 @@
+response-property-enum-value-added    info
+response-body-wrapped-in-one-of-original-preserved    info
+request-body-wrapped-in-one-of-original-preserved    info

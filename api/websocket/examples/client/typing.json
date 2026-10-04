@@ -1,0 +1,7 @@
+{
+  "type": "typing",
+  "chat_id": "42",
+  "data": {
+    "is_typing": true
+  }
+}

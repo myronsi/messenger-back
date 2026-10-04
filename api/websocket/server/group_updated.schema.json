@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ServerGroupUpdatedEvent",
+  "description": "Name, description, avatar, members or roles of a group changed.",
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "group_updated"
+    },
+    "event_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "chat_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "group": {
+          "$ref": "../../openapi.yaml#/components/schemas/Group"
+        }
+      },
+      "required": [
+        "group"
+      ]
+    }
+  },
+  "required": [
+    "type",
+    "event_id",
+    "chat_id",
+    "data"
+  ]
+}

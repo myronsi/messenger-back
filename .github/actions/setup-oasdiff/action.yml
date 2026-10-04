@@ -1,0 +1,24 @@
+name: Set up oasdiff
+description: Installs a pinned oasdiff release and verifies its checksum.
+
+inputs:
+  version:
+    description: oasdiff version without the leading v
+    default: "1.33.0"
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        archive="oasdiff_${VERSION}_linux_amd64.tar.gz"
+        dir="$(mktemp -d)"
+        gh release download "v${VERSION}" --repo oasdiff/oasdiff --dir "$dir" --pattern "$archive" --pattern checksums.txt
+        (cd "$dir" && grep " ${archive}\$" checksums.txt | sha256sum --check -)
+        tar -xzf "$dir/$archive" -C "$dir" oasdiff
+        sudo install "$dir/oasdiff" /usr/local/bin/oasdiff
+        oasdiff --version
