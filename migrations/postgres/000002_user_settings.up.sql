@@ -61,3 +61,6 @@ CREATE TABLE user_contact_names (
 );
 
 CREATE INDEX user_contact_names_target_idx ON user_contact_names (target_id);
+
+CREATE TRIGGER user_contact_names_set_updated_at BEFORE UPDATE ON user_contact_names
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();

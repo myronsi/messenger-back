@@ -443,6 +443,7 @@ func TestTransferRacesAccountDeletion(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		var deleteErr error
 		var wg sync.WaitGroup
 		wg.Add(2)
 		go func() {
@@ -451,9 +452,12 @@ func TestTransferRacesAccountDeletion(t *testing.T) {
 		}()
 		go func() {
 			defer wg.Done()
-			_, _ = s.Users().DeleteAccount(ctx, a.ID)
+			_, deleteErr = s.Users().DeleteAccount(ctx, a.ID)
 		}()
 		wg.Wait()
+		if deleteErr != nil {
+			t.Fatalf("round %d: delete account: %v", i, deleteErr)
+		}
 
 		var owners, members int
 		err = s.Pool().QueryRow(ctx,
@@ -467,6 +471,48 @@ func TestTransferRacesAccountDeletion(t *testing.T) {
 		// Bring the deleted user back for the next round.
 		if a, err = s.Users().Create(ctx, fmt.Sprintf("alice%d", i), "Alice", "hash"); err != nil {
 			t.Fatal(err)
+		}
+	}
+}
+
+// Each user created a group, handed it over and left, so only chats.created_by still points at them. Deleting
+// both accounts at once must not deadlock on those rows.
+func TestConcurrentDeletionOfCreators(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	chats := s.Chats()
+	third := mustUser(t, s, "third")
+
+	for i := range 10 {
+		a, b := mustUser(t, s, fmt.Sprintf("alice%d", i)), mustUser(t, s, fmt.Sprintf("bob%d", i))
+		for _, pair := range [][2]User{{a, b}, {b, a}} {
+			creator, heir := pair[0], pair[1]
+			g, err := chats.CreateGroup(ctx, NewGroup{OwnerID: creator.ID, Name: "Left", MemberIDs: []int64{heir.ID, third.ID}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := chats.TransferOwnership(ctx, g.ID, creator.ID, heir.ID); err != nil {
+				t.Fatal(err)
+			}
+			if err := chats.RemoveMember(ctx, g.ID, creator.ID); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		errs := make([]error, 2)
+		var wg sync.WaitGroup
+		for j, u := range []User{a, b} {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				_, errs[j] = s.Users().DeleteAccount(ctx, u.ID)
+			}()
+		}
+		wg.Wait()
+		for j, err := range errs {
+			if err != nil {
+				t.Fatalf("round %d, deletion %d: %v", i, j, err)
+			}
 		}
 	}
 }
