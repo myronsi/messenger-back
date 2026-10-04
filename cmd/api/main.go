@@ -3,12 +3,14 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/myronsi/messenger-back/internal/app"
+	"github.com/myronsi/messenger-back/internal/auth"
 	"github.com/myronsi/messenger-back/internal/config"
 	"github.com/myronsi/messenger-back/internal/httpapi"
 	"github.com/myronsi/messenger-back/internal/realtime"
@@ -49,6 +51,26 @@ func run() error {
 	}
 	defer es.Close()
 
+	key, err := base64.StdEncoding.DecodeString(cfg.EncryptionKey.Reveal())
+	if err != nil {
+		return fmt.Errorf("decode ENCRYPTION_KEY: %w", err)
+	}
+	trustedProxies, err := cfg.Auth.TrustedProxyPrefixes()
+	if err != nil {
+		return err
+	}
+	authSvc, err := auth.NewService(pg, rd.Client(), auth.Config{
+		JWTSecret:         []byte(cfg.JWTSecret.Reveal()),
+		EncryptionKey:     key,
+		RecoveryPepper:    []byte(cfg.RecoveryPepper.Reveal()),
+		SessionCacheTTL:   cfg.Auth.SessionCacheTTL,
+		RefreshReuseGrace: cfg.Auth.RefreshReuseGrace,
+		HashConcurrency:   cfg.Auth.PasswordHashConcurrency,
+	}, log)
+	if err != nil {
+		return err
+	}
+
 	hub := realtime.NewHub(log, p.Metrics)
 	router := httpapi.NewRouter(httpapi.Options{
 		HTTP:       cfg.HTTP,
@@ -56,6 +78,15 @@ func run() error {
 		Tracing:    cfg.Tracing.Enabled,
 		Log:        log,
 		Metrics:    p.Metrics,
+		API: httpapi.NewAuthServer(httpapi.AuthOptions{
+			Service:        authSvc,
+			Log:            log,
+			BasePath:       cfg.HTTP.BasePath,
+			CookiePath:     cfg.Auth.RefreshCookiePath,
+			CookieSecure:   cfg.Auth.CookieSecure,
+			TrustedProxies: trustedProxies,
+		}),
+		Authenticator: authSvc,
 		Checks: []httpapi.Check{
 			{Name: "postgres", Ping: pg.Ping},
 			{Name: "redis", Ping: rd.Ping},

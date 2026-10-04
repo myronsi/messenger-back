@@ -64,14 +64,6 @@ type RecoveryToken struct {
 	UsedAt    *time.Time
 }
 
-type TwoFactorChallenge struct {
-	JtiHash   string
-	UserID    int64
-	ExpiresAt time.Time
-	Attempts  int32
-	UsedAt    *time.Time
-}
-
 type User struct {
 	ID           int64
 	Username     string
@@ -174,4 +166,10 @@ type UserSession struct {
 	LastActiveAt     time.Time
 	ExpiresAt        time.Time
 	RevokedAt        *time.Time
+}
+
+type UserSessionRotatedToken struct {
+	TokenHash string
+	SessionID uuid.UUID
+	RotatedAt time.Time
 }

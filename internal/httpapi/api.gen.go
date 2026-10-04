@@ -599,6 +599,7 @@ type DirectMessagePolicy string
 
 // DisableTwoFactorRequest defines model for DisableTwoFactorRequest.
 type DisableTwoFactorRequest struct {
+	// Code A code of the authenticator app, or an unused recovery code.
 	Code     string  `json:"code"`
 	Password *string `json:"password,omitempty"`
 }
@@ -940,15 +941,11 @@ type Session struct {
 	CreatedAt Timestamp `json:"created_at"`
 
 	// Device Sanitised user agent
-	Device    *string    `json:"device,omitempty"`
-	ExpiresAt *Timestamp `json:"expires_at,omitempty"`
-
-	// Id Decimal ID as a string (Snowflake IDs exceed 2^53).
-	//
-	// Examples: 7217400317439950848
-	Id         Id        `json:"id"`
-	IsCurrent  bool      `json:"is_current"`
-	LastUsedAt Timestamp `json:"last_used_at"`
+	Device     *string            `json:"device,omitempty"`
+	ExpiresAt  *Timestamp         `json:"expires_at,omitempty"`
+	Id         openapi_types.UUID `json:"id"`
+	IsCurrent  bool               `json:"is_current"`
+	LastUsedAt Timestamp          `json:"last_used_at"`
 }
 
 // SetAvatarRequest defines model for SetAvatarRequest.
@@ -998,8 +995,15 @@ type TwoFactorCode struct {
 
 // TwoFactorLoginRequest defines model for TwoFactorLoginRequest.
 type TwoFactorLoginRequest struct {
+	// Code A code of the authenticator app, or an unused recovery code.
 	Code           string `json:"code"`
 	LoginChallenge string `json:"login_challenge"`
+}
+
+// TwoFactorRecoveryCodes defines model for TwoFactorRecoveryCodes.
+type TwoFactorRecoveryCodes struct {
+	// RecoveryCodes One-time codes for signing in without the authenticator app. Shown only once.
+	RecoveryCodes []string `json:"recovery_codes"`
 }
 
 // TwoFactorSetup defines model for TwoFactorSetup.
@@ -1137,10 +1141,8 @@ type MessageId = Id
 // Examples: 7217400317439950848
 type RequestId = Id
 
-// SessionId Decimal ID as a string (Snowflake IDs exceed 2^53).
-//
-// Examples: 7217400317439950848
-type SessionId = Id
+// SessionId defines model for SessionId.
+type SessionId = openapi_types.UUID
 
 // UserId Decimal ID as a string (Snowflake IDs exceed 2^53).
 //
@@ -5740,7 +5742,7 @@ func (siw *ServerInterfaceWrapper) RevokeSession(w http.ResponseWriter, r *http.
 	// ------------- Path parameter "session_id" -------------
 	var sessionId SessionId
 
-	err = runtime.BindStyledParameterWithOptions("simple", "session_id", r.PathValue("session_id"), &sessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", r.PathValue("session_id"), &sessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
 		return
@@ -10470,12 +10472,18 @@ type ConfirmTwoFactorResponseObject interface {
 	VisitConfirmTwoFactorResponse(w http.ResponseWriter) error
 }
 
-type ConfirmTwoFactor204Response struct {
-}
+type ConfirmTwoFactor200JSONResponse TwoFactorRecoveryCodes
 
-func (response ConfirmTwoFactor204Response) VisitConfirmTwoFactorResponse(w http.ResponseWriter) error {
-	w.WriteHeader(204)
-	return nil
+func (response ConfirmTwoFactor200JSONResponse) VisitConfirmTwoFactorResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
 }
 
 type ConfirmTwoFactor400ApplicationProblemPlusJSONResponse struct {
@@ -10506,6 +10514,22 @@ func (response ConfirmTwoFactor401ApplicationProblemPlusJSONResponse) VisitConfi
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ConfirmTwoFactor409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response ConfirmTwoFactor409ApplicationProblemPlusJSONResponse) VisitConfirmTwoFactorResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -10606,6 +10630,22 @@ func (response DisableTwoFactor403ApplicationProblemPlusJSONResponse) VisitDisab
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DisableTwoFactor409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response DisableTwoFactor409ApplicationProblemPlusJSONResponse) VisitDisableTwoFactorResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -11112,6 +11152,22 @@ func (response ChangePassword401ApplicationProblemPlusJSONResponse) VisitChangeP
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ChangePassword403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response ChangePassword403ApplicationProblemPlusJSONResponse) VisitChangePasswordResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }

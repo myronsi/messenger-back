@@ -44,6 +44,8 @@ make docker            # distroless, non-root image from go.Dockerfile
 - CORS origins come from `CORS_ORIGINS`; `*` is rejected. Request bodies are limited by `HTTP_MAX_BODY_BYTES`.
 - `go.Dockerfile` is separate from the Python `Dockerfile` until cutover. It is not called `Dockerfile.go` because Go would treat that name as a source file.
 
+- Authentication, sessions and 2FA are described in [auth.md](auth.md). Every route except a short allowlist needs a bearer token.
+
 ## CI
 
-`.github/workflows/go.yml`: golangci-lint, `go vet`, `go mod tidy` and `go generate` drift checks, `go test -race ./...` (with a PostgreSQL service for the database tests), `migrations` (up, down and up again with the real tool), `govulncheck`, an image build, and `dev-stack`, which starts `compose.dev.yaml` and checks that `/readyz` reports every store ready.
+`.github/workflows/go.yml`: golangci-lint, `go vet`, `go mod tidy` and `go generate` drift checks, `go test -race ./...` (with PostgreSQL and Redis services for the database tests), `migrations` (up, down and up again with the real tool), `govulncheck`, an image build, and `dev-stack`, which starts `compose.dev.yaml` and checks that `/readyz` reports every store ready.

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.0.0-alpha.1
+  version: 2.0.0-alpha.2
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -356,7 +356,7 @@ paths:
       tags: [me]
       operationId: changePassword
       summary: Change the password
-      description: Revokes all other sessions.
+      description: "Revokes all other sessions. A wrong current password answers `403` with `code: invalid_credentials`."
       requestBody:
         required: true
         content:
@@ -368,6 +368,7 @@ paths:
           description: Password changed
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
   /me/security:
@@ -463,7 +464,7 @@ paths:
       tags: [me]
       operationId: setupTwoFactor
       summary: Start two-factor setup
-      description: Returns the secret and an `otpauth://` URI; two-factor stays off until confirmed.
+      description: "Returns the secret and an `otpauth://` URI; two-factor stays off until confirmed. A wrong password answers `403` with `code: invalid_credentials`; `409` when two-factor is already on."
       requestBody:
         required: true
         content:
@@ -488,6 +489,7 @@ paths:
       tags: [me]
       operationId: confirmTwoFactor
       summary: Turn two-factor on with a code
+      description: "Returns the recovery codes. They are shown only once, so store them safely."
       requestBody:
         required: true
         content:
@@ -495,10 +497,14 @@ paths:
             schema: { $ref: "#/components/schemas/TwoFactorCode" }
       responses:
         "426": { $ref: "#/components/responses/ClientOutdated" }
-        "204":
+        "200":
           description: Two-factor authentication enabled
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TwoFactorRecoveryCodes" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "409": { $ref: "#/components/responses/Conflict" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
   /me/2fa/disable:
     parameters:
@@ -508,6 +514,7 @@ paths:
       tags: [me]
       operationId: disableTwoFactor
       summary: Turn two-factor off
+      description: "A wrong password or code answers `403` (`invalid_credentials` or `invalid_two_factor_code`); `409` when two-factor is off."
       requestBody:
         required: true
         content:
@@ -520,6 +527,7 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
   /me/privacy:
     parameters:
@@ -1512,7 +1520,7 @@ components:
 
   headers:
     RefreshCookie:
-      description: HttpOnly, Secure, SameSite refresh cookie scoped to `/api/v2/auth`. Login and refresh set it; logout clears it (expired cookie).
+      description: HttpOnly, Secure, SameSite refresh cookie scoped to `/api/v2/auth/refresh`, so the browser sends it only to the refresh endpoint. Login and refresh set it; logout clears it (expired cookie).
       schema: { type: string }
 
   parameters:
@@ -1555,7 +1563,7 @@ components:
       name: session_id
       in: path
       required: true
-      schema: { $ref: "#/components/schemas/Id" }
+      schema: { type: string, format: uuid }
 
     ClientVersion:
       name: X-Client-Version
@@ -1734,7 +1742,10 @@ components:
       required: [login_challenge, code]
       properties:
         login_challenge: { type: string }
-        code: { type: string, pattern: "^[0-9]{6}$" }
+        code:
+          type: string
+          pattern: "^([0-9]{6}|[0-9A-Fa-f]{8}-[0-9A-Fa-f]{8})$"
+          description: A code of the authenticator app, or an unused recovery code.
     TokenResponse:
       type: object
       required: [access_token, token_type, expires_in]
@@ -1829,7 +1840,7 @@ components:
       type: object
       required: [id, created_at, last_used_at, is_current]
       properties:
-        id: { $ref: "#/components/schemas/Id" }
+        id: { type: string, format: uuid }
         device:
           type: [string, "null"]
           description: Sanitised user agent
@@ -1848,12 +1859,23 @@ components:
       required: [code]
       properties:
         code: { type: string, pattern: "^[0-9]{6}$" }
+    TwoFactorRecoveryCodes:
+      type: object
+      required: [recovery_codes]
+      properties:
+        recovery_codes:
+          type: array
+          items: { type: string }
+          description: One-time codes for signing in without the authenticator app. Shown only once.
     DisableTwoFactorRequest:
       type: object
       required: [password, code]
       properties:
         password: { type: string, maxLength: 128, writeOnly: true }
-        code: { type: string, pattern: "^[0-9]{6}$" }
+        code:
+          type: string
+          pattern: "^([0-9]{6}|[0-9A-Fa-f]{8}-[0-9A-Fa-f]{8})$"
+          description: A code of the authenticator app, or an unused recovery code.
     Visibility:
       type: string
       description: Who may see the item. `*_except` scopes use the exception lists.

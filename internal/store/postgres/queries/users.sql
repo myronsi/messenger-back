@@ -31,3 +31,11 @@ UPDATE users SET last_seen_at = now() WHERE id = @id;
 
 -- name: DeleteUser :execrows
 DELETE FROM users WHERE id = @id;
+
+-- name: RehashPassword :execrows
+-- Only replaces the hash that was verified, so a password change in between is never overwritten.
+UPDATE users SET password_hash = @new_hash WHERE id = @id AND password_hash = @old_hash;
+
+-- name: EnsurePrivacySettings :exec
+INSERT INTO user_privacy_settings (user_id) VALUES (@user_id) ON CONFLICT (user_id) DO NOTHING;
+

@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/myronsi/messenger-back/internal/app"
+	"github.com/myronsi/messenger-back/internal/store/postgres"
 )
 
 func main() { app.Exit("worker", run) }
@@ -17,6 +18,25 @@ func run() error {
 		return err
 	}
 	defer p.Close()
+
+	pg, err := postgres.New(p.Ctx, p.Cfg.DatabaseURL.Reveal(), postgres.Options{
+		MaxConns:     p.Cfg.Postgres.MaxConns,
+		QueryTimeout: p.Cfg.Postgres.QueryTimeout,
+	})
+	if err != nil {
+		return err
+	}
+	defer pg.Close()
+	maintCtx, stopMaintenance := context.WithCancel(p.Ctx)
+	maintenanceDone := make(chan struct{})
+	go func() {
+		defer close(maintenanceDone)
+		maintain(maintCtx, p.Log, pg, maintenanceEvery)
+	}()
+	defer func() {
+		stopMaintenance()
+		<-maintenanceDone
+	}()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {

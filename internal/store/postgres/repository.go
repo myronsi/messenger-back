@@ -49,6 +49,14 @@ type UserRepository interface {
 	Credentials(ctx context.Context, username string) (Credentials, error)
 	UpdateProfile(ctx context.Context, id int64, p Profile) (User, error)
 	SetPasswordHash(ctx context.Context, id int64, passwordHash string) error
+	// Register creates the account together with its settings rows in one transaction.
+	Register(ctx context.Context, username, displayName, passwordHash string) (User, error)
+	CredentialsByID(ctx context.Context, id int64) (Credentials, error)
+	// RehashPassword replaces oldHash by newHash only if oldHash is still the stored hash; false otherwise.
+	RehashPassword(ctx context.Context, id int64, oldHash, newHash string) (bool, error)
+	// ChangePassword sets the new hash if oldHash is still the stored one (ErrConflict otherwise) and
+	// revokes every session except keepID in the same transaction. It returns the revoked ids.
+	ChangePassword(ctx context.Context, id int64, oldHash, newHash string, keepID uuid.UUID) ([]uuid.UUID, error)
 	TouchLastSeen(ctx context.Context, id int64) error
 	// DeleteAccount removes the account in one transaction: its direct chats, the groups nobody else is
 	// in, and everything that references the user. Groups it owned pass to the next admin, moderator or

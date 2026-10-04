@@ -9,6 +9,7 @@
 !docs/go-backend.md
 !docs/dev-environment.md
 !docs/postgres-schema.md
+!docs/auth.md
 !docs/deployment.md
 !CHANGELOG.md
 !server/

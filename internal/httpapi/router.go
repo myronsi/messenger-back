@@ -22,6 +22,9 @@ type Options struct {
 	// API implements the contract. Operations it does not implement answer 501 when it embeds
 	// Unimplemented.
 	API ServerInterface
+	// Authenticator verifies access tokens. Every operation that the contract does not list as public is
+	// answered 401 without one.
+	Authenticator Authenticator
 }
 
 // Router is the HTTP handler of the API server.
@@ -46,6 +49,7 @@ func NewRouter(o Options) *Router {
 	HandlerWithOptions(api, StdHTTPServerOptions{
 		BaseURL:          o.HTTP.BasePath,
 		BaseRouter:       mux,
+		Middlewares:      []MiddlewareFunc{authenticate(o.Authenticator, o.HTTP.BasePath, o.Log)},
 		ErrorHandlerFunc: requestErrorHandler,
 	})
 
