@@ -56,7 +56,8 @@ func TestForeignKeysHaveDeleteRules(t *testing.T) {
 	}
 }
 
-// A foreign key column without an index makes deletes and joins scan the whole table.
+// A foreign key column without an index makes deletes and joins scan the whole table. A partial index
+// only counts when it excludes nothing but NULL keys: the cascade of an account deletion must find every row.
 func TestForeignKeyColumnsAreIndexed(t *testing.T) {
 	s := newTestStore(t)
 	rows, err := s.Pool().Query(context.Background(), `
@@ -68,6 +69,12 @@ func TestForeignKeyColumnsAreIndexed(t *testing.T) {
 			WHERE i.indrelid = c.conrelid
 			AND i.indisvalid
 			AND (i.indkey::int2[])[0:cardinality(c.conkey) - 1] = c.conkey
+			AND (
+				i.indpred IS NULL
+				OR (cardinality(c.conkey) = 1 AND pg_get_expr(i.indpred, i.indrelid) = format(
+					'(%s IS NOT NULL)',
+					(SELECT attname FROM pg_attribute WHERE attrelid = c.conrelid AND attnum = c.conkey[1])))
+			)
 		)`)
 	if err != nil {
 		t.Fatal(err)
@@ -78,7 +85,7 @@ func TestForeignKeyColumnsAreIndexed(t *testing.T) {
 		if err := rows.Scan(&table, &name); err != nil {
 			t.Fatal(err)
 		}
-		t.Errorf("foreign key %s on %s has no index starting with its columns", name, table)
+		t.Errorf("foreign key %s on %s has no unfiltered index starting with its columns", name, table)
 	}
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)

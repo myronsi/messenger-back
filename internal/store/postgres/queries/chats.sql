@@ -56,6 +56,14 @@ UPDATE participants
 SET last_read_message_id = GREATEST(COALESCE(last_read_message_id, 0), @message_id::bigint)
 WHERE chat_id = @chat_id AND user_id = @user_id;
 
+-- name: LockChatsOfUser :many
+SELECT c.id
+FROM chats c
+JOIN participants p ON p.chat_id = c.id
+WHERE p.user_id = @user_id
+ORDER BY c.id
+FOR UPDATE OF c;
+
 -- name: ListDirectChatIDsOfUser :many
 SELECT c.id
 FROM chats c

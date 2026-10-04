@@ -16,7 +16,7 @@ CREATE TABLE chats (
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT chats_shape CHECK (
         (type = 'direct' AND direct_key IS NOT NULL AND name IS NULL)
-        OR (type = 'group' AND direct_key IS NULL AND char_length(btrim(name)) BETWEEN 1 AND 100)
+        OR (type = 'group' AND direct_key IS NULL AND name IS NOT NULL AND char_length(btrim(name)) BETWEEN 1 AND 100)
     ),
     CONSTRAINT chats_direct_key_format CHECK (
         direct_key IS NULL

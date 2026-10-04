@@ -247,6 +247,10 @@ func (r chatRepo) MarkRead(ctx context.Context, chatID, userID, messageID int64)
 func (r chatRepo) Delete(ctx context.Context, chatID int64) ([]string, error) {
 	var keys []string
 	err := r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
+		// Lock first so attachments added concurrently are listed or rejected, never orphaned.
+		if _, err := q.LockChat(ctx, chatID); err != nil {
+			return mapError(err)
+		}
 		var err error
 		if keys, err = q.ListAttachmentKeysOfChats(ctx, []int64{chatID}); err != nil {
 			return err

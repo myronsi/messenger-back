@@ -98,6 +98,11 @@ func (r userRepo) DeleteAccount(ctx context.Context, id int64) (DeletedAccount, 
 		if _, err := q.LockUser(ctx, id); err != nil {
 			return err
 		}
+		// Lock every chat of the user in id order before reading roles: a concurrent ownership
+		// transfer holds the same lock, so the roles read below cannot change underneath us.
+		if _, err := q.LockChatsOfUser(ctx, id); err != nil {
+			return err
+		}
 		// A direct chat cannot outlive one of its two sides.
 		doomed, err := q.ListDirectChatIDsOfUser(ctx, id)
 		if err != nil {

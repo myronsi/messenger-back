@@ -46,7 +46,8 @@ Every foreign key has an explicit `ON DELETE` rule (a test fails otherwise):
 
 `UserRepository.DeleteAccount` runs in one transaction:
 
-1. Locks the user.
+1. Locks the user, then every chat the user is in (in chat-id order, so concurrent deletions and ownership
+   transfers cannot deadlock or act on stale roles).
 2. Deletes the user's direct chats (they cannot outlive one side).
 3. For every group the user owns, hands the group to the next admin, then moderator, then the member who has
    been there longest, and removes the user from it. A group without anyone else is deleted.

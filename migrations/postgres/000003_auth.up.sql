@@ -27,6 +27,7 @@ CREATE TABLE user_sessions (
 
 CREATE UNIQUE INDEX user_sessions_refresh_token_key ON user_sessions (refresh_token_hash);
 -- Session list of an account.
+CREATE INDEX user_sessions_user_fk_idx ON user_sessions (user_id);
 CREATE INDEX user_sessions_user_idx ON user_sessions (user_id, last_active_at DESC) WHERE revoked_at IS NULL;
 -- Cleanup of expired sessions.
 CREATE INDEX user_sessions_expires_idx ON user_sessions (expires_at);
@@ -61,6 +62,7 @@ CREATE TABLE user_2fa_recovery_codes (
 );
 
 -- Unused codes of an account.
+CREATE INDEX user_2fa_recovery_codes_user_fk_idx ON user_2fa_recovery_codes (user_id);
 CREATE INDEX user_2fa_recovery_codes_user_idx ON user_2fa_recovery_codes (user_id) WHERE used_at IS NULL;
 
 -- Append-only log of security-relevant events (login, password change, 2FA, session revocation, ...).
@@ -75,4 +77,4 @@ CREATE TABLE user_security_events (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX user_security_events_user_idx ON user_security_events (user_id, created_at DESC, id DESC);
+CREATE INDEX user_security_events_user_idx ON user_security_events (user_id, id DESC);

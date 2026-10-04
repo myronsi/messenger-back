@@ -328,6 +328,35 @@ func (q *Queries) LockChat(ctx context.Context, id int64) (Chat, error) {
 	return i, err
 }
 
+const lockChatsOfUser = `-- name: LockChatsOfUser :many
+SELECT c.id
+FROM chats c
+JOIN participants p ON p.chat_id = c.id
+WHERE p.user_id = $1
+ORDER BY c.id
+FOR UPDATE OF c
+`
+
+func (q *Queries) LockChatsOfUser(ctx context.Context, userID int64) ([]int64, error) {
+	rows, err := q.db.Query(ctx, lockChatsOfUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int64{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockParticipant = `-- name: LockParticipant :one
 SELECT chat_id, user_id, role, last_read_message_id, joined_at FROM participants WHERE chat_id = $1 AND user_id = $2 FOR UPDATE
 `

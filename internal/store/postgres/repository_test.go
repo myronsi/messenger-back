@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/netip"
 	"slices"
 	"sync"
@@ -419,6 +420,54 @@ func TestDeleteAccount(t *testing.T) {
 
 	if _, err := s.Users().DeleteAccount(ctx, victim.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("deleting twice: got %v", err)
+	}
+}
+
+func TestGroupNeedsName(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	if _, err := s.Pool().Exec(ctx, `INSERT INTO chats (type) VALUES ('group')`); err == nil {
+		t.Fatal("a group without a name must be rejected")
+	}
+}
+
+// A transfer that races the deletion of its target must not leave a group with members and no owner.
+func TestTransferRacesAccountDeletion(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	chats := s.Chats()
+	owner, a, b := mustUser(t, s, "owner"), mustUser(t, s, "alice"), mustUser(t, s, "bob")
+
+	for i := range 15 {
+		g, err := chats.CreateGroup(ctx, NewGroup{OwnerID: owner.ID, Name: "Race", MemberIDs: []int64{a.ID, b.ID}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			_ = chats.TransferOwnership(ctx, g.ID, owner.ID, a.ID)
+		}()
+		go func() {
+			defer wg.Done()
+			_, _ = s.Users().DeleteAccount(ctx, a.ID)
+		}()
+		wg.Wait()
+
+		var owners, members int
+		err = s.Pool().QueryRow(ctx,
+			`SELECT count(*) FILTER (WHERE role = 'owner'), count(*) FROM participants WHERE chat_id = $1`, g.ID).Scan(&owners, &members)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if members > 0 && owners != 1 {
+			t.Fatalf("round %d: group has %d members and %d owners", i, members, owners)
+		}
+		// Bring the deleted user back for the next round.
+		if a, err = s.Users().Create(ctx, fmt.Sprintf("alice%d", i), "Alice", "hash"); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
