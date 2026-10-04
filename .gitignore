@@ -4,6 +4,7 @@
 !docs/image-storage-plan.md
 !docs/versioning.md
 !docs/releasing.md
+!docs/project-workflow.md
 !CHANGELOG.md
 !server/
 !server/version.py
@@ -43,6 +44,10 @@
 !.github/
 !.github/workflows/
 !.github/workflows/*.yml
+!.github/labels.yml
+!.github/pull_request_template.md
+!.github/ISSUE_TEMPLATE/
+!.github/ISSUE_TEMPLATE/*.yml
 !deploy/
 !deploy/deploy.sh
 !release-please-config.json
