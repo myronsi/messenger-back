@@ -80,7 +80,6 @@
 !go.mod
 !go.sum
 !Makefile
-!sonar-project.properties
 !.golangci.yml
 !go.Dockerfile
 !go.Dockerfile.dockerignore
