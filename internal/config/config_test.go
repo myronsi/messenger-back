@@ -110,6 +110,7 @@ func TestSecretIsRedacted(t *testing.T) {
 		fmt.Sprintf("%+v", cfg),
 		fmt.Sprintf("%#v", cfg),
 		fmt.Sprint(cfg.JWTSecret),
+		fmt.Sprintf("%d %x %q %s %10v", cfg.JWTSecret, cfg.JWTSecret, cfg.JWTSecret, cfg.JWTSecret, cfg.JWTSecret),
 	} {
 		for _, s := range []string{secret, testKey, "pw@localhost"} {
 			if strings.Contains(out, s) {

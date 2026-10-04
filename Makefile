@@ -16,7 +16,6 @@ GOVULNCHECK_VERSION   := v1.8.0
 MIGRATE_VERSION       := v4.20.1
 MIGRATE := go run -tags 'postgres,cassandra' github.com/golang-migrate/migrate/v4/cmd/migrate@$(MIGRATE_VERSION)
 
-comma := ,
 IMAGE ?= messenger-api:local
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 
@@ -58,10 +57,10 @@ tidy: ## Tidy go.mod and go.sum
 migrate: migrate-postgres migrate-scylla ## Apply all database migrations (needs DATABASE_URL, SCYLLA_HOSTS, SCYLLA_KEYSPACE)
 
 migrate-postgres: ## Apply the PostgreSQL migrations in migrations/postgres
-	$(MIGRATE) -path migrations/postgres -database "$(DATABASE_URL)" up
+	$(MIGRATE) -path migrations/postgres -database "$${DATABASE_URL:?DATABASE_URL is required}" up
 
 migrate-scylla: ## Apply the ScyllaDB migrations in migrations/scylla
-	$(MIGRATE) -path migrations/scylla -database "cassandra://$(firstword $(subst $(comma), ,$(SCYLLA_HOSTS)))/$(SCYLLA_KEYSPACE)" up
+	$(MIGRATE) -path migrations/scylla -database "cassandra://$$(printf %s "$${SCYLLA_HOSTS:?SCYLLA_HOSTS is required}" | cut -d, -f1 | tr -d ' ')/$${SCYLLA_KEYSPACE:?SCYLLA_KEYSPACE is required}" up
 
 docker: ## Build the API image (go.Dockerfile)
 	docker build -f go.Dockerfile --build-arg COMMIT=$(COMMIT) -t $(IMAGE) .

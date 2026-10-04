@@ -25,6 +25,9 @@ func (Secret) String() string { return "[redacted]" }
 // GoString implements fmt.GoStringer so %#v does not leak the value either.
 func (Secret) GoString() string { return "[redacted]" }
 
+// Format redacts the value for every verb, including ones a Stringer is not consulted for (%d, %x, %q).
+func (Secret) Format(state fmt.State, _ rune) { _, _ = state.Write([]byte("[redacted]")) }
+
 // LogValue implements slog.LogValuer.
 func (Secret) LogValue() slog.Value { return slog.StringValue("[redacted]") }
 
