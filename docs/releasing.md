@@ -5,7 +5,7 @@ The backend always deploys first and stays compatible with the previous frontend
 ## Release order
 
 1. Backend: merge the release PR, deploy the new version.
-2. Verify the deployed backend (health check, `GET /version` returns the new version and commit).
+2. Verify the deployed backend (health check, `GET /api/version` returns the new version and commit).
 3. Frontend: merge its release PR (see `messenger-front/docs/releasing.md`) and deploy.
 
 ## Checklist
@@ -30,7 +30,7 @@ The commit is baked into the image (build argument `COMMIT` -> `APP_COMMIT`) and
 
 ## Starting a new release train
 
-Add a `Release-As: X.Y.0` footer to a commit (for example `git commit --allow-empty -m "chore: start 0.6" -m "Release-As: 0.6.0"`) so that `MAJOR.MINOR` matches the frontend. While the version is `0.x` `bump-minor-pre-major` and `bump-patch-for-minor-pre-major` turn breaking changes into minor and features into patch releases.
+Add a `Release-As: X.Y.0` footer to a commit so that `MAJOR.MINOR` matches the frontend. Pull requests are squash-merged using the PR description as the commit message, so put the footer on its own line at the end of the PR description. While the version is `0.x` `bump-minor-pre-major` and `bump-patch-for-minor-pre-major` turn breaking changes into minor and features into patch releases.
 
 ## Raising the minimum client version
 

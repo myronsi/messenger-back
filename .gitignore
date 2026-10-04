@@ -17,6 +17,7 @@
 !server/rate_limit.py
 !server/recovery_shares.py
 !server/ws_tickets.py
+!server/image_metadata.py
 !server/routes/media.py
 !tests/
 !tests/test_database_queries.py
@@ -27,6 +28,7 @@
 !tests/test_media_access.py
 !tests/test_upload_security.py
 !tests/test_upload_routes.py
+!tests/test_image_metadata.py
 !tests/test_usernames.py
 !tests/test_cors_config.py
 !tests/test_client_version.py

@@ -12,6 +12,7 @@ from server.chat_summary import (
     message_visible_to,
     not_deleted_for_sql,
 )
+from server.image_metadata import IMAGE_METADATA_KEYS, describe_image, thumbnail_extension
 from server.media_access import copy_attachments, record_attachment
 from server.upload_security import ensure_inline_content_is_genuine, safe_filename
 from server.privacy import DEFAULT_AVATAR, can_send_to_chat, read_receipts_enabled, serialize_user_snapshot
@@ -331,11 +332,19 @@ async def upload_file(
         file_url = f"/static/uploads/{unique_filename}"
         file_name = file.filename
         clean_caption = caption.strip() if caption else ""
+        image_fields = {}
+        if file_type == "image":
+            image_fields, thumbnail = describe_image(content, file_extension)
+            if thumbnail:
+                thumbnail_name = f"{uuid.uuid4()}_thumb{thumbnail_extension(thumbnail)}"
+                (upload_dir / thumbnail_name).write_bytes(thumbnail)
+                image_fields["thumbnail_url"] = f"/static/uploads/{thumbnail_name}"
         message_content = {
             "file_url": file_url,
             "file_name": file_name,
             "file_type": file_type,
-            "file_size": file_size
+            "file_size": file_size,
+            **image_fields,
         }
         if clean_caption:
             message_content["caption"] = clean_caption
@@ -346,6 +355,7 @@ async def upload_file(
         """, (chat_id, current_user["id"], current_user["display_name"], json.dumps(message_content), utc_now_iso(), delivery_error, json.dumps(undelivered_to)))
         message_id = cursor.lastrowid
         record_attachment(cursor, message_id, file_url)
+        record_attachment(cursor, message_id, image_fields.get("thumbnail_url"))
         conn.commit()
 
         timestamp = utc_now_iso()
@@ -366,6 +376,7 @@ async def upload_file(
                 "file_name": file_name,
                 "file_type": file_type,
                 "file_size": file_size,
+                **image_fields,
                 **({"caption": clean_caption} if clean_caption else {}),
                 "message_id": message_id,
                 "reply_to": None
@@ -681,6 +692,7 @@ async def get_chat_photos(
                 "name": file_name,
                 "file_type": content.get("file_type") or "image",
                 "file_size": content.get("file_size"),
+                **{key: content[key] for key in IMAGE_METADATA_KEYS if key in content},
                 "timestamp": to_utc_iso(msg["timestamp"]),
             })
 

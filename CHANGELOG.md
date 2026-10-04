@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.5.1](https://github.com/myronsi/messenger-back/compare/v0.5.0...v0.5.1) (2026-10-03)
+
+
+### Features
+
+* add GET /version endpoint ([#94](https://github.com/myronsi/messenger-back/issues/94)) ([3496ef2](https://github.com/myronsi/messenger-back/commit/3496ef27675a31c20aed821e80958ca1a0329b49))
+
+## [0.5.0](https://github.com/myronsi/messenger-back/compare/v0.4.6...v0.5.0) (2026-10-03)
+
+
+### Miscellaneous Chores
+
+* release 0.5.0 ([#92](https://github.com/myronsi/messenger-back/issues/92)) ([ea4915e](https://github.com/myronsi/messenger-back/commit/ea4915e644ef12dfb0dfa0647a1d10621567cdc6))
+
+## [0.4.6](https://github.com/myronsi/messenger-back/compare/v0.4.5...v0.4.6) (2026-10-03)
+
+
+### Features
+
+* **media:** store image dimensions and thumbnails for chat images ([12485f1](https://github.com/myronsi/messenger-back/commit/12485f199cd7db578dca81e5ee9881fb9092d123))
+* **media:** store image dimensions and thumbnails for chat images ([ce55558](https://github.com/myronsi/messenger-back/commit/ce55558526e33904ba48df60e101c053e8916767))
+
+
+### Bug Fixes
+
+* track image_metadata module and its tests ([35e3c64](https://github.com/myronsi/messenger-back/commit/35e3c6429db145de644fc7e1f0881e04278f6399))
+
+## [0.4.5](https://github.com/myronsi/messenger-back/compare/v0.4.4...v0.4.5) (2026-10-03)
+
+
+### Bug Fixes
+
+* **security:** authorize WebSocket events and authenticate with one-time tickets ([85b95b7](https://github.com/myronsi/messenger-back/commit/85b95b7e4225175dc48a09b9526a661807b07e9f))
+* **security:** authorize WebSocket events and authenticate with one-time tickets ([886ce70](https://github.com/myronsi/messenger-back/commit/886ce703d4f44846995d11fc7c8291af4446c4c6))
+* **security:** close sockets when a session ends and accept only own uploads over WS ([ede9e85](https://github.com/myronsi/messenger-back/commit/ede9e85c27dba59910892f1665d77a5a52544ea6))
+
 ## [0.4.4](https://github.com/myronsi/messenger-back/compare/v0.4.3...v0.4.4) (2026-10-02)
 
 

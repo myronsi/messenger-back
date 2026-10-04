@@ -7,6 +7,7 @@ from server.config import ws_allow_query_token
 from server.client_version import hello_event
 from server.presence import mark_user_connected, mark_user_disconnected, utc_now_iso
 from server.chat_summary import deleted_for_user_ids, get_chat_unread_summary, get_message_summary, message_visible_to
+from server.image_metadata import IMAGE_METADATA_KEYS
 from server.media_access import attachment_metadata, attachment_path_from_url, attachment_url, find_attachment_source, record_attachment
 from server.privacy import DEFAULT_AVATAR, can_send_to_chat, read_receipts_enabled, serialize_user_snapshot, serialize_user
 import asyncio
@@ -587,6 +588,7 @@ async def websocket_endpoint(
                     file_name = recorded.get("file_name", file_name)
                     file_type = recorded.get("file_type", file_type)
                     file_size = recorded.get("file_size", file_size)
+                    image_fields = {key: recorded[key] for key in IMAGE_METADATA_KEYS if key in recorded}
 
                     undelivered_to, delivery_error = _undelivered_recipients_for_send(cursor, chat_id, user_id)
                     timestamp = utc_now_iso()
@@ -599,9 +601,11 @@ async def websocket_endpoint(
                             "file_name": file_name,
                             "file_type": file_type,
                             "file_size": file_size,
+                            **image_fields,
                         }), timestamp, reply_to, delivery_error, json.dumps(undelivered_to)))
                         message_id = cursor.lastrowid
                         record_attachment(cursor, message_id, file_url)
+                        record_attachment(cursor, message_id, image_fields.get("thumbnail_url"))
                         conn.commit()
                         logger.info(f"File message saved: chat_id={chat_id}, message_id={message_id}, user_id={user_id}")
                     except sqlite3.Error as e:
@@ -632,6 +636,7 @@ async def websocket_endpoint(
                             "file_name": file_name,
                             "file_type": file_type,
                             "file_size": file_size,
+                            **image_fields,
                             "message_id": message_id,
                             "client_temp_id": client_temp_id,
                             "reply_to": reply_to,
