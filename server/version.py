@@ -1,6 +1,6 @@
 import os
 
-__version__ = "0.5.1"  # x-release-please-version
+__version__ = "0.5.2"  # x-release-please-version
 
 # Contract version of the HTTP/WebSocket API (see docs/versioning.md); the Python API is contract v1.
 # Bump it only together with the API change, not with every release.
