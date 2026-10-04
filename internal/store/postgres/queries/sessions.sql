@@ -12,19 +12,22 @@ SELECT * FROM user_sessions WHERE refresh_token_hash = @hash;
 -- name: LockSessionByRefreshHash :one
 SELECT * FROM user_sessions WHERE refresh_token_hash = @hash FOR UPDATE;
 
--- name: LockSessionByPreviousRefreshHash :one
-SELECT * FROM user_sessions WHERE previous_refresh_token_hash = @hash FOR UPDATE;
+-- name: GetRotatedToken :one
+SELECT session_id, rotated_at FROM user_session_rotated_tokens WHERE token_hash = @hash;
+
+-- name: LockSession :one
+SELECT * FROM user_sessions WHERE id = @id FOR UPDATE;
+
+-- name: RecordRotatedToken :exec
+INSERT INTO user_session_rotated_tokens (token_hash, session_id) VALUES (@token_hash, @session_id);
 
 -- name: RotateSession :one
--- Keeps the replaced hash so that a second use of the old token is recognised as reuse.
 UPDATE user_sessions
-SET previous_refresh_token_hash = refresh_token_hash,
-    refresh_token_hash          = @new_hash,
-    rotated_at                  = now(),
-    last_active_at              = now(),
-    expires_at                  = @expires_at,
-    user_agent                  = COALESCE(sqlc.narg('user_agent')::text, user_agent),
-    ip_address                  = COALESCE(sqlc.narg('ip_address')::inet, ip_address)
+SET refresh_token_hash = @new_hash,
+    last_active_at     = now(),
+    expires_at         = @expires_at,
+    user_agent         = COALESCE(sqlc.narg('user_agent')::text, user_agent),
+    ip_address         = COALESCE(sqlc.narg('ip_address')::inet, ip_address)
 WHERE id = @id
 RETURNING *;
 

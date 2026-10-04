@@ -16,7 +16,7 @@ import (
 const createSession = `-- name: CreateSession :one
 INSERT INTO user_sessions (user_id, refresh_token_hash, user_agent, ip_address, expires_at)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at, previous_refresh_token_hash, rotated_at
+RETURNING id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at
 `
 
 type CreateSessionParams struct {
@@ -46,14 +46,28 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (U
 		&i.LastActiveAt,
 		&i.ExpiresAt,
 		&i.RevokedAt,
-		&i.PreviousRefreshTokenHash,
-		&i.RotatedAt,
 	)
 	return i, err
 }
 
+const getRotatedToken = `-- name: GetRotatedToken :one
+SELECT session_id, rotated_at FROM user_session_rotated_tokens WHERE token_hash = $1
+`
+
+type GetRotatedTokenRow struct {
+	SessionID uuid.UUID
+	RotatedAt time.Time
+}
+
+func (q *Queries) GetRotatedToken(ctx context.Context, hash string) (GetRotatedTokenRow, error) {
+	row := q.db.QueryRow(ctx, getRotatedToken, hash)
+	var i GetRotatedTokenRow
+	err := row.Scan(&i.SessionID, &i.RotatedAt)
+	return i, err
+}
+
 const getSession = `-- name: GetSession :one
-SELECT id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at, previous_refresh_token_hash, rotated_at FROM user_sessions WHERE id = $1
+SELECT id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at FROM user_sessions WHERE id = $1
 `
 
 func (q *Queries) GetSession(ctx context.Context, id uuid.UUID) (UserSession, error) {
@@ -69,14 +83,12 @@ func (q *Queries) GetSession(ctx context.Context, id uuid.UUID) (UserSession, er
 		&i.LastActiveAt,
 		&i.ExpiresAt,
 		&i.RevokedAt,
-		&i.PreviousRefreshTokenHash,
-		&i.RotatedAt,
 	)
 	return i, err
 }
 
 const getSessionByRefreshHash = `-- name: GetSessionByRefreshHash :one
-SELECT id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at, previous_refresh_token_hash, rotated_at FROM user_sessions WHERE refresh_token_hash = $1
+SELECT id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at FROM user_sessions WHERE refresh_token_hash = $1
 `
 
 func (q *Queries) GetSessionByRefreshHash(ctx context.Context, hash string) (UserSession, error) {
@@ -92,14 +104,12 @@ func (q *Queries) GetSessionByRefreshHash(ctx context.Context, hash string) (Use
 		&i.LastActiveAt,
 		&i.ExpiresAt,
 		&i.RevokedAt,
-		&i.PreviousRefreshTokenHash,
-		&i.RotatedAt,
 	)
 	return i, err
 }
 
 const listActiveSessions = `-- name: ListActiveSessions :many
-SELECT id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at, previous_refresh_token_hash, rotated_at FROM user_sessions
+SELECT id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at FROM user_sessions
 WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > now()
 ORDER BY last_active_at DESC, created_at DESC
 `
@@ -123,8 +133,6 @@ func (q *Queries) ListActiveSessions(ctx context.Context, userID int64) ([]UserS
 			&i.LastActiveAt,
 			&i.ExpiresAt,
 			&i.RevokedAt,
-			&i.PreviousRefreshTokenHash,
-			&i.RotatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -136,12 +144,12 @@ func (q *Queries) ListActiveSessions(ctx context.Context, userID int64) ([]UserS
 	return items, nil
 }
 
-const lockSessionByPreviousRefreshHash = `-- name: LockSessionByPreviousRefreshHash :one
-SELECT id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at, previous_refresh_token_hash, rotated_at FROM user_sessions WHERE previous_refresh_token_hash = $1 FOR UPDATE
+const lockSession = `-- name: LockSession :one
+SELECT id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at FROM user_sessions WHERE id = $1 FOR UPDATE
 `
 
-func (q *Queries) LockSessionByPreviousRefreshHash(ctx context.Context, hash *string) (UserSession, error) {
-	row := q.db.QueryRow(ctx, lockSessionByPreviousRefreshHash, hash)
+func (q *Queries) LockSession(ctx context.Context, id uuid.UUID) (UserSession, error) {
+	row := q.db.QueryRow(ctx, lockSession, id)
 	var i UserSession
 	err := row.Scan(
 		&i.ID,
@@ -153,14 +161,12 @@ func (q *Queries) LockSessionByPreviousRefreshHash(ctx context.Context, hash *st
 		&i.LastActiveAt,
 		&i.ExpiresAt,
 		&i.RevokedAt,
-		&i.PreviousRefreshTokenHash,
-		&i.RotatedAt,
 	)
 	return i, err
 }
 
 const lockSessionByRefreshHash = `-- name: LockSessionByRefreshHash :one
-SELECT id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at, previous_refresh_token_hash, rotated_at FROM user_sessions WHERE refresh_token_hash = $1 FOR UPDATE
+SELECT id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at FROM user_sessions WHERE refresh_token_hash = $1 FOR UPDATE
 `
 
 func (q *Queries) LockSessionByRefreshHash(ctx context.Context, hash string) (UserSession, error) {
@@ -176,10 +182,22 @@ func (q *Queries) LockSessionByRefreshHash(ctx context.Context, hash string) (Us
 		&i.LastActiveAt,
 		&i.ExpiresAt,
 		&i.RevokedAt,
-		&i.PreviousRefreshTokenHash,
-		&i.RotatedAt,
 	)
 	return i, err
+}
+
+const recordRotatedToken = `-- name: RecordRotatedToken :exec
+INSERT INTO user_session_rotated_tokens (token_hash, session_id) VALUES ($1, $2)
+`
+
+type RecordRotatedTokenParams struct {
+	TokenHash string
+	SessionID uuid.UUID
+}
+
+func (q *Queries) RecordRotatedToken(ctx context.Context, arg RecordRotatedTokenParams) error {
+	_, err := q.db.Exec(ctx, recordRotatedToken, arg.TokenHash, arg.SessionID)
+	return err
 }
 
 const revokeAllSessions = `-- name: RevokeAllSessions :many
@@ -294,15 +312,13 @@ func (q *Queries) RevokeSessionByID(ctx context.Context, id uuid.UUID) ([]uuid.U
 
 const rotateSession = `-- name: RotateSession :one
 UPDATE user_sessions
-SET previous_refresh_token_hash = refresh_token_hash,
-    refresh_token_hash          = $1,
-    rotated_at                  = now(),
-    last_active_at              = now(),
-    expires_at                  = $2,
-    user_agent                  = COALESCE($3::text, user_agent),
-    ip_address                  = COALESCE($4::inet, ip_address)
+SET refresh_token_hash = $1,
+    last_active_at     = now(),
+    expires_at         = $2,
+    user_agent         = COALESCE($3::text, user_agent),
+    ip_address         = COALESCE($4::inet, ip_address)
 WHERE id = $5
-RETURNING id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at, previous_refresh_token_hash, rotated_at
+RETURNING id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at
 `
 
 type RotateSessionParams struct {
@@ -313,7 +329,6 @@ type RotateSessionParams struct {
 	ID        uuid.UUID
 }
 
-// Keeps the replaced hash so that a second use of the old token is recognised as reuse.
 func (q *Queries) RotateSession(ctx context.Context, arg RotateSessionParams) (UserSession, error) {
 	row := q.db.QueryRow(ctx, rotateSession,
 		arg.NewHash,
@@ -333,8 +348,6 @@ func (q *Queries) RotateSession(ctx context.Context, arg RotateSessionParams) (U
 		&i.LastActiveAt,
 		&i.ExpiresAt,
 		&i.RevokedAt,
-		&i.PreviousRefreshTokenHash,
-		&i.RotatedAt,
 	)
 	return i, err
 }

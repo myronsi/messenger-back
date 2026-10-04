@@ -27,6 +27,10 @@ const (
 	maxArgonMemoryKiB = 512 * 1024
 	maxArgonTime      = 16
 	maxArgonThreads   = 16
+	// Bounds for the salt and the derived key of a stored hash (the key length is also the output size).
+	maxSaltLen = 64
+	minKeyLen  = 16
+	maxKeyLen  = 64
 
 	legacyPBKDF2Iterations = 100_000
 	// v1Prefix marks hashes written by the Python backend: "argon2$" followed by the PHC string.
@@ -104,7 +108,8 @@ func (h *Hasher) Verify(ctx context.Context, password, stored string) (ok, needs
 		if err != nil {
 			return false, false, err
 		}
-		return subtle.ConstantTimeCompare(got, want) == 1, true, nil
+		ok = subtle.ConstantTimeCompare(got, want) == 1
+		return ok, ok, nil
 	}
 	return false, false, ErrHashFormat
 }
@@ -140,24 +145,30 @@ func verifyArgon2id(password, phc string, prefixed bool) (ok, needsRehash bool, 
 	if m == 0 || t == 0 || th == 0 || m > maxArgonMemoryKiB || t > maxArgonTime || th > maxArgonThreads {
 		return false, false, ErrHashFormat
 	}
+	if len(parts[4]) > base64.RawStdEncoding.EncodedLen(maxSaltLen) || len(parts[5]) > base64.RawStdEncoding.EncodedLen(maxKeyLen) {
+		return false, false, ErrHashFormat
+	}
 	salt, err := base64.RawStdEncoding.DecodeString(parts[4])
 	if err != nil || len(salt) == 0 {
 		return false, false, ErrHashFormat
 	}
 	want, err := base64.RawStdEncoding.DecodeString(parts[5])
-	if err != nil || len(want) < 16 {
+	if err != nil || len(want) < minKeyLen {
 		return false, false, ErrHashFormat
 	}
 	p = argonParams{memory: uint32(m), time: uint32(t), threads: uint8(th), keyLen: uint32(len(want))} //nolint:gosec // bounded above
 	got := argon2.IDKey([]byte(password), salt, p.time, p.memory, p.threads, p.keyLen)
 	ok = subtle.ConstantTimeCompare(got, want) == 1
-	return ok, prefixed || p != currentParams, nil
+	return ok, ok && (prefixed || p != currentParams), nil
 }
 
 // parseLegacyPBKDF2 reads the first format of the Python backend: base64(salt) ":" base64(hash).
 func parseLegacyPBKDF2(stored string) (salt, hash []byte, ok bool) {
 	s, h, found := strings.Cut(stored, ":")
 	if !found {
+		return nil, nil, false
+	}
+	if len(s) > base64.StdEncoding.EncodedLen(maxSaltLen) || len(h) > base64.StdEncoding.EncodedLen(maxKeyLen) {
 		return nil, nil, false
 	}
 	salt, err1 := base64.StdEncoding.DecodeString(s)

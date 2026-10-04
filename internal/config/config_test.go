@@ -79,6 +79,7 @@ func TestValidation(t *testing.T) {
 		"cors http in prod":    {"APP_ENV": "production", "CORS_ORIGINS": "http://app.example.com"},
 		"insecure cookie prod": {"APP_ENV": "production", "COOKIE_SECURE": "false"},
 		"relative cookie path": {"REFRESH_COOKIE_PATH": "auth"},
+		"bad trusted proxy":    {"TRUSTED_PROXIES": "10.0.0.0/8,not-an-ip"},
 		"zero cache ttl":       {"SESSION_CACHE_TTL": "0s"},
 		"negative grace":       {"REFRESH_REUSE_GRACE": "-1s"},
 		"zero hash workers":    {"PASSWORD_HASH_CONCURRENCY": "0"},
@@ -108,8 +109,16 @@ func TestAuthDefaults(t *testing.T) {
 	e := validEnv()
 	e["COOKIE_SECURE"] = "false"
 	e["REFRESH_REUSE_GRACE"] = "0s"
+	e["TRUSTED_PROXIES"] = "10.0.0.0/8, 192.0.2.7 ,::1"
 	if cfg, err = LoadFrom(e); err != nil || cfg.Auth.CookieSecure || cfg.Auth.RefreshReuseGrace != 0 {
 		t.Fatalf("overrides not applied: %v %+v", err, cfg.Auth)
+	}
+	prefixes, err := cfg.Auth.TrustedProxyPrefixes()
+	if err != nil || len(prefixes) != 3 || prefixes[1].String() != "192.0.2.7/32" || prefixes[2].String() != "::1/128" {
+		t.Fatalf("trusted proxies: %v %v", prefixes, err)
+	}
+	if got, _ := (Auth{}).TrustedProxyPrefixes(); len(got) != 0 {
+		t.Fatalf("no proxies are trusted by default, got %v", got)
 	}
 }
 

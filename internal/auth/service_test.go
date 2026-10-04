@@ -296,7 +296,7 @@ func TestRefreshGraceWindowAllowsParallelTabs(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Within the grace window the previous token is refused but does not kill the session.
-	if _, err := e.svc.Refresh(ctx, c, ts.RefreshToken); !errors.Is(err, ErrInvalidRefreshToken) {
+	if _, err := e.svc.Refresh(ctx, c, ts.RefreshToken); !errors.Is(err, ErrRefreshSuperseded) {
 		t.Fatalf("got %v", err)
 	}
 	if _, err := e.svc.Authenticate(ctx, ts.AccessToken); err != nil {

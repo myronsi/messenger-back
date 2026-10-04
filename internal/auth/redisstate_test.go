@@ -107,6 +107,45 @@ func TestLimiterTakeIsAtomic(t *testing.T) {
 	}
 }
 
+func TestLimiterReserveAndRelease(t *testing.T) {
+	rdb, ns := testRedis(t)
+	ctx := context.Background()
+	l := NewLimiter(rdb, ns)
+	rule := Rule{Name: "reserve", Limit: 3, Window: time.Minute}
+
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var members []string
+	for range 30 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			m, ok, _, err := l.Reserve(ctx, rule, "u")
+			if err != nil {
+				t.Error(err)
+			}
+			if ok {
+				mu.Lock()
+				members = append(members, m)
+				mu.Unlock()
+			}
+		}()
+	}
+	wg.Wait()
+	if len(members) != 3 {
+		t.Fatalf("%d of 30 concurrent reservations passed a limit of 3", len(members))
+	}
+	if _, ok, _, _ := l.Reserve(ctx, rule, "u"); ok {
+		t.Fatal("the limit is reached")
+	}
+	if err := l.Release(ctx, rule, "u", members[0]); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, _, _ := l.Reserve(ctx, rule, "u"); !ok {
+		t.Fatal("a released reservation frees one slot")
+	}
+}
+
 func TestLimiterKeysAreDigests(t *testing.T) {
 	rdb, ns := testRedis(t)
 	ctx := context.Background()

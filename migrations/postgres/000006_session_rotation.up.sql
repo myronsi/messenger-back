@@ -1,13 +1,15 @@
 -- Schema v2, part 6: refresh token reuse detection.
--- A refresh rotates the token; the hash of the previous token stays on the session so that presenting it again
--- (a stolen or replayed token) is recognised and the session can be revoked.
+-- Every refresh rotates the token. The hashes of all tokens a session has used stay in a child table, so that
+-- presenting any of them again (a stolen or replayed token) is recognised and the session can be revoked,
+-- however many rotations ago it was replaced.
 
-ALTER TABLE user_sessions
-    ADD COLUMN previous_refresh_token_hash TEXT,
-    ADD COLUMN rotated_at                  TIMESTAMPTZ;
+CREATE TABLE user_session_rotated_tokens (
+    token_hash TEXT        PRIMARY KEY,
+    session_id UUID        NOT NULL REFERENCES user_sessions (id) ON DELETE CASCADE,
+    rotated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
-CREATE INDEX user_sessions_previous_refresh_token_idx ON user_sessions (previous_refresh_token_hash)
-    WHERE previous_refresh_token_hash IS NOT NULL;
+CREATE INDEX user_session_rotated_tokens_session_idx ON user_session_rotated_tokens (session_id);
 
 -- Login challenges of the second factor live in Redis (five minutes, attempt counter), not here.
 DROP TABLE two_factor_challenges;

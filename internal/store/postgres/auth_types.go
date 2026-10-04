@@ -42,13 +42,15 @@ type RotateOutcome int
 
 // The outcomes of SessionRepository.Rotate.
 const (
-	// RotateInvalid: the token is unknown, expired, revoked, or the stale token of a rotation that just
-	// happened (a second tab racing the first). Nothing changed.
+	// RotateInvalid: the token is unknown, expired or revoked. Nothing changed.
 	RotateInvalid RotateOutcome = iota
 	// RotateOK: the token was replaced; Session carries the new expiry.
 	RotateOK
 	// RotateReuse: a token that was rotated out earlier came back, so the session was revoked.
 	RotateReuse
+	// RotateStale: the token was rotated out a moment ago (a second tab racing the first), within ReuseGrace.
+	// Nothing changed; the winner of the race holds the valid token.
+	RotateStale
 )
 
 // RotateRequest is a refresh. NewExpiresAt is used when the rotation succeeds.
@@ -58,7 +60,7 @@ type RotateRequest struct {
 	NewExpiresAt  func(sessionDays int) time.Time
 	UserAgent     *string
 	IP            *netip.Addr
-	// ReuseGrace is how long after a rotation the previous token is answered with RotateInvalid instead
+	// ReuseGrace is how long after a rotation the previous token is answered with RotateStale instead
 	// of being treated as theft.
 	ReuseGrace time.Duration
 }

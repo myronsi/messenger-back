@@ -79,26 +79,43 @@ func (l *Limiter) key(r Rule, subject string) string {
 	return fmt.Sprintf("%s:rl:%s:%s", l.ns, r.Name, hex.EncodeToString(sum[:16]))
 }
 
-func (l *Limiter) run(ctx context.Context, r Rule, subject string, add bool) (bool, time.Duration, error) {
-	flag := "0"
+func (l *Limiter) run(ctx context.Context, r Rule, subject string, add bool) (member string, allowed bool, retry time.Duration, err error) {
+	flag, member := "0", uuid.NewString()
 	if add {
 		flag = "1"
 	}
-	res, err := checkScript.Run(ctx, l.rdb, []string{l.key(r, subject)}, r.Window.Milliseconds(), r.Limit, flag, uuid.NewString()).Int64Slice()
+	res, err := checkScript.Run(ctx, l.rdb, []string{l.key(r, subject)}, r.Window.Milliseconds(), r.Limit, flag, member).Int64Slice()
 	if err != nil || len(res) != 2 {
-		return false, 0, fmt.Errorf("rate limiter: %w", err)
+		return "", false, 0, fmt.Errorf("rate limiter: %w", err)
 	}
-	return res[0] == 1, time.Duration(res[1]) * time.Millisecond, nil
+	return member, res[0] == 1, time.Duration(res[1]) * time.Millisecond, nil
 }
 
 // Check reports whether the subject is under the limit, without counting anything.
 func (l *Limiter) Check(ctx context.Context, r Rule, subject string) (allowed bool, retryAfter time.Duration, err error) {
-	return l.run(ctx, r, subject, false)
+	_, allowed, retryAfter, err = l.run(ctx, r, subject, false)
+	return allowed, retryAfter, err
 }
 
 // Take counts one event if the subject is under the limit (atomically) and reports whether it was.
 func (l *Limiter) Take(ctx context.Context, r Rule, subject string) (allowed bool, retryAfter time.Duration, err error) {
+	_, allowed, retryAfter, err = l.run(ctx, r, subject, true)
+	return allowed, retryAfter, err
+}
+
+// Reserve counts one event if the subject is under the limit, in one atomic step, and returns a token for
+// Release. Failure-counting callers reserve before they verify a secret, so concurrent guesses cannot all
+// pass the check before the first failure is recorded; a correct guess gives the event back.
+func (l *Limiter) Reserve(ctx context.Context, r Rule, subject string) (member string, allowed bool, retryAfter time.Duration, err error) {
 	return l.run(ctx, r, subject, true)
+}
+
+// Release gives a reserved event back.
+func (l *Limiter) Release(ctx context.Context, r Rule, subject, member string) error {
+	if err := l.rdb.ZRem(ctx, l.key(r, subject), member).Err(); err != nil {
+		return fmt.Errorf("rate limiter: %w", err)
+	}
+	return nil
 }
 
 // Hit records one event unconditionally, typically a failed attempt.

@@ -19,7 +19,7 @@ users, chats and their participants, attachment metadata and the security log.
 | `000003_auth` | `user_security_settings`, `user_sessions`, `recovery_tokens`, `two_factor_challenges`, `user_2fa_recovery_codes`, `user_security_events` |
 | `000004_chats` | `chats`, `participants`, `user_chat_pins`, `approval_requests` |
 | `000005_attachments` | `attachments` |
-| `000006_session_rotation` | `user_sessions.previous_refresh_token_hash` and `rotated_at` (refresh token reuse detection); drops `two_factor_challenges`, login challenges live in Redis |
+| `000006_session_rotation` | `user_session_rotated_tokens` (every replaced refresh hash, for reuse detection and the parallel-refresh grace window); drops `two_factor_challenges`, login challenges live in Redis |
 
 Changes compared to v1:
 

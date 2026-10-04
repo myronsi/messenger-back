@@ -157,15 +157,19 @@ type UserSecuritySetting struct {
 }
 
 type UserSession struct {
-	ID                       uuid.UUID
-	UserID                   int64
-	RefreshTokenHash         string
-	UserAgent                *string
-	IpAddress                *netip.Addr
-	CreatedAt                time.Time
-	LastActiveAt             time.Time
-	ExpiresAt                time.Time
-	RevokedAt                *time.Time
-	PreviousRefreshTokenHash *string
-	RotatedAt                *time.Time
+	ID               uuid.UUID
+	UserID           int64
+	RefreshTokenHash string
+	UserAgent        *string
+	IpAddress        *netip.Addr
+	CreatedAt        time.Time
+	LastActiveAt     time.Time
+	ExpiresAt        time.Time
+	RevokedAt        *time.Time
+}
+
+type UserSessionRotatedToken struct {
+	TokenHash string
+	SessionID uuid.UUID
+	RotatedAt time.Time
 }

@@ -58,9 +58,9 @@ func TestSessionRotation(t *testing.T) {
 		t.Fatal("an unknown token revoked the session")
 	}
 
-	// Presenting a token that was already rotated out is reuse: the session is revoked, so even the
+	// Presenting a token that was already rotated out is reuse (h1 as well as h2: the whole history counts): the session is revoked, so even the
 	// current token stops working.
-	if res, err = s.Sessions().Rotate(ctx, rotateReq("h2", "h4", 0)); err != nil || res.Outcome != RotateReuse || res.Session.ID != sess.ID {
+	if res, err = s.Sessions().Rotate(ctx, rotateReq("h1", "h4", 0)); err != nil || res.Outcome != RotateReuse || res.Session.ID != sess.ID {
 		t.Fatalf("reuse: %+v %v", res, err)
 	}
 	if got, _ := s.Sessions().Get(ctx, sess.ID); got.RevokedAt == nil {
@@ -86,7 +86,7 @@ func TestSessionRotationGraceAndExpiry(t *testing.T) {
 	}
 	// Within the grace window the stale token is refused without touching the session.
 	res, err := s.Sessions().Rotate(ctx, rotateReq("h1", "h3", time.Minute))
-	if err != nil || res.Outcome != RotateInvalid {
+	if err != nil || res.Outcome != RotateStale {
 		t.Fatalf("stale token in grace: %+v %v", res, err)
 	}
 	if res, err = s.Sessions().Rotate(ctx, rotateReq("h2", "h3", time.Minute)); err != nil || res.Outcome != RotateOK {

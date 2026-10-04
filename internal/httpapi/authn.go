@@ -115,17 +115,17 @@ func bearerToken(r *http.Request) (string, bool) {
 	return token, true
 }
 
-// clientIP is the address of the caller. Forwarding headers are believed only when the TCP peer is a
-// private or loopback address, that is a reverse proxy in front of the server; the X-Forwarded-For
-// list is then read from the right, skipping private hops, so entries a client made up on the left
-// are ignored. Callers connecting directly can not choose their address.
-func clientIP(r *http.Request) netip.Addr {
+// clientIP is the address of the caller. Forwarding headers are believed only when the TCP peer is one
+// of the configured trusted proxies; the X-Forwarded-For list is then read from the right, skipping
+// trusted hops, so entries a client made up on the left are ignored. Callers connecting from anywhere
+// else can not choose their address, and with no trusted proxies the peer address is always used.
+func clientIP(r *http.Request, trusted []netip.Prefix) netip.Addr {
 	ap, err := netip.ParseAddrPort(r.RemoteAddr)
 	if err != nil {
 		return netip.Addr{}
 	}
 	peer := ap.Addr().Unmap()
-	if !isInternal(peer) {
+	if !isTrusted(peer, trusted) {
 		return peer
 	}
 	hops := strings.Split(strings.Join(r.Header.Values("X-Forwarded-For"), ","), ",")
@@ -134,20 +134,25 @@ func clientIP(r *http.Request) netip.Addr {
 		if err != nil {
 			break
 		}
-		if ip = ip.Unmap(); !isInternal(ip) {
+		if ip = ip.Unmap(); !isTrusted(ip, trusted) {
 			return ip
 		}
 	}
-	if ip, err := netip.ParseAddr(strings.TrimSpace(r.Header.Get("X-Real-IP"))); err == nil && !isInternal(ip.Unmap()) {
+	if ip, err := netip.ParseAddr(strings.TrimSpace(r.Header.Get("X-Real-IP"))); err == nil && !isTrusted(ip.Unmap(), trusted) {
 		return ip.Unmap()
 	}
 	return peer
 }
 
-func isInternal(ip netip.Addr) bool {
-	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsUnspecified()
+func isTrusted(ip netip.Addr, trusted []netip.Prefix) bool {
+	for _, p := range trusted {
+		if p.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
-func clientOf(r *http.Request) auth.Client {
-	return auth.Client{IP: clientIP(r), UserAgent: r.UserAgent()}
+func (a *AuthServer) clientOf(r *http.Request) auth.Client {
+	return auth.Client{IP: clientIP(r, a.trustedProxies), UserAgent: r.UserAgent()}
 }

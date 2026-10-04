@@ -57,6 +57,10 @@ func (r sessionRepo) Rotate(ctx context.Context, req RotateRequest) (RotateResul
 			if err != nil {
 				return err
 			}
+			// The replaced token stays on record for as long as the session lives.
+			if err := q.RecordRotatedToken(ctx, sqlcdb.RecordRotatedTokenParams{TokenHash: req.PresentedHash, SessionID: cur.ID}); err != nil {
+				return err
+			}
 			out = RotateResult{Outcome: RotateOK, Session: sessionFrom(next)}
 			return nil
 		}
@@ -65,17 +69,22 @@ func (r sessionRepo) Rotate(ctx context.Context, req RotateRequest) (RotateResul
 		}
 
 		// Not a current token. Is it one that was rotated out?
-		old, err := q.LockSessionByPreviousRefreshHash(ctx, &req.PresentedHash)
+		used, err := q.GetRotatedToken(ctx, req.PresentedHash)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
 		}
 		if err != nil {
 			return err
 		}
+		old, err := q.LockSession(ctx, used.SessionID)
+		if err != nil {
+			return err
+		}
 		if old.RevokedAt != nil || !old.ExpiresAt.After(now) {
 			return nil
 		}
-		if old.RotatedAt != nil && now.Sub(*old.RotatedAt) < req.ReuseGrace {
+		if now.Sub(used.RotatedAt) < req.ReuseGrace {
+			out = RotateResult{Outcome: RotateStale}
 			return nil
 		}
 		if _, err := q.RevokeSessionByID(ctx, old.ID); err != nil {

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"mime"
 	"net/http"
+	"net/netip"
 	"strconv"
 	"time"
 
@@ -27,6 +28,8 @@ type AuthOptions struct {
 	CookiePath string
 	// CookieSecure sets the Secure attribute of the refresh cookie.
 	CookieSecure bool
+	// TrustedProxies are the reverse proxies whose X-Forwarded-For and X-Real-IP headers are believed.
+	TrustedProxies []netip.Prefix
 }
 
 // AuthServer implements the authentication, session and two-factor operations of the contract. The
@@ -38,6 +41,8 @@ type AuthServer struct {
 	basePath     string
 	cookiePath   string
 	cookieSecure bool
+
+	trustedProxies []netip.Prefix
 }
 
 var _ ServerInterface = (*AuthServer)(nil)
@@ -52,7 +57,7 @@ func NewAuthServer(o AuthOptions) *AuthServer {
 	if path == "" {
 		path = o.BasePath + "/auth/refresh"
 	}
-	return &AuthServer{svc: o.Service, log: log, basePath: o.BasePath, cookiePath: path, cookieSecure: o.CookieSecure}
+	return &AuthServer{svc: o.Service, log: log, basePath: o.BasePath, cookiePath: path, cookieSecure: o.CookieSecure, trustedProxies: o.TrustedProxies}
 }
 
 // ---------------------------------------------------------------- request and response helpers
@@ -121,7 +126,7 @@ func (a *AuthServer) fail(w http.ResponseWriter, r *http.Request, err error, wit
 		WriteProblem(w, credStatus, ErrorCodeInvalidCredentials)
 	case errors.Is(err, auth.ErrInvalidTwoFactorCode):
 		WriteProblem(w, credStatus, ErrorCodeInvalidTwoFactorCode)
-	case errors.Is(err, auth.ErrInvalidChallenge), errors.Is(err, auth.ErrInvalidRefreshToken),
+	case errors.Is(err, auth.ErrInvalidChallenge), errors.Is(err, auth.ErrInvalidRefreshToken), errors.Is(err, auth.ErrRefreshSuperseded),
 		errors.Is(err, auth.ErrInvalidRecovery), errors.Is(err, auth.ErrUnauthenticated), errors.Is(err, auth.ErrInvalidToken):
 		WriteProblem(w, http.StatusUnauthorized, ErrorCodeUnauthenticated)
 	case errors.Is(err, auth.ErrSessionNotFound):
@@ -205,7 +210,7 @@ func (a *AuthServer) Register(w http.ResponseWriter, r *http.Request, _ Register
 	if !decode(w, r, &body) {
 		return
 	}
-	ts, err := a.svc.Register(r.Context(), clientOf(r), body.Username, body.DisplayName, body.Password, body.Bio)
+	ts, err := a.svc.Register(r.Context(), a.clientOf(r), body.Username, body.DisplayName, body.Password, body.Bio)
 	if err != nil {
 		a.fail(w, r, err, false)
 		return
@@ -228,7 +233,7 @@ func (a *AuthServer) Login(w http.ResponseWriter, r *http.Request, _ LoginParams
 		WriteProblem(w, http.StatusBadRequest, ErrorCodeInvalidRequest)
 		return
 	}
-	res, err := a.svc.Login(r.Context(), clientOf(r), body.Username, body.Password)
+	res, err := a.svc.Login(r.Context(), a.clientOf(r), body.Username, body.Password)
 	if err != nil {
 		a.fail(w, r, err, false)
 		return
@@ -256,7 +261,7 @@ func (a *AuthServer) LoginTwoFactor(w http.ResponseWriter, r *http.Request, _ Lo
 		WriteProblem(w, http.StatusBadRequest, ErrorCodeInvalidRequest)
 		return
 	}
-	ts, err := a.svc.LoginTwoFactor(r.Context(), clientOf(r), body.LoginChallenge, body.Code)
+	ts, err := a.svc.LoginTwoFactor(r.Context(), a.clientOf(r), body.LoginChallenge, body.Code)
 	if err != nil {
 		a.fail(w, r, err, false)
 		return
@@ -271,7 +276,7 @@ func (a *AuthServer) RefreshToken(w http.ResponseWriter, r *http.Request, _ Refr
 		WriteProblem(w, http.StatusUnauthorized, ErrorCodeUnauthenticated)
 		return
 	}
-	ts, err := a.svc.Refresh(r.Context(), clientOf(r), cookie.Value)
+	ts, err := a.svc.Refresh(r.Context(), a.clientOf(r), cookie.Value)
 	if err != nil {
 		if errors.Is(err, auth.ErrInvalidRefreshToken) {
 			a.clearRefreshCookie(w)
@@ -285,7 +290,7 @@ func (a *AuthServer) RefreshToken(w http.ResponseWriter, r *http.Request, _ Refr
 // Logout implements POST /auth/logout: by access token, or by the refresh cookie when the access token
 // is missing or expired.
 func (a *AuthServer) Logout(w http.ResponseWriter, r *http.Request, _ LogoutParams) {
-	client := clientOf(r)
+	client := a.clientOf(r)
 	var err error
 	switch p, ok := PrincipalFrom(r.Context()); {
 	case ok:
@@ -321,7 +326,7 @@ func (a *AuthServer) ResetPassword(w http.ResponseWriter, r *http.Request, _ Res
 		WriteProblem(w, http.StatusBadRequest, ErrorCodeInvalidRequest)
 		return
 	}
-	if err := a.svc.ResetPassword(r.Context(), clientOf(r), body.RecoveryToken, body.NewPassword); err != nil {
+	if err := a.svc.ResetPassword(r.Context(), a.clientOf(r), body.RecoveryToken, body.NewPassword); err != nil {
 		a.fail(w, r, err, false)
 		return
 	}
@@ -377,7 +382,7 @@ func (a *AuthServer) ChangePassword(w http.ResponseWriter, r *http.Request, _ Ch
 	if !decode(w, r, &body) {
 		return
 	}
-	if err := a.svc.ChangePassword(r.Context(), clientOf(r), p, body.CurrentPassword, body.NewPassword); err != nil {
+	if err := a.svc.ChangePassword(r.Context(), a.clientOf(r), p, body.CurrentPassword, body.NewPassword); err != nil {
 		a.fail(w, r, err, true)
 		return
 	}
@@ -419,7 +424,7 @@ func (a *AuthServer) RevokeSession(w http.ResponseWriter, r *http.Request, sessi
 	if !ok {
 		return
 	}
-	if err := a.svc.RevokeSession(r.Context(), clientOf(r), p, sessionID); err != nil {
+	if err := a.svc.RevokeSession(r.Context(), a.clientOf(r), p, sessionID); err != nil {
 		a.fail(w, r, err, true)
 		return
 	}
@@ -432,7 +437,7 @@ func (a *AuthServer) RevokeOtherSessions(w http.ResponseWriter, r *http.Request,
 	if !ok {
 		return
 	}
-	if err := a.svc.RevokeOtherSessions(r.Context(), clientOf(r), p); err != nil {
+	if err := a.svc.RevokeOtherSessions(r.Context(), a.clientOf(r), p); err != nil {
 		a.fail(w, r, err, true)
 		return
 	}
@@ -468,7 +473,7 @@ func (a *AuthServer) UpdateSecuritySettings(w http.ResponseWriter, r *http.Reque
 	if !decode(w, r, &body) {
 		return
 	}
-	if err := a.svc.SetSessionDuration(r.Context(), clientOf(r), p, body.SessionDurationDays); err != nil {
+	if err := a.svc.SetSessionDuration(r.Context(), a.clientOf(r), p, body.SessionDurationDays); err != nil {
 		a.fail(w, r, err, true)
 		return
 	}
@@ -520,7 +525,7 @@ func (a *AuthServer) ConfirmTwoFactor(w http.ResponseWriter, r *http.Request, _ 
 	if !decode(w, r, &body) {
 		return
 	}
-	codes, err := a.svc.ConfirmTwoFactor(r.Context(), clientOf(r), p, body.Code)
+	codes, err := a.svc.ConfirmTwoFactor(r.Context(), a.clientOf(r), p, body.Code)
 	if errors.Is(err, auth.ErrInvalidTwoFactorCode) {
 		WriteProblem(w, http.StatusBadRequest, ErrorCodeInvalidTwoFactorCode)
 		return
@@ -548,7 +553,7 @@ func (a *AuthServer) DisableTwoFactor(w http.ResponseWriter, r *http.Request, _ 
 	if !decode(w, r, &body) {
 		return
 	}
-	if err := a.svc.DisableTwoFactor(r.Context(), clientOf(r), p, body.Password, body.Code); err != nil {
+	if err := a.svc.DisableTwoFactor(r.Context(), a.clientOf(r), p, body.Password, body.Code); err != nil {
 		a.fail(w, r, err, true)
 		return
 	}

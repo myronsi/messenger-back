@@ -2,10 +2,13 @@ package auth
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"strings"
 	"testing"
 	"time"
+
+	"golang.org/x/crypto/argon2"
 )
 
 // Hashes produced by the Python backend: argon2-cffi's PasswordHasher().hash(password) with the "argon2$"
@@ -66,9 +69,18 @@ func TestHashRoundTripAndRehash(t *testing.T) {
 	}
 
 	// Weaker parameters are upgraded.
-	weak := "$argon2id$v=19$m=19456,t=2,p=1$" + strings.SplitN(hash, "$", 6)[4] + "$" + strings.SplitN(hash, "$", 6)[5]
-	if _, rehash, err := h.Verify(ctx, "s3cret-pass", weak); err != nil || !rehash {
-		t.Fatalf("weak params: rehash=%v err=%v", rehash, err)
+	salt := []byte("0123456789abcdef")
+	key := argon2.IDKey([]byte("s3cret-pass"), salt, 2, 19456, 1, 32)
+	weak := "$argon2id$v=19$m=19456,t=2,p=1$" + base64.RawStdEncoding.EncodeToString(salt) + "$" + base64.RawStdEncoding.EncodeToString(key)
+	if ok, rehash, err := h.Verify(ctx, "s3cret-pass", weak); err != nil || !ok || !rehash {
+		t.Fatalf("weak params: ok=%v rehash=%v err=%v", ok, rehash, err)
+	}
+	// A wrong password never asks for a rehash, whatever the format.
+	if ok, rehash, err := h.Verify(ctx, "wrong", weak); err != nil || ok || rehash {
+		t.Fatalf("wrong password on weak params: ok=%v rehash=%v err=%v", ok, rehash, err)
+	}
+	if ok, rehash, err := h.Verify(ctx, "wrong", base64.StdEncoding.EncodeToString(salt)+":"+base64.StdEncoding.EncodeToString(key)); err != nil || ok || rehash {
+		t.Fatalf("wrong password on PBKDF2: ok=%v rehash=%v err=%v", ok, rehash, err)
 	}
 }
 
@@ -84,6 +96,9 @@ func TestVerifyRejectsMalformedHashes(t *testing.T) {
 		"$argon2id$v=19$m=4194304,t=3,p=4$c2FsdHNhbHQ$aGFzaGhhc2hoYXNoaGFzaA", // would allocate 4 GiB
 		"$argon2id$v=19$m=65536,t=99999,p=4$c2FsdHNhbHQ$aGFzaGhhc2hoYXNoaGFzaA",
 		"$argon2i$v=19$m=65536,t=3,p=4$c2FsdHNhbHQ$aGFzaGhhc2hoYXNoaGFzaA",
+		"$argon2id$v=19$m=65536,t=3,p=4$c2FsdHNhbHQ$" + strings.Repeat("A", 4000),                 // a huge derived key
+		"$argon2id$v=19$m=65536,t=3,p=4$" + strings.Repeat("A", 4000) + "$aGFzaGhhc2hoYXNoaGFzaA", // a huge salt
+		"c2FsdA==:" + strings.Repeat("A", 4000),
 		"not-base64:also-not",
 	} {
 		ok, _, err := h.Verify(context.Background(), "x", stored)

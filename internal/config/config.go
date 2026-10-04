@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/netip"
 	"net/url"
 	"reflect"
 	"strings"
@@ -109,6 +110,31 @@ type Auth struct {
 	RefreshReuseGrace time.Duration `env:"REFRESH_REUSE_GRACE" envDefault:"10s"`
 	// PasswordHashConcurrency bounds simultaneous Argon2 hashes (each uses 64 MiB).
 	PasswordHashConcurrency int `env:"PASSWORD_HASH_CONCURRENCY" envDefault:"4"`
+	// TrustedProxies lists the IPs or CIDRs of reverse proxies whose X-Forwarded-For and X-Real-IP headers
+	// are believed when working out the client address (rate limits, session records). Empty trusts none.
+	TrustedProxies []string `env:"TRUSTED_PROXIES" envSeparator:","`
+}
+
+// TrustedProxyPrefixes parses TrustedProxies; a bare IP is a single-address prefix.
+func (a Auth) TrustedProxyPrefixes() ([]netip.Prefix, error) {
+	var out []netip.Prefix
+	for _, s := range a.TrustedProxies {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		if p, err := netip.ParsePrefix(s); err == nil {
+			out = append(out, p.Masked())
+			continue
+		}
+		ip, err := netip.ParseAddr(s)
+		if err != nil {
+			return nil, fmt.Errorf("%q is not an IP address or CIDR", s)
+		}
+		ip = ip.Unmap()
+		out = append(out, netip.PrefixFrom(ip, ip.BitLen()))
+	}
+	return out, nil
 }
 
 // Tracing configures optional OpenTelemetry tracing. The exporter itself is configured with the
@@ -253,6 +279,9 @@ func (a Auth) validate(production bool) []string {
 	}
 	if a.RefreshCookiePath != "" && (!strings.HasPrefix(a.RefreshCookiePath, "/") || strings.ContainsAny(a.RefreshCookiePath, ";, \r\n")) {
 		problems = append(problems, "REFRESH_COOKIE_PATH must be an absolute path")
+	}
+	if _, err := a.TrustedProxyPrefixes(); err != nil {
+		problems = append(problems, "TRUSTED_PROXIES must be a comma-separated list of IPs or CIDRs")
 	}
 	if a.SessionCacheTTL <= 0 {
 		problems = append(problems, "SESSION_CACHE_TTL must be positive")

@@ -55,6 +55,10 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("decode ENCRYPTION_KEY: %w", err)
 	}
+	trustedProxies, err := cfg.Auth.TrustedProxyPrefixes()
+	if err != nil {
+		return err
+	}
 	authSvc, err := auth.NewService(pg, rd.Client(), auth.Config{
 		JWTSecret:         []byte(cfg.JWTSecret.Reveal()),
 		EncryptionKey:     key,
@@ -75,11 +79,12 @@ func run() error {
 		Log:        log,
 		Metrics:    p.Metrics,
 		API: httpapi.NewAuthServer(httpapi.AuthOptions{
-			Service:      authSvc,
-			Log:          log,
-			BasePath:     cfg.HTTP.BasePath,
-			CookiePath:   cfg.Auth.RefreshCookiePath,
-			CookieSecure: cfg.Auth.CookieSecure,
+			Service:        authSvc,
+			Log:            log,
+			BasePath:       cfg.HTTP.BasePath,
+			CookiePath:     cfg.Auth.RefreshCookiePath,
+			CookieSecure:   cfg.Auth.CookieSecure,
+			TrustedProxies: trustedProxies,
 		}),
 		Authenticator: authSvc,
 		Checks: []httpapi.Check{

@@ -102,14 +102,17 @@ var (
 	ErrInvalidTwoFactorCode = errors.New("invalid two-factor code")
 	ErrInvalidChallenge     = errors.New("invalid or expired login challenge")
 	ErrInvalidRefreshToken  = errors.New("invalid refresh token")
-	ErrUnauthenticated      = errors.New("unauthenticated")
-	ErrUsernameTaken        = errors.New("username taken")
-	ErrSessionNotFound      = errors.New("session not found")
-	ErrTwoFactorEnabled     = errors.New("two-factor authentication is already enabled")
-	ErrNoPendingTwoFactor   = errors.New("no two-factor setup in progress")
-	ErrTwoFactorNotEnabled  = errors.New("two-factor authentication is not enabled")
-	ErrInvalidRecovery      = errors.New("invalid recovery token")
-	ErrConflict             = errors.New("the account changed concurrently")
+	// ErrRefreshSuperseded means the token was replaced a moment ago by a parallel refresh. The client holds
+	// (or is about to receive) the new token, so it must keep its cookie.
+	ErrRefreshSuperseded   = errors.New("refresh token superseded by a concurrent refresh")
+	ErrUnauthenticated     = errors.New("unauthenticated")
+	ErrUsernameTaken       = errors.New("username taken")
+	ErrSessionNotFound     = errors.New("session not found")
+	ErrTwoFactorEnabled    = errors.New("two-factor authentication is already enabled")
+	ErrNoPendingTwoFactor  = errors.New("no two-factor setup in progress")
+	ErrTwoFactorNotEnabled = errors.New("two-factor authentication is not enabled")
+	ErrInvalidRecovery     = errors.New("invalid recovery token")
+	ErrConflict            = errors.New("the account changed concurrently")
 )
 
 // RateLimitError says when the caller may try again.
@@ -266,17 +269,43 @@ func (s *Service) event(ctx context.Context, uid int64, typ string, c Client, de
 }
 
 // allow fails closed: a limiter that cannot be reached denies the request.
-func (s *Service) allow(ctx context.Context, checks ...limitCheck) error {
+// reservation is a set of rate-limit events counted before a secret is verified. They stay counted when the
+// secret is wrong; release gives them back when it is right.
+type reservation struct {
+	s     *Service
+	items []reservedEvent
+}
+
+type reservedEvent struct {
+	limitCheck
+	member string
+}
+
+// allow counts one attempt for every check, atomically per check, and refuses when one is over its limit.
+// An attempt that is refused is not counted.
+func (s *Service) allow(ctx context.Context, checks ...limitCheck) (*reservation, error) {
+	res := &reservation{s: s}
 	for _, c := range checks {
-		ok, retry, err := s.limiter.Check(ctx, c.rule, c.subject)
-		if err != nil {
-			return err
+		member, ok, retry, err := s.limiter.Reserve(ctx, c.rule, c.subject)
+		if err == nil && !ok {
+			err = &RateLimitError{RetryAfter: retry}
 		}
-		if !ok {
-			return &RateLimitError{RetryAfter: retry}
+		if err != nil {
+			res.release(ctx)
+			return nil, err
+		}
+		res.items = append(res.items, reservedEvent{c, member})
+	}
+	return res, nil
+}
+
+func (r *reservation) release(ctx context.Context) {
+	for _, e := range r.items {
+		if err := r.s.limiter.Release(ctx, e.rule, e.subject, e.member); err != nil {
+			r.s.log.WarnContext(ctx, "rate limiter unavailable", "rule", e.rule.Name, "err", err)
 		}
 	}
-	return nil
+	r.items = nil
 }
 
 type limitCheck struct {
@@ -293,14 +322,6 @@ func (s *Service) take(ctx context.Context, r Rule, subject string) error {
 		return &RateLimitError{RetryAfter: retry}
 	}
 	return nil
-}
-
-func (s *Service) fail(ctx context.Context, checks ...limitCheck) {
-	for _, c := range checks {
-		if err := s.limiter.Hit(ctx, c.rule, c.subject); err != nil {
-			s.log.WarnContext(ctx, "rate limiter unavailable", "rule", c.rule.Name, "err", err)
-		}
-	}
 }
 
 func (s *Service) clear(ctx context.Context, r Rule, subject string) {
@@ -453,7 +474,8 @@ func (s *Service) Login(ctx context.Context, c Client, username, password string
 		return nil, ErrInvalidCredentials
 	}
 	ipRule, userRule := limitCheck{RuleLoginIP, c.ipString()}, limitCheck{RuleLoginUser, username}
-	if err := s.allow(ctx, ipRule, userRule); err != nil {
+	attempt, err := s.allow(ctx, ipRule, userRule)
+	if err != nil {
 		return nil, err
 	}
 
@@ -477,12 +499,12 @@ func (s *Service) Login(ctx context.Context, c Client, username, password string
 		s.log.ErrorContext(ctx, "stored password hash has an unsupported format", "user_id", creds.UserID)
 	}
 	if !known || !ok {
-		s.fail(ctx, ipRule, userRule)
 		if known {
 			s.event(ctx, creds.UserID, "login_failed", c, nil)
 		}
 		return nil, ErrInvalidCredentials
 	}
+	attempt.release(ctx)
 	s.clear(ctx, RuleLoginUser, username)
 
 	if rehash {
@@ -558,7 +580,8 @@ func (s *Service) LoginTwoFactor(ctx context.Context, c Client, challenge, code 
 		return nil, ErrInvalidChallenge
 	}
 	ipRule := limitCheck{RuleTwoFAIP, c.ipString()}
-	if err := s.allow(ctx, ipRule); err != nil {
+	ipAttempt, err := s.allow(ctx, ipRule)
+	if err != nil {
 		return nil, err
 	}
 	uid, err := s.chal.Attempt(ctx, challenge)
@@ -569,7 +592,9 @@ func (s *Service) LoginTwoFactor(ctx context.Context, c Client, challenge, code 
 		return nil, err
 	}
 	userRule := limitCheck{RuleTwoFAUser, fmt.Sprint(uid)}
-	if err := s.allow(ctx, userRule); err != nil {
+	userAttempt, err := s.allow(ctx, userRule)
+	if err != nil {
+		ipAttempt.release(ctx)
 		return nil, err
 	}
 	settings, err := s.store.SecuritySettings().Get(ctx, uid)
@@ -584,7 +609,6 @@ func (s *Service) LoginTwoFactor(ctx context.Context, c Client, challenge, code 
 		return nil, err
 	}
 	if !ok {
-		s.fail(ctx, ipRule, userRule)
 		s.event(ctx, uid, "login_2fa_failed", c, nil)
 		return nil, ErrInvalidTwoFactorCode
 	}
@@ -595,6 +619,8 @@ func (s *Service) LoginTwoFactor(ctx context.Context, c Client, challenge, code 
 		}
 		return nil, err
 	}
+	ipAttempt.release(ctx)
+	userAttempt.release(ctx)
 	s.clear(ctx, RuleTwoFAUser, userRule.subject)
 	u, err := s.store.Users().Get(ctx, uid)
 	if err != nil {
@@ -644,6 +670,8 @@ func (s *Service) Refresh(ctx context.Context, c Client, refreshToken string) (*
 		s.log.WarnContext(ctx, "refresh token reuse detected, session revoked", "user_id", res.Session.UserID, "session_id", res.Session.ID)
 		s.event(ctx, res.Session.UserID, "refresh_reuse_detected", c, map[string]any{"session_id": res.Session.ID})
 		return nil, ErrInvalidRefreshToken
+	case postgres.RotateStale:
+		return nil, ErrRefreshSuperseded
 	default:
 		return nil, ErrInvalidRefreshToken
 	}
@@ -755,11 +783,11 @@ func (s *Service) Me(ctx context.Context, p Principal) (postgres.User, error) {
 // verifyPassword checks the current password of the account, counting failures.
 func (s *Service) verifyPassword(ctx context.Context, uid int64, password string) (hash string, err error) {
 	rule := limitCheck{RulePasswordU, fmt.Sprint(uid)}
-	if err := s.allow(ctx, rule); err != nil {
+	attempt, err := s.allow(ctx, rule)
+	if err != nil {
 		return "", err
 	}
 	if password == "" || len(password) > 1024 {
-		s.fail(ctx, rule)
 		return "", ErrInvalidCredentials
 	}
 	creds, err := s.store.Users().CredentialsByID(ctx, uid)
@@ -771,9 +799,9 @@ func (s *Service) verifyPassword(ctx context.Context, uid int64, password string
 		return "", err
 	}
 	if !ok {
-		s.fail(ctx, rule)
 		return "", ErrInvalidCredentials
 	}
+	attempt.release(ctx)
 	return creds.PasswordHash, nil
 }
 
@@ -908,7 +936,8 @@ func (s *Service) SetupTwoFactor(ctx context.Context, p Principal, password stri
 // recovery codes. They are shown once; only their hashes are stored.
 func (s *Service) ConfirmTwoFactor(ctx context.Context, c Client, p Principal, code string) ([]string, error) {
 	rule := limitCheck{RuleTwoFAUser, fmt.Sprint(p.UserID)}
-	if err := s.allow(ctx, rule); err != nil {
+	attempt, err := s.allow(ctx, rule)
+	if err != nil {
 		return nil, err
 	}
 	st, err := s.store.SecuritySettings().Get(ctx, p.UserID)
@@ -926,9 +955,9 @@ func (s *Service) ConfirmTwoFactor(ctx context.Context, c Client, p Principal, c
 		return nil, ErrNoPendingTwoFactor
 	}
 	if _, ok := VerifyTOTP(secret, strings.TrimSpace(code), s.now()); !ok {
-		s.fail(ctx, rule)
 		return nil, ErrInvalidTwoFactorCode
 	}
+	attempt.release(ctx)
 	codes, err := NewRecoveryCodes()
 	if err != nil {
 		return nil, err
@@ -954,7 +983,8 @@ func (s *Service) DisableTwoFactor(ctx context.Context, c Client, p Principal, p
 		return err
 	}
 	rule := limitCheck{RuleTwoFAUser, fmt.Sprint(p.UserID)}
-	if err := s.allow(ctx, rule); err != nil {
+	attempt, err := s.allow(ctx, rule)
+	if err != nil {
 		return err
 	}
 	st, err := s.store.SecuritySettings().Get(ctx, p.UserID)
@@ -969,9 +999,9 @@ func (s *Service) DisableTwoFactor(ctx context.Context, c Client, p Principal, p
 		return err
 	}
 	if !ok {
-		s.fail(ctx, rule)
 		return ErrInvalidTwoFactorCode
 	}
+	attempt.release(ctx)
 	if err := s.store.SecuritySettings().DisableTwoFactor(ctx, p.UserID); err != nil {
 		return err
 	}

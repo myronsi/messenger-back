@@ -327,6 +327,28 @@ func TestRegisterLoginRefreshOverHTTP(t *testing.T) {
 	}
 }
 
+func TestParallelRefreshKeepsTheWinnersCookie(t *testing.T) {
+	e := newAuthEnv(t, time.Minute, nil)
+	s := e.register(t, "parallel")
+
+	winner := e.do(t, request{method: http.MethodPost, path: "/auth/refresh", cookie: s.refresh})
+	if winner.Code != http.StatusOK || winner.refreshCookie() == nil {
+		t.Fatalf("refresh: %d %s", winner.Code, winner.Body)
+	}
+	// The loser presents the token the winner just replaced. It is refused, but its response must not
+	// delete the cookie the winner set.
+	loser := e.do(t, request{method: http.MethodPost, path: "/auth/refresh", cookie: s.refresh})
+	if loser.Code != http.StatusUnauthorized {
+		t.Fatalf("stale token in grace: %d %s", loser.Code, loser.Body)
+	}
+	if c := loser.refreshCookie(); c != nil {
+		t.Fatalf("a superseded refresh must not touch the cookie: %+v", c)
+	}
+	if rec := e.do(t, request{method: http.MethodPost, path: "/auth/refresh", cookie: winner.refreshCookie().Value}); rec.Code != http.StatusOK {
+		t.Fatalf("the session must survive a raced refresh: %d %s", rec.Code, rec.Body)
+	}
+}
+
 func TestInsecureCookieAndPathOverride(t *testing.T) {
 	e := newAuthEnv(t, 0, func(o *AuthOptions) { o.CookieSecure = false; o.CookiePath = "/auth" })
 	rec := e.post(t, "/auth/register", map[string]any{"username": "carol", "display_name": "Carol", "password": password})
@@ -638,6 +660,11 @@ func TestLogsHoldNoCredentials(t *testing.T) {
 	}
 }
 
+var testProxies = []netip.Prefix{
+	netip.MustParsePrefix("127.0.0.0/8"), netip.MustParsePrefix("::1/128"),
+	netip.MustParsePrefix("10.0.0.0/8"), netip.MustParsePrefix("172.16.0.0/12"),
+}
+
 func TestClientIP(t *testing.T) {
 	tests := []struct {
 		name, remote string
@@ -652,7 +679,8 @@ func TestClientIP(t *testing.T) {
 		{"several header lines", "10.0.0.2:1000", map[string]string{"X-Forwarded-For": "198.51.100.4"}, "198.51.100.4"},
 		{"real ip", "172.18.0.3:1000", map[string]string{"X-Real-IP": "198.51.100.5"}, "198.51.100.5"},
 		{"garbage header", "127.0.0.1:1000", map[string]string{"X-Forwarded-For": "not an ip", "X-Real-IP": "also not"}, "127.0.0.1"},
-		{"only private hops", "10.0.0.2:1000", map[string]string{"X-Forwarded-For": "192.168.1.5"}, "10.0.0.2"},
+		{"only trusted hops", "10.0.0.2:1000", map[string]string{"X-Forwarded-For": "10.0.0.9, 127.0.0.1"}, "10.0.0.2"},
+		{"private peer that is not a trusted proxy", "192.168.1.5:1000", map[string]string{"X-Forwarded-For": "198.51.100.1"}, "192.168.1.5"},
 		{"ipv6", "[::1]:1000", map[string]string{"X-Forwarded-For": "2001:db8::7"}, "2001:db8::7"},
 		{"mapped ipv4", "[::ffff:203.0.113.9]:1000", nil, "203.0.113.9"},
 	}
@@ -663,15 +691,22 @@ func TestClientIP(t *testing.T) {
 			for k, v := range tc.header {
 				req.Header.Set(k, v)
 			}
-			if got := clientIP(req); got != netip.MustParseAddr(tc.want) {
+			if got := clientIP(req, testProxies); got != netip.MustParseAddr(tc.want) {
 				t.Fatalf("got %v, want %s", got, tc.want)
 			}
 		})
 	}
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	req.RemoteAddr = "broken"
-	if clientIP(req).IsValid() {
+	if clientIP(req, testProxies).IsValid() {
 		t.Fatal("an unparsable peer has no address")
+	}
+	// Without trusted proxies nothing can be spoofed, not even from a loopback or private peer.
+	req = httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	req.RemoteAddr = "127.0.0.1:1000"
+	req.Header.Set("X-Forwarded-For", "198.51.100.1")
+	if got := clientIP(req, nil); got != netip.MustParseAddr("127.0.0.1") {
+		t.Fatalf("no trusted proxies: got %v", got)
 	}
 }
 
