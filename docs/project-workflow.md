@@ -4,19 +4,19 @@ Both repositories (`messenger-back`, `messenger-front`) are planned together in 
 
 ## GitHub Project
 
-One user-level project, **Messenger**, owned by the `myronsi` account so it can hold issues from both repositories. Both repositories are linked to it and every open issue from both is in it (Area and Release were set from the repository and the milestone). Enable **Auto-add to project** in the project's Workflows (one rule per repository) so new issues arrive without manual work; GitHub has no API for that, nor for views.
+One user-level project, **Messenger**, owned by the `myronsi` account so it can hold issues from both repositories. Both repositories are linked to it and every open issue from both is in it (Area and Release were set from the repository and the milestone). Auto-add does not fill custom fields, so the views below filter on the built-in **Milestone** field, which is always set from the issue. Enable **Auto-add to project** in the project's Workflows (one rule per repository) so new issues arrive without manual work; GitHub has no API for that, nor for views.
 
 | Field | Values |
 | --- | --- |
 | Area | backend, frontend, contract, infra |
-| Release | 0.5, 1.0, 1.1 (same as the milestones) |
+| Release | 0.5, 1.0, 1.1 (mirrors the milestone; optional, views use Milestone) |
 | Status | Todo, In Progress, Done |
 | Priority | P0, P1, P2 |
 
 Views (created in the project UI):
 
-1. **Board per release**: Board layout, filter `release:0.5` (one view each for 1.0 and 1.1), grouped by Status. It shows the backend and frontend issues of that release together.
-2. **API changes**: Table layout, filter `label:api-change`, grouped by Release.
+1. **Board per release**: Board layout, filter `milestone:"0.5"` (one view each for 1.0 and 1.1), grouped by Status. It shows the backend and frontend issues of that release together.
+2. **API changes**: Table layout, filter `label:api-change`, grouped by Milestone.
 
 ## Labels
 

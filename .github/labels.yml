@@ -1,26 +1,26 @@
 # Labels shared by messenger-back and messenger-front (see docs/project-workflow.md).
 # Applied to the repository by .github/workflows/labels.yml; labels not listed here are left alone.
 - name: api-change
-  color: 1D76DB
+  color: "1D76DB"
   description: Changes the API contract
 - name: breaking-change
-  color: B60205
+  color: "B60205"
   description: Breaks existing clients or the previous release
 - name: needs-backend
-  color: 5319E7
+  color: "5319E7"
   description: Needs a change in messenger-back
 - name: needs-frontend
-  color: FBCA04
+  color: "FBCA04"
   description: Needs a change in messenger-front
 - name: security
-  color: D93F0B
+  color: "D93F0B"
   description: Security issue or hardening
 - name: bug
-  color: D73A4A
+  color: "D73A4A"
   description: Something isn't working
 - name: feature
-  color: 0E8A16
+  color: "0E8A16"
   description: New functionality
 - name: epic
-  color: 3E4B9E
+  color: "3E4B9E"
   description: Parent issue that groups sub-issues
