@@ -107,7 +107,7 @@ func (s *Store) inTx(ctx context.Context, fn func(ctx context.Context, q *sqlcdb
 		// Jitter keeps two transactions that deadlocked from colliding again in lockstep.
 		select {
 		case <-ctx.Done():
-			return mapError(err)
+			return ctx.Err()
 		case <-time.After(time.Duration(attempt) * time.Duration(5+rand.IntN(20)) * time.Millisecond): //nolint:gosec // jitter, not a secret
 		}
 	}
