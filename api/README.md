@@ -13,6 +13,7 @@ api/
    ├─ openapi.yaml
    ├─ schema.d.ts        REST types (openapi-typescript)
    ├─ ws-events.d.ts     WebSocket event types (from the JSON Schemas)
+   ├─ ws-events.schema.json  bundled JSON Schemas (used by the breaking-change check)
    └─ index.js           export const API_VERSION = "2.0.0-alpha.1"
 ```
 

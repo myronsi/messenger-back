@@ -14,49 +14,76 @@
       "$ref": "../../openapi.yaml#/components/schemas/Id"
     },
     "data": {
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
-          "enum": [
-            "text",
-            "file",
-            "voice"
-          ]
-        },
-        "content": {
-          "type": [
-            "string",
-            "null"
+      "oneOf": [
+        {
+          "type": "object",
+          "title": "TextMessageData",
+          "properties": {
+            "type": {
+              "const": "text"
+            },
+            "content": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            "reply_to": {
+              "oneOf": [
+                {
+                  "$ref": "../../openapi.yaml#/components/schemas/Id"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "content"
           ],
-          "maxLength": 4096
+          "additionalProperties": false
         },
-        "attachment_id": {
-          "oneOf": [
-            {
+        {
+          "type": "object",
+          "title": "AttachmentMessageData",
+          "description": "`file` and `voice` messages reference an uploaded attachment by ID, never by URL.",
+          "properties": {
+            "type": {
+              "enum": [
+                "file",
+                "voice"
+              ]
+            },
+            "content": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 4096,
+              "description": "Optional caption"
+            },
+            "attachment_id": {
               "$ref": "../../openapi.yaml#/components/schemas/Id"
             },
-            {
-              "type": "null"
+            "reply_to": {
+              "oneOf": [
+                {
+                  "$ref": "../../openapi.yaml#/components/schemas/Id"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
+          },
+          "required": [
+            "type",
+            "attachment_id"
           ],
-          "description": "Required for `file` and `voice`; never a URL."
-        },
-        "reply_to": {
-          "oneOf": [
-            {
-              "$ref": "../../openapi.yaml#/components/schemas/Id"
-            },
-            {
-              "type": "null"
-            }
-          ]
+          "additionalProperties": false
         }
-      },
-      "required": [
-        "type"
-      ],
-      "additionalProperties": false
+      ]
     }
   },
   "required": [

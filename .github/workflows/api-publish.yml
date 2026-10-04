@@ -87,7 +87,8 @@ jobs:
         run: |
           set -euo pipefail
           # Only the package version of the next channel differs from info.version; dist/ already carries API_VERSION.
+          # check and build ran above, and the check would reject that intentional difference, so no lifecycle scripts.
           if [ "$VERSION" != "$(node -p "require('./package.json').version")" ]; then
             npm version "$VERSION" --no-git-tag-version
           fi
-          npm publish --provenance --access public --tag "$TAG"
+          npm publish --ignore-scripts --provenance --access public --tag "$TAG"

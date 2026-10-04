@@ -88,6 +88,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/RegisterRequest" }
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "201":
           description: Account created and signed in
           headers:
@@ -112,6 +113,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/LoginRequest" }
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: Signed in, or a two-factor challenge
           headers:
@@ -134,6 +136,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/TwoFactorLoginRequest" }
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: Signed in
           headers:
@@ -153,6 +156,7 @@ paths:
       security:
         - cookieAuth: []
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: New access token
           headers:
@@ -171,6 +175,7 @@ paths:
         - cookieAuth: []
         - bearerAuth: []
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "204":
           description: Signed out; the refresh cookie is cleared
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -188,6 +193,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/RecoveryRequest" }
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: Recovery token
           content:
@@ -209,6 +215,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/ResetPasswordRequest" }
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "204":
           description: Password changed; all sessions are revoked
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -225,6 +232,7 @@ paths:
         The ticket is valid for a few seconds and can be used once at
         `/api/v2/ws?ticket=…`; it replaces tokens in the URL.
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "201":
           description: Ticket
           content:
@@ -240,6 +248,7 @@ paths:
       operationId: getMe
       summary: Current user
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: The current user
           content:
@@ -257,6 +266,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/UpdateMeRequest" }
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: Updated user
           content:
@@ -275,6 +285,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/PasswordConfirmation" }
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "204":
           description: Account deleted
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -291,6 +302,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/SetAvatarRequest" }
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: Updated user
           content:
@@ -311,6 +323,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/ChangePasswordRequest" }
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "204":
           description: Password changed
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -323,6 +336,7 @@ paths:
       operationId: getSecuritySettings
       summary: Security settings
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: Settings
           content:
@@ -339,6 +353,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/UpdateSecuritySettingsRequest" }
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: Settings
           content:
@@ -352,6 +367,7 @@ paths:
       operationId: listSessions
       summary: Signed-in devices
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: Sessions of the current user
           content:
@@ -369,6 +385,7 @@ paths:
       operationId: revokeOtherSessions
       summary: Sign out everywhere except this device
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "204":
           description: Other sessions revoked
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -380,6 +397,7 @@ paths:
       operationId: revokeSession
       summary: Sign out one device
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "204":
           description: Session revoked
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -396,6 +414,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/PasswordConfirmation" }
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: Secret to add to an authenticator app
           content:
@@ -415,6 +434,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/TwoFactorCode" }
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "204":
           description: Two-factor authentication enabled
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -431,6 +451,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/DisableTwoFactorRequest" }
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "204":
           description: Two-factor authentication disabled
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -443,6 +464,7 @@ paths:
       operationId: getPrivacySettings
       summary: Privacy settings and exceptions
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: Settings
           content:
@@ -459,6 +481,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/UpdatePrivacySettingsRequest" }
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: Settings
           content:
@@ -490,6 +513,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/PrivacyExceptionsRequest" }
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: Settings
           content:
@@ -507,6 +531,7 @@ paths:
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/After"
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: A page of blocked users
           content:
@@ -521,6 +546,7 @@ paths:
       operationId: blockUser
       summary: Block a user
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "204":
           description: Blocked (also when already blocked)
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -530,6 +556,7 @@ paths:
       operationId: unblockUser
       summary: Unblock a user
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "204":
           description: Unblocked (also when not blocked)
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -550,6 +577,7 @@ paths:
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/After"
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: A page of users
           content:
@@ -568,6 +596,7 @@ paths:
           required: true
           schema: { $ref: "#/components/schemas/Username" }
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: The user, as visible to the current user
           content:
@@ -583,6 +612,7 @@ paths:
       operationId: getUser
       summary: Profile by ID
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: The user, as visible to the current user
           content:
@@ -599,6 +629,7 @@ paths:
       summary: Current avatar image
       description: Respects the avatar visibility of the user; falls back to the default avatar.
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: Image
           content:
@@ -617,6 +648,7 @@ paths:
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/After"
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: A page of previous avatars, newest first
           content:
@@ -644,6 +676,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/ContactNameRequest" }
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: The user with the contact name applied
           content:
@@ -657,6 +690,7 @@ paths:
       operationId: removeContactName
       summary: Remove your display name for a user
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "204":
           description: Removed
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -678,6 +712,7 @@ paths:
           multipart/form-data:
             schema: { $ref: "#/components/schemas/UploadAttachmentRequest" }
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "201":
           description: Uploaded
           content:
@@ -697,6 +732,7 @@ paths:
       summary: Download an attachment
       description: Only participants of the chat the attachment was sent to (and its uploader) can download it.
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: File content
           content:
@@ -717,6 +753,7 @@ paths:
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/After"
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: A page of chats
           content:
@@ -737,6 +774,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/CreateChatRequest" }
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: The chat already existed
           content:
@@ -765,6 +803,7 @@ paths:
       operationId: getChat
       summary: One chat
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: The chat
           content:
@@ -778,6 +817,7 @@ paths:
       summary: Delete a direct chat for yourself
       description: For groups use `DELETE /groups/{chat_id}` (owner) or `POST /groups/{chat_id}/leave`.
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "204":
           description: Deleted
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -790,6 +830,7 @@ paths:
       operationId: pinChat
       summary: Pin a chat
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "204":
           description: Pinned
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -800,6 +841,7 @@ paths:
       operationId: unpinChat
       summary: Unpin a chat
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "204":
           description: Unpinned
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -818,6 +860,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/MarkReadRequest" }
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: New unread count
           content:
@@ -855,6 +898,7 @@ paths:
           description: A window containing this message ID
           schema: { $ref: "#/components/schemas/Id" }
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: A page of messages
           content:
@@ -876,6 +920,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/SendMessageRequest" }
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "201":
           description: Message created
           content:
@@ -907,6 +952,7 @@ paths:
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/After"
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: Matches, newest first
           content:
@@ -931,6 +977,7 @@ paths:
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/After"
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: Messages with matching attachments, newest first
           content:
@@ -954,6 +1001,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/EditMessageRequest" }
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: Edited message
           content:
@@ -978,6 +1026,7 @@ paths:
             type: string
             enum: [me, everyone]
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "204":
           description: Deleted
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -997,6 +1046,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/ForwardMessageRequest" }
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "201":
           description: One new message per target chat
           content:
@@ -1024,6 +1074,7 @@ paths:
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/After"
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: A page of pending requests
           content:
@@ -1045,6 +1096,7 @@ paths:
       operationId: approveRequest
       summary: Approve a request
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: Approved; the chat or group membership now exists
           content:
@@ -1062,6 +1114,7 @@ paths:
       operationId: rejectRequest
       summary: Reject a request
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "204":
           description: Rejected
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -1079,6 +1132,7 @@ paths:
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/After"
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: A page of group chats
           content:
@@ -1096,6 +1150,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/CreateGroupRequest" }
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "201":
           description: Group created
           content:
@@ -1113,6 +1168,7 @@ paths:
       operationId: getGroup
       summary: Group details and members
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: The group
           content:
@@ -1130,6 +1186,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/UpdateGroupRequest" }
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: Updated group
           content:
@@ -1144,6 +1201,7 @@ paths:
       operationId: deleteGroup
       summary: Delete the group (owner only)
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "204":
           description: Deleted for all members
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -1162,6 +1220,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/SetAvatarRequest" }
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: Updated group
           content:
@@ -1183,6 +1242,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/AddParticipantRequest" }
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: Updated group (the user may still be pending approval)
           content:
@@ -1206,6 +1266,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/UpdateRoleRequest" }
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: Updated group
           content:
@@ -1220,6 +1281,7 @@ paths:
       operationId: removeGroupParticipant
       summary: Remove a participant
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "204":
           description: Removed
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -1238,6 +1300,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/TransferOwnerRequest" }
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":
           description: Updated group
           content:
@@ -1255,6 +1318,7 @@ paths:
       summary: Leave the group
       description: The owner has to transfer ownership first.
       responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
         "204":
           description: Left
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -1322,6 +1386,11 @@ components:
       schema: { $ref: "#/components/schemas/Id" }
 
   responses:
+    ClientOutdated:
+      description: "The `X-Client-Api-Version` header has another MAJOR version than the server or is below `min_client_api_version` (`client_outdated`). Not returned by `/meta`, which clients use to find out the current versions."
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
     BadRequest:
       description: Malformed request
       content:
@@ -1421,7 +1490,7 @@ components:
         - internal_error
     Problem:
       type: object
-      description: RFC 9457 problem details. `426 Upgrade Required` (`client_outdated`) uses the same format on every endpoint.
+      description: RFC 9457 problem details. `426 Upgrade Required` (`client_outdated`) uses the same format.
       required: [type, title, status, code]
       properties:
         type:
@@ -1899,7 +1968,7 @@ components:
           type: [string, "null"]
           maxLength: 4096
         attachment_id:
-          description: Required for `file` and `voice`; never a URL.
+          description: Required and not null for `file` and `voice`; never a URL.
           oneOf:
             - $ref: "#/components/schemas/Id"
             - type: "null"
@@ -1907,6 +1976,13 @@ components:
           oneOf:
             - $ref: "#/components/schemas/Id"
             - type: "null"
+      if:
+        properties:
+          type: { enum: [file, voice] }
+      then:
+        required: [attachment_id]
+        properties:
+          attachment_id: { $ref: "#/components/schemas/Id" }
     EditMessageRequest:
       type: object
       required: [content]

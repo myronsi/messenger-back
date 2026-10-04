@@ -11,14 +11,7 @@
       "$ref": "../../openapi.yaml#/components/schemas/Id"
     },
     "chat_id": {
-      "oneOf": [
-        {
-          "$ref": "../../openapi.yaml#/components/schemas/Id"
-        },
-        {
-          "type": "null"
-        }
-      ]
+      "type": "null"
     },
     "data": {
       "type": "object",

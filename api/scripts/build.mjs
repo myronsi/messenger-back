@@ -1,4 +1,4 @@
-// Generates dist/: the OpenAPI document, REST types, WebSocket event types and the version constant.
+// Generates dist/: the OpenAPI document, the bundled WebSocket schemas, REST and WebSocket types and the version constant.
 import { copyFileSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { compile } from "json-schema-to-typescript";
@@ -20,6 +20,7 @@ const ast = await openapiTS(pathToFileURL(join(apiDir, "openapi.yaml")));
 writeFileSync(join(dist, "schema.d.ts"), banner + astToString(ast));
 
 const defs = bundle(spec, loadEvents());
+writeFileSync(join(dist, "ws-events.schema.json"), JSON.stringify({ $schema: "https://json-schema.org/draft/2020-12/schema", $defs: defs }, null, 2) + "\n");
 const wsTypes = await compile(
   {
     title: "WebSocketEvent",

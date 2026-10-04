@@ -52,20 +52,30 @@ jobs:
           latest="$(npm view @myronsi/messenger-api dist-tags.latest 2>/dev/null || true)"
           if [ -n "$latest" ]; then
             npm pack "@myronsi/messenger-api@${latest}" --pack-destination "$RUNNER_TEMP" >/dev/null
-            tar -xzf "$RUNNER_TEMP"/myronsi-messenger-api-*.tgz -C "$RUNNER_TEMP" package/dist/openapi.yaml
-            cp "$RUNNER_TEMP/package/dist/openapi.yaml" "$RUNNER_TEMP/baseline.yaml"
-            echo "source=npm @myronsi/messenger-api@${latest}" >> "$GITHUB_OUTPUT"
+            tar -xzf "$RUNNER_TEMP"/myronsi-messenger-api-*.tgz -C "$RUNNER_TEMP" package/dist
+            {
+              echo "dir=$RUNNER_TEMP/package/dist"
+              echo "source=npm @myronsi/messenger-api@${latest}"
+            } >> "$GITHUB_OUTPUT"
           elif git cat-file -e "origin/${BASE_REF}:api/openapi.yaml" 2>/dev/null; then
-            git show "origin/${BASE_REF}:api/openapi.yaml" > "$RUNNER_TEMP/baseline.yaml"
-            echo "source=${BASE_REF} branch" >> "$GITHUB_OUTPUT"
+            mkdir "$RUNNER_TEMP/base"
+            git -C "$GITHUB_WORKSPACE" archive "origin/${BASE_REF}" api | tar -x -C "$RUNNER_TEMP/base"
+            {
+              echo "dir=$RUNNER_TEMP/base/api"
+              echo "source=${BASE_REF} branch"
+            } >> "$GITHUB_OUTPUT"
           else
             echo "source=none" >> "$GITHUB_OUTPUT"
           fi
+      # Compares the REST contract and the WebSocket schemas.
       - name: Breaking changes and info.version bump
         if: steps.baseline.outputs.source != 'none'
+        env:
+          BASELINE_DIR: ${{ steps.baseline.outputs.dir }}
+          BASELINE_SOURCE: ${{ steps.baseline.outputs.source }}
         run: |
-          echo "Baseline: ${{ steps.baseline.outputs.source }}"
-          node scripts/check-version-bump.mjs "$RUNNER_TEMP/baseline.yaml" openapi.yaml
+          echo "Baseline: $BASELINE_SOURCE"
+          node scripts/check-version-bump.mjs "$BASELINE_DIR" .
 
   # The Go server does not exist yet. As soon as a go.mod is added, the generated code must be current.
   go-generated:
@@ -84,3 +94,5 @@ jobs:
         run: |
           go generate ./...
           git diff --exit-code
+          # git diff ignores files that generation created and the PR did not commit
+          test -z "$(git ls-files --others --exclude-standard)"

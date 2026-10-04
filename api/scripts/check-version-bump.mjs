@@ -1,14 +1,17 @@
 // Checks that info.version was bumped as far as the changes require.
-//   node check-version-bump.mjs <base-openapi.yaml> <new-openapi.yaml>
+//   node check-version-bump.mjs <baseline contract dir> <new contract dir>
+// A contract dir is api/ (openapi.yaml + websocket/) or an unpacked package dist/ (openapi.yaml + ws-events.schema.json).
 // Breaking change -> MAJOR, any other API change -> MINOR, docs-only change -> PATCH.
 // While the baseline is a pre-release (2.0.0-alpha.N) every change only needs a higher version.
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { parse } from "yaml";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { loadContract, wsAsOpenApi } from "./lib.mjs";
 
-const [baseFile, newFile] = process.argv.slice(2);
-if (!baseFile || !newFile) {
-  console.error("usage: check-version-bump.mjs <base.yaml> <new.yaml>");
+const [baseDir, newDir] = process.argv.slice(2);
+if (!baseDir || !newDir) {
+  console.error("usage: check-version-bump.mjs <baseline contract dir> <new contract dir>");
   process.exit(2);
 }
 const oasdiff = process.env.OASDIFF || "oasdiff";
@@ -44,8 +47,10 @@ const stable = (v) => JSON.stringify(v, (_, x) =>
     ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : 1)))
     : x);
 
-const base = parse(readFileSync(baseFile, "utf8"));
-const next = parse(readFileSync(newFile, "utf8"));
+const baseContract = loadContract(baseDir);
+const newContract = loadContract(newDir);
+const base = baseContract.spec;
+const next = newContract.spec;
 const baseVersion = semver(base.info.version);
 const newVersion = semver(next.info.version);
 const problems = [];
@@ -54,12 +59,26 @@ if (next.servers?.[0]?.url !== `/api/v${newVersion.major}`) {
   problems.push(`servers[0].url must be /api/v${newVersion.major} to match the MAJOR of info.version (found ${next.servers?.[0]?.url})`);
 }
 
-const out = execFileSync(oasdiff, ["changelog", baseFile, newFile, "--format", "json"], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
-const changes = (out.trim() ? JSON.parse(out) : []).filter((c) => c.id !== "api-version-not-bumped");
+const changelog = (a, b) => {
+  const out = execFileSync(oasdiff, ["changelog", a, b, "--format", "json"], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  return (out.trim() ? JSON.parse(out) : []).filter((c) => c.id !== "api-version-not-bumped");
+};
+const changes = changelog(join(baseDir, "openapi.yaml"), join(newDir, "openapi.yaml"));
+
+// A baseline from before the WebSocket schemas were published has nothing to compare with.
+const wsComparable = baseContract.ws && newContract.ws;
+if (wsComparable) {
+  const tmp = mkdtempSync(join(tmpdir(), "ws-contract-"));
+  writeFileSync(join(tmp, "base.json"), JSON.stringify(wsAsOpenApi(baseContract.ws, base.info.version)));
+  writeFileSync(join(tmp, "new.json"), JSON.stringify(wsAsOpenApi(newContract.ws, next.info.version)));
+  for (const c of changelog(join(tmp, "base.json"), join(tmp, "new.json"))) changes.push({ ...c, text: `WebSocket: ${c.text}` });
+} else {
+  console.warn("::notice::The baseline has no WebSocket schemas, only the REST contract was compared");
+}
 const breaking = changes.filter((c) => c.level === 3);
 
 const strip = (doc) => { const copy = structuredClone(doc); delete copy.info.version; return copy; };
-const docsChanged = stable(strip(base)) !== stable(strip(next));
+const docsChanged = stable(strip(base)) !== stable(strip(next)) || (wsComparable && stable(baseContract.ws) !== stable(newContract.ws));
 
 let required = "none";
 if (breaking.length) required = "major";

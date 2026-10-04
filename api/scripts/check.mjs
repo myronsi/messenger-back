@@ -43,6 +43,9 @@ for (const dir of ["client", "server"]) {
 const negative = [
   ["ClientMessageEvent", { type: "message", chat_id: "42", data: { type: "text", content: "x" } }],
   ["ServerMessageEvent", { type: "message", event_id: 1, chat_id: "42", data: {} }],
+  ["ClientMessageEvent", { type: "message", client_temp_id: "c-1", chat_id: "42", data: { type: "file", content: "x" } }],
+  ["ClientMessageEvent", { type: "message", client_temp_id: "c-1", chat_id: "42", data: { type: "file", attachment_id: null } }],
+  ["ServerHelloEvent", { type: "hello", event_id: "1", chat_id: "42", data: { api_version: "2.0.0", min_client_api_version: "2.0.0", user_id: "1" } }],
 ];
 for (const [title, payload] of negative) {
   if (ajv.compile({ $defs: defs, $ref: `#/$defs/${title}` })(payload)) errors.push(`${title} accepted an invalid payload`);

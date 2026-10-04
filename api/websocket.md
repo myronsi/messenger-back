@@ -25,12 +25,12 @@ Client → server:
 
 - All IDs are strings (Snowflake IDs do not fit into a JavaScript number).
 - `event_id` is unique and increases per server; it is only for deduplication and logs.
-- `chat_id` is `null` for events that do not belong to a chat (`hello`, `presence`, `approval_request_created`, connection-level errors).
+- `chat_id` is always `null` in `hello`, `presence` and `approval_request_created`, which do not belong to a chat. `ack` and `error` repeat the `chat_id` of the client event they answer, and it is `null` for connection-level errors.
 - Unknown event `type`s must be ignored by clients, so new event types are not a breaking change.
 
 ## Acknowledgements
 
-Every client event except `typing` carries a `client_temp_id` (1–64 characters, unique per client). The server answers with exactly one of:
+Every client event except `typing` (which is not acknowledged and carries no `client_temp_id`) has a `client_temp_id` (1–64 characters, unique per client). The server answers with exactly one of:
 
 - `ack` — `client_temp_id`, and for `message` the stored `message_id` and `created_at`. Sending the same `client_temp_id` again returns the same `ack` (idempotent), which makes retries after a reconnect safe.
 - `error` — `client_temp_id` and `data.code`/`data.message`. `code` is one of the stable codes of `ErrorCode` in `openapi.yaml` (the same codes as the REST `application/problem+json` errors).

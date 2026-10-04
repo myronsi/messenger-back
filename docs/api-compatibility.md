@@ -43,7 +43,7 @@ The API contract (`api/openapi.yaml` and `api/websocket/`) is versioned separate
 | --- | --- |
 | Lint | `redocly lint` (`api/redocly.yaml`) |
 | Package version equals `info.version`; WebSocket examples match their schemas | `npm run check` |
-| Breaking changes and version bump | `api/scripts/check-version-bump.mjs` uses [oasdiff](https://github.com/oasdiff/oasdiff) to compare with the last released contract (the latest stable `@myronsi/messenger-api` on npm; before the first stable release the contract on the base branch). A removed field without a MAJOR bump fails; so does an addition without a MINOR bump or a docs change without a PATCH bump |
+| Breaking changes and version bump | `api/scripts/check-version-bump.mjs` uses [oasdiff](https://github.com/oasdiff/oasdiff) to compare the REST contract and the WebSocket schemas (as a synthetic OpenAPI document: server events are responses, client events are request bodies) with the last released contract (the latest stable `@myronsi/messenger-api` on npm; before the first stable release the contract on the base branch). A removed event or field without a MAJOR bump fails; so does an addition without a MINOR bump or a docs change without a PATCH bump |
 | Generated Go code is current | `go generate ./... && git diff --exit-code`, once the repository has a `go.mod` |
 | Label | `labeler.yml` adds `api-change` to every PR that touches `api/**` |
 
@@ -51,5 +51,5 @@ Run the same checks locally:
 
 ```sh
 cd api && npm ci && npm run lint && npm run check
-OASDIFF=oasdiff node scripts/check-version-bump.mjs <last released openapi.yaml> openapi.yaml
+OASDIFF=oasdiff node scripts/check-version-bump.mjs <last released contract dir: unpacked package dist/ or an api/ checkout> .
 ```
