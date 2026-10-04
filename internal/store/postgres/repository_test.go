@@ -598,6 +598,71 @@ func TestConcurrentDeletionOfCrossUploaders(t *testing.T) {
 	}
 }
 
+// deleteBoth deletes both accounts at the same time and fails the test if either deletion fails.
+func deleteBoth(t *testing.T, s *Store, round int, a, b User) {
+	t.Helper()
+	errs := make([]error, 2)
+	var wg sync.WaitGroup
+	for j, u := range []User{a, b} {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, errs[j] = s.Users().DeleteAccount(context.Background(), u.ID)
+		}()
+	}
+	wg.Wait()
+	for j, err := range errs {
+		if err != nil {
+			t.Fatalf("round %d, deletion %d: %v", round, j, err)
+		}
+	}
+}
+
+// Reciprocal rows (A blocks B, B blocks A) are removed by two cascades that cannot be ordered up front; the
+// deletion has to survive the deadlock PostgreSQL may report.
+func TestConcurrentDeletionWithReciprocalRows(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	for i := range 15 {
+		a, b := mustUser(t, s, fmt.Sprintf("alice%d", i)), mustUser(t, s, fmt.Sprintf("bob%d", i))
+		for _, q := range []string{
+			`INSERT INTO user_blocks (blocker_id, blocked_id) VALUES ($1, $2), ($2, $1)`,
+			`INSERT INTO user_contact_names (owner_id, target_id, display_name) VALUES ($1, $2, 'x'), ($2, $1, 'y')`,
+		} {
+			if _, err := s.Pool().Exec(ctx, q, a.ID, b.ID); err != nil {
+				t.Fatal(err)
+			}
+		}
+		deleteBoth(t, s, i, a, b)
+		var left int
+		if err := s.Pool().QueryRow(ctx, `SELECT (SELECT count(*) FROM user_blocks) + (SELECT count(*) FROM user_contact_names)`).Scan(&left); err != nil || left != 0 {
+			t.Fatalf("round %d: %d rows left (%v)", i, left, err)
+		}
+	}
+}
+
+// Each user owns a solo group and invited the other into it.
+func TestConcurrentDeletionWithCrossInvitations(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	for i := range 15 {
+		a, b := mustUser(t, s, fmt.Sprintf("alice%d", i)), mustUser(t, s, fmt.Sprintf("bob%d", i))
+		for _, pair := range [][2]User{{a, b}, {b, a}} {
+			owner, guest := pair[0], pair[1]
+			g, err := s.Chats().CreateGroup(ctx, NewGroup{OwnerID: owner.ID, Name: "Solo"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.Pool().Exec(ctx,
+				`INSERT INTO approval_requests (type, requester_id, recipient_id, chat_id) VALUES ('group_invite', $1, $2, $3)`,
+				owner.ID, guest.ID, g.ID); err != nil {
+				t.Fatal(err)
+			}
+		}
+		deleteBoth(t, s, i, a, b)
+	}
+}
+
 func TestDeleteChatReturnsAttachmentKeys(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()

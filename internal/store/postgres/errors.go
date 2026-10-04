@@ -30,11 +30,20 @@ var (
 
 // PostgreSQL error classes that carry a meaning for callers.
 const (
-	codeUniqueViolation     = "23505"
-	codeForeignKeyViolation = "23503"
-	codeCheckViolation      = "23514"
-	codeNotNullViolation    = "23502"
+	codeSerializationFailure = "40001"
+	codeDeadlockDetected     = "40P01"
+	codeUniqueViolation      = "23505"
+	codeForeignKeyViolation  = "23503"
+	codeCheckViolation       = "23514"
+	codeNotNullViolation     = "23502"
 )
+
+// isRetryable reports whether the whole transaction can simply be run again: PostgreSQL aborted it to resolve a
+// deadlock or a serialization conflict.
+func isRetryable(err error) bool {
+	var pg *pgconn.PgError
+	return errors.As(err, &pg) && (pg.Code == codeDeadlockDetected || pg.Code == codeSerializationFailure)
+}
 
 // mapError turns driver errors into the sentinels above. It names the constraint, never the offending
 // values, which may be personal data.

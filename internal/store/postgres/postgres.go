@@ -10,6 +10,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"math/rand/v2"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -86,12 +87,29 @@ func (s *Store) call(ctx context.Context) (context.Context, context.CancelFunc) 
 	return context.WithTimeout(ctx, s.timeout)
 }
 
+// maxTxAttempts bounds how often a transaction that PostgreSQL aborted for a deadlock is run again.
+const maxTxAttempts = 4
+
 // inTx runs fn in one transaction under a single timeout. The transaction is rolled back when fn fails.
+// A transaction aborted by a deadlock or serialization failure is run again from the start (within the same
+// timeout), so fn must not keep state between attempts: it has to set every result it hands out.
 func (s *Store) inTx(ctx context.Context, fn func(ctx context.Context, q *sqlcdb.Queries) error) error {
 	ctx, cancel := s.call(ctx)
 	defer cancel()
-	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		return fn(ctx, s.q.WithTx(tx))
-	})
+	var err error
+	for attempt := 1; ; attempt++ {
+		err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+			return fn(ctx, s.q.WithTx(tx))
+		})
+		if err == nil || !isRetryable(err) || attempt == maxTxAttempts {
+			break
+		}
+		// Jitter keeps two transactions that deadlocked from colliding again in lockstep.
+		select {
+		case <-ctx.Done():
+			return mapError(err)
+		case <-time.After(time.Duration(attempt) * time.Duration(5+rand.IntN(20)) * time.Millisecond): //nolint:gosec // jitter, not a secret
+		}
+	}
 	return mapError(err)
 }

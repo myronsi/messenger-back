@@ -57,14 +57,24 @@ SET last_read_message_id = GREATEST(COALESCE(last_read_message_id, 0), @message_
 WHERE chat_id = @chat_id AND user_id = @user_id;
 
 -- name: LockChatsOfUser :many
--- Chats that reference the user as member, creator or uploader: deleting the user also rewrites
+-- Chats that reference the user as member, creator, uploader, invitation party or pinner (each side is an
+-- indexed lookup, not a scan of all chats): deleting the user also rewrites
 -- chats.created_by and attachments.uploader_id (SET NULL), so those chats must be locked in one id order
 -- or two deletions can deadlock.
 SELECT c.id
 FROM chats c
-WHERE c.created_by = sqlc.arg(user_id)::bigint
-   OR EXISTS (SELECT 1 FROM participants p WHERE p.chat_id = c.id AND p.user_id = sqlc.arg(user_id)::bigint)
-   OR EXISTS (SELECT 1 FROM attachments a WHERE a.chat_id = c.id AND a.uploader_id = sqlc.arg(user_id)::bigint)
+WHERE c.id IN (
+    SELECT ch.id FROM chats ch WHERE ch.created_by = sqlc.arg(user_id)::bigint
+    UNION
+    SELECT p.chat_id FROM participants p WHERE p.user_id = sqlc.arg(user_id)::bigint
+    UNION
+    SELECT a.chat_id FROM attachments a WHERE a.uploader_id = sqlc.arg(user_id)::bigint
+    UNION
+    SELECT r.chat_id FROM approval_requests r
+    WHERE r.chat_id IS NOT NULL AND (r.requester_id = sqlc.arg(user_id)::bigint OR r.recipient_id = sqlc.arg(user_id)::bigint)
+    UNION
+    SELECT pin.chat_id FROM user_chat_pins pin WHERE pin.user_id = sqlc.arg(user_id)::bigint
+)
 ORDER BY c.id
 FOR UPDATE OF c;
 

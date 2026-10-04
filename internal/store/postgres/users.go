@@ -94,11 +94,12 @@ func (r userRepo) TouchLastSeen(ctx context.Context, id int64) error {
 func (r userRepo) DeleteAccount(ctx context.Context, id int64) (DeletedAccount, error) {
 	var out DeletedAccount
 	err := r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
+		out = DeletedAccount{} // the transaction can be retried
 		// Concurrent writers that reference the user wait for this lock instead of racing the deletion.
 		if _, err := q.LockUser(ctx, id); err != nil {
 			return err
 		}
-		// Lock every chat that references the user (member, creator or uploader) in id order before reading roles: a concurrent ownership
+		// Lock every chat that references the user (member, creator, uploader, invitation party or pinner) in id order before reading roles: a concurrent ownership
 		// transfer holds the same lock, so the roles read below cannot change underneath us.
 		if _, err := q.LockChatsOfUser(ctx, id); err != nil {
 			return err
