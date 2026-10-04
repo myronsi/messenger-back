@@ -52,7 +52,7 @@ func (r chatRepo) CreateDirect(ctx context.Context, creatorID, otherID int64) (C
 		if errors.Is(err, pgx.ErrNoRows) {
 			// The pair has a chat already (possibly committed a moment ago by a concurrent call).
 			row, err = q.GetDirectChat(ctx, &key)
-			chat = chatFrom(row)
+			chat, created = chatFrom(row), false
 			return err
 		}
 		if err != nil {
