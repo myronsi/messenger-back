@@ -19,7 +19,7 @@ MIGRATE := go run -tags 'postgres,cassandra' github.com/golang-migrate/migrate/v
 IMAGE ?= messenger-api:local
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 
-.PHONY: help run run-worker build test lint vet vuln fmt generate tidy migrate migrate-postgres migrate-scylla docker
+.PHONY: help run run-worker build test lint vet vuln fmt generate tidy migrate migrate-postgres migrate-scylla docker env up down dev-logs
 
 help: ## List the targets
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
@@ -61,6 +61,20 @@ migrate-postgres: ## Apply the PostgreSQL migrations in migrations/postgres
 
 migrate-scylla: ## Apply the ScyllaDB migrations in migrations/scylla
 	$(MIGRATE) -path migrations/scylla -database "cassandra://$$(printf %s "$${SCYLLA_HOSTS:?SCYLLA_HOSTS is required}" | cut -d, -f1 | tr -d ' ')/$${SCYLLA_KEYSPACE:?SCYLLA_KEYSPACE is required}" up
+
+DEV_COMPOSE := docker compose -f compose.dev.yaml
+
+env: ## Create .env with generated secrets for the development stack (never overwrites)
+	go run deploy/dev/genenv.go
+
+up: ## Start the whole development stack (API, worker, PostgreSQL, Redis, ScyllaDB, Elasticsearch, S3)
+	$(DEV_COMPOSE) up --build --detach --wait
+
+down: ## Stop the development stack (keeps the data; add `docker compose -f compose.dev.yaml down -v` to wipe it)
+	$(DEV_COMPOSE) down
+
+dev-logs: ## Follow the logs of the development stack
+	$(DEV_COMPOSE) logs --follow --tail 100
 
 docker: ## Build the API image (go.Dockerfile)
 	docker build -f go.Dockerfile --build-arg COMMIT=$(COMMIT) -t $(IMAGE) .

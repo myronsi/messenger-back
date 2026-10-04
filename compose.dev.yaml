@@ -1,0 +1,252 @@
+# Development environment for the Go backend: the API, the worker and every data store.
+#
+#   make env      # once: creates .env with generated secrets
+#   make up       # docker compose -f compose.dev.yaml up --build --wait
+#
+# Development only. Credentials come from .env (see .env.example), nothing secret is written here, and
+# every published port is bound to 127.0.0.1. The root compose.yaml is the Python backend's production
+# deployment and is left alone. See docs/dev-environment.md for the RAM needed and troubleshooting.
+name: messenger-dev
+
+x-go-app: &go-app
+  build:
+    context: .
+    dockerfile: go.Dockerfile
+    args:
+      COMMIT: ${COMMIT:-dev}
+  image: messenger-go:dev
+  restart: unless-stopped
+  environment:
+    APP_ENV: development
+    LOG_LEVEL: ${LOG_LEVEL:-debug}
+    JWT_SECRET: ${JWT_SECRET:?required}
+    ENCRYPTION_KEY: ${ENCRYPTION_KEY:?required}
+    RECOVERY_PEPPER: ${RECOVERY_PEPPER:?required}
+    DATABASE_URL: postgres://${POSTGRES_USER:-messenger}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-messenger}?sslmode=disable
+    REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+    SCYLLA_HOSTS: scylla
+    SCYLLA_KEYSPACE: ${SCYLLA_KEYSPACE:-messenger}
+    ELASTICSEARCH_URL: http://elastic:${ELASTIC_PASSWORD}@elasticsearch:9200
+    S3_ENDPOINT: http://object-storage:9000
+    S3_ACCESS_KEY: ${S3_ACCESS_KEY:?required}
+    S3_SECRET_KEY: ${S3_SECRET_KEY:?required}
+    S3_BUCKETS: ${S3_BUCKETS:-messenger-media}
+    CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    scylla:
+      condition: service_healthy
+    elasticsearch:
+      condition: service_healthy
+    object-storage:
+      condition: service_healthy
+    postgres-migrate:
+      condition: service_completed_successfully
+    scylla-migrate:
+      condition: service_completed_successfully
+    elasticsearch-init:
+      condition: service_completed_successfully
+    object-storage-init:
+      condition: service_completed_successfully
+
+services:
+  api:
+    <<: *go-app
+    ports:
+      - "127.0.0.1:${API_PORT:-8080}:8080"
+
+  worker:
+    <<: *go-app
+    command: ["/app/worker"]
+    ports:
+      - "127.0.0.1:${WORKER_PORT:-8081}:8081"
+
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-messenger}
+      POSTGRES_USER: ${POSTGRES_USER:-messenger}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?required}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    # PostgreSQL 18 images keep a version directory below /var/lib/postgresql.
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:8-alpine
+    command: ["sh", "-c", "exec redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\""]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?required}
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  scylla:
+    image: scylladb/scylla:2026.1
+    command: ["--smp", "1", "--memory", "1G", "--overprovisioned", "1", "--developer-mode", "1"]
+    ports:
+      - "127.0.0.1:${SCYLLA_PORT:-9042}:9042"
+    volumes:
+      - scylla-data:/var/lib/scylla
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'DESCRIBE KEYSPACES' >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 40s
+    restart: unless-stopped
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.5.3
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "true"
+      # Plain HTTP inside the compose network; production uses TLS (docs/deployment.md).
+      xpack.security.http.ssl.enabled: "false"
+      xpack.ml.enabled: "false"
+      # A nearly full laptop disk must not turn indices read-only.
+      cluster.routing.allocation.disk.threshold_enabled: "false"
+      ES_JAVA_OPTS: -Xms1g -Xmx1g
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:?required}
+    ports:
+      - "127.0.0.1:${ELASTICSEARCH_PORT:-9200}:9200"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs -u elastic:$${ELASTIC_PASSWORD} 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s' >/dev/null"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
+
+  object-storage:
+    image: rustfs/rustfs:1.0.1
+    environment:
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY:?required}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY:?required}
+    ports:
+      - "127.0.0.1:${S3_PORT:-9000}:9000"
+      - "127.0.0.1:${S3_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - object-storage-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:9000/health >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  # --- One-shot init steps. They are idempotent, so `up` can be repeated safely. ---
+
+  postgres-migrate:
+    image: migrate/migrate:v4.20.1
+    entrypoint: ["sh", "/migrate.sh", "/migrations"]
+    environment:
+      MIGRATE_DATABASE: postgres://${POSTGRES_USER:-messenger}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-messenger}?sslmode=disable
+    volumes:
+      - ./deploy/dev/migrate.sh:/migrate.sh:ro
+      - ./migrations/postgres:/migrations:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # The keyspace has to exist before golang-migrate can connect to it.
+  scylla-keyspace:
+    image: scylladb/scylla:2026.1
+    entrypoint: ["cqlsh", "scylla", "-e"]
+    command: ["CREATE KEYSPACE IF NOT EXISTS ${SCYLLA_KEYSPACE:-messenger} WITH replication = {'class': 'NetworkTopologyStrategy', 'datacenter1': 1}"]
+    depends_on:
+      scylla:
+        condition: service_healthy
+
+  scylla-migrate:
+    image: migrate/migrate:v4.20.1
+    entrypoint: ["sh", "/migrate.sh", "/migrations"]
+    environment:
+      MIGRATE_DATABASE: cassandra://scylla:9042/${SCYLLA_KEYSPACE:-messenger}
+    volumes:
+      - ./deploy/dev/migrate.sh:/migrate.sh:ro
+      - ./migrations/scylla:/migrations:ro
+    depends_on:
+      scylla-keyspace:
+        condition: service_completed_successfully
+
+  # Index template and the `messages` write alias; sets the kibana_system password when one is given.
+  elasticsearch-init:
+    image: curlimages/curl:8.22.0
+    entrypoint: ["sh", "/init/init.sh"]
+    environment:
+      ES_URL: http://elasticsearch:9200
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD}
+      KIBANA_PASSWORD: ${KIBANA_PASSWORD:?required}
+    volumes:
+      - ./deploy/dev/elasticsearch:/init:ro
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+  object-storage-init:
+    image: amazon/aws-cli:2.37.9
+    entrypoint: ["sh", "/init/create-buckets.sh"]
+    environment:
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
+      AWS_DEFAULT_REGION: us-east-1
+      S3_ENDPOINT: http://object-storage:9000
+      S3_BUCKETS: ${S3_BUCKETS:-messenger-media}
+    volumes:
+      - ./deploy/dev/object-storage:/init:ro
+    depends_on:
+      object-storage:
+        condition: service_healthy
+
+  # Optional: docker compose -f compose.dev.yaml --profile kibana up -d  ->  http://localhost:5601
+  kibana:
+    profiles: ["kibana"]
+    image: docker.elastic.co/kibana/kibana:9.5.3
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+      ELASTICSEARCH_USERNAME: kibana_system
+      ELASTICSEARCH_PASSWORD: ${KIBANA_PASSWORD}
+    ports:
+      - "127.0.0.1:${KIBANA_PORT:-5601}:5601"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:5601/api/status >/dev/null"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
+    depends_on:
+      elasticsearch-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  redis-data:
+  scylla-data:
+  elasticsearch-data:
+  object-storage-data:

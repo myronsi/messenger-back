@@ -16,13 +16,15 @@ The Go backend replaces the Python one (`server/`). Its skeleton is in place; fe
 | `internal/realtime` | WebSocket registry and graceful "reconnect" close (code 1012) |
 | `internal/store/{postgres,redis,scylla,elastic}` | lazy store clients with `Ping` for `/readyz` |
 | `internal/{auth,users,chats,groups,messages,media,search}` | domain packages, empty for now |
-| `migrations/{postgres,scylla}` | schema migrations (`make migrate`) |
+| `migrations/{postgres,scylla}` | schema migrations (`make migrate`, applied automatically by the dev stack) |
+| `compose.dev.yaml`, `deploy/dev` | development stack and its init steps, see [dev-environment.md](dev-environment.md); production notes are in [deployment.md](deployment.md) |
 
 ## Everyday commands
 
 ```sh
-cp .env.example .env   # fill in the secrets, see the comments in the file
-make run               # API on :8080
+make env               # creates .env with generated secrets (or: cp .env.example .env and fill it in)
+make up                # the whole stack in Docker: API, worker and all stores (docs/dev-environment.md)
+make run               # or only the API from source on :8080, against stores that are already running
 make test              # go test -race ./...
 make lint              # golangci-lint + go vet
 make vuln              # govulncheck
@@ -44,4 +46,4 @@ make docker            # distroless, non-root image from go.Dockerfile
 
 ## CI
 
-`.github/workflows/go.yml`: golangci-lint, `go vet`, `go mod tidy` and `go generate` drift checks, `go test -race ./...`, `govulncheck` and an image build.
+`.github/workflows/go.yml`: golangci-lint, `go vet`, `go mod tidy` and `go generate` drift checks, `go test -race ./...`, `govulncheck`, an image build, and `dev-stack`, which starts `compose.dev.yaml` and checks that `/readyz` reports every store ready.

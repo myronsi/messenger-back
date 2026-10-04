@@ -7,6 +7,8 @@
 !docs/project-workflow.md
 !docs/api-compatibility.md
 !docs/go-backend.md
+!docs/dev-environment.md
+!docs/deployment.md
 !CHANGELOG.md
 !server/
 !server/version.py
@@ -83,6 +85,9 @@
 !.golangci.yml
 !go.Dockerfile
 !go.Dockerfile.dockerignore
+!compose.dev.yaml
+!deploy/dev/
+!deploy/dev/**
 !cmd/
 !cmd/**
 !internal/

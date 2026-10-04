@@ -1,0 +1,23 @@
+{
+  "index_patterns": ["messages-*"],
+  "priority": 100,
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0
+    },
+    "mappings": {
+      "dynamic": "false",
+      "properties": {
+        "message_id": { "type": "keyword" },
+        "chat_id": { "type": "keyword" },
+        "sender_id": { "type": "keyword" },
+        "text": { "type": "text" },
+        "created_at": { "type": "date" }
+      }
+    }
+  },
+  "_meta": {
+    "description": "Development defaults (single node, no replicas). The search feature owns the final mapping."
+  }
+}
