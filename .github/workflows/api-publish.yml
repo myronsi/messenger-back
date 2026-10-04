@@ -1,27 +1,20 @@
 name: Publish API contract
 
-# Publishes @myronsi/messenger-api to npmjs.com.
-#   next:    every merge to master that changes api/ -> <info.version>-next.<run number> under the `next` dist-tag
-#   release: called by release.yml after a backend release -> info.version under `latest`
+# Publishes @myronsi/messenger-api to npmjs.com. Called only by release.yml on every push to master:
+#   next:    a merge that changes api/ -> <info.version>-next.<run number> under the `next` dist-tag
+#   release: after a backend release -> info.version under `latest`
 #            (a pre-release such as 2.0.0-alpha.1 goes under `alpha`), only if that version is not on npm yet,
 #            that is, only if the contract changed since the last publish.
-# Needs the NPM_TOKEN repository secret (automation token that may publish the @myronsi scope).
-# Without it the job only prints a notice, so forks and unconfigured repositories stay green.
+# Authentication is npm Trusted Publishing (OIDC), there is no token. npm validates the workflow that started
+# the run, so the trusted publisher on npmjs.com must be repository myronsi/messenger-back, workflow release.yml.
+# This is why the file has no triggers of its own: a second entry point would need a second trusted publisher.
 on:
-  push:
-    branches: [master]
-    paths:
-      - "api/**"
   workflow_call:
     inputs:
       channel:
         description: release or next
         type: string
         default: release
-    secrets:
-      NPM_TOKEN:
-        required: false
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -33,18 +26,21 @@ concurrency:
 
 jobs:
   publish:
+    if: github.repository == 'myronsi/messenger-back'
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: api
     env:
       CHANNEL: ${{ inputs.channel || 'next' }}
-      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 2
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 22
+          # Trusted Publishing needs npm 11.5.1 or newer, which Node 24 ships.
+          node-version: 24
           registry-url: https://registry.npmjs.org
           cache: npm
           cache-dependency-path: api/package-lock.json
@@ -67,8 +63,8 @@ jobs:
             esac
           fi
           publish=true
-          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
-            echo "::notice::NPM_TOKEN is not configured, not publishing"
+          if [ "$CHANNEL" = "next" ] && git diff --quiet HEAD^ HEAD -- .; then
+            echo "::notice::api/ did not change in this commit, no snapshot"
             publish=false
           elif npm view "@myronsi/messenger-api@${version}" version >/dev/null 2>&1; then
             echo "::notice::@myronsi/messenger-api@${version} is already on npm, the contract did not change"
