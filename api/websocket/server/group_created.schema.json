@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ServerGroupCreatedEvent",
+  "description": "You were added to a new group.",
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "group_created"
+    },
+    "event_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "chat_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "group": {
+          "$ref": "../../openapi.yaml#/components/schemas/Group"
+        }
+      },
+      "required": [
+        "group"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "type",
+    "event_id",
+    "chat_id",
+    "data"
+  ],
+  "additionalProperties": false
+}

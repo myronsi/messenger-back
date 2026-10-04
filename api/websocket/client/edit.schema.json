@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ClientEditEvent",
+  "description": "Edit your own text message.",
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "edit"
+    },
+    "client_temp_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/ClientTempId"
+    },
+    "chat_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "message_id": {
+          "$ref": "../../openapi.yaml#/components/schemas/Id"
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        }
+      },
+      "required": [
+        "message_id",
+        "content"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "type",
+    "client_temp_id",
+    "chat_id",
+    "data"
+  ],
+  "additionalProperties": false
+}

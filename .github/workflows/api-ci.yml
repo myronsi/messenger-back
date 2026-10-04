@@ -1,0 +1,86 @@
+name: API contract
+
+on:
+  pull_request:
+    paths:
+      - "api/**"
+      - ".github/workflows/api-ci.yml"
+      - ".github/actions/setup-oasdiff/**"
+  push:
+    branches: [master]
+    paths:
+      - "api/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: api-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+      - run: npm ci
+      - name: Lint openapi.yaml
+        run: npx redocly lint openapi.yaml
+      - name: Package version equals info.version, WebSocket examples match their schemas
+        run: npm run check
+      - name: Types can be generated
+        run: npm run build
+      - uses: ./.github/actions/setup-oasdiff
+      # The baseline is the contract of the latest stable release on npm. Before the first
+      # stable release it is the contract on the base branch.
+      - name: Get the last released contract
+        id: baseline
+        env:
+          BASE_REF: ${{ github.base_ref || 'master' }}
+        run: |
+          set -euo pipefail
+          latest="$(npm view @myronsi/messenger-api dist-tags.latest 2>/dev/null || true)"
+          if [ -n "$latest" ]; then
+            npm pack "@myronsi/messenger-api@${latest}" --pack-destination "$RUNNER_TEMP" >/dev/null
+            tar -xzf "$RUNNER_TEMP"/myronsi-messenger-api-*.tgz -C "$RUNNER_TEMP" package/dist/openapi.yaml
+            cp "$RUNNER_TEMP/package/dist/openapi.yaml" "$RUNNER_TEMP/baseline.yaml"
+            echo "source=npm @myronsi/messenger-api@${latest}" >> "$GITHUB_OUTPUT"
+          elif git cat-file -e "origin/${BASE_REF}:api/openapi.yaml" 2>/dev/null; then
+            git show "origin/${BASE_REF}:api/openapi.yaml" > "$RUNNER_TEMP/baseline.yaml"
+            echo "source=${BASE_REF} branch" >> "$GITHUB_OUTPUT"
+          else
+            echo "source=none" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Breaking changes and info.version bump
+        if: steps.baseline.outputs.source != 'none'
+        run: |
+          echo "Baseline: ${{ steps.baseline.outputs.source }}"
+          node scripts/check-version-bump.mjs "$RUNNER_TEMP/baseline.yaml" openapi.yaml
+
+  # The Go server does not exist yet. As soon as a go.mod is added, the generated code must be current.
+  go-generated:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - id: go
+        run: |
+          if [ -f go.mod ]; then echo "present=true" >> "$GITHUB_OUTPUT"; else echo "::notice::No go.mod yet, skipping the generated-code check"; fi
+      - if: steps.go.outputs.present == 'true'
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - if: steps.go.outputs.present == 'true'
+        name: go generate must not change anything
+        run: |
+          go generate ./...
+          git diff --exit-code

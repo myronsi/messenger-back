@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ServerHelloEvent",
+  "description": "First event after connecting, so clients that reconnect after a deploy learn the current contract.",
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "hello"
+    },
+    "event_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "chat_id": {
+      "oneOf": [
+        {
+          "$ref": "../../openapi.yaml#/components/schemas/Id"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "api_version": {
+          "type": "string"
+        },
+        "min_client_api_version": {
+          "type": "string"
+        },
+        "user_id": {
+          "$ref": "../../openapi.yaml#/components/schemas/Id"
+        }
+      },
+      "required": [
+        "api_version",
+        "min_client_api_version",
+        "user_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "type",
+    "event_id",
+    "chat_id",
+    "data"
+  ],
+  "additionalProperties": false
+}

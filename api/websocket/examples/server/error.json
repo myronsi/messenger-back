@@ -1,0 +1,10 @@
+{
+  "type": "error",
+  "event_id": "7217400317439950009",
+  "chat_id": "42",
+  "data": {
+    "code": "forbidden",
+    "message": "You are not a member of this chat"
+  },
+  "client_temp_id": "c-1"
+}

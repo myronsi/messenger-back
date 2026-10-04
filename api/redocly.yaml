@@ -1,0 +1,12 @@
+extends:
+  - recommended
+
+rules:
+  # The server URL is relative on purpose (same origin behind the reverse proxy).
+  no-server-example.com: off
+  # Every response of the API is documented explicitly; 4XX ranges are not used.
+  operation-4xx-response: error
+  security-defined: error
+  no-unused-components: error
+  operation-operationId-unique: error
+  tag-description: error

@@ -1,0 +1,10 @@
+{
+  "type": "presence",
+  "event_id": "7217400317439950009",
+  "chat_id": null,
+  "data": {
+    "user_id": "1002",
+    "is_online": false,
+    "last_seen": "2026-10-04T12:00:00Z"
+  }
+}

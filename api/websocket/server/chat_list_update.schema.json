@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ServerChatListUpdateEvent",
+  "description": "The chat-list entry changed (last message, unread count, pin).",
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "chat_list_update"
+    },
+    "event_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "chat_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "chat": {
+          "$ref": "../../openapi.yaml#/components/schemas/Chat"
+        }
+      },
+      "required": [
+        "chat"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "type",
+    "event_id",
+    "chat_id",
+    "data"
+  ],
+  "additionalProperties": false
+}

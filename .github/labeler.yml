@@ -1,0 +1,4 @@
+# Used by actions/labeler (.github/workflows/labeler.yml).
+api-change:
+  - changed-files:
+      - any-glob-to-any-file: "api/**"

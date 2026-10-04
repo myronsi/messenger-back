@@ -58,6 +58,40 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  # Publishes the API contract as @myronsi/messenger-api when info.version is not on npm yet.
+  contract:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/api-publish.yml
+    with:
+      channel: release
+    secrets:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # Attaches the images-only compose file with the image pinned to this release, so a frontend can
+  # start the matching backend with all its stores.
+  stack:
+    needs: [release-please, image]
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Upload compose.stack.yaml to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          sed "s#/messenger-back:master}#/messenger-back:${version}}#" deploy/compose.stack.yaml > "$RUNNER_TEMP/compose.stack.yaml"
+          grep -q "messenger-back:${version}}" "$RUNNER_TEMP/compose.stack.yaml"
+          gh release upload "$TAG" "$RUNNER_TEMP/compose.stack.yaml" --clobber --repo "$GITHUB_REPOSITORY"
+
   # Every merge to master also publishes a snapshot image: master and sha-<short sha>.
   snapshot-image:
     runs-on: ubuntu-latest

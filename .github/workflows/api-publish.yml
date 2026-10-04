@@ -1,0 +1,93 @@
+name: Publish API contract
+
+# Publishes @myronsi/messenger-api to npmjs.com.
+#   next:    every merge to master that changes api/ -> <info.version>-next.<run number> under the `next` dist-tag
+#   release: called by release.yml after a backend release -> info.version under `latest`
+#            (a pre-release such as 2.0.0-alpha.1 goes under `alpha`), only if that version is not on npm yet,
+#            that is, only if the contract changed since the last publish.
+# Needs the NPM_TOKEN repository secret (automation token that may publish the @myronsi scope).
+# Without it the job only prints a notice, so forks and unconfigured repositories stay green.
+on:
+  push:
+    branches: [master]
+    paths:
+      - "api/**"
+  workflow_call:
+    inputs:
+      channel:
+        description: release or next
+        type: string
+        default: release
+    secrets:
+      NPM_TOKEN:
+        required: false
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: api-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    env:
+      CHANNEL: ${{ inputs.channel || 'next' }}
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+      - run: npm ci
+      - run: npm run check
+      - run: npm run build
+      - name: Decide version and dist-tag
+        id: plan
+        run: |
+          set -euo pipefail
+          contract="$(node -p "require('./package.json').version")"
+          if [ "$CHANNEL" = "next" ]; then
+            version="$(node scripts/next-version.mjs "$GITHUB_RUN_NUMBER")"
+            tag=next
+          else
+            version="$contract"
+            case "$version" in
+              *-*) pre="${version#*-}"; tag="${pre%%.*}" ;;
+              *) tag=latest ;;
+            esac
+          fi
+          publish=true
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "::notice::NPM_TOKEN is not configured, not publishing"
+            publish=false
+          elif npm view "@myronsi/messenger-api@${version}" version >/dev/null 2>&1; then
+            echo "::notice::@myronsi/messenger-api@${version} is already on npm, the contract did not change"
+            publish=false
+          fi
+          {
+            echo "version=$version"
+            echo "tag=$tag"
+            echo "publish=$publish"
+          } >> "$GITHUB_OUTPUT"
+      - name: Publish
+        if: steps.plan.outputs.publish == 'true'
+        env:
+          VERSION: ${{ steps.plan.outputs.version }}
+          TAG: ${{ steps.plan.outputs.tag }}
+        run: |
+          set -euo pipefail
+          # Only the package version of the next channel differs from info.version; dist/ already carries API_VERSION.
+          if [ "$VERSION" != "$(node -p "require('./package.json').version")" ]; then
+            npm version "$VERSION" --no-git-tag-version
+          fi
+          npm publish --provenance --access public --tag "$TAG"

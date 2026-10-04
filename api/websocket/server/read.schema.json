@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ServerReadEvent",
+  "description": "A user read messages up to and including `message_id` (not sent when the reader turned read receipts off).",
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "read"
+    },
+    "event_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "chat_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "message_id": {
+          "$ref": "../../openapi.yaml#/components/schemas/Id"
+        },
+        "user_id": {
+          "$ref": "../../openapi.yaml#/components/schemas/Id"
+        },
+        "read_at": {
+          "$ref": "../../openapi.yaml#/components/schemas/Timestamp"
+        }
+      },
+      "required": [
+        "message_id",
+        "user_id",
+        "read_at"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "type",
+    "event_id",
+    "chat_id",
+    "data"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ServerAckEvent",
+  "description": "The server accepted the client event with this `client_temp_id`.",
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "ack"
+    },
+    "event_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "chat_id": {
+      "oneOf": [
+        {
+          "$ref": "../../openapi.yaml#/components/schemas/Id"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "message_id": {
+          "oneOf": [
+            {
+              "$ref": "../../openapi.yaml#/components/schemas/Id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "created_at": {
+          "oneOf": [
+            {
+              "$ref": "../../openapi.yaml#/components/schemas/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "client_temp_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/ClientTempId"
+    }
+  },
+  "required": [
+    "type",
+    "event_id",
+    "chat_id",
+    "data",
+    "client_temp_id"
+  ],
+  "additionalProperties": false
+}

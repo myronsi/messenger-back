@@ -1,0 +1,12 @@
+{
+  "type": "reaction_remove",
+  "event_id": "7217400317439950009",
+  "chat_id": "42",
+  "data": {
+    "message_id": "7217400317439950001",
+    "reaction": {
+      "emoji": "👍",
+      "user_id": "1002"
+    }
+  }
+}

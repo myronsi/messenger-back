@@ -1,0 +1,10 @@
+{
+  "type": "hello",
+  "event_id": "7217400317439950009",
+  "chat_id": null,
+  "data": {
+    "api_version": "2.0.0-alpha.1",
+    "min_client_api_version": "2.0.0-alpha.1",
+    "user_id": "1001"
+  }
+}

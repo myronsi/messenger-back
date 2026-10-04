@@ -1,0 +1,8 @@
+{
+  "type": "typing",
+  "client_temp_id": "c-1",
+  "chat_id": "42",
+  "data": {
+    "is_typing": true
+  }
+}

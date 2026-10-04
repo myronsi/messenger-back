@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ClientReactionRemoveEvent",
+  "description": "Remove your reaction.",
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "reaction_remove"
+    },
+    "client_temp_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/ClientTempId"
+    },
+    "chat_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "message_id": {
+          "$ref": "../../openapi.yaml#/components/schemas/Id"
+        },
+        "emoji": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        }
+      },
+      "required": [
+        "message_id",
+        "emoji"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "type",
+    "client_temp_id",
+    "chat_id",
+    "data"
+  ],
+  "additionalProperties": false
+}

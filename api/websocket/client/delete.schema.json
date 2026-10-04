@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ClientDeleteEvent",
+  "description": "Delete a message for yourself or for everyone.",
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "delete"
+    },
+    "client_temp_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/ClientTempId"
+    },
+    "chat_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "message_id": {
+          "$ref": "../../openapi.yaml#/components/schemas/Id"
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "me",
+            "everyone"
+          ]
+        }
+      },
+      "required": [
+        "message_id",
+        "scope"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "type",
+    "client_temp_id",
+    "chat_id",
+    "data"
+  ],
+  "additionalProperties": false
+}

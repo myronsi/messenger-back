@@ -1,0 +1,32 @@
+{
+  "type": "edit",
+  "event_id": "7217400317439950009",
+  "chat_id": "42",
+  "data": {
+    "message": {
+      "id": "7217400317439950001",
+      "chat_id": "42",
+      "type": "text",
+      "sender": {
+        "id": "1001",
+        "username": "alice",
+        "display_name": "Alice",
+        "avatar_url": "/api/v2/users/1001/avatar",
+        "bio": null,
+        "is_online": true,
+        "last_seen": null,
+        "is_deleted": false
+      },
+      "content": "Hello, world!",
+      "attachment": null,
+      "reply_to": null,
+      "forwarded_from": null,
+      "reactions": [],
+      "read_by": [],
+      "created_at": "2026-10-04T12:00:00Z",
+      "edited_at": "2026-10-04T12:00:00Z",
+      "is_deleted": false,
+      "client_temp_id": "c-1"
+    }
+  }
+}

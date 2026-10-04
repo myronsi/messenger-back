@@ -9,7 +9,7 @@ Both repositories (`messenger-back`, `messenger-front`) follow [Semantic Version
 | App version | git tags `vX.Y.Z`, GitHub Releases, `server/version.py`, shown in the app | SemVer; both repos share `MAJOR.MINOR` for each release | backend `0.5.0` + frontend `0.5.2` |
 | API contract version | `info.version` in `api/openapi.yaml` = npm package `@myronsi/messenger-api` | MAJOR = breaking change (new base path `/api/vN`), MINOR = backwards-compatible addition, PATCH = docs and fixes | `2.3.0` |
 
-Compatibility is decided by the API contract version, not by app versions. The frontend requires the contract version it was built with (same MAJOR, at least that MINOR). The backend implements the newest contract and supports clients down to `min_client_api_version`.
+Compatibility is decided by the API contract version, not by app versions. The frontend requires the contract version it was built with (same MAJOR, at least that MINOR). The backend implements the newest contract and supports clients down to `min_client_api_version`. What counts as a breaking change, and how CI enforces it, is in `docs/api-compatibility.md`; the contract package is described in `api/README.md`.
 
 The version of the Python backend lives in `server/version.py` (`__version__`). It is updated automatically by release-please; do not edit it by hand. `API_VERSION` in the same file is the contract version this backend implements (`1.0.0` for the Python API); change it only together with an API change.
 

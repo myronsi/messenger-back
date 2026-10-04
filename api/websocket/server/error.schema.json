@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ServerErrorEvent",
+  "description": "The server rejected the client event with this `client_temp_id`, or a connection-level error occurred.",
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "error"
+    },
+    "event_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "chat_id": {
+      "oneOf": [
+        {
+          "$ref": "../../openapi.yaml#/components/schemas/Id"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "$ref": "../../openapi.yaml#/components/schemas/ErrorCode"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code"
+      ],
+      "additionalProperties": false
+    },
+    "client_temp_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/ClientTempId"
+    }
+  },
+  "required": [
+    "type",
+    "event_id",
+    "chat_id",
+    "data"
+  ],
+  "additionalProperties": false
+}

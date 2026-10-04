@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ServerPresenceEvent",
+  "description": "A user came online or went offline, as far as their privacy settings allow.",
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "presence"
+    },
+    "event_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "chat_id": {
+      "oneOf": [
+        {
+          "$ref": "../../openapi.yaml#/components/schemas/Id"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "$ref": "../../openapi.yaml#/components/schemas/Id"
+        },
+        "is_online": {
+          "type": "boolean"
+        },
+        "last_seen": {
+          "oneOf": [
+            {
+              "$ref": "../../openapi.yaml#/components/schemas/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "user_id",
+        "is_online",
+        "last_seen"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "type",
+    "event_id",
+    "chat_id",
+    "data"
+  ],
+  "additionalProperties": false
+}
