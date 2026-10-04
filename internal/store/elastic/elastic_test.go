@@ -38,7 +38,9 @@ func TestPing(t *testing.T) {
 }
 
 func TestNewRejectsInvalidURL(t *testing.T) {
-	if _, err := New("not a url"); err == nil {
-		t.Fatal("expected an error")
+	for _, u := range []string{"not a url", "ftp://host:9200", "http://host?tenant=x", "http://host#frag"} {
+		if _, err := New(u); err == nil {
+			t.Errorf("New(%q) must fail", u)
+		}
 	}
 }

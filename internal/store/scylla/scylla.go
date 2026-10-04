@@ -45,6 +45,10 @@ func (s *Store) Session(ctx context.Context) (*gocql.Session, error) {
 		s.mu.Unlock()
 		return session, nil
 	}
+	if s.closed {
+		s.mu.Unlock()
+		return nil, fmt.Errorf("connect to scylla: store closed")
+	}
 	if s.connecting == nil {
 		s.connecting = &attempt{done: make(chan struct{})}
 		go s.connect(s.connecting)

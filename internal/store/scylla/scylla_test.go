@@ -21,3 +21,16 @@ func TestPingHonoursContextDeadline(t *testing.T) {
 		t.Fatalf("Ping took %s, longer than the context deadline", d)
 	}
 }
+
+func TestSessionAfterCloseFailsImmediately(t *testing.T) {
+	s := New([]string{"192.0.2.1"}, "")
+	_ = s.Close()
+
+	start := time.Now()
+	if _, err := s.Session(context.Background()); err == nil {
+		t.Fatal("expected store closed")
+	}
+	if d := time.Since(start); d > 100*time.Millisecond {
+		t.Fatalf("Session after Close took %s", d)
+	}
+}

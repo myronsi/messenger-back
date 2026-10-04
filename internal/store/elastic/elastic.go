@@ -20,8 +20,8 @@ type Store struct {
 // New validates the base URL (credentials may be given as user:password@host) without connecting.
 func New(baseURL string) (*Store, error) {
 	u, err := url.Parse(baseURL)
-	if err != nil || u.Host == "" {
-		return nil, fmt.Errorf("parse elasticsearch url: invalid format")
+	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.RawQuery != "" || u.Fragment != "" {
+		return nil, fmt.Errorf("parse elasticsearch url: want http(s)://host[:port][/path] without query or fragment")
 	}
 	return &Store{
 		baseURL: strings.TrimRight(baseURL, "/"),
