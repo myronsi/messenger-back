@@ -1,11 +1,13 @@
 SHELL := /bin/sh
 .DEFAULT_GOAL := help
 
-# Local settings: `make run` reads .env when it exists (copy .env.example). Values already
-# in the environment win over the file.
+# Local settings: `make run` reads .env when it exists (copy .env.example). Variables that are already
+# set in the environment or on the command line win over the file, so `DATABASE_URL=... make migrate`
+# is never overridden. Lines must be plain KEY=value.
 ifneq (,$(wildcard .env))
-include .env
-export
+dotenv_value = $(subst $$,$$$$,$(shell sed -n -e 's/\r$$//' -e 's/^$(1)=//p' .env | tail -n 1))
+$(foreach v,$(shell sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' .env),\
+  $(if $(filter undefined,$(origin $(v))),$(eval $(v) := $(call dotenv_value,$(v)))$(eval export $(v))))
 endif
 
 # Pinned tool versions; `go run module@version` needs no global install.

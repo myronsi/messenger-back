@@ -283,6 +283,26 @@ func TestRequestTimeoutAppliesToContext(t *testing.T) {
 	}
 }
 
+func TestUpgradeHeaderDoesNotSkipRequestTimeout(t *testing.T) {
+	var deadline time.Time
+	var ok bool
+	e := newTestEnv(t, func(o *Options) { o.API = deadlineAPI{deadline: &deadline, ok: &ok} })
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/meta", http.NoBody)
+	req.Header.Set("Upgrade", "websocket")
+	e.do(req)
+	if !ok {
+		t.Fatal("a client-supplied Upgrade header removed the request deadline")
+	}
+}
+
+func TestFlushRecordsImplicitOK(t *testing.T) {
+	rec := &statusRecorder{ResponseWriter: httptest.NewRecorder()}
+	rec.Flush()
+	if rec.status != http.StatusOK || !rec.wrote {
+		t.Fatalf("status=%d wrote=%v after Flush", rec.status, rec.wrote)
+	}
+}
+
 type deadlineAPI struct {
 	Unimplemented
 	deadline *time.Time

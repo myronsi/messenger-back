@@ -92,7 +92,10 @@ func (p *Process) Serve(srv *http.Server) error {
 		close(serveErr)
 	}()
 	select {
-	case err := <-serveErr:
+	case err, ok := <-serveErr:
+		if !ok {
+			return nil
+		}
 		return fmt.Errorf("listen: %w", err)
 	case <-p.Ctx.Done():
 		p.stop()

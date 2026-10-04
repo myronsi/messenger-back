@@ -3,6 +3,8 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"sync"
@@ -63,7 +65,7 @@ func (h *health) readyz(w http.ResponseWriter, r *http.Request) {
 				ready = false
 				results[c.Name] = "unavailable"
 				h.metrics.StoreError(c.Name)
-				h.log.WarnContext(r.Context(), "readiness check failed", "store", c.Name, "error", err.Error())
+				h.log.WarnContext(r.Context(), "readiness check failed", "store", c.Name, "reason", failureReason(err))
 				return
 			}
 			results[c.Name] = "ok"
@@ -82,4 +84,17 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+// failureReason classifies a dependency error without its text, which may contain connection
+// strings or credentials.
+func failureReason(err error) string {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return "timeout"
+	case errors.Is(err, context.Canceled):
+		return "canceled"
+	default:
+		return fmt.Sprintf("%T", err)
+	}
 }

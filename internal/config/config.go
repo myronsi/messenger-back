@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"reflect"
 	"strings"
 	"time"
 
@@ -117,16 +118,37 @@ func redactParseError(err error) error {
 	for _, e := range agg.Errors {
 		var missing env.VarIsNotSetError
 		var empty env.EmptyVarError
+		var parse env.ParseError
 		switch {
 		case errors.As(e, &missing):
 			msgs = append(msgs, missing.Key+" is required")
 		case errors.As(e, &empty):
 			msgs = append(msgs, empty.Key+" must not be empty")
+		case errors.As(e, &parse):
+			msgs = append(msgs, envName(reflect.TypeOf(Config{}), parse.Name)+" has an invalid value")
 		default:
 			msgs = append(msgs, "a variable has an invalid value")
 		}
 	}
 	return fmt.Errorf("invalid configuration: %s", strings.Join(msgs, "; "))
+}
+
+// envName finds the environment variable of the (possibly nested) struct field called field.
+func envName(t reflect.Type, field string) string {
+	for i := range t.NumField() {
+		f := t.Field(i)
+		if f.Name == field {
+			if name, _, _ := strings.Cut(f.Tag.Get("env"), ","); name != "" {
+				return name
+			}
+		}
+		if f.Type.Kind() == reflect.Struct {
+			if name := envName(f.Type, field); name != "a variable" {
+				return name
+			}
+		}
+	}
+	return "a variable"
 }
 
 // Validate checks the values that the parser cannot: secret strength, URLs, ranges.

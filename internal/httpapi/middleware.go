@@ -96,6 +96,11 @@ func (s *statusRecorder) Write(b []byte) (int, error) {
 func (s *statusRecorder) Unwrap() http.ResponseWriter { return s.ResponseWriter }
 
 func (s *statusRecorder) Flush() {
+	// Flushing sends the headers, with an implicit 200 when the handler wrote none.
+	if !s.wrote {
+		s.status = http.StatusOK
+		s.wrote = true
+	}
 	_ = http.NewResponseController(s.ResponseWriter).Flush()
 }
 
@@ -276,16 +281,12 @@ func bodyLimit(limit int64) middleware {
 	}
 }
 
-// timeout puts a deadline on the request context. It is a context deadline, not
-// http.TimeoutHandler, so streaming and WebSocket upgrades keep working; upgrade requests get no
-// deadline because the connection outlives the handler.
+// timeout puts a deadline on the request context of every request. It is a context deadline, not
+// http.TimeoutHandler, so streaming keeps working. A WebSocket handler that has completed the
+// upgrade must detach the connection from this deadline itself (context.WithoutCancel).
 func timeout(d time.Duration) middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
-				next.ServeHTTP(w, r)
-				return
-			}
 			ctx, cancel := context.WithTimeout(r.Context(), d)
 			defer cancel()
 			next.ServeHTTP(w, r.WithContext(ctx))

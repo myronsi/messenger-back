@@ -135,3 +135,18 @@ func TestElasticsearchCredentialsAreRedacted(t *testing.T) {
 		t.Fatalf("formatted config leaks the Elasticsearch password: %s", out)
 	}
 }
+
+func TestParseErrorNamesTheVariable(t *testing.T) {
+	e := validEnv()
+	e["HTTP_READ_TIMEOUT"] = "not-a-duration-secret"
+	_, err := LoadFrom(e)
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if !strings.Contains(err.Error(), "HTTP_READ_TIMEOUT") {
+		t.Fatalf("error does not name the variable: %v", err)
+	}
+	if strings.Contains(err.Error(), "not-a-duration-secret") {
+		t.Fatalf("error leaks the value: %v", err)
+	}
+}
