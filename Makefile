@@ -19,7 +19,7 @@ MIGRATE := go run -tags 'postgres,cassandra' github.com/golang-migrate/migrate/v
 IMAGE ?= messenger-api:local
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 
-.PHONY: help run run-worker build test lint vet vuln fmt generate tidy migrate migrate-postgres migrate-scylla docker env up down dev-logs
+.PHONY: help run run-worker build test lint vet vuln fmt generate tidy migrate migrate-postgres migrate-postgres-down migrate-scylla docker env up down dev-logs
 
 help: ## List the targets
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
@@ -48,7 +48,7 @@ vuln: ## Check dependencies and the standard library for known vulnerabilities
 fmt: ## Format the code
 	gofmt -w cmd internal
 
-generate: ## Regenerate the server from api/openapi.yaml
+generate: ## Regenerate the server (api/openapi.yaml) and the PostgreSQL queries (sqlc)
 	go generate ./...
 
 tidy: ## Tidy go.mod and go.sum
@@ -58,6 +58,9 @@ migrate: migrate-postgres migrate-scylla ## Apply all database migrations (needs
 
 migrate-postgres: ## Apply the PostgreSQL migrations in migrations/postgres
 	$(MIGRATE) -path migrations/postgres -database "$${DATABASE_URL:?DATABASE_URL is required}" up
+
+migrate-postgres-down: ## Roll back every PostgreSQL migration (development only: drops all data)
+	$(MIGRATE) -path migrations/postgres -database "$${DATABASE_URL:?DATABASE_URL is required}" down -all
 
 migrate-scylla: ## Apply the ScyllaDB migrations in migrations/scylla
 	$(MIGRATE) -path migrations/scylla -database "cassandra://$$(printf %s "$${SCYLLA_HOSTS:?SCYLLA_HOSTS is required}" | cut -d, -f1 | tr -d ' ')/$${SCYLLA_KEYSPACE:?SCYLLA_KEYSPACE is required}" up

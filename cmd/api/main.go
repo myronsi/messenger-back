@@ -28,7 +28,10 @@ func run() error {
 	defer p.Close()
 	cfg, log := p.Cfg, p.Log
 
-	pg, err := postgres.New(p.Ctx, cfg.DatabaseURL.Reveal())
+	pg, err := postgres.New(p.Ctx, cfg.DatabaseURL.Reveal(), postgres.Options{
+		MaxConns:     cfg.Postgres.MaxConns,
+		QueryTimeout: cfg.Postgres.QueryTimeout,
+	})
 	if err != nil {
 		return err
 	}

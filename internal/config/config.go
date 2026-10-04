@@ -49,7 +49,8 @@ type Config struct {
 
 	HTTP HTTP
 
-	DatabaseURL Secret   `env:"DATABASE_URL,required,notEmpty"`
+	DatabaseURL Secret `env:"DATABASE_URL,required,notEmpty"`
+	Postgres    Postgres
 	RedisURL    Secret   `env:"REDIS_URL,required,notEmpty"`
 	ScyllaHosts []string `env:"SCYLLA_HOSTS,required,notEmpty" envSeparator:","`
 	// ScyllaKeyspace is optional so the readiness check works before the keyspace is migrated.
@@ -60,6 +61,14 @@ type Config struct {
 
 	// WorkerAddr is where the worker serves /healthz and /metrics.
 	WorkerAddr string `env:"WORKER_ADDR" envDefault:":8081"`
+}
+
+// Postgres tunes the connection pool; the connection URL is DATABASE_URL.
+type Postgres struct {
+	// MaxConns is the size of the pool: one pool per process.
+	MaxConns int32 `env:"POSTGRES_MAX_CONNS" envDefault:"10"`
+	// QueryTimeout bounds every repository call (a whole transaction counts as one call).
+	QueryTimeout time.Duration `env:"POSTGRES_QUERY_TIMEOUT" envDefault:"5s"`
 }
 
 // HTTP configures the API server.
@@ -202,6 +211,12 @@ func (c Config) Validate() error {
 				break
 			}
 		}
+	}
+	if c.Postgres.MaxConns <= 0 {
+		add("POSTGRES_MAX_CONNS must be positive")
+	}
+	if c.Postgres.QueryTimeout <= 0 {
+		add("POSTGRES_QUERY_TIMEOUT must be positive")
 	}
 	problems = append(problems, c.HTTP.validate()...)
 

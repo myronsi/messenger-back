@@ -8,6 +8,7 @@
 !docs/api-compatibility.md
 !docs/go-backend.md
 !docs/dev-environment.md
+!docs/postgres-schema.md
 !docs/deployment.md
 !CHANGELOG.md
 !server/
@@ -82,6 +83,7 @@
 !go.mod
 !go.sum
 !Makefile
+!sqlc.yaml
 !.golangci.yml
 !go.Dockerfile
 !go.Dockerfile.dockerignore

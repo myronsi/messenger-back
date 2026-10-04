@@ -1,0 +1,28 @@
+-- name: CreateUser :one
+INSERT INTO users (username, display_name, password_hash)
+VALUES (@username, @display_name, @password_hash)
+RETURNING *;
+
+-- name: GetUser :one
+SELECT * FROM users WHERE id = @id;
+
+-- name: LockUser :one
+SELECT * FROM users WHERE id = @id FOR UPDATE;
+
+-- name: GetUserByUsername :one
+SELECT * FROM users WHERE LOWER(username) = LOWER(@username);
+
+-- name: UpdateUserProfile :one
+UPDATE users
+SET display_name = @display_name, bio = @bio, avatar_url = @avatar_url
+WHERE id = @id
+RETURNING *;
+
+-- name: SetPasswordHash :execrows
+UPDATE users SET password_hash = @password_hash WHERE id = @id;
+
+-- name: TouchLastSeen :execrows
+UPDATE users SET last_seen_at = now() WHERE id = @id;
+
+-- name: DeleteUser :execrows
+DELETE FROM users WHERE id = @id;
