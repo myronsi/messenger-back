@@ -69,3 +69,30 @@ jobs:
           build-args: COMMIT=${{ github.sha }}
           cache-from: type=gha,scope=go
           cache-to: type=gha,scope=go,mode=max
+
+  # The development stack from compose.dev.yaml starts and every store answers /readyz.
+  dev-stack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - name: Create .env with generated secrets
+        run: go run deploy/dev/genenv.go
+      - name: Start the stack
+        run: docker compose -f compose.dev.yaml up --build --detach --wait
+      - name: The API reports every store ready
+        run: |
+          # The distroless images have no Compose healthcheck, so --wait does not cover the listeners.
+          curl --fail --silent --show-error --retry 15 --retry-delay 2 --retry-all-errors --retry-connrefused http://127.0.0.1:8080/readyz
+          curl --fail --silent --show-error --retry 15 --retry-delay 2 --retry-all-errors --retry-connrefused http://127.0.0.1:8081/healthz
+      - name: Start again (the init steps are idempotent)
+        run: docker compose -f compose.dev.yaml up --detach --wait
+      - name: Logs
+        if: failure()
+        run: docker compose -f compose.dev.yaml logs --no-color --tail 200
+      - name: Stop
+        if: always()
+        run: docker compose -f compose.dev.yaml down --volumes
