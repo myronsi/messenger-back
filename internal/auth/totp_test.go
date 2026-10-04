@@ -2,6 +2,7 @@ package auth
 
 import (
 	"crypto/sha256"
+	"encoding/base32"
 	"encoding/hex"
 	"strings"
 	"testing"
@@ -46,7 +47,7 @@ func TestTOTP(t *testing.T) {
 
 func TestTOTPKnownVector(t *testing.T) {
 	// RFC 6238 appendix B, SHA-1, T=59 -> 94287082 (8 digits); the 6-digit code is its last six digits.
-	secret := "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ" // base32("12345678901234567890")
+	secret := base32.StdEncoding.EncodeToString([]byte("12345678901234567890"))
 	if _, ok := VerifyTOTP(secret, "287082", time.Unix(59, 0)); !ok {
 		t.Fatal("RFC 6238 test vector rejected")
 	}
