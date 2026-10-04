@@ -55,4 +55,4 @@ As soon as the repository has a `go.mod`, CI runs `go generate ./... && git diff
 
 ## Publishing
 
-See `docs/releasing.md`: `next` on every merge to `master` that changes `api/`, the stable version after a backend release when `info.version` is not on npm yet. Both use `npm publish` with Trusted Publishing, which also attaches provenance.
+See `docs/releasing.md`: `next` on every merge to `master` that changes `api/`, the stable version after a backend release when `info.version` is not on npm yet. Both use `npm publish` with Trusted Publishing (trusted publisher: `myronsi/messenger-back`, workflow `release.yml`), which also attaches provenance.

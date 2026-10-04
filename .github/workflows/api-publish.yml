@@ -80,6 +80,8 @@ jobs:
         env:
           VERSION: ${{ steps.plan.outputs.version }}
           TAG: ${{ steps.plan.outputs.tag }}
+          # verbose shows why a Trusted Publishing token exchange is rejected, npm hides it otherwise
+          NPM_CONFIG_LOGLEVEL: verbose
         run: |
           set -euo pipefail
           # Only the package version of the next channel differs from info.version; dist/ already carries API_VERSION.
