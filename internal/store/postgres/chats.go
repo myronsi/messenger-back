@@ -165,6 +165,10 @@ func lockGroup(ctx context.Context, q *sqlcdb.Queries, chatID int64) error {
 
 func (r chatRepo) AddMember(ctx context.Context, chatID, userID int64) error {
 	return r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
+		// User before chat, like DeleteAccount: the insert would otherwise take the user lock while holding the chat.
+		if _, err := q.LockUserShared(ctx, userID); err != nil {
+			return err
+		}
 		if err := lockGroup(ctx, q, chatID); err != nil {
 			return err
 		}

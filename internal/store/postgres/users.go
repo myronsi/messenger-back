@@ -98,7 +98,7 @@ func (r userRepo) DeleteAccount(ctx context.Context, id int64) (DeletedAccount, 
 		if _, err := q.LockUser(ctx, id); err != nil {
 			return err
 		}
-		// Lock every chat that references the user (member or creator) in id order before reading roles: a concurrent ownership
+		// Lock every chat that references the user (member, creator or uploader) in id order before reading roles: a concurrent ownership
 		// transfer holds the same lock, so the roles read below cannot change underneath us.
 		if _, err := q.LockChatsOfUser(ctx, id); err != nil {
 			return err

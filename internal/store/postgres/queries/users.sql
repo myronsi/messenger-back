@@ -9,6 +9,11 @@ SELECT * FROM users WHERE id = @id;
 -- name: LockUser :one
 SELECT * FROM users WHERE id = @id FOR UPDATE;
 
+-- name: LockUserShared :one
+-- Takes the lock a foreign key check would take, but up front, so operations that reference a user lock
+-- the user before any chat, the same order DeleteAccount uses.
+SELECT id FROM users WHERE id = @id FOR KEY SHARE;
+
 -- name: GetUserByUsername :one
 SELECT * FROM users WHERE LOWER(username) = LOWER(@username);
 

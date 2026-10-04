@@ -333,12 +333,14 @@ SELECT c.id
 FROM chats c
 WHERE c.created_by = $1::bigint
    OR EXISTS (SELECT 1 FROM participants p WHERE p.chat_id = c.id AND p.user_id = $1::bigint)
+   OR EXISTS (SELECT 1 FROM attachments a WHERE a.chat_id = c.id AND a.uploader_id = $1::bigint)
 ORDER BY c.id
 FOR UPDATE OF c
 `
 
-// Memberships plus chats the user created: deleting the user also rewrites chats.created_by (SET NULL),
-// so those rows must be locked in the same id order or two deletions can deadlock.
+// Chats that reference the user as member, creator or uploader: deleting the user also rewrites
+// chats.created_by and attachments.uploader_id (SET NULL), so those chats must be locked in one id order
+// or two deletions can deadlock.
 func (q *Queries) LockChatsOfUser(ctx context.Context, userID int64) ([]int64, error) {
 	rows, err := q.db.Query(ctx, lockChatsOfUser, userID)
 	if err != nil {

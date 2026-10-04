@@ -57,12 +57,14 @@ SET last_read_message_id = GREATEST(COALESCE(last_read_message_id, 0), @message_
 WHERE chat_id = @chat_id AND user_id = @user_id;
 
 -- name: LockChatsOfUser :many
--- Memberships plus chats the user created: deleting the user also rewrites chats.created_by (SET NULL),
--- so those rows must be locked in the same id order or two deletions can deadlock.
+-- Chats that reference the user as member, creator or uploader: deleting the user also rewrites
+-- chats.created_by and attachments.uploader_id (SET NULL), so those chats must be locked in one id order
+-- or two deletions can deadlock.
 SELECT c.id
 FROM chats c
 WHERE c.created_by = sqlc.arg(user_id)::bigint
    OR EXISTS (SELECT 1 FROM participants p WHERE p.chat_id = c.id AND p.user_id = sqlc.arg(user_id)::bigint)
+   OR EXISTS (SELECT 1 FROM attachments a WHERE a.chat_id = c.id AND a.uploader_id = sqlc.arg(user_id)::bigint)
 ORDER BY c.id
 FOR UPDATE OF c;
 

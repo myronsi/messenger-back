@@ -517,6 +517,87 @@ func TestConcurrentDeletionOfCreators(t *testing.T) {
 	}
 }
 
+// A former creator rejoins the group while their account is deleted: AddMember must not take the chat lock
+// before the user lock DeleteAccount already holds.
+func TestAddMemberRacesAccountDeletion(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	chats := s.Chats()
+	heir, third := mustUser(t, s, "heir"), mustUser(t, s, "third")
+
+	for i := range 10 {
+		c := mustUser(t, s, fmt.Sprintf("creator%d", i))
+		g, err := chats.CreateGroup(ctx, NewGroup{OwnerID: c.ID, Name: "Rejoin", MemberIDs: []int64{heir.ID, third.ID}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := chats.TransferOwnership(ctx, g.ID, c.ID, heir.ID); err != nil {
+			t.Fatal(err)
+		}
+		if err := chats.RemoveMember(ctx, g.ID, c.ID); err != nil {
+			t.Fatal(err)
+		}
+
+		var addErr, delErr error
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			addErr = chats.AddMember(ctx, g.ID, c.ID)
+		}()
+		go func() {
+			defer wg.Done()
+			_, delErr = s.Users().DeleteAccount(ctx, c.ID)
+		}()
+		wg.Wait()
+		if delErr != nil {
+			t.Fatalf("round %d: delete account: %v", i, delErr)
+		}
+		if addErr != nil && !errors.Is(addErr, ErrNotFound) {
+			t.Fatalf("round %d: add member: %v", i, addErr)
+		}
+	}
+}
+
+// Each user owns a one-member group that holds a file uploaded by the other user. Deleting both accounts at
+// once makes each deletion rewrite uploader_id in the group the other deletion is removing.
+func TestConcurrentDeletionOfCrossUploaders(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	for i := range 10 {
+		a, b := mustUser(t, s, fmt.Sprintf("alice%d", i)), mustUser(t, s, fmt.Sprintf("bob%d", i))
+		for j, pair := range [][2]User{{a, b}, {b, a}} {
+			owner, uploader := pair[0], pair[1]
+			g, err := s.Chats().CreateGroup(ctx, NewGroup{OwnerID: owner.ID, Name: "Solo"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.Attachments().Create(ctx, NewAttachment{
+				UploaderID: &uploader.ID, ChatID: g.ID, StorageKey: fmt.Sprintf("k/%d/%d", i, j), MimeType: "image/png", Size: 1,
+			}); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		errs := make([]error, 2)
+		var wg sync.WaitGroup
+		for j, u := range []User{a, b} {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				_, errs[j] = s.Users().DeleteAccount(ctx, u.ID)
+			}()
+		}
+		wg.Wait()
+		for j, err := range errs {
+			if err != nil {
+				t.Fatalf("round %d, deletion %d: %v", i, j, err)
+			}
+		}
+	}
+}
+
 func TestDeleteChatReturnsAttachmentKeys(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()

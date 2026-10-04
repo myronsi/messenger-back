@@ -113,6 +113,19 @@ func (q *Queries) LockUser(ctx context.Context, id int64) (User, error) {
 	return i, err
 }
 
+const lockUserShared = `-- name: LockUserShared :one
+SELECT id FROM users WHERE id = $1 FOR KEY SHARE
+`
+
+// Takes the lock a foreign key check would take, but up front, so operations that reference a user lock
+// the user before any chat, the same order DeleteAccount uses.
+func (q *Queries) LockUserShared(ctx context.Context, id int64) (int64, error) {
+	row := q.db.QueryRow(ctx, lockUserShared, id)
+	var id_2 int64
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
 const setPasswordHash = `-- name: SetPasswordHash :execrows
 UPDATE users SET password_hash = $1 WHERE id = $2
 `

@@ -29,16 +29,25 @@ func attachmentFrom(a sqlcdb.Attachment) Attachment {
 }
 
 func (r attachmentRepo) Create(ctx context.Context, a NewAttachment) (Attachment, error) {
-	ctx, cancel := r.s.call(ctx)
-	defer cancel()
-	row, err := r.s.q.CreateAttachment(ctx, sqlcdb.CreateAttachmentParams{
-		UploaderID: a.UploaderID, ChatID: a.ChatID, StorageKey: a.StorageKey, MimeType: a.MimeType,
-		Size: a.Size, Width: a.Width, Height: a.Height, Duration: a.Duration, Waveform: a.Waveform,
+	var out Attachment
+	err := r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
+		// User before chat, like DeleteAccount: the insert would otherwise take the user lock while holding the chat.
+		if a.UploaderID != nil {
+			if _, err := q.LockUserShared(ctx, *a.UploaderID); err != nil {
+				return err
+			}
+		}
+		row, err := q.CreateAttachment(ctx, sqlcdb.CreateAttachmentParams{
+			UploaderID: a.UploaderID, ChatID: a.ChatID, StorageKey: a.StorageKey, MimeType: a.MimeType,
+			Size: a.Size, Width: a.Width, Height: a.Height, Duration: a.Duration, Waveform: a.Waveform,
+		})
+		out = attachmentFrom(row)
+		return err
 	})
 	if err != nil {
-		return Attachment{}, mapError(err)
+		return Attachment{}, err
 	}
-	return attachmentFrom(row), nil
+	return out, nil
 }
 
 func (r attachmentRepo) Get(ctx context.Context, id uuid.UUID) (Attachment, error) {
