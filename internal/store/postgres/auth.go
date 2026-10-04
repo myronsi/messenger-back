@@ -146,6 +146,44 @@ func (r sessionRepo) Revoke(ctx context.Context, userID int64, id uuid.UUID) err
 	return nil
 }
 
+// purgeBatch bounds one DELETE so a large backlog does not hold locks for long.
+const purgeBatch = 1000
+
+func (r sessionRepo) PurgeEnded(ctx context.Context, retention time.Duration) (sessions, rotatedTokens int64, err error) {
+	cutoff := time.Now().Add(-retention)
+	for {
+		n, err := r.purgeOnce(ctx, func(ctx context.Context) (int64, error) {
+			return r.s.q.DeleteEndedSessions(ctx, sqlcdb.DeleteEndedSessionsParams{Cutoff: cutoff, Batch: purgeBatch})
+		})
+		sessions += n
+		if err != nil {
+			return sessions, rotatedTokens, err
+		}
+		if n < purgeBatch {
+			break
+		}
+	}
+	for {
+		n, err := r.purgeOnce(ctx, func(ctx context.Context) (int64, error) {
+			return r.s.q.DeleteOldRotatedTokens(ctx, sqlcdb.DeleteOldRotatedTokensParams{Cutoff: cutoff, Batch: purgeBatch})
+		})
+		rotatedTokens += n
+		if err != nil {
+			return sessions, rotatedTokens, err
+		}
+		if n < purgeBatch {
+			return sessions, rotatedTokens, nil
+		}
+	}
+}
+
+func (r sessionRepo) purgeOnce(ctx context.Context, del func(context.Context) (int64, error)) (int64, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	n, err := del(ctx)
+	return n, mapError(err)
+}
+
 func (r sessionRepo) RevokeByID(ctx context.Context, id uuid.UUID) (bool, error) {
 	ctx, cancel := r.s.call(ctx)
 	defer cancel()

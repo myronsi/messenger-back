@@ -25,6 +25,8 @@ Every refresh rotates the token. Every replaced hash is kept in `user_session_ro
 - presenting it again within `REFRESH_REUSE_GRACE` (10 s) of its replacement is treated as a lost response or parallel tab: the request fails with `401` but the session survives and the response does **not** clear the refresh cookie, so the cookie set by the winning request stays;
 - otherwise it is treated as theft: **the session is revoked** and the event is recorded.
 
+The worker (`cmd/worker`) runs a maintenance job every hour: it deletes sessions that expired or were revoked more than 30 days ago (the rotation history goes with them), prunes rotation history rows older than 30 days (an older replayed token is then just unknown, not recognised as reuse), and removes stale recovery tokens.
+
 ### Migration from the Python backend (MSGC-77)
 
 Refresh hashes and sessions are kept as they are, so existing sessions continue. v1 cookies have `Path=/auth` (or `<COOKIE_PATH_PREFIX>/auth`); set `REFRESH_COOKIE_PATH` to that value during the migration window so browsers still send them.

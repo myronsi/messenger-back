@@ -92,6 +92,10 @@ type SessionRepository interface {
 	RevokeAll(ctx context.Context, userID int64) ([]uuid.UUID, error)
 	// Touch records activity. Callers throttle it.
 	Touch(ctx context.Context, id uuid.UUID) error
+	// PurgeEnded deletes sessions that expired or were revoked more than retention ago (their rotated
+	// refresh hashes go with them) and the rotation history older than retention, in bounded batches.
+	// It returns how many sessions and history rows were removed.
+	PurgeEnded(ctx context.Context, retention time.Duration) (sessions, rotatedTokens int64, err error)
 }
 
 // SecuritySettings are the per-account security options. The two-factor secrets are stored sealed

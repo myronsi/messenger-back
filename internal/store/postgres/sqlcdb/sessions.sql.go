@@ -50,6 +50,49 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (U
 	return i, err
 }
 
+const deleteEndedSessions = `-- name: DeleteEndedSessions :execrows
+DELETE FROM user_sessions WHERE id IN (
+    SELECT id FROM user_sessions
+    WHERE expires_at < $1::timestamptz OR revoked_at < $1::timestamptz
+    LIMIT $2::int
+)
+`
+
+type DeleteEndedSessionsParams struct {
+	Cutoff time.Time
+	Batch  int32
+}
+
+// Deleting a session cascades to its rotated refresh hashes.
+func (q *Queries) DeleteEndedSessions(ctx context.Context, arg DeleteEndedSessionsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteEndedSessions, arg.Cutoff, arg.Batch)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteOldRotatedTokens = `-- name: DeleteOldRotatedTokens :execrows
+DELETE FROM user_session_rotated_tokens WHERE token_hash IN (
+    SELECT token_hash FROM user_session_rotated_tokens
+    WHERE rotated_at < $1::timestamptz
+    LIMIT $2::int
+)
+`
+
+type DeleteOldRotatedTokensParams struct {
+	Cutoff time.Time
+	Batch  int32
+}
+
+func (q *Queries) DeleteOldRotatedTokens(ctx context.Context, arg DeleteOldRotatedTokensParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteOldRotatedTokens, arg.Cutoff, arg.Batch)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getRotatedToken = `-- name: GetRotatedToken :one
 SELECT session_id, rotated_at FROM user_session_rotated_tokens WHERE token_hash = $1
 `

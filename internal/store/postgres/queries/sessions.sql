@@ -54,3 +54,17 @@ RETURNING id;
 
 -- name: RevokeAllSessions :many
 UPDATE user_sessions SET revoked_at = now() WHERE user_id = @user_id AND revoked_at IS NULL RETURNING id;
+-- name: DeleteEndedSessions :execrows
+-- Deleting a session cascades to its rotated refresh hashes.
+DELETE FROM user_sessions WHERE id IN (
+    SELECT id FROM user_sessions
+    WHERE expires_at < sqlc.arg(cutoff)::timestamptz OR revoked_at < sqlc.arg(cutoff)::timestamptz
+    LIMIT sqlc.arg(batch)::int
+);
+
+-- name: DeleteOldRotatedTokens :execrows
+DELETE FROM user_session_rotated_tokens WHERE token_hash IN (
+    SELECT token_hash FROM user_session_rotated_tokens
+    WHERE rotated_at < sqlc.arg(cutoff)::timestamptz
+    LIMIT sqlc.arg(batch)::int
+);

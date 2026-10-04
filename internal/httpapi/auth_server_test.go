@@ -493,8 +493,8 @@ func TestSessionsAndPasswordOverHTTP(t *testing.T) {
 	phone := session{access: phoneLogin.json()["access_token"].(string), refresh: phoneLogin.refreshCookie().Value}
 
 	list := e.do(t, request{method: http.MethodGet, path: "/me/sessions", token: laptop.access})
-	var sessions []map[string]any
-	if err := json.Unmarshal(list.Body.Bytes(), &sessions); err != nil || list.Code != http.StatusOK || len(sessions) != 2 {
+	sessions, err := decodeSessions(list.Body.Bytes())
+	if err != nil || list.Code != http.StatusOK || len(sessions) != 2 {
 		t.Fatalf("sessions: %d %s", list.Code, list.Body)
 	}
 	var other string
@@ -560,7 +560,7 @@ func TestSessionsAndPasswordOverHTTP(t *testing.T) {
 		t.Fatalf("revoke others: %d", rec.Code)
 	}
 	list = e.do(t, request{method: http.MethodGet, path: "/me/sessions", token: laptop.access})
-	if err := json.Unmarshal(list.Body.Bytes(), &sessions); err != nil || len(sessions) != 1 {
+	if sessions, err = decodeSessions(list.Body.Bytes()); err != nil || len(sessions) != 1 {
 		t.Fatalf("sessions after revoke: %s", list.Body)
 	}
 	patch := e.do(t, request{method: http.MethodPatch, path: "/me/security", token: laptop.access, body: map[string]any{"session_duration_days": 30}})
@@ -570,6 +570,15 @@ func TestSessionsAndPasswordOverHTTP(t *testing.T) {
 	if rec := e.do(t, request{method: http.MethodPatch, path: "/me/security", token: laptop.access, body: map[string]any{"session_duration_days": 31}}); rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("invalid duration: %d", rec.Code)
 	}
+}
+
+// decodeSessions reads the {"items": [...]} shape of the contract.
+func decodeSessions(body []byte) ([]map[string]any, error) {
+	var w struct {
+		Items []map[string]any `json:"items"`
+	}
+	err := json.Unmarshal(body, &w)
+	return w.Items, err
 }
 
 func TestTwoFactorOverHTTP(t *testing.T) {

@@ -415,7 +415,7 @@ func (a *AuthServer) ListSessions(w http.ResponseWriter, r *http.Request, _ List
 		})
 	}
 	noStore(w)
-	writeJSONStatus(w, http.StatusOK, out)
+	writeJSONStatus(w, http.StatusOK, ListSessions200JSONResponse{Items: out})
 }
 
 // RevokeSession implements DELETE /me/sessions/{session_id}.

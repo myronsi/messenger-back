@@ -406,3 +406,61 @@ func TestDeleteAccountWithSessionsAndTwoFactor(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestPurgeEndedSessionsAndHistory(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	u := mustUser(t, s, "alice")
+	live := newSession(t, s, u.ID, "live1")
+	if _, err := s.Sessions().Rotate(ctx, rotateReq("live1", "live2", 0)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Sessions().Rotate(ctx, rotateReq("live2", "live3", 0)); err != nil {
+		t.Fatal(err)
+	}
+	expired := newSession(t, s, u.ID, "expired1")
+	oldRevoked := newSession(t, s, u.ID, "oldrevoked1")
+	recentRevoked := newSession(t, s, u.ID, "recentrevoked1")
+	if _, err := s.Sessions().Rotate(ctx, rotateReq("expired1", "expired2", 0)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Sessions().RevokeByID(ctx, oldRevoked.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Sessions().RevokeByID(ctx, recentRevoked.ID); err != nil {
+		t.Fatal(err)
+	}
+	long := time.Now().Add(-60 * 24 * time.Hour)
+	for _, q := range []struct {
+		sql string
+		arg any
+		id  any
+	}{
+		{"UPDATE user_sessions SET expires_at = $1 WHERE id = $2", long, expired.ID},
+		{"UPDATE user_sessions SET revoked_at = $1 WHERE id = $2", long, oldRevoked.ID},
+		{"UPDATE user_session_rotated_tokens SET rotated_at = $1 WHERE token_hash = $2", long, "live1"},
+	} {
+		if _, err := s.Pool().Exec(ctx, q.sql, q.arg, q.id); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	sessions, rotated, err := s.Sessions().PurgeEnded(ctx, 30*24*time.Hour)
+	if err != nil || sessions != 2 || rotated != 1 {
+		t.Fatalf("purge: sessions=%d rotated=%d err=%v (want 2 sessions and the one old history row of the live session; rows of deleted sessions cascade)", sessions, rotated, err)
+	}
+	for _, gone := range []Session{expired, oldRevoked} {
+		if _, err := s.Sessions().Get(ctx, gone.ID); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("session %s must be deleted: %v", gone.ID, err)
+		}
+	}
+	for _, kept := range []Session{live, recentRevoked} {
+		if _, err := s.Sessions().Get(ctx, kept.ID); err != nil {
+			t.Fatalf("session %s must stay: %v", kept.ID, err)
+		}
+	}
+	// The recent history of the live session still detects reuse.
+	if res, err := s.Sessions().Rotate(ctx, rotateReq("live2", "x", 0)); err != nil || res.Outcome != RotateReuse {
+		t.Fatalf("recent history must survive the purge: %+v %v", res, err)
+	}
+}

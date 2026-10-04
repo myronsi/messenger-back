@@ -10,6 +10,10 @@ CREATE TABLE user_session_rotated_tokens (
 );
 
 CREATE INDEX user_session_rotated_tokens_session_idx ON user_session_rotated_tokens (session_id);
+-- The worker prunes old history rows by age.
+CREATE INDEX user_session_rotated_tokens_rotated_idx ON user_session_rotated_tokens (rotated_at);
+-- Ended sessions are deleted by age as well (expires_at is already indexed); this one serves revoked_at.
+CREATE INDEX user_sessions_revoked_idx ON user_sessions (revoked_at) WHERE revoked_at IS NOT NULL;
 
 -- Login challenges of the second factor live in Redis (five minutes, attempt counter), not here.
 DROP TABLE two_factor_challenges;
