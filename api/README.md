@@ -45,14 +45,13 @@ Change the contract first, in the same PR as the code that implements it. Bump `
 
 ## Go server
 
-The Go server code is generated from `openapi.yaml` with [oapi-codegen](https://github.com/oapi-codegen/oapi-codegen) (strict server) in the same PR as a contract change. The configuration is `oapi-codegen.yaml`; the generator was verified with oapi-codegen v2.8.0 (Go 1.25) against this document. Add this directive to the Go module and commit the generated file:
+The Go server code is generated from `openapi.yaml` with [oapi-codegen](https://github.com/oapi-codegen/oapi-codegen) (strict server) in the same PR as a contract change. The configuration is `oapi-codegen.yaml`, the output is `internal/httpapi/api.gen.go`, and the `go:generate` directive lives in `internal/httpapi/generate.go`:
 
-```go
-//go:generate go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.8.0 -config api/oapi-codegen.yaml api/openapi.yaml
+```sh
+make generate   # go generate ./...
 ```
 
-As soon as the repository has a `go.mod`, CI runs `go generate ./... && git diff --exit-code`.
-
+When an operation is added to the contract, the build fails until it is added to `internal/httpapi/unimplemented.go` (which answers 501) or to a real implementation. CI runs `go generate ./... && git diff --exit-code`, so a stale generated file fails the build.
 ## Publishing
 
 See `docs/releasing.md`: `next` on every merge to `master` that changes `api/`, the stable version after a backend release when `info.version` is not on npm yet. Both use `npm publish` with Trusted Publishing, which also attaches provenance.
