@@ -20,4 +20,4 @@ ENV APP_COMMIT=$COMMIT
 USER nonroot:nonroot
 EXPOSE 8080
 # The worker runs from the same image: set the command to /app/worker.
-ENTRYPOINT ["/app/api"]
+CMD ["/app/api"]

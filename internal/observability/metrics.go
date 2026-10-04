@@ -74,6 +74,7 @@ func (m *Metrics) Handler() http.Handler {
 
 // ObserveRequest records one finished HTTP request.
 func (m *Metrics) ObserveRequest(method, route string, status int, d time.Duration) {
+	method = methodLabel(method)
 	m.requests.WithLabelValues(method, route, statusLabel(status)).Inc()
 	m.duration.WithLabelValues(method, route).Observe(d.Seconds())
 }
@@ -108,4 +109,14 @@ func statusLabel(status int) string {
 		return "unknown"
 	}
 	return strconv.Itoa(status)
+}
+
+// methodLabel keeps the method label bounded: clients may send any HTTP token.
+func methodLabel(method string) string {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions:
+		return method
+	default:
+		return "OTHER"
+	}
 }

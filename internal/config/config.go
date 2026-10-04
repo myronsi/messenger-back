@@ -50,7 +50,7 @@ type Config struct {
 	ScyllaHosts []string `env:"SCYLLA_HOSTS,required,notEmpty" envSeparator:","`
 	// ScyllaKeyspace is optional so the readiness check works before the keyspace is migrated.
 	ScyllaKeyspace   string `env:"SCYLLA_KEYSPACE"`
-	ElasticsearchURL string `env:"ELASTICSEARCH_URL,required,notEmpty"`
+	ElasticsearchURL Secret `env:"ELASTICSEARCH_URL,required,notEmpty"`
 
 	Tracing Tracing
 
@@ -160,7 +160,7 @@ func (c Config) Validate() error {
 	if !validURL(c.RedisURL.Reveal(), "redis", "rediss") {
 		add("REDIS_URL must be a redis:// or rediss:// URL")
 	}
-	if !validURL(c.ElasticsearchURL, "http", "https") {
+	if !validURL(c.ElasticsearchURL.Reveal(), "http", "https") {
 		add("ELASTICSEARCH_URL must be an http:// or https:// URL")
 	}
 	for _, h := range c.ScyllaHosts {
@@ -172,7 +172,7 @@ func (c Config) Validate() error {
 
 	if c.Env == "production" {
 		for _, o := range c.HTTP.CORSOrigins {
-			if strings.HasPrefix(o, "http://") && !strings.HasPrefix(o, "http://localhost") {
+			if u, err := url.Parse(o); err == nil && u.Scheme == "http" && !strings.EqualFold(u.Hostname(), "localhost") {
 				add("CORS_ORIGINS must use https in production")
 				break
 			}
@@ -188,8 +188,8 @@ func (c Config) Validate() error {
 
 func (h HTTP) validate() []string {
 	var problems []string
-	if !strings.HasPrefix(h.BasePath, "/") || (len(h.BasePath) > 1 && strings.HasSuffix(h.BasePath, "/")) {
-		problems = append(problems, "API_BASE_PATH must start with / and not end with /")
+	if h.BasePath == "/" || !strings.HasPrefix(h.BasePath, "/") || strings.HasSuffix(h.BasePath, "/") {
+		problems = append(problems, "API_BASE_PATH must start with /, contain a path segment and not end with /")
 	}
 	for name, d := range map[string]time.Duration{
 		"HTTP_READ_HEADER_TIMEOUT": h.ReadHeaderTimeout,
@@ -212,7 +212,7 @@ func (h HTTP) validate() []string {
 	}
 	for _, o := range h.CORSOrigins {
 		u, err := url.Parse(o)
-		if o == "*" || err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || (u.Path != "" && u.Path != "/") {
+		if o == "*" || err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
 			problems = append(problems, "CORS_ORIGINS entries must be origins such as https://app.example.com (\"*\" is not accepted)")
 			break
 		}

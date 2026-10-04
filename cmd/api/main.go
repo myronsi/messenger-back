@@ -40,7 +40,7 @@ func run() error {
 	defer func() { _ = rd.Close() }()
 	sc := scylla.New(cfg.ScyllaHosts, cfg.ScyllaKeyspace)
 	defer func() { _ = sc.Close() }()
-	es, err := elastic.New(cfg.ElasticsearchURL)
+	es, err := elastic.New(cfg.ElasticsearchURL.Reveal())
 	if err != nil {
 		return err
 	}

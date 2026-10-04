@@ -64,6 +64,11 @@ func TestValidation(t *testing.T) {
 		"cors with path":      {"CORS_ORIGINS": "https://a.example/app"},
 		"zero timeout":        {"HTTP_REQUEST_TIMEOUT": "0s"},
 		"bad base path":       {"API_BASE_PATH": "api/"},
+		"root base path":      {"API_BASE_PATH": "/"},
+		"cors userinfo":       {"CORS_ORIGINS": "https://user@app.example.com"},
+		"cors query":          {"CORS_ORIGINS": "https://app.example.com?x=1"},
+		"cors fragment":       {"CORS_ORIGINS": "https://app.example.com#x"},
+		"cors localhost fake": {"APP_ENV": "production", "CORS_ORIGINS": "http://localhost.attacker.example"},
 		"cors http in prod":   {"APP_ENV": "production", "CORS_ORIGINS": "http://app.example.com"},
 	}
 	for name, override := range tests {
@@ -116,5 +121,17 @@ func TestSecretIsRedacted(t *testing.T) {
 	slog.New(slog.NewJSONHandler(&b, nil)).Info("cfg", "secret", cfg.JWTSecret)
 	if strings.Contains(b.String(), secret) {
 		t.Fatalf("slog leaks the secret: %s", b.String())
+	}
+}
+
+func TestElasticsearchCredentialsAreRedacted(t *testing.T) {
+	e := validEnv()
+	e["ELASTICSEARCH_URL"] = "http://elastic:hunter2@localhost:9200"
+	cfg, err := LoadFrom(e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out := fmt.Sprintf("%v %+v %#v", cfg, cfg, cfg); strings.Contains(out, "hunter2") {
+		t.Fatalf("formatted config leaks the Elasticsearch password: %s", out)
 	}
 }
