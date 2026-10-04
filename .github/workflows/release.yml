@@ -58,18 +58,17 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # Publishes the API contract as @myronsi/messenger-api when info.version is not on npm yet.
+  # Publishes the API contract as @myronsi/messenger-api: the stable version after a release when
+  # info.version is not on npm yet, otherwise a `next` snapshot if api/ changed in this commit.
+  # npm Trusted Publishing accepts one workflow per package, and this is the one (see api-publish.yml).
   contract:
     needs: release-please
-    if: ${{ needs.release-please.outputs.release_created == 'true' }}
     permissions:
       contents: read
       id-token: write
     uses: ./.github/workflows/api-publish.yml
     with:
-      channel: release
-    secrets:
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      channel: ${{ needs.release-please.outputs.release_created == 'true' && 'release' || 'next' }}
 
   # Attaches the images-only compose file with the image pinned to this release, so a frontend can
   # start the matching backend with all its stores.
