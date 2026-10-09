@@ -315,6 +315,12 @@ async def upload_file(
     if not file_type:
         raise HTTPException(status_code=400, detail="Unsupported file type")
 
+    # Decode before the membership and privacy checks, so nothing can change between those checks and the insert.
+    # Decoding a large image takes long enough to stall every WebSocket on the event loop.
+    image_fields, thumbnail = {}, None
+    if file_type == "image":
+        image_fields, thumbnail = await run_in_threadpool(describe_image, content, file_extension)
+
     conn = get_connection()
     cursor = conn.cursor()
     try:
@@ -333,14 +339,10 @@ async def upload_file(
         file_url = f"/static/uploads/{unique_filename}"
         file_name = file.filename
         clean_caption = caption.strip() if caption else ""
-        image_fields = {}
-        if file_type == "image":
-            # Decoding a large image takes long enough to stall every WebSocket on the event loop.
-            image_fields, thumbnail = await run_in_threadpool(describe_image, content, file_extension)
-            if thumbnail:
-                thumbnail_name = f"{uuid.uuid4()}_thumb{thumbnail_extension(thumbnail)}"
-                (upload_dir / thumbnail_name).write_bytes(thumbnail)
-                image_fields["thumbnail_url"] = f"/static/uploads/{thumbnail_name}"
+        if thumbnail:
+            thumbnail_name = f"{uuid.uuid4()}_thumb{thumbnail_extension(thumbnail)}"
+            (upload_dir / thumbnail_name).write_bytes(thumbnail)
+            image_fields["thumbnail_url"] = f"/static/uploads/{thumbnail_name}"
         message_content = {
             "file_url": file_url,
             "file_name": file_name,

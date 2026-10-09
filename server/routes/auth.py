@@ -876,7 +876,14 @@ async def change_password(payload: PasswordChangeRequest, current_user: dict = D
         if not row or not await run_in_threadpool(verify_password, row["password"], payload.current_password):
             raise HTTPException(status_code=400, detail="Current password is incorrect")
         new_password = await run_in_threadpool(hash_password_with_salt, payload.new_password)
-        cursor.execute("UPDATE users SET password = ? WHERE id = ?", (new_password, current_user["id"]))
+        # Hashing yields to other requests; only replace the hash that was just verified.
+        cursor.execute(
+            "UPDATE users SET password = ? WHERE id = ? AND password = ?",
+            (new_password, current_user["id"], row["password"]),
+        )
+        if cursor.rowcount == 0:
+            conn.rollback()
+            raise HTTPException(status_code=409, detail="Password was changed by another request")
         cursor.execute("""
             UPDATE user_sessions
             SET revoked_at = ?
@@ -952,6 +959,12 @@ async def disable_two_factor(payload: TwoFactorDisableRequest, current_user: dic
         row = cursor.fetchone()
         if not row or not await run_in_threadpool(verify_password, row["password"], payload.password):
             raise HTTPException(status_code=400, detail="Password is incorrect")
+        # Verification yields to other requests; lock the row and make sure the password is still the one checked.
+        cursor.execute("SELECT password FROM users WHERE id = ? FOR UPDATE", (current_user["id"],))
+        current = cursor.fetchone()
+        if not current or current["password"] != row["password"]:
+            conn.rollback()
+            raise HTTPException(status_code=409, detail="Password was changed by another request")
         if not verify_two_factor_or_recovery(cursor, current_user["id"], payload.code):
             raise HTTPException(status_code=400, detail="Invalid verification code")
         cursor.execute("""
