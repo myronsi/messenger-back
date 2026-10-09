@@ -243,11 +243,9 @@ class AuthEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         return {"Authorization": f"Bearer {response.json()['access_token']}"}
 
-    def change_stored_password(self, password):
+    def change_stored_password(self, stored_hash):
         conn = self.database.get_connection()
-        conn.cursor().execute(
-            "UPDATE users SET password = ? WHERE id = ?", (self.auth.hash_password_with_salt(password), self.user_id)
-        )
+        conn.cursor().execute("UPDATE users SET password = ? WHERE id = ?", (stored_hash, self.user_id))
         conn.commit()
         conn.close()
 
@@ -264,9 +262,10 @@ class AuthEndpointTests(unittest.TestCase):
 
         headers = self.access_headers()
         hash_password = self.auth.hash_password_with_salt
+        concurrent_hash = hash_password("Concurrent0!x")
 
         def hash_while_another_request_changes_it(password):
-            self.change_stored_password("Concurrent0!x")
+            self.change_stored_password(concurrent_hash)
             return hash_password(password)
 
         with patch.object(self.auth, "hash_password_with_salt", hash_while_another_request_changes_it):
@@ -283,10 +282,11 @@ class AuthEndpointTests(unittest.TestCase):
 
         headers = self.access_headers()
         verify_password = self.auth.verify_password
+        concurrent_hash = self.auth.hash_password_with_salt("Concurrent0!x")
 
         def verify_while_another_request_changes_it(stored, provided):
             result = verify_password(stored, provided)
-            self.change_stored_password("Concurrent0!x")
+            self.change_stored_password(concurrent_hash)
             return result
 
         with patch.object(self.auth, "verify_password", verify_while_another_request_changes_it):
