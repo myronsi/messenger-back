@@ -4,7 +4,7 @@ import unittest
 
 from PIL import Image
 
-from server.image_metadata import describe_image, thumbnail_extension
+from server.image_metadata import IMAGE_WORK_CONCURRENCY, describe_image, run_image_work, thumbnail_extension
 from tests.test_upload_security import make_image
 
 
@@ -55,6 +55,36 @@ class DescribeImageTests(unittest.TestCase):
     def test_non_images_and_garbage_get_no_metadata(self):
         self.assertEqual(describe_image(b"%PDF-1.7", ".pdf"), ({}, None))
         self.assertEqual(describe_image(b"not an image", ".png"), ({}, None))
+
+
+class ImageWorkTests(unittest.TestCase):
+    def test_image_work_runs_off_the_event_loop_with_bounded_concurrency(self):
+        import asyncio
+        import threading
+        import time
+
+        lock = threading.Lock()
+        active = 0
+        peak = 0
+        loop_threads = []
+
+        def decode():
+            nonlocal active, peak
+            with lock:
+                active += 1
+                peak = max(peak, active)
+            time.sleep(0.05)
+            with lock:
+                active -= 1
+            return threading.current_thread()
+
+        async def main():
+            loop_threads.append(threading.current_thread())
+            return await asyncio.gather(*(run_image_work(decode) for _ in range(IMAGE_WORK_CONCURRENCY * 3)))
+
+        worker_threads = asyncio.run(main())
+        self.assertLessEqual(peak, IMAGE_WORK_CONCURRENCY)
+        self.assertNotIn(loop_threads[0], worker_threads)
 
 
 if __name__ == "__main__":

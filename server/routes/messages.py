@@ -1,7 +1,6 @@
 import json
 from fastapi import APIRouter, HTTPException, Depends, status, UploadFile, File, Form, Query
 from pydantic import BaseModel
-from starlette.concurrency import run_in_threadpool
 from server.database import get_connection
 from server.routes.auth import get_current_user
 from server.websocket import manager, send_chat_list_message
@@ -13,7 +12,7 @@ from server.chat_summary import (
     message_visible_to,
     not_deleted_for_sql,
 )
-from server.image_metadata import IMAGE_METADATA_KEYS, describe_image, thumbnail_extension
+from server.image_metadata import IMAGE_METADATA_KEYS, describe_image, run_image_work, thumbnail_extension
 from server.media_access import copy_attachments, record_attachment
 from server.upload_security import ensure_inline_content_is_genuine, safe_filename
 from server.privacy import DEFAULT_AVATAR, can_send_to_chat, read_receipts_enabled, serialize_user_snapshot
@@ -319,7 +318,7 @@ async def upload_file(
     # Decoding a large image takes long enough to stall every WebSocket on the event loop.
     image_fields, thumbnail = {}, None
     if file_type == "image":
-        image_fields, thumbnail = await run_in_threadpool(describe_image, content, file_extension)
+        image_fields, thumbnail = await run_image_work(describe_image, content, file_extension)
 
     conn = get_connection()
     cursor = conn.cursor()

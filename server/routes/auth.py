@@ -33,6 +33,7 @@ from server.usernames import normalize_username
 from server import rate_limit
 from server.ws_tickets import tickets as ws_tickets
 from server.recovery_shares import decrypt_cloud_part, encrypt_cloud_part
+from server.image_metadata import run_image_work
 from server.upload_security import AVATAR_MAX_BYTES, process_avatar
 from server.privacy import (
     AVATAR_PROFILE_VISIBILITY_SCOPES,
@@ -1224,7 +1225,7 @@ async def update_user_profile(update: UserUpdate = None, current_user: dict = De
 @router.post("/me/avatar")
 async def upload_avatar(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
     content = await file.read(AVATAR_MAX_BYTES + 1)
-    image_bytes, extension = await run_in_threadpool(process_avatar, content)
+    image_bytes, extension = await run_image_work(process_avatar, content)
 
     avatar_url = store_user_avatar(current_user["id"], image_bytes, extension)
     record_user_avatar(current_user["id"], avatar_url)

@@ -4,12 +4,28 @@ Clients use the stored size to reserve space before an image loads and the thumb
 the full file for the message list. Anything that cannot be decoded safely simply gets no metadata.
 """
 import io
+import os
+from typing import Callable, TypeVar
+
+import anyio
+
+T = TypeVar("T")
 
 IMAGE_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".gif", ".webp"})
 IMAGE_METADATA_KEYS = ("image_width", "image_height", "thumbnail_url")
 THUMBNAIL_MAX_SIDE = 640
 # About 80 MB as RGBA when decoded; larger images get no metadata instead of tying up a worker.
 MAX_DECODED_PIXELS = 20_000_000
+
+# A decode can hold several full-size buffers, so image work gets its own small pool instead of the shared
+# threadpool (40 threads), which would let concurrent uploads use several GiB.
+IMAGE_WORK_CONCURRENCY = max(1, int(os.getenv("IMAGE_WORK_CONCURRENCY", "2")))
+_image_work_limiter = anyio.CapacityLimiter(IMAGE_WORK_CONCURRENCY)
+
+
+async def run_image_work(func: Callable[..., T], *args) -> T:
+    """Run memory-heavy image decoding off the event loop, at most IMAGE_WORK_CONCURRENCY at a time."""
+    return await anyio.to_thread.run_sync(func, *args, limiter=_image_work_limiter)
 
 
 def describe_image(content: bytes, extension: str) -> tuple[dict, bytes | None]:
