@@ -1344,6 +1344,9 @@ async def reset_password(request: ResetPasswordRequest, http_request: Request):
     ip_key = rate_limit.client_ip(http_request)
     rate_limit.enforce(rate_limit.RESET_IP, ip_key)
     validate_password(request.new_password)
+    # Argon2 is deliberately slow; keep it off the event loop, and hash before the transaction so no
+    # row lock (the consumed recovery token) is held across the await.
+    password_field = await run_in_threadpool(hash_password_with_salt, request.new_password)
     conn = get_connection()
     cursor = conn.cursor()
     try:
@@ -1352,8 +1355,6 @@ async def reset_password(request: ResetPasswordRequest, http_request: Request):
             conn.rollback()
             rate_limit.RESET_IP.hit(ip_key)
             raise HTTPException(status_code=401, detail="Invalid or expired recovery token")
-        # Argon2 is deliberately slow; keep it off the event loop.
-        password_field = await run_in_threadpool(hash_password_with_salt, request.new_password)
         cursor.execute("UPDATE users SET password = ? WHERE id = ?", (password_field, user_id))
         cursor.execute(
             "UPDATE user_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL",
