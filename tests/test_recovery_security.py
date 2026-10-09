@@ -220,6 +220,28 @@ class RecoveryRouteTests(PostgresFixture, unittest.TestCase):
         self.assertEqual(statuses[0], 401)
         self.assertEqual(statuses[-1], 429)
 
+    def test_reset_password_hashes_off_the_event_loop(self):
+        import asyncio
+
+        hash_password = self.auth.hash_password_with_salt
+        on_loop = []
+
+        def recording_hash(password):
+            try:
+                asyncio.get_running_loop()
+                on_loop.append(True)
+            except RuntimeError:
+                on_loop.append(False)
+            return hash_password(password)
+
+        token = self.recover(part1=SHARES[0]).json()["recovery_token"]
+        with patch.object(self.auth, "hash_password_with_salt", recording_hash):
+            response = self.client.post(
+                "/auth/reset-password", json={"recovery_token": token, "new_password": "password456"}
+            )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(on_loop, [False])
+
     def test_full_recovery_flow_resets_password_and_revokes_sessions(self):
         token = self.recover(part1=SHARES[0]).json()["recovery_token"]
         response = self.client.post(

@@ -8,7 +8,8 @@ import io
 IMAGE_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".gif", ".webp"})
 IMAGE_METADATA_KEYS = ("image_width", "image_height", "thumbnail_url")
 THUMBNAIL_MAX_SIDE = 640
-MAX_DECODED_PIXELS = 60_000_000
+# About 80 MB as RGBA when decoded; larger images get no metadata instead of tying up a worker.
+MAX_DECODED_PIXELS = 20_000_000
 
 
 def describe_image(content: bytes, extension: str) -> tuple[dict, bytes | None]:

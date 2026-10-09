@@ -47,6 +47,11 @@ class DescribeImageTests(unittest.TestCase):
         self.assertEqual(metadata["image_width"], 900)
         self.assertIsNone(thumbnail)
 
+    def test_images_over_the_pixel_cap_are_not_decoded(self):
+        output = io.BytesIO()
+        Image.new("1", (5000, 4001)).save(output, format="PNG")
+        self.assertEqual(describe_image(output.getvalue(), ".png"), ({}, None))
+
     def test_non_images_and_garbage_get_no_metadata(self):
         self.assertEqual(describe_image(b"%PDF-1.7", ".pdf"), ({}, None))
         self.assertEqual(describe_image(b"not an image", ".png"), ({}, None))

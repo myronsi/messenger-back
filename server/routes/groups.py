@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 from server.database import get_connection
 from server.routes.auth import get_current_user
 from server.websocket import manager, broadcast_to_chat_list, get_chat_participant_ids
@@ -423,7 +424,7 @@ async def upload_group_avatar(
     try:
         _ensure_role(cursor, chat_id, current_user["id"], {"owner", "admin"}, "Only owners and admins can update this group")
 
-        image_bytes, extension = process_avatar(await file.read(AVATAR_MAX_BYTES + 1))
+        image_bytes, extension = await run_in_threadpool(process_avatar, await file.read(AVATAR_MAX_BYTES + 1))
         safe_name = f"group_{chat_id}_{uuid4().hex}{extension}"
         upload_dir = Path("static/avatars/groups")
         upload_dir.mkdir(parents=True, exist_ok=True)
