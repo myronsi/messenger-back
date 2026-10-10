@@ -115,6 +115,7 @@ type Service struct {
 	d Deps
 	// rebuilds runs one rebuild of a user's unread counters at a time; concurrent readers share it.
 	rebuilds singleflight.Group
+	groups   groupQueue
 }
 
 // New returns the service.
@@ -122,7 +123,7 @@ func New(d Deps) *Service {
 	if d.Log == nil {
 		d.Log = slog.New(slog.DiscardHandler)
 	}
-	return &Service{d: d}
+	return &Service{d: d, groups: groupQueue{pending: map[int64]*pendingGroup{}, slots: make(chan struct{}, groupRenders)}}
 }
 
 func badCursor() error { return fmt.Errorf("%w: the cursor is not one of ours", ErrBadCursor) }

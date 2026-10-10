@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -83,7 +84,8 @@ func cleanDescription(d *string) (*string, error) {
 }
 
 // invitePermission decides whether actor may add target to a group: allowed, approval needed or denied, by
-// the target's group_invites setting (an explicit exception decides first, as in v1). Blocks deny.
+// the target's group_invites setting, as v1 did: an allow exception lets the actor in; otherwise the setting
+// decides, a deny exception counting as "not allowed" (so wait_approval still asks). Blocks deny.
 func (s *Service) invitePermission(ctx context.Context, actor, target int64) (allowed, approval bool, err error) {
 	social := s.d.Store.Social()
 	blocked, err := social.BlockedEither(ctx, actor, target)
@@ -94,20 +96,20 @@ func (s *Service) invitePermission(ctx context.Context, actor, target int64) (al
 	if err != nil {
 		return false, false, err
 	}
-	switch exc[actor][postgres.SettingGroupInvites] {
-	case postgres.EffectAllow:
+	effect := exc[actor][postgres.SettingGroupInvites]
+	if effect == postgres.EffectAllow {
 		return true, false, nil
-	case postgres.EffectDeny:
-		return false, false, nil
 	}
 	settings, err := social.Privacy(ctx, []int64{target})
 	if err != nil {
 		return false, false, err
 	}
-	switch v := settings[target].GroupInvites; v {
-	case postgres.WaitApproval:
+	switch v := settings[target].GroupInvites; {
+	case v == postgres.WaitApproval:
 		return false, true, nil
-	case postgres.VisibleSharedChats:
+	case effect == postgres.EffectDeny:
+		return false, false, nil
+	case v == postgres.VisibleSharedChats:
 		shared, err := social.SharedChatPartners(ctx, target, []int64{actor})
 		return shared[actor], false, err
 	default:
@@ -117,7 +119,7 @@ func (s *Service) invitePermission(ctx context.Context, actor, target int64) (al
 
 // group renders a group for one member.
 func (s *Service) group(ctx context.Context, viewer, chatID int64) (GroupView, error) {
-	views, err := s.groupViews(ctx, chatID, []int64{viewer})
+	views, err := s.groupViews(ctx, chatID, []int64{viewer}, true)
 	if err != nil {
 		return GroupView{}, err
 	}
@@ -128,8 +130,9 @@ func (s *Service) group(ctx context.Context, viewer, chatID int64) (GroupView, e
 	return v, nil
 }
 
-// groupViews renders the group for each of the viewers who are members.
-func (s *Service) groupViews(ctx context.Context, chatID int64, viewers []int64) (map[int64]GroupView, error) {
+// groupViews renders the group for each of the viewers who are members, with the member list when withMembers
+// (rendered for each viewer: one directory lookup per viewer).
+func (s *Service) groupViews(ctx context.Context, chatID int64, viewers []int64, withMembers bool) (map[int64]GroupView, error) {
 	chat, err := s.d.Store.Chats().Get(ctx, chatID)
 	if err != nil {
 		return nil, notFoundOr(err)
@@ -156,60 +159,123 @@ func (s *Service) groupViews(ctx context.Context, chatID int64, viewers []int64)
 		if !member {
 			continue
 		}
-		people, err := s.d.Directory.ForViewer(ctx, v, ids)
-		if err != nil {
-			return nil, unavailable(err)
-		}
-		g := GroupView{Chat: chat, OwnerID: owner, MyRole: role, Members: make([]Member, len(ps))}
-		for i, p := range ps {
-			g.Members[i] = Member{User: people[p.UserID], Role: p.Role, JoinedAt: p.JoinedAt}
+		g := GroupView{Chat: chat, OwnerID: owner, MyRole: role, Members: []Member{}}
+		if withMembers {
+			people, err := s.d.Directory.ForViewer(ctx, v, ids)
+			if err != nil {
+				return nil, unavailable(err)
+			}
+			g.Members = make([]Member, len(ps))
+			for i, p := range ps {
+				g.Members[i] = Member{User: people[p.UserID], Role: p.Role, JoinedAt: p.JoinedAt}
+			}
 		}
 		out[v] = g
 	}
 	return out, nil
 }
 
-// changed tells the group's members about a change, after the request (rendering for every member costs a
-// directory lookup each). added get group_created instead of group_updated.
+// Group events: at most groupRenders groups are rendered at once, and a group's member list goes into its
+// events only up to eventMembers members (each member sees the list rendered for them, so the cost grows with
+// the square of the size); bigger groups send events without members and clients load them with GET.
+const (
+	groupRenders = 4
+	eventMembers = 100
+)
+
+// groupQueue coalesces the events of each group: while one run renders a group, further changes only mark it
+// dirty, and one more run follows with the state of that moment. Runs of one group never overlap, so members
+// never get an older state after a newer one.
+type groupQueue struct {
+	mu      sync.Mutex
+	pending map[int64]*pendingGroup
+	slots   chan struct{}
+}
+
+type pendingGroup struct {
+	dirty bool
+	added map[int64]bool
+}
+
+// changed tells the group's members about a change, in the background. added get group_created (if they are
+// still members by then) instead of group_updated.
 func (s *Service) changed(ctx context.Context, chatID int64, added ...int64) {
 	n, ok := s.d.Notifier.(GroupNotifier)
 	if !ok {
 		return
 	}
+	q := &s.groups
+	q.mu.Lock()
+	p, running := q.pending[chatID]
+	if !running {
+		p = &pendingGroup{added: map[int64]bool{}}
+		q.pending[chatID] = p
+	}
+	for _, uid := range added {
+		p.added[uid] = true
+	}
+	p.dirty = true
+	q.mu.Unlock()
+	if running {
+		return // the run in progress goes once more
+	}
 	ctx = context.WithoutCancel(ctx)
 	go func() {
-		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		defer cancel()
-		ps, err := s.d.Store.Chats().Participants(ctx, chatID)
-		if err != nil {
-			s.d.Log.WarnContext(ctx, "group members for an event", "error", err)
-			return
-		}
-		ids := make([]int64, len(ps))
-		for i, p := range ps {
-			ids[i] = p.UserID
-		}
-		views, err := s.groupViews(ctx, chatID, ids)
-		if err != nil {
-			s.d.Log.WarnContext(ctx, "render group for an event", "error", err)
-			return
-		}
-		fresh := map[int64]GroupView{}
-		for _, uid := range added {
-			if v, ok := views[uid]; ok {
-				fresh[uid] = v
-				delete(views, uid)
+		for {
+			q.mu.Lock()
+			if !p.dirty {
+				delete(q.pending, chatID)
+				q.mu.Unlock()
+				return
 			}
+			fresh := p.added
+			p.added, p.dirty = map[int64]bool{}, false
+			q.mu.Unlock()
+
+			q.slots <- struct{}{}
+			s.publishGroup(ctx, n, chatID, fresh)
+			<-q.slots
 		}
-		if len(fresh) > 0 {
-			n.GroupCreated(ctx, chatID, fresh)
-		}
-		n.GroupUpdated(ctx, chatID, views)
 	}()
+}
+
+func (s *Service) publishGroup(ctx context.Context, n GroupNotifier, chatID int64, added map[int64]bool) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	ps, err := s.d.Store.Chats().Participants(ctx, chatID)
+	if errors.Is(err, postgres.ErrNotFound) || (err == nil && len(ps) == 0) {
+		return // deleted meanwhile
+	}
+	if err != nil {
+		s.d.Log.WarnContext(ctx, "group members for an event", "error", err)
+		return
+	}
+	ids := make([]int64, len(ps))
+	for i, p := range ps {
+		ids[i] = p.UserID
+	}
+	views, err := s.groupViews(ctx, chatID, ids, len(ps) <= eventMembers)
+	if err != nil {
+		s.d.Log.WarnContext(ctx, "render group for an event", "error", err)
+		return
+	}
+	fresh := map[int64]GroupView{}
+	for uid := range added {
+		if v, ok := views[uid]; ok {
+			fresh[uid] = v
+			delete(views, uid)
+		}
+	}
+	if len(fresh) > 0 {
+		n.GroupCreated(ctx, chatID, fresh)
+	}
+	n.GroupUpdated(ctx, chatID, views)
 }
 
 // membership finishes a membership change: the cache, unread counters and events.
 func (s *Service) membership(ctx context.Context, chatID, actor int64, added, removed []int64) {
+	// The change is committed: the cleanup must happen even if the client went away.
+	ctx = context.WithoutCancel(ctx)
 	if err := s.d.Members.Invalidate(ctx, chatID); err != nil {
 		s.d.Log.WarnContext(ctx, "invalidate members", "error", err)
 	}
@@ -349,6 +415,7 @@ func (s *Service) DeleteGroup(ctx context.Context, userID, chatID int64) error {
 
 // removedChat cleans up after a deleted chat: sockets, counters, cache, the worker and files.
 func (s *Service) removedChat(ctx context.Context, chatID, actor int64, members []int64, keys []string) {
+	ctx = context.WithoutCancel(ctx)
 	s.d.Notifier.ChatRemoved(ctx, chatID, members)
 	if err := s.d.Unread.Forget(ctx, chatID, members...); err != nil {
 		s.d.Log.WarnContext(ctx, "forget unread", "error", err)
@@ -385,6 +452,10 @@ func (s *Service) SetGroupAvatar(ctx context.Context, userID, chatID int64, atta
 // AddMember adds a user to the group, or invites them when they approve invitations first (the group then
 // lists them nowhere until they accept).
 func (s *Service) AddMember(ctx context.Context, userID, chatID, target int64) (GroupView, error) {
+	// Outsiders learn nothing about the group, not even through the invitee's settings.
+	if err := s.requireGroupMember(ctx, userID, chatID); err != nil {
+		return GroupView{}, err
+	}
 	if _, err := s.d.Store.Users().Get(ctx, target); err != nil {
 		return GroupView{}, notFoundOr(err)
 	}
@@ -418,7 +489,11 @@ func (s *Service) AddMember(ctx context.Context, userID, chatID, target int64) (
 // RemoveMember removes a member (owner and admins; not the owner).
 func (s *Service) RemoveMember(ctx context.Context, userID, chatID, target int64) error {
 	if target == userID {
-		return s.Leave(ctx, userID, chatID)
+		err := s.Leave(ctx, userID, chatID)
+		if errors.Is(err, ErrConflict) {
+			return fmt.Errorf("%w: the owner cannot be removed", ErrForbidden)
+		}
+		return err
 	}
 	if err := s.d.Store.Chats().RemoveMemberAs(ctx, chatID, userID, target); err != nil {
 		if errors.Is(err, postgres.ErrOwnerMustTransfer) {
@@ -458,6 +533,9 @@ func (s *Service) SetRole(ctx context.Context, userID, chatID, target int64, rol
 
 // TransferOwnership makes another member the owner; the previous owner becomes an admin.
 func (s *Service) TransferOwnership(ctx context.Context, userID, chatID, target int64) (GroupView, error) {
+	if err := s.requireGroupMember(ctx, userID, chatID); err != nil {
+		return GroupView{}, err
+	}
 	if target == userID {
 		return GroupView{}, fmt.Errorf("%w: you are the owner already", ErrInvalid)
 	}
@@ -471,13 +549,27 @@ func (s *Service) TransferOwnership(ctx context.Context, userID, chatID, target 
 	return s.group(ctx, userID, chatID)
 }
 
-// approveInvite accepts a group invitation: the user joins and the members are told.
+// approveInvite accepts a group invitation: the user joins and the members are told (unless they were in the
+// group already).
 func (s *Service) approveInvite(ctx context.Context, userID, requestID int64) (View, error) {
-	req, err := s.d.Store.Approvals().ApproveInvite(ctx, requestID, userID)
+	req, joined, err := s.d.Store.Approvals().ApproveInvite(ctx, requestID, userID)
+	if errors.Is(err, postgres.ErrForbidden) {
+		return View{}, fmt.Errorf("%w: whoever invited you can no longer add members", ErrConflict)
+	}
 	if err != nil {
 		return View{}, requestError(err)
 	}
-	s.membership(ctx, *req.ChatID, req.RequesterID, []int64{userID}, nil)
-	s.changed(ctx, *req.ChatID, userID)
+	if joined {
+		s.membership(ctx, *req.ChatID, req.RequesterID, []int64{userID}, nil)
+		s.changed(ctx, *req.ChatID, userID)
+	}
 	return s.Get(ctx, userID, *req.ChatID)
+}
+
+// requireGroupMember fails with ErrNotFound unless the user is in the group.
+func (s *Service) requireGroupMember(ctx context.Context, userID, chatID int64) error {
+	if _, err := s.d.Store.Chats().Participant(ctx, chatID, userID); err != nil {
+		return notFoundOr(err)
+	}
+	return nil
 }

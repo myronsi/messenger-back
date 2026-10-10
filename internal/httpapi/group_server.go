@@ -11,8 +11,16 @@ import (
 	"github.com/myronsi/messenger-back/internal/store/redis"
 )
 
-// RateCreateGroup limits new groups per user.
-var RateCreateGroup = redis.Rate{Name: "create_group", Rate: 20, Period: time.Hour, Burst: 10}
+// Group rates: new groups, and changes of a group (each one renders the group for its members).
+var (
+	RateCreateGroup = redis.Rate{Name: "create_group", Rate: 20, Period: time.Hour, Burst: 10}
+	RateGroupChange = redis.Rate{Name: "group_change", Rate: 60, Period: time.Minute, Burst: 30}
+)
+
+// changeAllowed applies RateGroupChange.
+func (c *ChatServer) changeAllowed(w http.ResponseWriter, r *http.Request, userID int64) bool {
+	return allow(w, r, c.o.Limiter, RateGroupChange, strconv.FormatInt(userID, 10), c.o.Log)
+}
 
 // PresentGroup renders a group as one member sees it.
 func PresentGroup(g chats.GroupView, basePath string) Group {
@@ -116,7 +124,7 @@ func (c *ChatServer) UpdateGroup(w http.ResponseWriter, r *http.Request, chatID 
 		return
 	}
 	var raw map[string]json.RawMessage
-	if !decode(w, r, &raw) {
+	if !decode(w, r, &raw) || !c.changeAllowed(w, r, p.UserID) {
 		return
 	}
 	var (
@@ -176,7 +184,7 @@ func (c *ChatServer) SetGroupAvatar(w http.ResponseWriter, r *http.Request, chat
 		return
 	}
 	var body SetAvatarRequest
-	if !decode(w, r, &body) {
+	if !decode(w, r, &body) || !c.changeAllowed(w, r, p.UserID) {
 		return
 	}
 	g, err := c.o.Service.SetGroupAvatar(r.Context(), p.UserID, id, body.AttachmentId)
@@ -194,7 +202,7 @@ func (c *ChatServer) AddGroupParticipant(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	var body AddParticipantRequest
-	if !decode(w, r, &body) {
+	if !decode(w, r, &body) || !c.changeAllowed(w, r, p.UserID) {
 		return
 	}
 	target, ok := parseID(w, "user_id", body.UserId)
@@ -216,7 +224,7 @@ func (c *ChatServer) RemoveGroupParticipant(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	target, ok := parseID(w, "user_id", userID)
-	if !ok {
+	if !ok || !c.changeAllowed(w, r, p.UserID) {
 		return
 	}
 	if err := c.o.Service.RemoveMember(r.Context(), p.UserID, id, target); err != nil {
@@ -241,7 +249,7 @@ func (c *ChatServer) UpdateGroupParticipantRole(w http.ResponseWriter, r *http.R
 		return
 	}
 	var body UpdateRoleRequest
-	if !decode(w, r, &body) {
+	if !decode(w, r, &body) || !c.changeAllowed(w, r, p.UserID) {
 		return
 	}
 	if !body.Role.Valid() {
@@ -263,7 +271,7 @@ func (c *ChatServer) TransferGroupOwnership(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	var body TransferOwnerRequest
-	if !decode(w, r, &body) {
+	if !decode(w, r, &body) || !c.changeAllowed(w, r, p.UserID) {
 		return
 	}
 	target, ok := parseID(w, "user_id", body.UserId)

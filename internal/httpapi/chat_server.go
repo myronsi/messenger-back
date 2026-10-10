@@ -36,12 +36,13 @@ func NewChatServer(o ChatOptions) *ChatServer {
 // RateCreateChat limits new direct chats and requests per user.
 var RateCreateChat = redis.Rate{Name: "create_chat", Rate: 60, Period: time.Hour, Burst: 20}
 
-// PresentRole renders a group role; the contract knows no moderators, who act as admins.
+// PresentRole renders a group role. The contract knows no moderators: v1 moderators may only delete other
+// members' messages, so they show as members (showing them as admins would offer controls that fail).
 func PresentRole(r postgres.Role) GroupRole {
 	switch r {
 	case postgres.RoleOwner:
 		return GroupRoleOwner
-	case postgres.RoleAdmin, postgres.RoleModerator:
+	case postgres.RoleAdmin:
 		return GroupRoleAdmin
 	}
 	return GroupRoleMember

@@ -91,7 +91,11 @@ func (r chatRepo) AddMemberAs(ctx context.Context, chatID, actorID, userID int64
 		if err := actingIn(ctx, q, chatID, actorID, managers); err != nil {
 			return err
 		}
-		_, err := q.AddParticipant(ctx, sqlcdb.AddParticipantParams{ChatID: chatID, UserID: userID, Role: string(RoleMember)})
+		if _, err := q.AddParticipant(ctx, sqlcdb.AddParticipantParams{ChatID: chatID, UserID: userID, Role: string(RoleMember)}); err != nil {
+			return err
+		}
+		// Invitations to the group that the user did not answer yet are settled by joining.
+		_, err := q.CloseGroupInvites(ctx, sqlcdb.CloseGroupInvitesParams{ChatID: &chatID, RecipientID: userID})
 		return err
 	}))
 }
@@ -186,6 +190,12 @@ func (r chatRepo) InviteAs(ctx context.Context, chatID, actorID, userID int64) (
 		created bool
 	)
 	err := r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
+		// Users before the chat (the request references both), in id order, like AddMember and DeleteAccount.
+		for _, uid := range []int64{min(actorID, userID), max(actorID, userID)} {
+			if _, err := q.LockUserShared(ctx, uid); err != nil {
+				return err
+			}
+		}
 		if err := actingIn(ctx, q, chatID, actorID, managers); err != nil {
 			return err
 		}
@@ -211,15 +221,11 @@ func (r chatRepo) InviteAs(ctx context.Context, chatID, actorID, userID int64) (
 	return req, created, nil
 }
 
-func (r chatRepo) PendingInvitees(ctx context.Context, chatID int64) ([]int64, error) {
-	ctx, cancel := r.s.call(ctx)
-	defer cancel()
-	ids, err := r.s.q.PendingInviteRecipients(ctx, &chatID)
-	return ids, mapError(err)
-}
-
-func (r approvalRepo) ApproveInvite(ctx context.Context, id, recipientID int64) (ApprovalRequest, error) {
-	var req ApprovalRequest
+func (r approvalRepo) ApproveInvite(ctx context.Context, id, recipientID int64) (ApprovalRequest, bool, error) {
+	var (
+		req    ApprovalRequest
+		joined bool
+	)
 	err := r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
 		peek, err := q.GetApprovalRequest(ctx, id)
 		if errors.Is(err, pgx.ErrNoRows) || (err == nil && (peek.RecipientID != recipientID || peek.Type != RequestGroupInvite || peek.ChatID == nil)) {
@@ -242,7 +248,12 @@ func (r approvalRepo) ApproveInvite(ctx context.Context, id, recipientID int64) 
 		if row.Status != RequestPending {
 			return ErrConflict
 		}
-		if _, err := q.RespondToRequest(ctx, sqlcdb.RespondToRequestParams{ID: id, Status: RequestApproved}); err != nil {
+		// The invitation stands only while whoever made it may still add members.
+		inviter, err := q.GetParticipant(ctx, sqlcdb.GetParticipantParams{ChatID: *row.ChatID, UserID: row.RequesterID})
+		if errors.Is(err, pgx.ErrNoRows) || (err == nil && !slices.Contains(managers, Role(inviter.Role))) {
+			return ErrForbidden
+		}
+		if err != nil {
 			return err
 		}
 		// A failed insert would abort the transaction, so membership is checked first (the group is locked).
@@ -250,7 +261,12 @@ func (r approvalRepo) ApproveInvite(ctx context.Context, id, recipientID int64) 
 			if _, err := q.AddParticipant(ctx, sqlcdb.AddParticipantParams{ChatID: *row.ChatID, UserID: recipientID, Role: string(RoleMember)}); err != nil {
 				return err
 			}
+			joined = true
 		} else if err != nil {
+			return err
+		}
+		// This one and every other pending invitation of the user to the group are settled.
+		if _, err := q.CloseGroupInvites(ctx, sqlcdb.CloseGroupInvitesParams{ChatID: row.ChatID, RecipientID: recipientID}); err != nil {
 			return err
 		}
 		req = requestFrom(row)
@@ -258,7 +274,7 @@ func (r approvalRepo) ApproveInvite(ctx context.Context, id, recipientID int64) 
 		return nil
 	})
 	if err != nil {
-		return ApprovalRequest{}, mapError(err)
+		return ApprovalRequest{}, false, mapError(err)
 	}
-	return req, nil
+	return req, joined, nil
 }

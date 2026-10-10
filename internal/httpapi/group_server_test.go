@@ -127,6 +127,25 @@ func TestGroupsOverHTTP(t *testing.T) {
 	if r := e.do(t, request{method: http.MethodDelete, path: "/groups/" + gid + "/participants/" + e.uid(t, owner), token: bob.access}); r.Code != http.StatusForbidden {
 		t.Fatalf("remove the owner: %d", r.Code)
 	}
+	if r := e.do(t, request{method: http.MethodDelete, path: "/groups/" + gid + "/participants/" + e.uid(t, owner), token: owner.access}); r.Code != http.StatusForbidden {
+		t.Fatalf("the owner removes themselves: %d", r.Code)
+	}
+	// Outsiders learn nothing, whatever the invitee's settings.
+	if r := e.do(t, request{method: http.MethodPost, path: "/groups/" + gid + "/participants", token: dave.access, body: map[string]any{"user_id": erinID}}); r.Code != http.StatusNotFound {
+		t.Fatalf("outsider adds: %d", r.Code)
+	}
+	// An invitation lapses when its inviter can no longer add members.
+	fay := e.register(t, "fay")
+	e.do(t, request{method: http.MethodPatch, path: "/me/privacy", token: fay.access, body: map[string]any{"group_invites": "wait_approval"}})
+	if r := e.do(t, request{method: http.MethodPost, path: "/groups/" + gid + "/participants", token: bob.access, body: map[string]any{"user_id": e.uid(t, fay)}}); r.Code != http.StatusOK {
+		t.Fatalf("invite fay: %d %s", r.Code, r.Body)
+	}
+	e.do(t, request{method: http.MethodPatch, path: "/groups/" + gid + "/participants/" + bobID, token: owner.access, body: map[string]any{"role": "member"}})
+	invite := items(t, e.do(t, request{method: http.MethodGet, path: "/requests", token: fay.access}))[0]["id"].(string)
+	if r := e.do(t, request{method: http.MethodPost, path: "/requests/" + invite + "/approve", token: fay.access}); r.Code != http.StatusConflict {
+		t.Fatalf("accept a lapsed invitation: %d %s", r.Code, r.Body)
+	}
+	e.do(t, request{method: http.MethodPatch, path: "/groups/" + gid + "/participants/" + bobID, token: owner.access, body: map[string]any{"role": "admin"}})
 
 	// The group avatar is an avatar upload of the caller.
 	ownerID := mustID(t, e.uid(t, owner))

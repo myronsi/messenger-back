@@ -10,6 +10,25 @@ import (
 	"time"
 )
 
+const closeGroupInvites = `-- name: CloseGroupInvites :execrows
+UPDATE approval_requests SET status = 'approved', responded_at = now()
+WHERE chat_id = $1 AND recipient_id = $2 AND type = 'group_invite' AND status = 'pending'
+`
+
+type CloseGroupInvitesParams struct {
+	ChatID      *int64
+	RecipientID int64
+}
+
+// The user is in the group now: their pending invitations to it are settled.
+func (q *Queries) CloseGroupInvites(ctx context.Context, arg CloseGroupInvitesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, closeGroupInvites, arg.ChatID, arg.RecipientID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const createGroupInvite = `-- name: CreateGroupInvite :one
 INSERT INTO approval_requests (type, requester_id, recipient_id, chat_id)
 VALUES ('group_invite', $1, $2, $3)
@@ -54,32 +73,6 @@ func (q *Queries) CreateGroupInvite(ctx context.Context, arg CreateGroupInvitePa
 		&i.Created,
 	)
 	return i, err
-}
-
-const pendingInviteRecipients = `-- name: PendingInviteRecipients :many
-SELECT DISTINCT recipient_id FROM approval_requests
-WHERE chat_id = $1 AND type = 'group_invite' AND status = 'pending'
-`
-
-// Users invited to the group who did not answer yet.
-func (q *Queries) PendingInviteRecipients(ctx context.Context, chatID *int64) ([]int64, error) {
-	rows, err := q.db.Query(ctx, pendingInviteRecipients, chatID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []int64{}
-	for rows.Next() {
-		var recipient_id int64
-		if err := rows.Scan(&recipient_id); err != nil {
-			return nil, err
-		}
-		items = append(items, recipient_id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const updateGroupInfo = `-- name: UpdateGroupInfo :one

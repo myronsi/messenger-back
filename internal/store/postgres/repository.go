@@ -264,8 +264,6 @@ type ChatRepository interface {
 	SetGroupAvatarAs(ctx context.Context, chatID, actorID int64, attachmentID *uuid.UUID) error
 	// InviteAs makes a group invitation for a user who approves invitations (a pending one is reused).
 	InviteAs(ctx context.Context, chatID, actorID, userID int64) (req ApprovalRequest, created bool, err error)
-	// PendingInvitees are the users invited to the group who did not answer yet.
-	PendingInvitees(ctx context.Context, chatID int64) ([]int64, error)
 }
 
 // ApprovalRepository keeps the approval requests.
@@ -281,7 +279,9 @@ type ApprovalRepository interface {
 	// such direct-message request for this recipient; ErrConflict: it was answered already.
 	ApproveDirect(ctx context.Context, id, recipientID int64) (req ApprovalRequest, chat Chat, created bool, closed []ApprovalRequest, err error)
 	// ApproveInvite accepts a pending group invitation of the recipient: they join the group.
-	ApproveInvite(ctx context.Context, id, recipientID int64) (ApprovalRequest, error)
+	// joined is false when the user was in the group already. ErrForbidden: the inviter can no longer add
+	// members (left, removed or no longer an admin).
+	ApproveInvite(ctx context.Context, id, recipientID int64) (req ApprovalRequest, joined bool, err error)
 	// Reject turns down a pending request of the recipient (ErrNotFound, ErrConflict as above).
 	Reject(ctx context.Context, id, recipientID int64) (ApprovalRequest, error)
 }

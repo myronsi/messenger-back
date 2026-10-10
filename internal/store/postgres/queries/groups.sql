@@ -14,7 +14,8 @@ ON CONFLICT (requester_id, recipient_id, chat_id) WHERE status = 'pending' AND t
 DO UPDATE SET created_at = approval_requests.created_at
 RETURNING *, (xmax = 0) AS created;
 
--- name: PendingInviteRecipients :many
--- Users invited to the group who did not answer yet.
-SELECT DISTINCT recipient_id FROM approval_requests
-WHERE chat_id = @chat_id AND type = 'group_invite' AND status = 'pending';
+
+-- name: CloseGroupInvites :execrows
+-- The user is in the group now: their pending invitations to it are settled.
+UPDATE approval_requests SET status = 'approved', responded_at = now()
+WHERE chat_id = @chat_id AND recipient_id = @recipient_id AND type = 'group_invite' AND status = 'pending';

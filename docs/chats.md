@@ -61,21 +61,26 @@ Groups are deleted or left with the group endpoints (`422` here).
 
 | Who | May |
 |---|---|
-| owner | everything below, delete the group, transfer ownership |
-| admin (and v1 moderators) | change name, description and avatar; add and remove members (not the owner); make members admins or members again |
+| owner | everything an admin may, delete the group, transfer ownership |
+| admin | change name, description and avatar; add and remove members (not the owner); make members admins or members again |
 | member | read and write, leave |
 
-In group messages, owners, admins and moderators may also delete anyone's message for everyone. The contract knows `owner`, `admin` and `member`; v1 moderators show as `admin` but keep their v1 rights (they cannot manage the group).
+In group messages, owners, admins and v1 moderators may also delete anyone's message for everyone. The contract knows `owner`, `admin` and `member`; v1 moderators show as `member`, since deleting messages is all they may do beyond a member.
 
-- **Role checks:** every group change checks the actor's role under the group's row lock in the transaction that makes the change (`ChatRepository.*As`), so a role taken away a moment before cannot still be used.
-- **Members:** `POST /groups` (at most 200 members at once) and `POST /groups/{id}/participants` follow each invitee's `group_invites` setting, as in v1:
-  - an explicit exception (allow, deny) decides first;
-  - then `everyone`, `contacts` (a shared chat), `nobody` and the `*_except` values;
-  - `wait_approval` makes an invitation that waits in the invitee's inbox; the group lists them once they accept;
-  - a block denies.
+- **Role checks:** every group change checks the actor's role under the group's row lock in the transaction that makes the change (`ChatRepository.*As`), so a role taken away a moment before cannot still be used. Changes are rate limited per user (60 per minute, bursts of 30).
+- **Members:** `POST /groups` (at most 200 members at once) and `POST /groups/{id}/participants` follow each invitee's `group_invites` setting, as v1 did:
+  - an allow exception lets the caller add them;
+  - otherwise `wait_approval` makes an invitation that waits in the invitee's inbox (the group lists them once they accept);
+  - a deny exception refuses;
+  - then `everyone`, `shared_chats` (a shared chat), `nobody` and the `*_except` values decide;
+  - a block refuses.
 
-  A member who does not allow invitations at all fails group creation (`403`) or the add (`403`). Adding a member twice is `409`.
+  A member who refuses invitations fails group creation (`403`) or the add (`403`). Adding a member twice is `409`. An outsider gets `404` for everything, before any setting of the invitee is looked at.
+- **Invitations:** accepting one adds the user only while whoever invited them may still add members (`409` otherwise). Joining, by an invitation or by being added, settles every other pending invitation of the user to that group.
 - **Leaving and removing:** `POST /groups/{id}/leave` and `DELETE /groups/{id}/participants/{user_id}` remove the member and their pin of the group. The removed member gets `chat_deleted` and no further events of the group, and their unread counter for it is dropped. The owner cannot leave (`409`) or be removed (`403`) and has to transfer ownership first (`POST /groups/{id}/transfer-owner`; the old owner becomes an admin).
-- **Avatar:** `PUT /groups/{id}/avatar` takes an image the caller uploaded with purpose `avatar`. Members download it through `/attachments/{id}/content`, which the group avatar's members may read.
-- **Deleting:** `DELETE /groups/{id}` (the owner) deletes it for everyone. Members get `chat_deleted`, and the worker deletes the messages.
-- **Events:** after every change the members get `group_updated` with the group as each of them sees it (members rendered with their privacy settings), and added members get `group_created`. These go out after the answer, because rendering for every member costs a directory lookup each.
+- **Avatar:** `PUT /groups/{id}/avatar` takes an image the caller uploaded with purpose `avatar`. The group's members may download it through `/attachments/{id}/content`.
+- **Deleting:** `DELETE /groups/{id}` (the owner) deletes the group for everyone. Members get `chat_deleted`, and the worker deletes the messages.
+- **Events:** after a change the members get `group_updated` with the group as each of them sees it, and added members get `group_created`. They are sent in the background, so they can arrive before or after the HTTP answer:
+  - Changes that come while a group is being rendered are folded into one more run with the latest state. The runs of one group never overlap, so nobody gets an older state after a newer one.
+  - At most 4 groups render at once.
+  - Groups of more than 100 members send their events with an empty `members` list; clients load the members with `GET /groups/{id}`. Every member sees the list rendered for them, so the cost grows with the square of the size.
