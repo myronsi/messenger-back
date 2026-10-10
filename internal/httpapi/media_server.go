@@ -41,6 +41,30 @@ type RateAllower interface {
 // RateUpload limits uploads per user.
 var RateUpload = redis.Rate{Name: "upload", Rate: 60, Period: time.Minute, Burst: 20}
 
+// RateSearch limits user searches per user.
+var RateSearch = redis.Rate{Name: "user_search", Rate: 60, Period: time.Minute, Burst: 20}
+
+// allow applies a rate limit and answers the request when it is over: 429 with Retry-After, or 503 when the
+// limiter itself failed (Redis), which is no reason to blame the client. A nil limiter allows everything.
+func allow(w http.ResponseWriter, r *http.Request, l RateAllower, rate redis.Rate, subject string, log *slog.Logger) bool {
+	if l == nil {
+		return true
+	}
+	res, err := l.Allow(r.Context(), rate, subject)
+	if err != nil {
+		log.WarnContext(r.Context(), "rate limit", "rate", rate.Name, "error", err)
+		w.Header().Set("Retry-After", "5")
+		WriteProblem(w, http.StatusServiceUnavailable, ErrorCodeInternalError)
+		return false
+	}
+	if !res.Allowed {
+		w.Header().Set("Retry-After", strconv.Itoa(int(res.RetryAfter/time.Second)+1))
+		WriteProblem(w, http.StatusTooManyRequests, ErrorCodeRateLimited)
+		return false
+	}
+	return true
+}
+
 // MediaOptions configures the media endpoints.
 type MediaOptions struct {
 	Service   *media.Service
@@ -187,16 +211,7 @@ func (m *MediaServer) UploadAttachment(w http.ResponseWriter, r *http.Request, _
 		WriteProblem(w, http.StatusUnsupportedMediaType, ErrorCodeUnsupportedMediaType)
 		return
 	}
-	res, err := m.o.Limiter.Allow(r.Context(), RateUpload, strconv.FormatInt(p.UserID, 10))
-	if err != nil {
-		m.o.Log.WarnContext(r.Context(), "upload rate limit", "error", err)
-		w.Header().Set("Retry-After", "5")
-		WriteProblem(w, http.StatusServiceUnavailable, ErrorCodeInternalError)
-		return
-	}
-	if !res.Allowed {
-		w.Header().Set("Retry-After", strconv.Itoa(int(res.RetryAfter/time.Second)+1))
-		WriteProblem(w, http.StatusTooManyRequests, ErrorCodeRateLimited)
+	if !allow(w, r, m.o.Limiter, RateUpload, strconv.FormatInt(p.UserID, 10), m.o.Log) {
 		return
 	}
 	form, err := readUploadForm(r, m.o.Service.Limits().Max())

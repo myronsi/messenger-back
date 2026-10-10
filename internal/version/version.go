@@ -9,6 +9,10 @@ import (
 	"strings"
 )
 
+// Backend is the version of this build, set at build time
+// (-ldflags "-X github.com/myronsi/messenger-back/internal/version.Backend=1.2.3").
+var Backend = "dev"
+
 // API is the version of the contract in api/openapi.yaml (info.version). A test keeps the two equal.
 const API = "2.0.0-alpha.4"
 

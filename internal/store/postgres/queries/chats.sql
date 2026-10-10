@@ -102,3 +102,6 @@ FROM participants
 WHERE chat_id = @chat_id AND user_id <> @leaving_user_id
 ORDER BY CASE role WHEN 'admin' THEN 0 WHEN 'moderator' THEN 1 ELSE 2 END, joined_at, user_id
 LIMIT 1;
+
+-- name: ListParticipantIDs :many
+SELECT user_id FROM participants WHERE chat_id = @chat_id ORDER BY user_id;

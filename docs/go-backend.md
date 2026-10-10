@@ -15,7 +15,7 @@ The Go backend replaces the Python one (`server/`). Its skeleton is in place; fe
 | `internal/httpapi` | router, middleware, health checks, generated server (`api.gen.go`) |
 | `internal/realtime` | the WebSocket gateway ([realtime.md](realtime.md)): connections, delivery between instances, presence |
 | `internal/messages` | message use cases with their authorization checks |
-| `internal/users` | users as other users may see them (privacy) |
+| `internal/users` | users as other users may see them (privacy); the account and user endpoints are in [accounts.md](accounts.md) |
 | `internal/version` | the contract version and SemVer comparison |
 | `internal/events`, `internal/jobs` | domain events on Redis streams and the worker's handlers |
 | `internal/media` | uploads, downloads, avatars: storage (disk, S3), content checks, image processing ([media.md](media.md)) |

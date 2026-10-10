@@ -3,6 +3,8 @@ package postgres
 import (
 	"context"
 	"errors"
+	"slices"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -176,7 +178,7 @@ func (r userRepo) TouchLastSeen(ctx context.Context, id int64) error {
 func (r userRepo) DeleteAccount(ctx context.Context, id int64) (DeletedAccount, error) {
 	var out DeletedAccount
 	err := r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
-		out = DeletedAccount{} // the transaction can be retried
+		out = DeletedAccount{DeletedChats: map[int64][]int64{}} // the transaction can be retried
 		// Concurrent writers that reference the user wait for this lock instead of racing the deletion.
 		if _, err := q.LockUser(ctx, id); err != nil {
 			return err
@@ -216,9 +218,23 @@ func (r userRepo) DeleteAccount(ctx context.Context, id int64) (DeletedAccount, 
 		if out.AttachmentKeys, err = q.ListAttachmentKeysOfChats(ctx, doomed); err != nil {
 			return err
 		}
+		all, err := q.ListChatIDsOfUser(ctx, id)
+		if err != nil {
+			return err
+		}
 		for _, chatID := range doomed {
+			members, err := q.ListParticipantIDs(ctx, chatID)
+			if err != nil {
+				return err
+			}
+			out.DeletedChats[chatID] = slices.DeleteFunc(members, func(m int64) bool { return m == id })
 			if _, err := q.DeleteChat(ctx, chatID); err != nil {
 				return err
+			}
+		}
+		for _, chatID := range all {
+			if _, gone := out.DeletedChats[chatID]; !gone {
+				out.LeftGroups = append(out.LeftGroups, chatID)
 			}
 		}
 		_, err = q.DeleteUser(ctx, id)
@@ -250,4 +266,33 @@ func setRole(ctx context.Context, q *sqlcdb.Queries, chatID, userID int64, role 
 		return ErrNotFound
 	}
 	return nil
+}
+
+// likeEscape makes user input safe inside a LIKE pattern.
+func likeEscape(s string) string {
+	r := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+	return r.Replace(s)
+}
+
+func (r userRepo) Search(ctx context.Context, viewerID int64, query, after string, limit int) ([]User, error) {
+	q := likeEscape(strings.ToLower(strings.TrimSpace(query)))
+	if q == "" {
+		return nil, nil
+	}
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	p := sqlcdb.SearchUsersParams{Prefix: q, Contains: q, ViewerID: viewerID, MaxRows: clampLimit(limit)}
+	if after != "" {
+		a := strings.ToLower(after)
+		p.After = &a
+	}
+	rows, err := r.s.q.SearchUsers(ctx, p)
+	if err != nil {
+		return nil, mapError(err)
+	}
+	out := make([]User, len(rows))
+	for i, u := range rows {
+		out[i] = userFrom(u)
+	}
+	return out, nil
 }
