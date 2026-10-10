@@ -47,12 +47,12 @@ membership change; the check fails closed when Redis or PostgreSQL cannot answer
 
 | Action | Rule |
 |---|---|
-| `message` | member; in a direct chat neither user blocked the other (`blocked_by_user`); a `file`/`voice` attachment was uploaded by the sender to this chat (voice: audio); `reply_to` is a message of the chat; idempotent per `client_temp_id` (24 h) |
-| `edit` | the sender's own text message, not deleted |
+| `message` | member; in a direct chat neither user blocked the other (`blocked_by_user`, which applies to every action below too; typing is dropped); a `file`/`voice` attachment is the sender's upload (voice: audio); `reply_to` is a message of the chat; idempotent per user, chat and `client_temp_id` (24 h): a retry is acknowledged only once the first send is stored |
+| `edit` | the sender's own text message, not deleted; members who deleted it for themselves get no `edit` |
 | `delete` | `me`: any member; `everyone`: the sender, or the owner, an admin or a moderator of a group |
 | `reaction_add`/`reaction_remove` | member, message not deleted |
-| `read` | member; the read position only moves forward; the unread counter is recounted |
-| `resend` | the sender's own message; members it was hidden from as not delivered get it |
+| `read` | member; the read position only moves forward; an older position changes nothing and is not broadcast |
+| `resend` | the sender's own message; it goes to the sender's devices and to the members it was hidden from as not delivered, never to those who deleted it for themselves |
 | `typing` | member |
 
 A chat the user is not in looks like a chat that does not exist (`not_found`).
@@ -63,7 +63,8 @@ A chat the user is not in looks like a chat that does not exist (`not_found`).
 `client_temp_id`) and publishes all of them in one pipeline. What travels on `user:{id}` is a small frame around the
 client event, so the receiving gateway can apply three rules before forwarding:
 
-- **Removed from a chat:** the removal (`chat_deleted`) marks the chat for that user; later events of the chat are
+- **Removed from a chat:** (sent by the chat and group endpoints, #53) the removal (`chat_deleted`) marks the chat
+  for that user; later events of the chat are
   dropped, including ones a concurrent send published after loading the old member list. `chat_created` or
   `group_created` for the chat lifts the mark.
 - **Presence order:** a presence change is forwarded only when its version is newer than the last one for that
@@ -84,12 +85,15 @@ their presence (`presence_visibility` with its exceptions). Going offline writes
 ## Sessions
 
 Revoking a session (logout, revoke, password change) broadcasts its id to every instance, which closes the
-session's sockets with `4401`. Other sessions of the same user stay connected.
+session's sockets with `4401`. Other sessions of the same user stay connected. Because a broadcast can be lost
+(Redis unavailable) or arrive before the socket is registered, every socket also re-checks its session right after
+connecting and on every second ping (about once a minute; the session cache answers most checks).
 
 ## Shutdown
 
-On SIGTERM every socket is closed with `1012` "reconnect"; each one releases its presence on the way out, then the
-bus, presence loop and the ID node lease stop.
+On SIGTERM every socket is closed with `1012` "reconnect". The gateway waits until every connection handler has
+released its presence and recorded last-seen (within `HTTP_SHUTDOWN_TIMEOUT`), then the bus, presence loop and the
+ID node lease stop.
 
 ## Settings
 

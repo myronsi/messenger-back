@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 	"unicode"
@@ -64,10 +65,10 @@ type Unread interface {
 	Set(ctx context.Context, userID, chatID, count int64) error
 }
 
-// Dedup remembers the message of a client_temp_id.
+// Dedup remembers the message of a client_temp_id (per user and chat).
 type Dedup interface {
-	Claim(ctx context.Context, userID int64, clientTempID string, id int64) (existing int64, claimed bool, err error)
-	Release(ctx context.Context, userID int64, clientTempID string, id int64) error
+	Claim(ctx context.Context, userID, chatID int64, clientTempID string, id int64) (existing int64, claimed bool, err error)
+	Release(ctx context.Context, userID, chatID int64, clientTempID string, id int64) error
 }
 
 // Store is the PostgreSQL side.
@@ -181,7 +182,7 @@ type Sent struct {
 }
 
 func (s *Service) validateSend(r SendRequest) error {
-	if n := len(r.ClientTempID); n == 0 || n > 64 || !utf8.ValidString(r.ClientTempID) {
+	if n := utf8.RuneCountInString(r.ClientTempID); n == 0 || n > 64 || !utf8.ValidString(r.ClientTempID) {
 		return invalid("client_temp_id must be 1 to 64 characters")
 	}
 	if r.Content != nil && !validText(*r.Content, MaxContent) {
@@ -249,12 +250,12 @@ func (s *Service) Send(ctx context.Context, r SendRequest) (Sent, error) {
 	if err != nil {
 		return Sent{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
-	prev, claimed, err := s.d.Dedup.Claim(ctx, r.SenderID, r.ClientTempID, id)
+	prev, claimed, err := s.d.Dedup.Claim(ctx, r.SenderID, r.ChatID, r.ClientTempID, id)
 	if err != nil {
 		return Sent{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
 	if !claimed {
-		return s.duplicate(ctx, r.ChatID, prev)
+		return s.duplicate(ctx, r, prev)
 	}
 
 	sender := r.SenderID
@@ -263,7 +264,7 @@ func (s *Service) Send(ctx context.Context, r SendRequest) (Sent, error) {
 		AttachmentID: attachment, ReplyTo: r.ReplyTo, CreatedAt: ids.Time(id),
 	}
 	if err := s.d.Messages.Insert(ctx, m); err != nil {
-		if rerr := s.d.Dedup.Release(context.WithoutCancel(ctx), r.SenderID, r.ClientTempID, id); rerr != nil {
+		if rerr := s.d.Dedup.Release(context.WithoutCancel(ctx), r.SenderID, r.ChatID, r.ClientTempID, id); rerr != nil {
 			s.d.Log.WarnContext(ctx, "release client_temp_id", "error", rerr)
 		}
 		return Sent{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
@@ -278,12 +279,16 @@ func (s *Service) Send(ctx context.Context, r SendRequest) (Sent, error) {
 	return Sent{Message: m}, nil
 }
 
-// duplicate answers a repeated send with the first message. If that send is still being stored (a
-// concurrent retry), the id and time are known anyway because both come from the id.
-func (s *Service) duplicate(ctx context.Context, chatID, id int64) (Sent, error) {
-	m, err := s.d.Messages.Get(ctx, chatID, id)
-	if err != nil {
-		m = scylla.Message{ChatID: chatID, ID: id, CreatedAt: ids.Time(id)}
+// ErrSendInProgress: a send with this client_temp_id is still being stored (or failed). The client retries.
+var ErrSendInProgress = fmt.Errorf("%w: the first send with this client_temp_id is not stored yet", ErrUnavailable)
+
+// duplicate answers a repeated send with the first message, but only once that message is stored: until then
+// (the first send is still running, or failed and will release its claim) the retry fails as unavailable, so
+// a client never gets an ack for a message that does not exist.
+func (s *Service) duplicate(ctx context.Context, r SendRequest, id int64) (Sent, error) {
+	m, err := s.d.Messages.Get(ctx, r.ChatID, id)
+	if err != nil || m.SenderID == nil || *m.SenderID != r.SenderID {
+		return Sent{}, ErrSendInProgress
 	}
 	return Sent{Message: m, Duplicate: true}, nil
 }
@@ -296,6 +301,25 @@ func without(ids []int64, id int64) []int64 {
 		}
 	}
 	return out
+}
+
+// requireNotBlocked fails with ErrBlocked when the chat is a direct chat and one side blocked the other.
+func (s *Service) requireNotBlocked(ctx context.Context, userID, chatID int64) error {
+	chat, err := s.d.Store.Chats().Get(ctx, chatID)
+	if errors.Is(err, postgres.ErrNotFound) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrUnavailable, err)
+	}
+	if chat.Type != postgres.ChatDirect {
+		return nil
+	}
+	members, err := s.Members(ctx, chatID)
+	if err != nil {
+		return err
+	}
+	return s.checkNotBlocked(ctx, userID, members)
 }
 
 func (s *Service) checkNotBlocked(ctx context.Context, sender int64, members []int64) error {
@@ -347,6 +371,9 @@ func (s *Service) Edit(ctx context.Context, userID, chatID, messageID int64, con
 	if m.SenderID == nil || *m.SenderID != userID || m.Type != scylla.TypeText {
 		return scylla.Message{}, ErrForbidden
 	}
+	if err := s.requireNotBlocked(ctx, userID, chatID); err != nil {
+		return scylla.Message{}, err
+	}
 	at := s.now().UTC().Truncate(time.Millisecond)
 	if err := s.d.Messages.Edit(ctx, chatID, messageID, content, at); errors.Is(err, scylla.ErrNotFound) {
 		return scylla.Message{}, ErrNotFound
@@ -354,11 +381,27 @@ func (s *Service) Edit(ctx context.Context, userID, chatID, messageID int64, con
 		return scylla.Message{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
 	m.Content, m.EditedAt = &content, &at
-	members, err := s.Members(ctx, chatID)
-	if err == nil {
-		s.d.Notifier.MessageEdited(ctx, m, members)
+	if members, err := s.Members(ctx, chatID); err == nil {
+		// Members who deleted the message for themselves do not get its new text.
+		s.d.Notifier.MessageEdited(ctx, m, s.withoutHidden(ctx, chatID, messageID, members))
 	}
 	return m, nil
+}
+
+// withoutHidden leaves out the members for whom the message is hidden.
+func (s *Service) withoutHidden(ctx context.Context, chatID, messageID int64, members []int64) []int64 {
+	hidden, err := s.d.Messages.HiddenAmong(ctx, chatID, messageID, members)
+	if err != nil {
+		s.d.Log.WarnContext(ctx, "hidden check", "error", err)
+		return nil // fail closed: nobody gets an event that might reveal a hidden message
+	}
+	out := make([]int64, 0, len(members))
+	for _, m := range members {
+		if !hidden[m] {
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 // Delete scopes.
@@ -451,6 +494,9 @@ func (s *Service) React(ctx context.Context, userID, chatID, messageID int64, em
 	if m.Deleted {
 		return ErrNotFound
 	}
+	if err := s.requireNotBlocked(ctx, userID, chatID); err != nil {
+		return err
+	}
 	at := s.now().UTC()
 	if add {
 		err = s.d.Messages.AddReaction(ctx, chatID, messageID, userID, emoji, at)
@@ -475,11 +521,16 @@ func (s *Service) Read(ctx context.Context, userID, chatID, messageID int64) err
 	if _, err := s.message(ctx, chatID, messageID); err != nil {
 		return err
 	}
-	err := s.d.Store.Chats().MarkRead(ctx, chatID, userID, messageID)
-	if err != nil && !errors.Is(err, postgres.ErrNotFound) {
+	advanced, err := s.d.Store.Chats().MarkRead(ctx, chatID, userID, messageID)
+	if errors.Is(err, postgres.ErrNotFound) {
+		return ErrNotFound // removed from the chat after the cached membership check
+	}
+	if err != nil {
 		return fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
-	// ErrNotFound from MarkRead means the position was already further: nothing changed.
+	if !advanced {
+		return nil // an older position (a lagging tab): nothing changes, nobody is told
+	}
 	if n, err := s.d.Messages.CountAfter(ctx, chatID, userID, messageID, unreadCap); err != nil {
 		s.d.Log.WarnContext(ctx, "unread recount", "error", err, "chat_id", chatID)
 	} else if err := s.d.Unread.Set(ctx, userID, chatID, int64(n)); err != nil {
@@ -511,16 +562,26 @@ func (s *Service) Resend(ctx context.Context, userID, chatID, messageID int64) e
 	if m.Deleted {
 		return ErrNotFound
 	}
+	if err := s.requireNotBlocked(ctx, userID, chatID); err != nil {
+		return err
+	}
+	// Delivered again to the sender's devices and to the members it was not delivered to; members who deleted
+	// it for themselves keep it deleted.
+	unhidden, err := s.d.Messages.UnhideAll(ctx, chatID, messageID)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrUnavailable, err)
+	}
 	members, err := s.Members(ctx, chatID)
 	if err != nil {
 		return err
 	}
-	for _, uid := range members {
-		if err := s.d.Messages.Unhide(ctx, uid, chatID, messageID); err != nil {
-			return fmt.Errorf("%w: %w", ErrUnavailable, err)
+	recipients := []int64{userID}
+	for _, uid := range unhidden {
+		if uid != userID && slices.Contains(members, uid) {
+			recipients = append(recipients, uid)
 		}
 	}
-	s.d.Notifier.MessageCreated(ctx, m, members, "")
+	s.d.Notifier.MessageCreated(ctx, m, recipients, "")
 	return nil
 }
 
@@ -528,6 +589,9 @@ func (s *Service) Resend(ctx context.Context, userID, chatID, messageID int64) e
 func (s *Service) Typing(ctx context.Context, userID, chatID int64, typing bool) error {
 	if err := s.requireMember(ctx, chatID, userID); err != nil {
 		return err
+	}
+	if err := s.requireNotBlocked(ctx, userID, chatID); err != nil {
+		return nil // dropped silently, like every typing indicator that cannot be delivered
 	}
 	members, err := s.Members(ctx, chatID)
 	if err != nil {

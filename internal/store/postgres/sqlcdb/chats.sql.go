@@ -395,8 +395,9 @@ func (q *Queries) LockParticipant(ctx context.Context, arg LockParticipantParams
 
 const markRead = `-- name: MarkRead :execrows
 UPDATE participants
-SET last_read_message_id = GREATEST(COALESCE(last_read_message_id, 0), $1::bigint)
+SET last_read_message_id = $1::bigint
 WHERE chat_id = $2 AND user_id = $3
+  AND (last_read_message_id IS NULL OR last_read_message_id < $1::bigint)
 `
 
 type MarkReadParams struct {
@@ -405,7 +406,7 @@ type MarkReadParams struct {
 	UserID    int64
 }
 
-// The read marker only moves forward.
+// The read marker only moves forward: no row is updated when it is already at or past the message.
 func (q *Queries) MarkRead(ctx context.Context, arg MarkReadParams) (int64, error) {
 	result, err := q.db.Exec(ctx, markRead, arg.MessageID, arg.ChatID, arg.UserID)
 	if err != nil {

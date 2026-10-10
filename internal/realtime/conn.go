@@ -116,10 +116,12 @@ func (c *conn) writeLoop() {
 	}
 }
 
+// pingLoop pings the client and, every other ping, re-checks the session: a revocation whose broadcast was
+// lost (Redis unavailable) still ends the socket.
 func (c *conn) pingLoop() {
 	t := time.NewTicker(c.gw.o.PingInterval)
 	defer t.Stop()
-	for {
+	for n := 1; ; n++ {
 		select {
 		case <-c.done:
 			return
@@ -129,6 +131,10 @@ func (c *conn) pingLoop() {
 			cancel()
 			if err != nil {
 				_ = c.Close(int(websocket.StatusGoingAway), "ping timeout")
+				return
+			}
+			if n%2 == 0 && !c.gw.sessionActive(c) {
+				_ = c.Close(CloseInvalidTicket, "session ended")
 				return
 			}
 		}

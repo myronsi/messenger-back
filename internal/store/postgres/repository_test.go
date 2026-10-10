@@ -260,16 +260,20 @@ func TestMarkReadOnlyMovesForward(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, id := range []int64{50, 20} {
-		if err := s.Chats().MarkRead(ctx, c.ID, a.ID, id); err != nil {
-			t.Fatal(err)
+	for _, step := range []struct {
+		id       int64
+		advanced bool
+	}{{50, true}, {20, false}, {50, false}, {60, true}} {
+		advanced, err := s.Chats().MarkRead(ctx, c.ID, a.ID, step.id)
+		if err != nil || advanced != step.advanced {
+			t.Fatalf("read %d: advanced=%v %v", step.id, advanced, err)
 		}
 	}
 	p, err := s.Chats().Participant(ctx, c.ID, a.ID)
-	if err != nil || p.LastReadMessageID == nil || *p.LastReadMessageID != 50 {
+	if err != nil || p.LastReadMessageID == nil || *p.LastReadMessageID != 60 {
 		t.Fatalf("read marker: %+v, %v", p, err)
 	}
-	if err := s.Chats().MarkRead(ctx, c.ID, 999999, 1); !errors.Is(err, ErrNotFound) {
+	if _, err := s.Chats().MarkRead(ctx, c.ID, 999999, 1); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("not a participant: got %v", err)
 	}
 }

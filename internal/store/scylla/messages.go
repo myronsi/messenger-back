@@ -102,8 +102,12 @@ type MessageRepository interface {
 	Delete(ctx context.Context, chatID, messageID int64) error
 	// Hide hides the message from one user.
 	Hide(ctx context.Context, userID, chatID, messageID int64, reason string) error
-	// Unhide shows a message hidden as not delivered once it is delivered.
-	Unhide(ctx context.Context, userID, chatID, messageID int64) error
+	// Unhide shows a message hidden as not delivered once it is delivered; true when it was hidden so.
+	Unhide(ctx context.Context, userID, chatID, messageID int64) (bool, error)
+	// UnhideAll shows the message to every user it was hidden from as not delivered and returns them.
+	UnhideAll(ctx context.Context, chatID, messageID int64) ([]int64, error)
+	// HiddenAmong returns which of the users have the message hidden (for any reason).
+	HiddenAmong(ctx context.Context, chatID, messageID int64, userIDs []int64) (map[int64]bool, error)
 	AddReaction(ctx context.Context, chatID, messageID, userID int64, emoji string, at time.Time) error
 	RemoveReaction(ctx context.Context, chatID, messageID, userID int64, emoji string) error
 	// Reactions returns the reactions of the messages, keyed by message id, in one query.
@@ -427,19 +431,90 @@ func (r *Messages) markHidden(ctx context.Context, sess *gocql.Session, chatID, 
 // hideAttempts bounds the insert/upgrade rounds of Hide against concurrent Unhide calls.
 const hideAttempts = 5
 
-func (r *Messages) Unhide(ctx context.Context, userID, chatID, messageID int64) error {
+func (r *Messages) Unhide(ctx context.Context, userID, chatID, messageID int64) (bool, error) {
 	ctx, cancel, sess, err := r.session(ctx)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer cancel()
+	return r.unhide(ctx, sess, userID, chatID, messageID)
+}
+
+func (r *Messages) unhide(ctx context.Context, sess *gocql.Session, userID, chatID, messageID int64) (bool, error) {
 	// Only an undelivered message becomes visible; one the user deleted for themselves stays hidden.
-	_, err = sess.Query(`DELETE FROM hidden_messages WHERE user_id = ? AND chat_id = ? AND message_id = ? IF reason = ?`,
+	applied, err := sess.Query(`DELETE FROM hidden_messages WHERE user_id = ? AND chat_id = ? AND message_id = ? IF reason = ?`,
 		userID, chatID, messageID, HiddenNotDelivered).WithContext(ctx).SerialConsistency(gocql.LocalSerial).MapScanCAS(map[string]any{})
 	if err != nil {
-		return fmt.Errorf("unhide message: %w", err)
+		return false, fmt.Errorf("unhide message: %w", err)
 	}
-	return nil
+	return applied, nil
+}
+
+// hiddenUsers returns who has hidden messages in the chat (hidden_message_users).
+func (r *Messages) hiddenUsers(ctx context.Context, sess *gocql.Session, chatID int64) ([]int64, error) {
+	iter := sess.Query(`SELECT user_id FROM hidden_message_users WHERE chat_id = ?`, chatID).WithContext(ctx).Iter()
+	var out []int64
+	var uid int64
+	for iter.Scan(&uid) {
+		out = append(out, uid)
+	}
+	if err := iter.Close(); err != nil {
+		return nil, fmt.Errorf("hidden users: %w", err)
+	}
+	return out, nil
+}
+
+func (r *Messages) UnhideAll(ctx context.Context, chatID, messageID int64) ([]int64, error) {
+	ctx, cancel, sess, err := r.session(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer cancel()
+	users, err := r.hiddenUsers(ctx, sess, chatID)
+	if err != nil {
+		return nil, err
+	}
+	var out []int64
+	for _, uid := range users {
+		ok, err := r.unhide(ctx, sess, uid, chatID, messageID)
+		if err != nil {
+			return out, err
+		}
+		if ok {
+			out = append(out, uid)
+		}
+	}
+	return out, nil
+}
+
+func (r *Messages) HiddenAmong(ctx context.Context, chatID, messageID int64, userIDs []int64) (map[int64]bool, error) {
+	out := map[int64]bool{}
+	ctx, cancel, sess, err := r.session(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer cancel()
+	candidates, err := r.hiddenUsers(ctx, sess, chatID)
+	if err != nil {
+		return nil, err
+	}
+	wanted := make(map[int64]bool, len(userIDs))
+	for _, u := range userIDs {
+		wanted[u] = true
+	}
+	for _, uid := range candidates {
+		if !wanted[uid] {
+			continue
+		}
+		h, err := r.hiddenIn(ctx, sess, uid, chatID, messageID, messageID)
+		if err != nil {
+			return nil, err
+		}
+		if h[messageID] {
+			out[uid] = true
+		}
+	}
+	return out, nil
 }
 
 func (r *Messages) AddReaction(ctx context.Context, chatID, messageID, userID int64, emoji string, at time.Time) error {

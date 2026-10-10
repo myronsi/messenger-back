@@ -241,11 +241,21 @@ func (r chatRepo) TransferOwnership(ctx context.Context, chatID, fromID, toID in
 	})
 }
 
-func (r chatRepo) MarkRead(ctx context.Context, chatID, userID, messageID int64) error {
+func (r chatRepo) MarkRead(ctx context.Context, chatID, userID, messageID int64) (bool, error) {
 	ctx, cancel := r.s.call(ctx)
 	defer cancel()
 	n, err := r.s.q.MarkRead(ctx, sqlcdb.MarkReadParams{ChatID: chatID, UserID: userID, MessageID: messageID})
-	return affected(n, err)
+	if err != nil {
+		return false, mapError(err)
+	}
+	if n > 0 {
+		return true, nil
+	}
+	// Nothing changed: the marker was already further, or the user is not in the chat.
+	if _, err := r.s.q.GetParticipant(ctx, sqlcdb.GetParticipantParams{ChatID: chatID, UserID: userID}); err != nil {
+		return false, mapError(err)
+	}
+	return false, nil
 }
 
 func (r chatRepo) Delete(ctx context.Context, chatID int64) ([]string, error) {

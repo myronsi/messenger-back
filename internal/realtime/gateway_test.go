@@ -35,8 +35,9 @@ func TestMain(m *testing.M) {
 
 // tickets is a fake ticket store: the tests mint tickets for a user and session.
 type tickets struct {
-	mu sync.Mutex
-	m  map[string]auth.Principal
+	mu      sync.Mutex
+	m       map[string]auth.Principal
+	revoked map[uuid.UUID]bool
 }
 
 func (t *tickets) issue(userID int64) (string, uuid.UUID) {
@@ -45,6 +46,12 @@ func (t *tickets) issue(userID int64) (string, uuid.UUID) {
 	tk, sid := uuid.NewString(), uuid.New()
 	t.m[tk] = auth.Principal{UserID: userID, SessionID: sid}
 	return tk, sid
+}
+
+func (t *tickets) SessionActive(_ context.Context, p auth.Principal) (bool, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return !t.revoked[p.SessionID], nil
 }
 
 func (t *tickets) RedeemTicket(_ context.Context, ticket string) (auth.Principal, error) {
@@ -66,6 +73,8 @@ type env struct {
 	prefix  string
 	tickets *tickets
 	node    int
+	// ping is the ping (and session re-check) interval of new instances.
+	ping time.Duration
 }
 
 func newEnv(t *testing.T) *env {
@@ -73,11 +82,12 @@ func newEnv(t *testing.T) *env {
 	pg := testenv.Postgres(t)
 	_, prefix := testenv.Redis(t)
 	sc := testenv.Scylla(t)
-	return &env{t: t, pg: pg, repo: scylla.NewMessages(sc, 10*time.Second), prefix: prefix, tickets: &tickets{m: map[string]auth.Principal{}}}
+	return &env{t: t, pg: pg, repo: scylla.NewMessages(sc, 10*time.Second), prefix: prefix, tickets: &tickets{m: map[string]auth.Principal{}, revoked: map[uuid.UUID]bool{}}, ping: time.Hour}
 }
 
 // instance is one API process: its own Redis connection, bus, presence, fan-out, service and gateway.
 type instance struct {
+	hub      *Hub
 	gw       *Gateway
 	fanout   *Fanout
 	svc      *messages.Service
@@ -123,10 +133,11 @@ func (e *env) instance(name string) *instance {
 		Dedup: redis.NewDedup(rdb, e.prefix, 0), IDs: gen, Notifier: in.fanout,
 	})
 	hub := NewHub(slog.New(slog.DiscardHandler), nil)
+	in.hub = hub
 	in.gw, err = New(Options{
 		Auth: e.tickets, Messages: in.svc, Fanout: in.fanout, Bus: bus, Presence: in.presence,
 		Limiter: redis.NewRateLimiter(rdb, e.prefix), LastSeen: e.pg.Users(), Hub: hub,
-		MinClientAPIVersion: "2.0.0-alpha.1", PingInterval: time.Hour,
+		MinClientAPIVersion: "2.0.0-alpha.1", PingInterval: e.ping,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -618,5 +629,48 @@ func TestForeignOriginIsRejected(t *testing.T) {
 	}
 	if err == nil || resp == nil || resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("foreign origin: %v %v", resp, err)
+	}
+}
+
+// A revocation whose broadcast was lost still ends the socket: the session is re-checked periodically.
+func TestRevokedSessionIsFoundWithoutBroadcast(t *testing.T) {
+	e := newEnv(t)
+	e.ping = 100 * time.Millisecond
+	a := e.instance("a")
+	alice := e.user("alice")
+	tk, sid := e.tickets.issue(alice)
+	c := e.dial(a, alice, "ticket="+tk)
+	c.next("hello")
+	e.tickets.mu.Lock()
+	e.tickets.revoked[sid] = true
+	e.tickets.mu.Unlock()
+	if code := c.closeCode(); code != CloseInvalidTicket {
+		t.Fatalf("close code %d", code)
+	}
+}
+
+// On shutdown every socket gets the reconnect code and its user goes offline before the gateway returns.
+func TestShutdownReleasesPresence(t *testing.T) {
+	e := newEnv(t)
+	a, b := e.instance("a"), e.instance("b")
+	alice, bob := e.user("alice"), e.user("bob")
+	if _, _, err := e.pg.Chats().CreateDirect(context.Background(), alice, bob); err != nil {
+		t.Fatal(err)
+	}
+	cb := e.online(b, bob)
+	ca := e.online(a, alice)
+	cb.next("presence")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	a.hub.Shutdown(ctx)
+	a.gw.Wait(ctx)
+	if code := ca.closeCode(); code != CloseServiceRestart {
+		t.Fatalf("close code %d", code)
+	}
+	if d := data(cb.next("presence")); d["is_online"] != false {
+		t.Fatalf("presence after shutdown: %v", d)
+	}
+	if m, _ := a.presence.Online(context.Background(), alice); m[alice] {
+		t.Fatal("alice still online after the shutdown")
 	}
 }

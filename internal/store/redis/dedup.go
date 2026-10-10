@@ -29,15 +29,16 @@ func NewDedup(rdb Client, prefix string, ttl time.Duration) *Dedup {
 	return &Dedup{rdb: rdb, prefix: prefix, ttl: ttl}
 }
 
-func (d *Dedup) key(userID int64, clientTempID string) string {
-	// The client chooses the id: hash it, so it cannot shape key names.
-	return d.prefix + "sent:" + strconv.FormatInt(userID, 10) + ":" + digest(clientTempID)
+func (d *Dedup) key(userID, chatID int64, clientTempID string) string {
+	// Per chat: client_temp_ids are unique per client (tab), and two tabs may count alike. The client chooses
+	// the id, so it is hashed and cannot shape key names.
+	return d.prefix + "sent:" + strconv.FormatInt(userID, 10) + ":" + strconv.FormatInt(chatID, 10) + ":" + digest(clientTempID)
 }
 
-// Claim records id for the user's client_temp_id unless one is recorded already, in which case that one is
-// returned with claimed false.
-func (d *Dedup) Claim(ctx context.Context, userID int64, clientTempID string, id int64) (existing int64, claimed bool, err error) {
-	old, err := d.rdb.SetArgs(ctx, d.key(userID, clientTempID), id, goredis.SetArgs{Mode: "NX", Get: true, TTL: d.ttl}).Result()
+// Claim records id for the user's client_temp_id in the chat unless one is recorded already, in which case
+// that one is returned with claimed false.
+func (d *Dedup) Claim(ctx context.Context, userID, chatID int64, clientTempID string, id int64) (existing int64, claimed bool, err error) {
+	old, err := d.rdb.SetArgs(ctx, d.key(userID, chatID, clientTempID), id, goredis.SetArgs{Mode: "NX", Get: true, TTL: d.ttl}).Result()
 	if errors.Is(err, goredis.Nil) {
 		return id, true, nil
 	}
@@ -58,8 +59,8 @@ return 0`)
 
 // Release forgets a claim whose send failed, so the client's retry can succeed. Only the claim of id is
 // removed.
-func (d *Dedup) Release(ctx context.Context, userID int64, clientTempID string, id int64) error {
-	if err := releaseClaimScript.Run(ctx, d.rdb, []string{d.key(userID, clientTempID)}, strconv.FormatInt(id, 10)).Err(); err != nil {
+func (d *Dedup) Release(ctx context.Context, userID, chatID int64, clientTempID string, id int64) error {
+	if err := releaseClaimScript.Run(ctx, d.rdb, []string{d.key(userID, chatID, clientTempID)}, strconv.FormatInt(id, 10)).Err(); err != nil {
 		return fmt.Errorf("dedup release: %w", err)
 	}
 	return nil

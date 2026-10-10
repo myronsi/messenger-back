@@ -51,10 +51,11 @@ DELETE FROM participants WHERE chat_id = @chat_id AND user_id = @user_id;
 UPDATE participants SET role = @role WHERE chat_id = @chat_id AND user_id = @user_id;
 
 -- name: MarkRead :execrows
--- The read marker only moves forward.
+-- The read marker only moves forward: no row is updated when it is already at or past the message.
 UPDATE participants
-SET last_read_message_id = GREATEST(COALESCE(last_read_message_id, 0), @message_id::bigint)
-WHERE chat_id = @chat_id AND user_id = @user_id;
+SET last_read_message_id = @message_id::bigint
+WHERE chat_id = @chat_id AND user_id = @user_id
+  AND (last_read_message_id IS NULL OR last_read_message_id < @message_id::bigint);
 
 -- name: LockChatsOfUser :many
 -- Chats that reference the user as member, creator, uploader, invitation party or pinner (each side is an

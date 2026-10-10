@@ -27,9 +27,11 @@ const (
 	eventTimeout        = 10 * time.Second
 )
 
-// TicketRedeemer turns a WebSocket ticket into the session it was issued for.
+// TicketRedeemer turns a WebSocket ticket into the session it was issued for, and tells whether a session is
+// still active.
 type TicketRedeemer interface {
 	RedeemTicket(ctx context.Context, ticket string) (auth.Principal, error)
+	SessionActive(ctx context.Context, p auth.Principal) (bool, error)
 }
 
 // Subscriber is the bus as the gateway uses it.
@@ -91,6 +93,11 @@ type Gateway struct {
 
 	mu    sync.Mutex
 	users map[int64]*userState
+
+	// conns counts the running connection handlers, bg the background work they started; shutdown waits for
+	// both, so every socket releases its presence and records last-seen before the stores close.
+	conns sync.WaitGroup
+	bg    sync.WaitGroup
 }
 
 // userState is what this instance knows about one connected user.
@@ -133,6 +140,8 @@ func New(o Options) (*Gateway, error) {
 
 // ServeHTTP upgrades the request, authenticates it with the ticket and runs the connection until it closes.
 func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	g.conns.Add(1)
+	defer g.conns.Done()
 	ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: g.origins})
 	if err != nil {
 		return // Accept has answered the request
@@ -171,10 +180,16 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := g.register(c); err != nil {
 		g.o.Log.WarnContext(r.Context(), "register connection", "error", err)
+		g.unregister(c)
 		_ = ws.Close(websocket.StatusTryAgainLater, "try again")
 		return
 	}
 	defer g.unregister(c)
+	// A revocation broadcast between redeeming the ticket and registering found no socket to close.
+	if !g.sessionActive(c) {
+		_ = ws.Close(CloseInvalidTicket, "session ended")
+		return
+	}
 	c.run()
 }
 
@@ -185,8 +200,22 @@ func (g *Gateway) hello(userID int64) []byte {
 	return raw
 }
 
+// sessionActive re-checks the connection's session; when the answer is unknown the socket stays (the next
+// check decides).
+func (g *Gateway) sessionActive(c *conn) bool {
+	ctx, cancel := context.WithTimeout(g.ctx, eventTimeout)
+	defer cancel()
+	ok, err := g.o.Auth.SessionActive(ctx, auth.Principal{UserID: c.userID, SessionID: c.sessionID})
+	if err != nil {
+		g.o.Log.WarnContext(ctx, "session check", "error", err)
+		return true
+	}
+	return ok
+}
+
 // register adds the connection; the user's first connection on this instance subscribes the user's channel
-// and claims presence.
+// and claims presence. Without a subscription the socket would silently miss events, so that fails the
+// connection (the client reconnects).
 func (g *Gateway) register(c *conn) error {
 	g.mu.Lock()
 	st, ok := g.users[c.userID]
@@ -200,16 +229,19 @@ func (g *Gateway) register(c *conn) error {
 	ctx, cancel := context.WithTimeout(g.ctx, eventTimeout)
 	defer cancel()
 	if err := g.o.Bus.Subscribe(ctx, c.userID); err != nil {
-		// The subscription is retried by the bus on its next reconnect; the client may miss events until
-		// then and catches up after its next reconnect.
-		g.o.Log.WarnContext(ctx, "subscribe user", "error", err)
+		return err
 	}
 	change, changed, err := g.o.Presence.Connect(ctx, c.userID)
 	if err != nil {
 		g.o.Log.WarnContext(ctx, "presence connect", "error", err)
 	}
 	if changed {
-		g.o.Fanout.Presence(ctx, change, time.Time{})
+		// In the background: the connection's writer must start before events can pile up.
+		g.bg.Go(func() {
+			ctx, cancel := context.WithTimeout(context.WithoutCancel(g.ctx), eventTimeout)
+			defer cancel()
+			g.o.Fanout.Presence(ctx, change, time.Time{})
+		})
 	}
 	return nil
 }
@@ -248,7 +280,7 @@ func (g *Gateway) wentOffline(ctx context.Context, change redis.Change) {
 // PresenceChanged handles the transitions presence detects in the background (a crashed instance's users
 // going offline, users coming back after Redis lost their claim).
 func (g *Gateway) PresenceChanged(changes []redis.Change) {
-	go func() {
+	g.bg.Go(func() {
 		ctx, cancel := context.WithTimeout(g.ctx, time.Minute)
 		defer cancel()
 		for _, c := range changes {
@@ -258,7 +290,7 @@ func (g *Gateway) PresenceChanged(changes []redis.Change) {
 				g.wentOffline(ctx, c)
 			}
 		}
-	}()
+	})
 }
 
 // Deliver handles a frame published to a user served here (the bus handler). It must not block.
@@ -347,6 +379,22 @@ func (g *Gateway) connsOf(match func(*conn) bool) []*conn {
 		}
 	}
 	return out
+}
+
+// Wait blocks until every connection handler and its background work has finished, or ctx is done. Call it
+// after the hub's Shutdown closed the sockets.
+func (g *Gateway) Wait(ctx context.Context) {
+	done := make(chan struct{})
+	go func() {
+		g.conns.Wait()
+		g.bg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-ctx.Done():
+		g.o.Log.WarnContext(ctx, "websocket handlers still running at shutdown")
+	}
 }
 
 // Close stops the gateway's background work; open connections are closed by the hub's Shutdown.

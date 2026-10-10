@@ -345,7 +345,8 @@ func (s *Service) clear(ctx context.Context, r Rule, subject string) {
 // fails instead of reporting an immediate sign-out that did not fully happen.
 func (s *Service) revokeInCache(ctx context.Context, ids ...uuid.UUID) error {
 	if s.onRevoked != nil && len(ids) > 0 {
-		s.onRevoked(ctx, ids)
+		// After the cache knows (deferred), and without holding up the request.
+		defer func() { go s.onRevoked(context.WithoutCancel(ctx), ids) }()
 	}
 	var err error
 	for attempt := range 3 {
@@ -1100,6 +1101,27 @@ func (s *Service) IssueTicket(ctx context.Context, p Principal) (string, time.Du
 
 // RedeemTicket consumes a ticket and checks that its session is still active. The WebSocket gateway
 // calls it during the handshake.
+// SessionActive reports whether the session still exists and is neither revoked nor expired. The gateway
+// re-checks the sessions of open sockets with it (the cache answers most calls).
+func (s *Service) SessionActive(ctx context.Context, p Principal) (bool, error) {
+	hit, found, err := s.cache.Get(ctx, p.SessionID)
+	if err == nil && found {
+		return !hit.Revoked && hit.UserID == p.UserID && hit.Expires.After(s.now()), nil
+	}
+	sess, err := s.store.Sessions().Get(ctx, p.SessionID)
+	if errors.Is(err, postgres.ErrNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	active := sess.UserID == p.UserID && sess.Active(s.now())
+	if active {
+		_ = s.cache.Put(ctx, p.SessionID, sess.UserID, sess.ExpiresAt)
+	}
+	return active, nil
+}
+
 func (s *Service) RedeemTicket(ctx context.Context, ticket string) (Principal, error) {
 	t, err := s.tickets.Redeem(ctx, ticket)
 	if err != nil {

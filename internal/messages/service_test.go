@@ -28,15 +28,17 @@ func TestMain(m *testing.M) {
 // recorder is a Notifier that remembers what it was told.
 type recorder struct {
 	messages.NopNotifier
-	mu      sync.Mutex
-	created []scylla.Message
-	deleted []string
-	reads   [][]int64
+	mu         sync.Mutex
+	created    []scylla.Message
+	recipients []int64
+	deleted    []string
+	reads      [][]int64
 }
 
-func (r *recorder) MessageCreated(_ context.Context, m scylla.Message, _ []int64, _ string) {
+func (r *recorder) MessageCreated(_ context.Context, m scylla.Message, recipients []int64, _ string) {
 	r.mu.Lock()
 	r.created = append(r.created, m)
+	r.recipients = recipients
 	r.mu.Unlock()
 }
 
@@ -268,5 +270,91 @@ func TestResendOnlyOwnMessages(t *testing.T) {
 	}
 	if len(f.rec.created) != 2 {
 		t.Fatalf("resend did not deliver: %d", len(f.rec.created))
+	}
+}
+
+func TestBlocksCoverEveryAction(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	alice, bob := f.user("alice"), f.user("bob")
+	chat, _, _ := f.pg.Chats().CreateDirect(ctx, alice, bob)
+	m := f.send(chat.ID, alice, "b-1", "before the block")
+	if err := f.pg.Social().Block(ctx, bob, alice); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.Edit(ctx, alice, chat.ID, m.ID, "sneaky"); !errors.Is(err, messages.ErrBlocked) {
+		t.Fatalf("edit: %v", err)
+	}
+	if err := f.svc.React(ctx, alice, chat.ID, m.ID, "👋", true); !errors.Is(err, messages.ErrBlocked) {
+		t.Fatalf("react: %v", err)
+	}
+	if err := f.svc.Resend(ctx, alice, chat.ID, m.ID); !errors.Is(err, messages.ErrBlocked) {
+		t.Fatalf("resend: %v", err)
+	}
+	before := len(f.rec.created)
+	if err := f.svc.Typing(ctx, alice, chat.ID, true); err != nil {
+		t.Fatalf("typing is dropped silently: %v", err)
+	}
+	if len(f.rec.created) != before {
+		t.Fatal("something was delivered")
+	}
+}
+
+func TestStaleReadChangesNothing(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	alice, bob := f.user("alice"), f.user("bob")
+	chat, _, _ := f.pg.Chats().CreateDirect(ctx, alice, bob)
+	if err := f.unread.Load(ctx, bob, map[int64]int64{}); err != nil {
+		t.Fatal(err)
+	}
+	first := f.send(chat.ID, alice, "r-1", "one")
+	last := f.send(chat.ID, alice, "r-2", "two")
+	if err := f.svc.Read(ctx, bob, chat.ID, last.ID); err != nil {
+		t.Fatal(err)
+	}
+	// A lagging tab reports an older position: the counter stays at 0 and nobody is told.
+	if err := f.svc.Read(ctx, bob, chat.ID, first.ID); err != nil {
+		t.Fatal(err)
+	}
+	if counts, _, _ := f.unread.Get(ctx, bob); counts[chat.ID] != 0 {
+		t.Fatalf("unread went back up: %d", counts[chat.ID])
+	}
+	if len(f.rec.reads) != 1 {
+		t.Fatalf("%d read events, want 1", len(f.rec.reads))
+	}
+}
+
+func TestResendRespectsDeletedForMe(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	owner, bob, carol := f.user("owner"), f.user("bob"), f.user("carol")
+	g, _ := f.pg.Chats().CreateGroup(ctx, postgres.NewGroup{OwnerID: owner, Name: "G", MemberIDs: []int64{bob, carol}})
+	m := f.send(g.ID, owner, "x-1", "hello")
+	if err := f.svc.Delete(ctx, carol, g.ID, m.ID, messages.ScopeMe); err != nil {
+		t.Fatal(err)
+	}
+	f.rec.mu.Lock()
+	f.rec.created = nil
+	f.rec.recipients = nil
+	f.rec.mu.Unlock()
+	if err := f.svc.Resend(ctx, owner, g.ID, m.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.rec.recipients; len(got) != 1 || got[0] != owner {
+		t.Fatalf("resend went to %v, want only the sender's devices", got)
+	}
+}
+
+func TestClientTempIDsArePerChat(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	alice, bob, carol := f.user("alice"), f.user("bob"), f.user("carol")
+	c1, _, _ := f.pg.Chats().CreateDirect(ctx, alice, bob)
+	c2, _, _ := f.pg.Chats().CreateDirect(ctx, alice, carol)
+	a := f.send(c1.ID, alice, "c-1", "to bob")
+	b := f.send(c2.ID, alice, "c-1", "to carol")
+	if a.ID == b.ID {
+		t.Fatal("the same client_temp_id in another chat was treated as a retry")
 	}
 }
