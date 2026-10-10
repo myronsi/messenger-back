@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/myronsi/messenger-back/internal/auth"
+	"github.com/myronsi/messenger-back/internal/httpapi"
 	"github.com/myronsi/messenger-back/internal/messages"
 	"github.com/myronsi/messenger-back/internal/store/redis"
 	"github.com/myronsi/messenger-back/internal/version"
@@ -58,7 +59,7 @@ type LastSeen interface {
 
 // Rates of the client actions, per user across all connections and instances.
 var (
-	RateSend   = redis.Rate{Name: "ws_send", Rate: 30, Period: 10 * time.Second, Burst: 20}
+	RateSend   = httpapi.RateSend // shared with POST /chats/{id}/messages
 	RateTyping = redis.Rate{Name: "ws_typing", Rate: 1, Period: time.Second, Burst: 5}
 	RateOther  = redis.Rate{Name: "ws_action", Rate: 60, Period: 10 * time.Second, Burst: 40}
 )

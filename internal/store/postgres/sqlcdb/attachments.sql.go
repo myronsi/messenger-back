@@ -399,15 +399,15 @@ SELECT a.id, a.uploader_id, a.chat_id, a.storage_key, a.mime_type, a.size, a.wid
 FROM attachment_links l
 JOIN attachments a ON a.id = l.attachment_id
 WHERE l.chat_id = $1 AND a.kind = ANY($2::text[])
-  AND ($3::timestamptz IS NULL OR l.created_at < $3::timestamptz)
-ORDER BY l.created_at DESC
+  AND ($3::bigint IS NULL OR l.message_id < $3::bigint)
+ORDER BY l.message_id DESC
 LIMIT $4
 `
 
 type ListLinkedAttachmentsParams struct {
 	ChatID  int64
 	Kinds   []string
-	Before  *time.Time
+	Before  *int64
 	MaxRows int32
 }
 
@@ -431,7 +431,8 @@ type ListLinkedAttachmentsRow struct {
 	LinkedAt     time.Time
 }
 
-// Attachments of a chat by kind, newest first, for the media lists (photos, audio).
+// Attachments of a chat by kind, newest message first, for the media lists (photos, audio); the cursor is
+// the message id of the last one.
 func (q *Queries) ListLinkedAttachments(ctx context.Context, arg ListLinkedAttachmentsParams) ([]ListLinkedAttachmentsRow, error) {
 	rows, err := q.db.Query(ctx, listLinkedAttachments,
 		arg.ChatID,

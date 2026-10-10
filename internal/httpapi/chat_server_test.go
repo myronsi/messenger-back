@@ -99,7 +99,8 @@ func newChatEnv(t *testing.T) *chatEnv {
 	svc := chats.New(chats.Deps{Store: store, Messages: repo, Unread: unread, Members: members, Sender: msgs, Directory: dir, Notifier: ev})
 	api := NewServer(NewAuthServer(AuthOptions{Service: authSvc, Log: log, BasePath: apiBase, CookieSecure: true}), nil).
 		WithAccount(NewAccountServer(AccountOptions{Store: store, Directory: dir, Deleter: authSvc, BasePath: apiBase, Log: log})).
-		WithChats(NewChatServer(ChatOptions{Service: svc, BasePath: apiBase, Log: log}))
+		WithChats(NewChatServer(ChatOptions{Service: svc, BasePath: apiBase, Log: log})).
+		WithMessages(NewMessageServer(MessageOptions{Service: msgs, Store: store, Directory: dir, BasePath: apiBase, Log: log}))
 	return &chatEnv{
 		authEnv: &authEnv{router: NewRouter(Options{
 			HTTP:          config.HTTP{BasePath: apiBase, RequestTimeout: 10 * time.Second, ReadinessTimeout: time.Second, MaxBodyBytes: 4096},

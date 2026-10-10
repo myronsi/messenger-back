@@ -77,6 +77,7 @@ type Store interface {
 	Chats() postgres.ChatRepository
 	Social() postgres.SocialRepository
 	Attachments() postgres.AttachmentRepository
+	Users() postgres.UserRepository
 }
 
 // Deps are the collaborators of the service.
@@ -323,19 +324,27 @@ func (s *Service) Send(ctx context.Context, r SendRequest) (Sent, error) {
 		}
 		return Sent{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
+	s.delivered(ctx, m, members, r.ClientTempID)
+	return Sent{Message: m}, nil
+}
+
+// delivered finishes a stored new message: chat order, unread counters, delivery and the event. Failures only
+// leave derived state stale; the message itself is stored.
+func (s *Service) delivered(ctx context.Context, m scylla.Message, members []int64, clientTempID string) {
 	s.d.Accepted()
 	// The chat moves up in its members' lists; a failure only leaves the order stale until the next message.
-	if err := s.d.Store.Chats().TouchActivity(ctx, r.ChatID, id, m.CreatedAt); err != nil {
-		s.d.Log.WarnContext(ctx, "chat activity", "error", err, "chat_id", r.ChatID)
+	if err := s.d.Store.Chats().TouchActivity(ctx, m.ChatID, m.ID, m.CreatedAt); err != nil {
+		s.d.Log.WarnContext(ctx, "chat activity", "error", err, "chat_id", m.ChatID)
 	}
-
-	others := without(members, r.SenderID)
-	if err := s.d.Unread.Increment(ctx, r.ChatID, others...); err != nil {
-		s.d.Log.WarnContext(ctx, "unread increment", "error", err, "chat_id", r.ChatID)
+	sender := int64(0)
+	if m.SenderID != nil {
+		sender = *m.SenderID
 	}
-	s.d.Notifier.MessageCreated(ctx, m, members, r.ClientTempID)
-	s.emit(ctx, events.Event{Type: events.MessageCreated, ChatID: r.ChatID, MessageID: id, ActorID: r.SenderID, At: m.CreatedAt})
-	return Sent{Message: m}, nil
+	if err := s.d.Unread.Increment(ctx, m.ChatID, without(members, sender)...); err != nil {
+		s.d.Log.WarnContext(ctx, "unread increment", "error", err, "chat_id", m.ChatID)
+	}
+	s.d.Notifier.MessageCreated(ctx, m, members, clientTempID)
+	s.emit(ctx, events.Event{Type: events.MessageCreated, ChatID: m.ChatID, MessageID: m.ID, ActorID: sender, At: m.CreatedAt})
 }
 
 // ErrSendInProgress: a send with this client_temp_id is still being stored (or failed). The client retries.

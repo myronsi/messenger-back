@@ -347,7 +347,7 @@ type AttachmentRepository interface {
 	// LinksForViewer returns the messages using the attachment in chats the viewer is a member of (at most 50).
 	LinksForViewer(ctx context.Context, attachmentID uuid.UUID, viewerID int64) ([]AttachmentLink, error)
 	// ListLinked returns a chat's attachments of the kinds, newest first, linked before `before` (zero: now).
-	ListLinked(ctx context.Context, chatID int64, kinds []string, before time.Time, limit int) ([]LinkedAttachment, error)
+	ListLinked(ctx context.Context, chatID int64, kinds []string, beforeMessageID int64, limit int) ([]LinkedAttachment, error)
 	// Unreferenced lists uploads older than the time that nothing uses.
 	Unreferenced(ctx context.Context, olderThan time.Time, limit int) ([]UnreferencedAttachment, error)
 	// DeleteIfUnreferenced deletes the row when it is still unused and returns its storage keys; deleted is false
