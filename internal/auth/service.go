@@ -47,6 +47,9 @@ type Config struct {
 	HashConcurrency int
 	// Namespace prefixes the Redis keys (default "auth").
 	Namespace string
+	// OnRevoked is told about every revoked session, so open WebSockets of those sessions can be closed.
+	// Optional; it must not block.
+	OnRevoked func(ctx context.Context, sessionIDs []uuid.UUID)
 }
 
 // Client describes who is calling, for rate limits and the security log.
@@ -193,7 +196,9 @@ type Service struct {
 	tickets *Tickets
 	grace   time.Duration
 	now     func() time.Time
-	dummy   func() (string, error)
+	// onRevoked is Config.OnRevoked.
+	onRevoked func(ctx context.Context, sessionIDs []uuid.UUID)
+	dummy     func() (string, error)
 }
 
 // NewService wires the service.
@@ -238,6 +243,8 @@ func NewService(store Store, rdb Redis, cfg Config, log *slog.Logger) (*Service,
 		tickets: NewTickets(rdb, cfg.Namespace),
 		grace:   cfg.RefreshReuseGrace,
 		now:     time.Now,
+
+		onRevoked: cfg.OnRevoked,
 	}
 	s.dummy = sync.OnceValues(func() (string, error) { return s.hasher.dummyHash(context.Background()) })
 	return s, nil
@@ -337,6 +344,9 @@ func (s *Service) clear(ctx context.Context, r Rule, subject string) {
 // verdict could keep an access token alive until it expires, so the failure is returned and the request
 // fails instead of reporting an immediate sign-out that did not fully happen.
 func (s *Service) revokeInCache(ctx context.Context, ids ...uuid.UUID) error {
+	if s.onRevoked != nil && len(ids) > 0 {
+		s.onRevoked(ctx, ids)
+	}
 	var err error
 	for attempt := range 3 {
 		if err = s.cache.Revoke(ctx, ids...); err == nil {

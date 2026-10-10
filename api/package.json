@@ -1,6 +1,6 @@
 {
   "name": "@myronsi/messenger-api",
-  "version": "2.0.0-alpha.2",
+  "version": "2.0.0-alpha.3",
   "description": "API contract of the Messenger backend: OpenAPI document, WebSocket event schemas and generated TypeScript types",
   "license": "MIT",
   "repository": {

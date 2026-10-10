@@ -10,12 +10,12 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
+	"github.com/google/uuid"
 
 	"github.com/myronsi/messenger-back/internal/app"
 	"github.com/myronsi/messenger-back/internal/auth"
 	"github.com/myronsi/messenger-back/internal/config"
 	"github.com/myronsi/messenger-back/internal/httpapi"
-	"github.com/myronsi/messenger-back/internal/realtime"
 	"github.com/myronsi/messenger-back/internal/store/elastic"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/redis"
@@ -67,6 +67,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	var rt *realtimeStack
 	authSvc, err := auth.NewService(pg, rd.Client(), auth.Config{
 		JWTSecret:         []byte(cfg.JWTSecret.Reveal()),
 		EncryptionKey:     key,
@@ -74,12 +75,17 @@ func run() error {
 		SessionCacheTTL:   cfg.Auth.SessionCacheTTL,
 		RefreshReuseGrace: cfg.Auth.RefreshReuseGrace,
 		HashConcurrency:   cfg.Auth.PasswordHashConcurrency,
+		// Revoked sessions lose their WebSockets on every instance.
+		OnRevoked: func(ctx context.Context, sessions []uuid.UUID) { rt.closeSessions(ctx, sessions) },
 	}, log)
 	if err != nil {
 		return err
 	}
+	rt, err = startRealtime(p, pg, rd, sc, authSvc)
+	if err != nil {
+		return err
+	}
 
-	hub := realtime.NewHub(log, p.Metrics)
 	router := httpapi.NewRouter(httpapi.Options{
 		HTTP:       cfg.HTTP,
 		Production: cfg.Env == "production",
@@ -95,6 +101,7 @@ func run() error {
 			TrustedProxies: trustedProxies,
 		}),
 		Authenticator: authSvc,
+		WebSocket:     rt.gateway,
 		Checks: []httpapi.Check{
 			{Name: "postgres", Ping: pg.Ping},
 			{Name: "redis", Ping: rd.Ping},
@@ -110,12 +117,15 @@ func run() error {
 	if err := p.Serve(srv); err != nil {
 		return err
 	}
-	return shutdown(log, cfg.HTTP, srv, router, hub)
+	if err := shutdown(log, cfg.HTTP, srv, router, rt); err != nil {
+		return err
+	}
+	return p.Err()
 }
 
 // shutdown drains the server: /readyz turns 503, the listener closes, in-flight requests finish
 // and open WebSockets get the "reconnect" close code.
-func shutdown(log *slog.Logger, cfg config.HTTP, srv *http.Server, router *httpapi.Router, hub *realtime.Hub) error {
+func shutdown(log *slog.Logger, cfg config.HTTP, srv *http.Server, router *httpapi.Router, rt *realtimeStack) error {
 	log.Info("shutting down")
 	router.Drain()
 	if cfg.DrainDelay > 0 {
@@ -128,7 +138,7 @@ func shutdown(log *slog.Logger, cfg config.HTTP, srv *http.Server, router *httpa
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		hub.Shutdown(ctx)
+		rt.stop(ctx)
 	}()
 	err := srv.Shutdown(ctx)
 	<-done

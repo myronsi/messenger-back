@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/caarlos0/env/v11"
+
+	"github.com/myronsi/messenger-back/internal/version"
 )
 
 const minSecretLength = 32
@@ -60,8 +62,9 @@ type Config struct {
 	Scylla           Scylla
 	ElasticsearchURL Secret `env:"ELASTICSEARCH_URL,required,notEmpty"`
 
-	Auth    Auth
-	Tracing Tracing
+	Auth     Auth
+	Realtime Realtime
+	Tracing  Tracing
 
 	// WorkerAddr is where the worker serves /healthz and /metrics.
 	WorkerAddr string `env:"WORKER_ADDR" envDefault:":8081"`
@@ -79,6 +82,28 @@ type Postgres struct {
 type Redis struct {
 	// Timeout bounds every command (blocking stream reads excepted).
 	Timeout time.Duration `env:"REDIS_TIMEOUT" envDefault:"2s"`
+	// MembersCacheTTL is how long the members of a chat are cached (changes invalidate at once).
+	MembersCacheTTL time.Duration `env:"MEMBERS_CACHE_TTL" envDefault:"10m"`
+}
+
+// Realtime configures the WebSocket gateway.
+type Realtime struct {
+	// InstanceID identifies this process among the running API instances (presence, ID leases). Empty
+	// derives one from the host name and a random suffix.
+	InstanceID string `env:"INSTANCE_ID"`
+	// NodeID is this instance's Snowflake node number (0-1023). Unset leases a free one from Redis; set it
+	// only when every instance gets its own number some other way.
+	NodeID *int `env:"NODE_ID"`
+	// PresenceTTL is how long a user stays online without a heartbeat from the instance holding the
+	// connection (a crashed instance's users go offline within about this time).
+	PresenceTTL time.Duration `env:"PRESENCE_TTL" envDefault:"60s"`
+	// MinClientAPIVersion is the oldest contract version still served; older clients get close code 4426
+	// on the WebSocket (and 426 on REST).
+	MinClientAPIVersion string `env:"MIN_CLIENT_API_VERSION" envDefault:"2.0.0-alpha.1"`
+	// SendBuffer is how many events may wait for a slow client before it is disconnected.
+	SendBuffer int `env:"WS_SEND_BUFFER" envDefault:"256"`
+	// PingInterval is how often idle connections are pinged.
+	PingInterval time.Duration `env:"WS_PING_INTERVAL" envDefault:"25s"`
 }
 
 // Scylla tunes the ScyllaDB session; the hosts are SCYLLA_HOSTS.
@@ -283,6 +308,10 @@ func (c Config) Validate() error {
 	if c.Redis.Timeout <= 0 {
 		add("REDIS_TIMEOUT must be positive")
 	}
+	if c.Redis.MembersCacheTTL <= 0 {
+		add("MEMBERS_CACHE_TTL must be positive")
+	}
+	problems = append(problems, c.Realtime.validate()...)
 	switch c.Scylla.Consistency {
 	case "local_quorum", "quorum", "one", "local_one":
 	default:
@@ -298,6 +327,29 @@ func (c Config) Validate() error {
 		return fmt.Errorf("invalid configuration: %s", strings.Join(problems, "; "))
 	}
 	return nil
+}
+
+func (r Realtime) validate() []string {
+	var problems []string
+	if r.NodeID != nil && (*r.NodeID < 0 || *r.NodeID > 1023) {
+		problems = append(problems, "NODE_ID must be between 0 and 1023")
+	}
+	if r.PresenceTTL < 3*time.Second {
+		problems = append(problems, "PRESENCE_TTL must be at least 3s")
+	}
+	if min, err := version.Parse(r.MinClientAPIVersion); err != nil || min.Major != version.MustParse(version.API).Major || min.Compare(version.MustParse(version.API)) > 0 {
+		problems = append(problems, "MIN_CLIENT_API_VERSION must be a version with the API's major version, not above "+version.API)
+	}
+	if r.SendBuffer < 16 {
+		problems = append(problems, "WS_SEND_BUFFER must be at least 16")
+	}
+	if r.PingInterval < time.Second {
+		problems = append(problems, "WS_PING_INTERVAL must be at least 1s")
+	}
+	if len(r.InstanceID) > 64 {
+		problems = append(problems, "INSTANCE_ID must be at most 64 characters")
+	}
+	return problems
 }
 
 func (a Auth) validate(production bool) []string {

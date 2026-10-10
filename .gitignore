@@ -13,6 +13,7 @@
 !docs/deployment.md
 !docs/redis.md
 !docs/messages.md
+!docs/realtime.md
 !CHANGELOG.md
 !server/
 !server/version.py

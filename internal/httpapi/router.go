@@ -25,6 +25,9 @@ type Options struct {
 	// Authenticator verifies access tokens. Every operation that the contract does not list as public is
 	// answered 401 without one.
 	Authenticator Authenticator
+	// WebSocket serves <base path>/ws (the realtime gateway). It authenticates with a ticket, not a bearer
+	// token, so it is mounted outside the contract's routes. Optional.
+	WebSocket http.Handler
 }
 
 // Router is the HTTP handler of the API server.
@@ -46,6 +49,9 @@ func NewRouter(o Options) *Router {
 	mux.HandleFunc("GET /healthz", h.healthz)
 	mux.HandleFunc("GET /readyz", h.readyz)
 	mux.Handle("GET /metrics", o.Metrics.Handler())
+	if o.WebSocket != nil {
+		mux.Handle("GET "+o.HTTP.BasePath+"/ws", o.WebSocket)
+	}
 	HandlerWithOptions(api, StdHTTPServerOptions{
 		BaseURL:          o.HTTP.BasePath,
 		BaseRouter:       mux,

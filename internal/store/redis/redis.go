@@ -10,6 +10,8 @@ package redis
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net"
@@ -165,3 +167,9 @@ func pipelineScript(ctx context.Context, rdb Client, s *goredis.Script, n int, c
 }
 
 func isNoScript(err error) bool { return strings.HasPrefix(err.Error(), "NOSCRIPT") }
+
+// digest is a short, fixed-length stand-in for a value that must not appear in key names as it is.
+func digest(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:16])
+}
