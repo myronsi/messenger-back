@@ -10,6 +10,9 @@ import (
 	"github.com/gocql/gocql"
 )
 
+// clockMargin is how far message IDs may be ahead of this process's clock.
+const clockMargin = time.Minute
+
 // bucketsPerQuery is how many bucket numbers one read of chat_buckets returns.
 const bucketsPerQuery = 16
 
@@ -221,9 +224,11 @@ func (r *Messages) Page(ctx context.Context, q PageQuery) (Page, error) {
 	defer cancel()
 
 	older := func(bound int64, n int) ([]Message, bool, error) {
-		// The newest page starts at the current bucket without asking chat_buckets, so an active chat's
-		// page is a single-partition read.
-		now := BucketOf(time.Now())
+		// The newest page starts at the bucket of now plus a margin without asking chat_buckets, so an active
+		// chat's page is a single-partition read. The margin covers IDs that run ahead of this clock (another
+		// node's clock, a generator borrowing future milliseconds): within it of a bucket boundary the scan
+		// starts at the next bucket, which is usually empty, and continues with the older ones.
+		now := BucketOf(time.Now().Add(clockMargin))
 		start := &now
 		if bound != 0 {
 			var err error

@@ -28,6 +28,20 @@ func TestNodeLease(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// The same instance id acquiring again (a restarted pod, a paused process whose lease expired) gets a
+	// lease of its own: the old acquisition cannot renew it.
+	if err := s.Client().Del(ctx, b.key(b.Node())).Err(); err != nil {
+		t.Fatal(err)
+	}
+	b2, err := AcquireNode(ctx, s.Client(), prefix, "b", 1, time.Minute)
+	if err != nil || b2.Node() != b.Node() {
+		t.Fatalf("reacquire: %v", err)
+	}
+	if err := b.Renew(ctx); !errors.Is(err, ErrLeaseLost) {
+		t.Fatalf("stale acquisition renewed: %v", err)
+	}
+	b = b2
+
 	// Somebody else holds a's number now (Redis lost the key, another instance took it).
 	if err := s.Client().Set(ctx, a.key(a.Node()), "intruder", time.Minute).Err(); err != nil {
 		t.Fatal(err)

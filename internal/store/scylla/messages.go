@@ -111,7 +111,8 @@ type MessageRepository interface {
 	// CountAfter counts the messages newer than afterID that viewer can see and did not send, up to limit.
 	// It rebuilds unread counters.
 	CountAfter(ctx context.Context, chatID, viewer, afterID int64, limit int) (int, error)
-	// DeleteChat removes every message, reaction and location of the chat.
+	// DeleteChat removes every message, reaction, location and hidden marker of the chat. It may take long
+	// for a big chat; when it fails or is cancelled, calling it again continues where it stopped.
 	DeleteChat(ctx context.Context, chatID int64) error
 }
 
@@ -328,6 +329,10 @@ func (r *Messages) Locate(ctx context.Context, messageID int64) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("locate message: %w", err)
 	}
+	// An interrupted insert can leave a location without its message; only a stored message counts.
+	if _, _, err := r.get(ctx, sess, chat, messageID); err != nil {
+		return 0, err
+	}
 	return chat, nil
 }
 
@@ -386,8 +391,21 @@ func (r *Messages) Hide(ctx context.Context, userID, chatID, messageID int64, re
 		return err
 	}
 	defer cancel()
-	err = sess.Query(`INSERT INTO hidden_messages (user_id, chat_id, message_id, reason) VALUES (?, ?, ?, ?)`,
-		userID, chatID, messageID, reason).WithContext(ctx).Idempotent(true).Exec()
+	// Recorded first, so a chat deletion always finds the user's hidden_messages partition.
+	err = sess.Query(`INSERT INTO hidden_message_users (chat_id, user_id) VALUES (?, ?)`, chatID, userID).
+		WithContext(ctx).Idempotent(true).Exec()
+	if err != nil {
+		return fmt.Errorf("hide message: %w", err)
+	}
+	// All writes of a hidden row are lightweight transactions, so they are serialized: "deleted for me" is
+	// final, and neither a late "not delivered" nor Unhide can replace or remove it.
+	applied, err := sess.Query(`INSERT INTO hidden_messages (user_id, chat_id, message_id, reason) VALUES (?, ?, ?, ?) IF NOT EXISTS`,
+		userID, chatID, messageID, reason).WithContext(ctx).SerialConsistency(gocql.LocalSerial).MapScanCAS(map[string]any{})
+	if err == nil && !applied && reason == HiddenDeletedForMe {
+		// Hidden as not delivered so far: upgrade to deleted.
+		_, err = sess.Query(`UPDATE hidden_messages SET reason = ? WHERE user_id = ? AND chat_id = ? AND message_id = ? IF EXISTS`,
+			HiddenDeletedForMe, userID, chatID, messageID).WithContext(ctx).SerialConsistency(gocql.LocalSerial).MapScanCAS(map[string]any{})
+	}
 	if err != nil {
 		return fmt.Errorf("hide message: %w", err)
 	}
@@ -471,45 +489,125 @@ func (r *Messages) Reactions(ctx context.Context, chatID int64, messageIDs []int
 	return out, nil
 }
 
+// deleteParallelism bounds the concurrent statements of one chat deletion.
+const deleteParallelism = 32
+
+// DeleteChat works bucket by bucket and checkpoints after each one: a finished bucket is removed from
+// chat_buckets, so a deletion that runs out of time (each bucket gets the repository timeout of its own) or
+// fails continues where it stopped when it is called again. Callers run it in the background.
 func (r *Messages) DeleteChat(ctx context.Context, chatID int64) error {
-	ctx, cancel, sess, err := r.session(ctx)
+	sess, err := r.s.Session(ctx)
 	if err != nil {
 		return err
 	}
-	defer cancel()
-	buckets, err := r.allBuckets(ctx, sess, chatID)
+	if err := r.deleteHidden(ctx, sess, chatID); err != nil {
+		return err
+	}
+	lctx, cancel := context.WithTimeout(ctx, r.timeout)
+	buckets, err := r.allBuckets(lctx, sess, chatID)
+	cancel()
 	if err != nil {
 		return err
 	}
 	for _, b := range buckets {
-		iter := sess.Query(`SELECT message_id FROM messages WHERE chat_id = ? AND bucket = ?`, chatID, b).WithContext(ctx).PageSize(500).Iter()
-		var id int64
-		for iter.Scan(&id) {
-			err := sess.Query(`DELETE FROM message_reactions WHERE chat_id = ? AND message_id = ?`, chatID, id).WithContext(ctx).Idempotent(true).Exec()
-			if err == nil {
-				err = sess.Query(`DELETE FROM message_locations WHERE message_id = ?`, id).WithContext(ctx).Idempotent(true).Exec()
-			}
-			if err != nil {
-				_ = iter.Close()
-				return fmt.Errorf("delete chat: %w", err)
-			}
+		if err := r.deleteBucket(ctx, sess, chatID, b); err != nil {
+			return err
 		}
-		if err := iter.Close(); err != nil {
-			return fmt.Errorf("delete chat: %w", err)
-		}
-		if err := sess.Query(`DELETE FROM messages WHERE chat_id = ? AND bucket = ?`, chatID, b).WithContext(ctx).Idempotent(true).Exec(); err != nil {
-			return fmt.Errorf("delete chat: %w", err)
-		}
+		r.mu.Lock()
+		delete(r.knownBuckets, [2]int64{chatID, int64(b)})
+		r.mu.Unlock()
 	}
-	// Last, so a failed deletion can be retried: the buckets still lead to what is left.
-	if err := sess.Query(`DELETE FROM chat_buckets WHERE chat_id = ?`, chatID).WithContext(ctx).Idempotent(true).Exec(); err != nil {
+	return nil
+}
+
+// each runs fn for every value with bounded parallelism and returns the first error.
+func each[T any](ctx context.Context, values []T, fn func(context.Context, T) error) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	sem := make(chan struct{}, deleteParallelism)
+	errs := make(chan error, 1)
+	var wg sync.WaitGroup
+	for _, v := range values {
+		select {
+		case sem <- struct{}{}:
+		case <-ctx.Done():
+		}
+		if ctx.Err() != nil {
+			break
+		}
+		wg.Go(func() {
+			defer func() { <-sem }()
+			if err := fn(ctx, v); err != nil {
+				select {
+				case errs <- err:
+				default:
+				}
+				cancel()
+			}
+		})
+	}
+	wg.Wait()
+	select {
+	case err := <-errs:
+		return err
+	default:
+		return ctx.Err()
+	}
+}
+
+func (r *Messages) deleteBucket(ctx context.Context, sess *gocql.Session, chatID int64, b int) error {
+	ctx, cancel := context.WithTimeout(ctx, r.timeout)
+	defer cancel()
+	iter := sess.Query(`SELECT message_id FROM messages WHERE chat_id = ? AND bucket = ?`, chatID, b).WithContext(ctx).PageSize(1000).Iter()
+	var ids []int64
+	var id int64
+	for iter.Scan(&id) {
+		ids = append(ids, id)
+	}
+	if err := iter.Close(); err != nil {
 		return fmt.Errorf("delete chat: %w", err)
 	}
-	r.mu.Lock()
-	for _, b := range buckets {
-		delete(r.knownBuckets, [2]int64{chatID, int64(b)})
+	err := each(ctx, ids, func(ctx context.Context, id int64) error {
+		if err := sess.Query(`DELETE FROM message_reactions WHERE chat_id = ? AND message_id = ?`, chatID, id).WithContext(ctx).Idempotent(true).Exec(); err != nil {
+			return err
+		}
+		return sess.Query(`DELETE FROM message_locations WHERE message_id = ?`, id).WithContext(ctx).Idempotent(true).Exec()
+	})
+	if err == nil {
+		err = sess.Query(`DELETE FROM messages WHERE chat_id = ? AND bucket = ?`, chatID, b).WithContext(ctx).Idempotent(true).Exec()
 	}
-	r.mu.Unlock()
+	if err == nil {
+		// The checkpoint: this bucket is done.
+		err = sess.Query(`DELETE FROM chat_buckets WHERE chat_id = ? AND bucket = ?`, chatID, b).WithContext(ctx).Idempotent(true).Exec()
+	}
+	if err != nil {
+		return fmt.Errorf("delete chat: %w", err)
+	}
+	return nil
+}
+
+// deleteHidden removes the hidden_messages partitions of every user that hid something in the chat.
+func (r *Messages) deleteHidden(ctx context.Context, sess *gocql.Session, chatID int64) error {
+	ctx, cancel := context.WithTimeout(ctx, r.timeout)
+	defer cancel()
+	iter := sess.Query(`SELECT user_id FROM hidden_message_users WHERE chat_id = ?`, chatID).WithContext(ctx).Iter()
+	var users []int64
+	var uid int64
+	for iter.Scan(&uid) {
+		users = append(users, uid)
+	}
+	if err := iter.Close(); err != nil {
+		return fmt.Errorf("delete chat: %w", err)
+	}
+	err := each(ctx, users, func(ctx context.Context, uid int64) error {
+		return sess.Query(`DELETE FROM hidden_messages WHERE user_id = ? AND chat_id = ?`, uid, chatID).WithContext(ctx).Idempotent(true).Exec()
+	})
+	if err == nil {
+		err = sess.Query(`DELETE FROM hidden_message_users WHERE chat_id = ?`, chatID).WithContext(ctx).Idempotent(true).Exec()
+	}
+	if err != nil {
+		return fmt.Errorf("delete chat: %w", err)
+	}
 	return nil
 }
 

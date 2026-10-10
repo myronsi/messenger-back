@@ -540,3 +540,77 @@ func TestBucketOf(t *testing.T) {
 		t.Fatal("bucket boundaries")
 	}
 }
+
+// "Deleted for me" is final: a late "not delivered" does not replace it and Unhide does not remove it.
+func TestDeletedForMeIsFinal(t *testing.T) {
+	r := testRepo(t)
+	ctx := context.Background()
+	chat := newChat()
+	ms := seed(t, r, chat, 1, 2, time.Now(), time.Millisecond)
+	const viewer = 5
+	// Deleted first, then a delayed "not delivered" arrives.
+	if err := r.Hide(ctx, viewer, chat, ms[0], HiddenDeletedForMe); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Hide(ctx, viewer, chat, ms[0], HiddenNotDelivered); err != nil {
+		t.Fatal(err)
+	}
+	// Not delivered first, then deleted: upgraded.
+	if err := r.Hide(ctx, viewer, chat, ms[1], HiddenNotDelivered); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Hide(ctx, viewer, chat, ms[1], HiddenDeletedForMe); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range ms {
+		if err := r.Unhide(ctx, viewer, chat, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if p, _ := r.Page(ctx, PageQuery{ChatID: chat, Viewer: viewer}); len(p.Messages) != 0 {
+		t.Fatalf("deleted messages came back: %v", idsOf(p.Messages))
+	}
+}
+
+func TestLocateIgnoresLocationWithoutMessage(t *testing.T) {
+	r := testRepo(t)
+	ctx := context.Background()
+	sess, err := r.s.Session(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, _ := ids.NewGenerator(3)
+	id, _ := g.Next()
+	// What an insert that failed after writing the location leaves behind.
+	if err := sess.Query(`INSERT INTO message_locations (message_id, chat_id, bucket) VALUES (?, ?, ?)`, id, newChat(), BucketOf(ids.Time(id))).Exec(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Locate(ctx, id); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("located a message that does not exist: %v", err)
+	}
+}
+
+func TestDeleteChatRemovesHiddenMarkers(t *testing.T) {
+	r := testRepo(t)
+	ctx := context.Background()
+	chat := newChat()
+	ms := seed(t, r, chat, 1, 3, time.Now(), time.Millisecond)
+	for _, uid := range []int64{2, 3} {
+		if err := r.Hide(ctx, uid, chat, ms[0], HiddenDeletedForMe); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := r.DeleteChat(ctx, chat); err != nil {
+		t.Fatal(err)
+	}
+	sess, _ := r.s.Session(ctx)
+	var n int
+	for _, uid := range []int64{2, 3} {
+		if err := sess.Query(`SELECT COUNT(*) FROM hidden_messages WHERE user_id = ? AND chat_id = ?`, uid, chat).Scan(&n); err != nil || n != 0 {
+			t.Fatalf("hidden rows of user %d left: %d %v", uid, n, err)
+		}
+	}
+	if err := sess.Query(`SELECT COUNT(*) FROM hidden_message_users WHERE chat_id = ?`, chat).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("hidden users left: %d %v", n, err)
+	}
+}
