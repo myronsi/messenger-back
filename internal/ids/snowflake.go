@@ -44,14 +44,19 @@ const maxBackwards = 5 * time.Second
 // long inside a request is worse than failing it.
 var ErrClockBackwards = errors.New("ids: clock moved backwards")
 
+// ErrNotValid is returned after the validity set with ValidUntil has passed: the node number may belong to
+// another process by now (its lease could not be renewed in time).
+var ErrNotValid = errors.New("ids: the node number is no longer held")
+
 // Generator hands out IDs for one node. It is safe for concurrent use.
 type Generator struct {
 	node uint64
 	now  func() time.Time
 
-	mu   sync.Mutex
-	last int64 // milliseconds since Epoch of the last ID
-	seq  uint64
+	mu    sync.Mutex
+	last  int64 // milliseconds since Epoch of the last ID
+	seq   uint64
+	valid time.Time // zero: no limit
 }
 
 // NewGenerator returns the generator of the node.
@@ -66,10 +71,39 @@ func (g *Generator) millis() int64 { return g.now().Sub(Epoch).Milliseconds() }
 
 var cutoverMillis = Cutover.Sub(Epoch).Milliseconds()
 
+// Resume continues after the IDs a previous holder of the node issued up to lastMillis (milliseconds since
+// Epoch, see LastMillis): the next ID is in a later millisecond, even if this clock is behind the previous
+// holder's. Call it before the first Next.
+func (g *Generator) Resume(lastMillis int64) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if lastMillis > g.last {
+		g.last, g.seq = lastMillis, maxSeq
+	}
+}
+
+// LastMillis is the millisecond of the newest ID issued (0 before the first), the value for Resume.
+func (g *Generator) LastMillis() int64 {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.last
+}
+
+// ValidUntil makes Next fail after t, until it is extended. Leases call it on every renewal, so a process
+// that was paused past its lease cannot hand out IDs another process may be using by now.
+func (g *Generator) ValidUntil(t time.Time) {
+	g.mu.Lock()
+	g.valid = t
+	g.mu.Unlock()
+}
+
 // Next returns a new ID, larger than every ID this generator returned before.
 func (g *Generator) Next() (int64, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	if !g.valid.IsZero() && g.now().After(g.valid) {
+		return 0, ErrNotValid
+	}
 	ms := g.millis()
 	if ms < cutoverMillis {
 		return 0, ErrClockBeforeCutover

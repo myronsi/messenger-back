@@ -614,3 +614,27 @@ func TestDeleteChatRemovesHiddenMarkers(t *testing.T) {
 		t.Fatalf("hidden users left: %d %v", n, err)
 	}
 }
+
+// A big bucket is deleted in chunks; an interrupted deletion continues instead of starting over.
+func TestDeleteChatInChunks(t *testing.T) {
+	r := testRepo(t)
+	ctx := context.Background()
+	chat := newChat()
+	all := seed(t, r, chat, 1, deleteChunk+120, time.Now().Add(-time.Hour), time.Millisecond)
+	sess, _ := r.s.Session(ctx)
+	b := BucketOf(ids.Time(all[0]))
+	// One chunk, as an interrupted run leaves it.
+	if done, err := r.deleteChunkOf(ctx, sess, chat, b); err != nil || done {
+		t.Fatalf("first chunk: %v %v", done, err)
+	}
+	var left int
+	if err := sess.Query(`SELECT COUNT(*) FROM messages WHERE chat_id = ? AND bucket = ?`, chat, b).Scan(&left); err != nil || left != 120 {
+		t.Fatalf("after one chunk %d left (%v)", left, err)
+	}
+	if err := r.DeleteChat(ctx, chat); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := r.Page(ctx, PageQuery{ChatID: chat}); len(p.Messages) != 0 {
+		t.Fatalf("%d messages left", len(p.Messages))
+	}
+}

@@ -470,9 +470,9 @@ func (r *Messages) Reactions(ctx context.Context, chatID int64, messageIDs []int
 // deleteParallelism bounds the concurrent statements of one chat deletion.
 const deleteParallelism = 32
 
-// DeleteChat works bucket by bucket and checkpoints after each one: a finished bucket is removed from
-// chat_buckets, so a deletion that runs out of time (each bucket gets the repository timeout of its own) or
-// fails continues where it stopped when it is called again. Callers run it in the background.
+// DeleteChat works bucket by bucket and, within a bucket, in chunks of deleteChunk messages, each with the
+// repository timeout of its own. Finished chunks and buckets are gone, so a deletion that fails or is
+// cancelled continues where it stopped when it is called again. Callers run it in the background.
 func (r *Messages) DeleteChat(ctx context.Context, chatID int64) error {
 	sess, err := r.s.Session(ctx)
 	if err != nil {
@@ -530,17 +530,39 @@ func each[T any](ctx context.Context, values []T, fn func(context.Context, T) er
 	}
 }
 
+// deleteChunk is how many messages one step of a chat deletion removes.
+const deleteChunk = 500
+
+// deleteBucket removes a bucket in chunks. Each chunk ends with a range delete of exactly its messages, so
+// it is never read again: a deletion that fails or runs out of time repeats at most one chunk.
 func (r *Messages) deleteBucket(ctx context.Context, sess *gocql.Session, chatID int64, b int) error {
+	for {
+		done, err := r.deleteChunkOf(ctx, sess, chatID, b)
+		if err != nil {
+			return fmt.Errorf("delete chat: %w", err)
+		}
+		if done {
+			return nil
+		}
+	}
+}
+
+func (r *Messages) deleteChunkOf(ctx context.Context, sess *gocql.Session, chatID int64, b int) (bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
-	iter := sess.Query(`SELECT message_id FROM messages WHERE chat_id = ? AND bucket = ?`, chatID, b).WithContext(ctx).PageSize(1000).Iter()
+	iter := sess.Query(`SELECT message_id FROM messages WHERE chat_id = ? AND bucket = ? LIMIT ?`, chatID, b, deleteChunk).WithContext(ctx).Iter()
 	var ids []int64
 	var id int64
 	for iter.Scan(&id) {
 		ids = append(ids, id)
 	}
 	if err := iter.Close(); err != nil {
-		return fmt.Errorf("delete chat: %w", err)
+		return false, err
+	}
+	if len(ids) == 0 {
+		// The checkpoint: this bucket is done.
+		err := sess.Query(`DELETE FROM chat_buckets WHERE chat_id = ? AND bucket = ?`, chatID, b).WithContext(ctx).Idempotent(true).Exec()
+		return err == nil, err
 	}
 	err := each(ctx, ids, func(ctx context.Context, id int64) error {
 		if err := sess.Query(`DELETE FROM message_reactions WHERE chat_id = ? AND message_id = ?`, chatID, id).WithContext(ctx).Idempotent(true).Exec(); err != nil {
@@ -548,17 +570,13 @@ func (r *Messages) deleteBucket(ctx context.Context, sess *gocql.Session, chatID
 		}
 		return sess.Query(`DELETE FROM message_locations WHERE message_id = ?`, id).WithContext(ctx).Idempotent(true).Exec()
 	})
-	if err == nil {
-		err = sess.Query(`DELETE FROM messages WHERE chat_id = ? AND bucket = ?`, chatID, b).WithContext(ctx).Idempotent(true).Exec()
-	}
-	if err == nil {
-		// The checkpoint: this bucket is done.
-		err = sess.Query(`DELETE FROM chat_buckets WHERE chat_id = ? AND bucket = ?`, chatID, b).WithContext(ctx).Idempotent(true).Exec()
-	}
 	if err != nil {
-		return fmt.Errorf("delete chat: %w", err)
+		return false, err
 	}
-	return nil
+	// Rows are read newest first: the chunk is the range from its last to its first id.
+	err = sess.Query(`DELETE FROM messages WHERE chat_id = ? AND bucket = ? AND message_id >= ? AND message_id <= ?`,
+		chatID, b, ids[len(ids)-1], ids[0]).WithContext(ctx).Idempotent(true).Exec()
+	return false, err
 }
 
 // deleteHidden removes the hidden_messages partitions of every user that hid something in the chat.

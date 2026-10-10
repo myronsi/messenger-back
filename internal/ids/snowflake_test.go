@@ -1,6 +1,7 @@
 package ids
 
 import (
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -99,4 +100,38 @@ func TestUniqueAcrossGoroutinesAndNodes(t *testing.T) {
 		}
 	}
 	wg.Wait()
+}
+
+// A new holder of a node continues after the IDs of the previous one, even with a clock that is behind.
+func TestResumeAfterPreviousHolder(t *testing.T) {
+	old, _ := NewGenerator(7)
+	now := time.Now()
+	old.now = func() time.Time { return now }
+	var last int64
+	for range 5000 { // borrows into the next millisecond
+		last, _ = old.Next()
+	}
+	next, _ := NewGenerator(7)
+	next.now = func() time.Time { return now.Add(-2 * time.Second) } // a machine whose clock is behind
+	next.Resume(old.LastMillis())
+	first, err := next.Next()
+	if err != nil || first <= last {
+		t.Fatalf("resumed generator issued %d after %d (%v)", first, last, err)
+	}
+	next.Resume(0) // never moves back
+	if again, _ := next.Next(); again <= first {
+		t.Fatal("resume went back")
+	}
+}
+
+func TestValidUntil(t *testing.T) {
+	g, _ := NewGenerator(1)
+	g.ValidUntil(time.Now().Add(-time.Second))
+	if _, err := g.Next(); !errors.Is(err, ErrNotValid) {
+		t.Fatalf("expired generator: %v", err)
+	}
+	g.ValidUntil(time.Now().Add(time.Minute))
+	if _, err := g.Next(); err != nil {
+		t.Fatal(err)
+	}
 }
