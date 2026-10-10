@@ -205,3 +205,53 @@ func TestPresenceRunReportsChanges(t *testing.T) {
 	cancel()
 	<-done
 }
+
+// After a crash of an instance with many users, one sweep announces all of them, not one batch.
+func TestPresenceSweepDrainsEveryBatch(t *testing.T) {
+	s, prefix := testStore(t)
+	ctx := context.Background()
+	crashed := newPresence(t, s, prefix, "crashed", time.Second)
+	const users = 2*sweepBatch + 100
+	crashed.mu.Lock()
+	for uid := int64(1); uid <= users; uid++ {
+		crashed.conns[uid] = 1
+	}
+	crashed.mu.Unlock()
+	if _, err := crashed.Heartbeat(ctx); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(1100 * time.Millisecond)
+
+	sweeper := newPresence(t, s, prefix, "sweeper", 10*time.Second)
+	changes, err := sweeper.Sweep(ctx)
+	if err != nil || len(changes) != users {
+		t.Fatalf("swept %d of %d: %v", len(changes), users, err)
+	}
+}
+
+// A user whose last connection closes while a heartbeat is in flight must not stay claimed.
+func TestPresenceHeartbeatDoesNotResurrectDisconnectedUsers(t *testing.T) {
+	s, prefix := testStore(t)
+	ctx := context.Background()
+	p := newPresence(t, s, prefix, "a", time.Minute)
+	if _, _, err := p.Connect(ctx, 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := p.Disconnect(ctx, 1); err != nil {
+		t.Fatal(err)
+	}
+	// What a heartbeat that took its snapshot before the disconnect does: claim, then notice and release.
+	if _, err := p.claim(ctx, []int64{1}); err != nil {
+		t.Fatal(err)
+	}
+	gone := p.notLocal([]int64{1})
+	if !gone[1] {
+		t.Fatal("user still local")
+	}
+	if _, err := p.settle(ctx, []int64{1}, p.instance); err != nil {
+		t.Fatal(err)
+	}
+	if online(t, p, 1) {
+		t.Fatal("disconnected user is online")
+	}
+}

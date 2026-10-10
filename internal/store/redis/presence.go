@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -122,17 +124,18 @@ end
 `
 
 var (
-	// KEYS[1] user hash; ARGV: instance, ttl ms. Claims the user for the instance.
-	// Returns {came_online, version, expires_at_ms}.
+	// KEYS: user hash, index; ARGV: instance, ttl ms, user id. Claims the user for the instance and indexes
+	// the claim in the same step, so a claim the sweep cannot find never exists. GT keeps the latest expiry
+	// when instances heartbeat out of order. Returns {came_online, version}.
 	claimScript = goredis.NewScript(presenceLib + `
 local ttl = tonumber(ARGV[2])
 local live = purge(KEYS[1])
-redis.call('HSET', KEYS[1], 'i:' .. ARGV[1], string.format('%.0f', now + ttl))
-local v = 0
-if live == 0 then v = bump(KEYS[1]) end
+local expires = string.format('%.0f', now + ttl)
+redis.call('HSET', KEYS[1], 'i:' .. ARGV[1], expires)
 redis.call('PEXPIRE', KEYS[1], ttl * 2)
-if live == 0 then return {1, v, now + ttl} end
-return {0, 0, now + ttl}`)
+redis.call('ZADD', KEYS[2], 'GT', expires, ARGV[3])
+if live == 0 then return {1, bump(KEYS[1])} end
+return {0, 0}`)
 
 	// KEYS[1] user hash; ARGV[1] instance to release, or "" to only drop expired claims. When no claim is
 	// left the hash is deleted and the user is reported offline, exactly once. Returns {went_offline, version}.
@@ -172,45 +175,55 @@ return 1`)
 
 func (p *Presence) ttlMS() int64 { return p.ttl.Milliseconds() }
 
-// claim runs the claim script for the users in one round trip and indexes the claims in a second.
+// claim claims the users for this instance in one round trip and returns those who came online.
 func (p *Presence) claim(ctx context.Context, userIDs []int64) ([]Change, error) {
 	if len(userIDs) == 0 {
 		return nil, nil
 	}
 	cmds, err := pipelineScript(ctx, p.rdb, claimScript, len(userIDs), func(pipe goredis.Pipeliner, i int) *goredis.Cmd {
-		return claimScript.EvalSha(ctx, pipe, []string{p.key(userIDs[i])}, p.instance, p.ttlMS())
+		return claimScript.EvalSha(ctx, pipe, []string{p.key(userIDs[i]), p.indexKey()}, p.instance, p.ttlMS(), userIDs[i])
 	})
 	if err != nil {
 		return nil, fmt.Errorf("presence claim: %w", err)
 	}
+	return transitions(cmds, userIDs, true)
+}
+
+// settle releases this instance's claims of the users (or, with instance "", only drops expired claims) in
+// one round trip and returns those who went offline.
+func (p *Presence) settle(ctx context.Context, userIDs []int64, instance string) ([]Change, error) {
+	if len(userIDs) == 0 {
+		return nil, nil
+	}
+	cmds, err := pipelineScript(ctx, p.rdb, settleScript, len(userIDs), func(pipe goredis.Pipeliner, i int) *goredis.Cmd {
+		return settleScript.EvalSha(ctx, pipe, []string{p.key(userIDs[i])}, instance)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("presence settle: %w", err)
+	}
+	return transitions(cmds, userIDs, false)
+}
+
+// transitions reads the {changed, version} replies of the claim and settle scripts.
+func transitions(cmds []*goredis.Cmd, userIDs []int64, online bool) ([]Change, error) {
 	var changes []Change
-	index := p.rdb.Pipeline()
 	for i, cmd := range cmds {
 		res, err := cmd.Int64Slice()
-		if err != nil || len(res) != 3 {
-			return nil, fmt.Errorf("presence claim: unexpected reply")
+		if err != nil || len(res) != 2 {
+			return nil, errors.New("presence: unexpected reply")
 		}
 		if res[0] == 1 {
-			changes = append(changes, Change{UserID: userIDs[i], Online: true, Version: res[1]})
+			changes = append(changes, Change{UserID: userIDs[i], Online: online, Version: res[1]})
 		}
-		// GT keeps the latest expiry when instances heartbeat out of order.
-		index.ZAddGT(ctx, p.indexKey(), goredis.Z{Score: float64(res[2]), Member: userIDs[i]})
-	}
-	if _, err := index.Exec(ctx); err != nil {
-		return changes, fmt.Errorf("presence index: %w", err)
 	}
 	return changes, nil
 }
 
-func (p *Presence) settle(ctx context.Context, userID int64, instance string) (Change, bool, error) {
-	res, err := settleScript.Run(ctx, p.rdb, []string{p.key(userID)}, instance).Int64Slice()
-	if err != nil || len(res) != 2 {
-		return Change{}, false, fmt.Errorf("presence settle: %w", err)
+func one(changes []Change, err error) (Change, bool, error) {
+	if len(changes) == 1 {
+		return changes[0], true, err
 	}
-	if res[0] != 1 {
-		return Change{}, false, nil
-	}
-	return Change{UserID: userID, Online: false, Version: res[1]}, true, nil
+	return Change{}, false, err
 }
 
 // Connect registers a new connection of the user on this instance. It returns the transition when the
@@ -224,11 +237,7 @@ func (p *Presence) Connect(ctx context.Context, userID int64) (Change, bool, err
 	if !first {
 		return Change{}, false, nil
 	}
-	changes, err := p.claim(ctx, []int64{userID})
-	if len(changes) == 1 {
-		return changes[0], true, err
-	}
-	return Change{}, false, err
+	return one(p.claim(ctx, []int64{userID}))
 }
 
 // Disconnect unregisters a closed connection. When it was the user's last connection on this instance the
@@ -248,7 +257,7 @@ func (p *Presence) Disconnect(ctx context.Context, userID int64) (Change, bool, 
 	}
 	delete(p.conns, userID)
 	p.mu.Unlock()
-	return p.settle(ctx, userID, p.instance)
+	return one(p.settle(ctx, []int64{userID}, p.instance))
 }
 
 // Local returns the users with a connection on this instance.
@@ -284,51 +293,90 @@ func (p *Presence) Online(ctx context.Context, userIDs ...int64) (map[int64]bool
 
 // Heartbeat renews the claims of every local user. Users whose claim Redis had lost (a restart, a long
 // pause) come online again, and those transitions are returned.
+//
+// The list of local users is a snapshot: a user whose last connection closes meanwhile may have released
+// the claim before the heartbeat writes it again. Such claims are released once more afterwards, and their
+// transitions are not reported (the Disconnect reported the user offline already).
 func (p *Presence) Heartbeat(ctx context.Context) ([]Change, error) {
 	const batch = 1000
 	users := p.Local()
 	var all []Change
 	for len(users) > 0 {
 		n := min(batch, len(users))
-		changes, err := p.claim(ctx, users[:n])
+		chunk := users[:n]
+		users = users[n:]
+		changes, err := p.claim(ctx, chunk)
+		gone := p.notLocal(chunk)
+		if len(gone) > 0 {
+			changes = slices.DeleteFunc(changes, func(c Change) bool { return gone[c.UserID] })
+			if _, serr := p.settle(ctx, slices.Collect(maps.Keys(gone)), p.instance); serr != nil && err == nil {
+				err = serr
+			}
+		}
 		all = append(all, changes...)
 		if err != nil {
 			return all, err
 		}
-		users = users[n:]
 	}
 	return all, nil
 }
 
+func (p *Presence) notLocal(userIDs []int64) map[int64]bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	var gone map[int64]bool
+	for _, uid := range userIDs {
+		if _, ok := p.conns[uid]; !ok {
+			if gone == nil {
+				gone = make(map[int64]bool)
+			}
+			gone[uid] = true
+		}
+	}
+	return gone
+}
+
+// sweepBudget bounds one Sweep, so a sweep after a large crash cannot run into the next one.
+func (p *Presence) sweepBudget() time.Duration { return p.ttl / 8 }
+
 // Sweep announces the users whose claims have all expired, typically because the instance holding them
-// crashed. Any number of instances may sweep at the same time; each transition is reported by one of them.
+// crashed. It works in batches until none is left or its time budget is used up. Any number of instances
+// may sweep at the same time; each transition is reported by one of them.
 func (p *Presence) Sweep(ctx context.Context) ([]Change, error) {
+	deadline := time.Now().Add(p.sweepBudget())
+	var all []Change
+	for {
+		changes, n, err := p.sweepBatch(ctx)
+		all = append(all, changes...)
+		if err != nil || n < sweepBatch || time.Now().After(deadline) {
+			return all, err
+		}
+	}
+}
+
+func (p *Presence) sweepBatch(ctx context.Context) ([]Change, int, error) {
 	ids, err := expiredScript.Run(ctx, p.rdb, []string{p.indexKey()}, sweepBatch).StringSlice()
 	if err != nil {
-		return nil, fmt.Errorf("presence sweep: %w", err)
+		return nil, 0, fmt.Errorf("presence sweep: %w", err)
 	}
-	var changes []Change
+	users := make([]int64, 0, len(ids))
 	args := make([]any, 0, len(ids))
 	for _, s := range ids {
-		uid, err := strconv.ParseInt(s, 10, 64)
-		if err != nil {
-			continue
-		}
-		c, ok, err := p.settle(ctx, uid, "")
-		if err != nil {
-			return changes, err
-		}
-		if ok {
-			changes = append(changes, c)
+		if uid, err := strconv.ParseInt(s, 10, 64); err == nil {
+			users = append(users, uid)
 		}
 		args = append(args, s)
 	}
+	changes, err := p.settle(ctx, users, "")
+	if err != nil {
+		return nil, len(ids), err
+	}
 	if len(args) > 0 {
 		if err := unindexScript.Run(ctx, p.rdb, []string{p.indexKey()}, args...).Err(); err != nil {
-			return changes, fmt.Errorf("presence sweep: %w", err)
+			return changes, len(ids), fmt.Errorf("presence sweep: %w", err)
 		}
 	}
-	return changes, nil
+	return changes, len(ids), nil
 }
 
 // Run heartbeats every TTL/3 and sweeps every TTL/4 until ctx is done, reporting transitions to OnChange.

@@ -19,6 +19,7 @@ type instance struct {
 	bus      *Bus
 	presence *Presence
 	got      chan delivery
+	resub    chan int64
 }
 
 func newInstance(t *testing.T, prefix, name string) *instance {
@@ -27,10 +28,12 @@ func newInstance(t *testing.T, prefix, name string) *instance {
 	if err != nil {
 		t.Fatal(err)
 	}
-	in := &instance{store: s, got: make(chan delivery, 16)}
-	in.bus, err = NewBus(s.Client(), BusOptions{Prefix: prefix, Handler: func(uid int64, p []byte) {
-		in.got <- delivery{uid, string(p)}
-	}})
+	in := &instance{store: s, got: make(chan delivery, 16), resub: make(chan int64, 16)}
+	in.bus, err = NewBus(s.Client(), BusOptions{
+		Prefix:        prefix,
+		Handler:       func(uid int64, p []byte) { in.got <- delivery{uid, string(p)} },
+		OnResubscribe: func(uid int64) { in.resub <- uid },
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,4 +199,36 @@ func TestTwoInstances(t *testing.T) {
 	if m, _ := b.presence.Online(ctx, alice); m[alice] {
 		t.Fatal("alice still online")
 	}
+}
+
+// After the connection to Redis is lost the bus subscribes again and reports the users whose events may
+// have been lost, so the gateway can make their clients catch up.
+func TestBusReportsResubscriptions(t *testing.T) {
+	_, prefix := testStore(t)
+	a := newInstance(t, prefix, "a")
+	b := newInstance(t, prefix, "b")
+	ctx := context.Background()
+	if err := a.bus.Subscribe(ctx, 1); err != nil {
+		t.Fatal(err)
+	}
+	waitSubscribed(t, b, a, 1)
+	select {
+	case uid := <-a.resub:
+		t.Fatalf("first subscription reported as renewed: %d", uid)
+	default:
+	}
+
+	// Drop every pub/sub connection on the server.
+	if err := b.store.Client().Do(ctx, "CLIENT", "KILL", "TYPE", "pubsub").Err(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case uid := <-a.resub:
+		if uid != 1 {
+			t.Fatalf("resubscribed %d", uid)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("no resubscription reported")
+	}
+	waitSubscribed(t, b, a, 1)
 }

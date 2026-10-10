@@ -17,17 +17,22 @@ import (
 // publishes it to the channel of every recipient (for a message: every member of the chat).
 //
 // Pub/sub is fire and forget: an event published while an instance is reconnecting to Redis is lost for
-// the users connected there. Clients close that gap by loading what they missed through REST after a
-// reconnect (the `after` cursor); durable work goes through the event streams instead.
+// the users connected there. The bus reports every channel it had to subscribe to again (OnResubscribe),
+// and the gateway tells those clients to reconnect, which makes them load what they missed through REST
+// (the `after` cursor). Durable work goes through the event streams instead.
 type Bus struct {
 	rdb     goredis.UniversalClient
 	prefix  string
 	handler func(userID int64, payload []byte)
+	resub   func(userID int64)
 
 	ps *goredis.PubSub
 
 	mu   sync.Mutex
 	subs map[int64]int
+	// confirmed holds the channels Redis confirmed since the last subscribe; a second confirmation without
+	// an unsubscribe in between is a subscription renewed after a lost connection.
+	confirmed map[string]bool
 }
 
 // BusOptions configures a Bus.
@@ -37,6 +42,9 @@ type BusOptions struct {
 	// Handler receives every event published to a subscribed user, on the receiving goroutine of the bus.
 	// It must not block: hand the payload to the connections' send buffers and return.
 	Handler func(userID int64, payload []byte)
+	// OnResubscribe is called when the connection to Redis was lost and the user's channel subscribed again:
+	// events for the user may have been lost in between. It must not block.
+	OnResubscribe func(userID int64)
 }
 
 // NewBus creates the bus of this instance. Call Run to start receiving.
@@ -44,8 +52,11 @@ func NewBus(rdb goredis.UniversalClient, o BusOptions) (*Bus, error) {
 	if o.Handler == nil {
 		return nil, errors.New("bus: handler is required")
 	}
+	if o.OnResubscribe == nil {
+		o.OnResubscribe = func(int64) {}
+	}
 	return &Bus{
-		rdb: rdb, prefix: o.Prefix, handler: o.Handler,
+		rdb: rdb, prefix: o.Prefix, handler: o.Handler, resub: o.OnResubscribe, confirmed: make(map[string]bool),
 		// No channels yet: SUBSCRIBE is sent when the first user subscribes.
 		ps:   rdb.Subscribe(context.Background()),
 		subs: make(map[int64]int),
@@ -133,17 +144,40 @@ func (b *Bus) Publish(ctx context.Context, payload []byte, userIDs ...int64) (in
 func (b *Bus) Run(ctx context.Context) {
 	stop := context.AfterFunc(ctx, func() { _ = b.ps.Close() })
 	defer stop()
-	ch := b.ps.Channel(
+	ch := b.ps.ChannelWithSubscriptions(
 		goredis.WithChannelSize(1024),
 		goredis.WithChannelHealthCheckInterval(15*time.Second),
 		goredis.WithChannelSendTimeout(time.Second),
 	)
-	for m := range ch {
-		uid, ok := b.userOf(m.Channel)
-		if !ok {
-			continue
+	for msg := range ch {
+		switch m := msg.(type) {
+		case *goredis.Message:
+			if uid, ok := b.userOf(m.Channel); ok {
+				b.handler(uid, []byte(m.Payload))
+			}
+		case *goredis.Subscription:
+			b.confirm(m)
 		}
-		b.handler(uid, []byte(m.Payload))
+	}
+}
+
+func (b *Bus) confirm(m *goredis.Subscription) {
+	uid, ok := b.userOf(m.Channel)
+	if !ok {
+		return
+	}
+	b.mu.Lock()
+	renewed := false
+	switch m.Kind {
+	case "subscribe":
+		renewed = b.confirmed[m.Channel]
+		b.confirmed[m.Channel] = true
+	case "unsubscribe":
+		delete(b.confirmed, m.Channel)
+	}
+	b.mu.Unlock()
+	if renewed {
+		b.resub(uid)
 	}
 }
 

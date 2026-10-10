@@ -39,9 +39,12 @@ instance holds a claim that has not expired, so the answer is the same on every 
 - **Heartbeats** renew the claims of all local users every TTL / 3. If Redis lost a claim (restart,
   flush) the heartbeat writes it again and reports the user online.
 - **Crashed instances** stop heartbeating. Their claims expire, and the sweep that every instance runs every
-  TTL / 4 finds those users through `presence:index` and reports them offline. The hash outlives its
-  claims (2 × TTL) for exactly this reason. Sweeps of several instances are safe: each transition is reported
-  by one of them.
+  TTL / 4 finds those users through `presence:index` and reports them offline. The claim and its index entry
+  are written by one script, so no claim escapes the sweep, and the hash outlives its claims (2 × TTL) so the
+  sweep still finds them. A sweep works through batches of 500 until none is left (within TTL / 8). Sweeps of
+  several instances are safe: each transition is reported by one of them.
+- A heartbeat works on a snapshot of the local users. When a user's last connection closes during the
+  heartbeat, the claim it writes is released again right after, and its transition is not reported.
 - Every transition carries a **version** that increases per user. Presence events of different instances can
   overtake each other on the way to a client, so the gateway forwards only changes newer than the last one it
   sent for that user.
@@ -55,8 +58,10 @@ new message, every member of the chat. For very large groups (thousands of membe
 publishes per message; per-chat channels are the planned next step then.
 
 Pub/sub does not store anything. An event published while an instance is reconnecting to Redis is lost for its
-users; clients load what they missed through REST after every reconnect (the `after` cursor). Work that must
-not be lost (search indexing, push) goes through the event streams.
+users. The bus notices when Redis confirms a channel a second time (the subscription was renewed after a lost
+connection) and calls `OnResubscribe` for that user; the gateway then closes the user's sockets with the
+"reconnect" code, and the clients load what they missed through REST (the `after` cursor). Work that must not
+be lost (search indexing, push) goes through the event streams.
 
 ## Unread counters
 
@@ -73,7 +78,8 @@ a rebuild can be missed until the user next reads that chat.
 Every committed membership change (member added, removed, left, chat or account deleted) must call
 `Members.Invalidate`. A cache fill that read the members before such a change cannot write them afterwards:
 the invalidation increments the version, and a fill only writes when the version is still the one it saw
-before loading.
+before loading. A refused fill also means the list it loaded may be stale, so it is loaded again (three
+attempts, then the call fails with `ErrMembershipChanging` and the action is refused).
 
 ## Rate limits
 
@@ -85,7 +91,8 @@ refused.
 ## Timeouts and errors
 
 Every command runs with a deadline of `REDIS_TIMEOUT` (2 s), or the caller's shorter one; a pipeline counts as
-one command. Blocking reads (`XREADGROUP … BLOCK`, `BLPOP`, …) are exempt and use the caller's context. Failed
+one command. Blocking commands (`BLPOP`, `WAIT`, …, and `XREAD`/`XREADGROUP` with `BLOCK`) are exempt and use the
+caller's context. Failed
 commands are counted in `messenger_store_errors_total{store="redis"}` (a missing key is not a failure).
 
 ## Operating Redis

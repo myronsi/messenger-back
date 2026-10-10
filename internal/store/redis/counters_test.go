@@ -154,25 +154,37 @@ func TestMembersCache(t *testing.T) {
 	}
 }
 
-// A fill that read the members before a change must not overwrite the invalidation of that change.
-func TestMembersStaleFillIsRefused(t *testing.T) {
+// A fill that read the members before a change must not cache or return them: it loads again.
+func TestMembersStaleFillIsReloaded(t *testing.T) {
 	s, prefix := testStore(t)
 	ctx := context.Background()
 	m := NewMembers(s.Client(), prefix, time.Minute)
 
-	stale := func(ctx context.Context, chatID int64) ([]int64, error) {
-		// The member list is read, then the user is removed and the cache invalidated before the fill.
-		if err := m.Invalidate(ctx, chatID); err != nil {
-			return nil, err
+	calls := 0
+	load := func(ctx context.Context, chatID int64) ([]int64, error) {
+		calls++
+		if calls == 1 {
+			// The member list is read, then user 2 is removed and the cache invalidated before the fill.
+			if err := m.Invalidate(ctx, chatID); err != nil {
+				return nil, err
+			}
+			return []int64{1, 2}, nil
 		}
-		return []int64{1, 2}, nil
+		return []int64{1}, nil
 	}
-	if _, err := m.Get(ctx, 9, stale); err != nil {
-		t.Fatal(err)
+	if ok, err := m.IsMember(ctx, 9, 2, load); err != nil || ok {
+		t.Fatalf("stale list used: %v %v", ok, err)
 	}
-	fresh := func(context.Context, int64) ([]int64, error) { return []int64{1}, nil }
-	if ok, _ := m.IsMember(ctx, 9, 2, fresh); ok {
-		t.Fatal("stale fill was cached")
+	if got, _ := m.Get(ctx, 9, load); !slices.Equal(got, []int64{1}) || calls != 2 {
+		t.Fatalf("cached %v after %d loads", got, calls)
+	}
+
+	// Invalidations that never stop make the call fail closed.
+	always := func(ctx context.Context, chatID int64) ([]int64, error) {
+		return []int64{1, 2}, m.Invalidate(ctx, chatID)
+	}
+	if ok, err := m.IsMember(ctx, 10, 2, always); ok || !errors.Is(err, ErrMembershipChanging) {
+		t.Fatalf("changing membership: %v %v", ok, err)
 	}
 }
 
@@ -208,6 +220,9 @@ func TestRateLimiterBurstAndRate(t *testing.T) {
 	}
 	if _, err := l.Allow(ctx, Rate{Name: "x"}, "a"); err == nil {
 		t.Fatal("accepted an invalid rate")
+	}
+	if _, err := l.Allow(ctx, Rate{Name: "x", Rate: 2_000_000, Period: time.Second, Burst: 1}, "a"); err == nil {
+		t.Fatal("accepted a rate finer than a microsecond")
 	}
 }
 

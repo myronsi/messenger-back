@@ -73,11 +73,28 @@ type hook struct {
 	onError func()
 }
 
-// blocking lists the commands that wait on the server on purpose; their wait is bounded by the caller.
-var blocking = map[string]bool{
+// alwaysBlocking lists the commands that wait on the server on purpose; their wait is bounded by the caller.
+var alwaysBlocking = map[string]bool{
 	"blpop": true, "brpop": true, "brpoplpush": true, "blmove": true, "blmpop": true,
-	"bzpopmin": true, "bzpopmax": true, "bzmpop": true, "xread": true, "xreadgroup": true,
-	"wait": true, "waitaof": true,
+	"bzpopmin": true, "bzpopmax": true, "bzmpop": true, "wait": true, "waitaof": true,
+}
+
+// isBlocking reports whether the command waits on the server: the commands above, and stream reads
+// with the BLOCK option.
+func isBlocking(cmd goredis.Cmder) bool {
+	name := strings.ToLower(cmd.Name())
+	if alwaysBlocking[name] {
+		return true
+	}
+	if name != "xread" && name != "xreadgroup" {
+		return false
+	}
+	for _, a := range cmd.Args() {
+		if s, ok := a.(string); ok && strings.EqualFold(s, "block") {
+			return true
+		}
+	}
+	return false
 }
 
 func (h hook) withTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
@@ -105,7 +122,7 @@ func (h hook) DialHook(next goredis.DialHook) goredis.DialHook {
 
 func (h hook) ProcessHook(next goredis.ProcessHook) goredis.ProcessHook {
 	return func(ctx context.Context, cmd goredis.Cmder) error {
-		if !blocking[strings.ToLower(cmd.Name())] {
+		if !isBlocking(cmd) {
 			var cancel context.CancelFunc
 			ctx, cancel = h.withTimeout(ctx)
 			defer cancel()

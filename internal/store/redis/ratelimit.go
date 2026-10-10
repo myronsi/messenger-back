@@ -78,7 +78,8 @@ func (l *RateLimiter) Allow(ctx context.Context, r Rate, subject string) (Result
 
 // AllowN counts n events at once when all of them are within the rate; otherwise nothing is counted.
 func (l *RateLimiter) AllowN(ctx context.Context, r Rate, subject string, n int) (Result, error) {
-	if r.Rate <= 0 || r.Period <= 0 || r.Burst <= 0 || n <= 0 {
+	// The script works in microseconds, so an event must use up at least one.
+	if r.Rate <= 0 || r.Period <= 0 || r.Burst <= 0 || n <= 0 || r.interval() < time.Microsecond {
 		return Result{}, errors.New("rate limiter: invalid rate")
 	}
 	res, err := gcraScript.Run(ctx, l.rdb, []string{l.key(r, subject)}, r.interval().Microseconds(), r.Burst, n).Int64Slice()

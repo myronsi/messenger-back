@@ -85,25 +85,39 @@ func (m *Members) Get(ctx context.Context, chatID int64, load LoadMembers) ([]in
 	return m.fill(ctx, chatID, load)
 }
 
+// ErrMembershipChanging is returned when the members of a chat changed during every attempt to load them;
+// callers treat it like any other failure and refuse the action.
+var ErrMembershipChanging = errors.New("members: membership kept changing while loading")
+
+// fillAttempts bounds the reloads when invalidations keep racing a fill.
+const fillAttempts = 3
+
+// fill loads the members and caches them. A refused fill means the membership changed after the version
+// was read, possibly after load read the members, so that list may be stale and is loaded again.
 func (m *Members) fill(ctx context.Context, chatID int64, load LoadMembers) ([]int64, error) {
-	seen, err := m.rdb.Get(ctx, m.versionKey(chatID)).Result()
-	if err != nil && !errors.Is(err, goredis.Nil) {
-		return nil, fmt.Errorf("members get: %w", err)
+	for range fillAttempts {
+		seen, err := m.rdb.Get(ctx, m.versionKey(chatID)).Result()
+		if err != nil && !errors.Is(err, goredis.Nil) {
+			return nil, fmt.Errorf("members get: %w", err)
+		}
+		members, err := load(ctx, chatID)
+		if err != nil {
+			return nil, err
+		}
+		args := make([]any, 0, len(members)+3)
+		args = append(args, seen, m.ttl.Milliseconds(), loadedMarker)
+		for _, uid := range members {
+			args = append(args, uid)
+		}
+		stored, err := fillScript.Run(ctx, m.rdb, []string{m.key(chatID), m.versionKey(chatID)}, args...).Int()
+		if err != nil {
+			return nil, fmt.Errorf("members fill: %w", err)
+		}
+		if stored == 1 {
+			return members, nil
+		}
 	}
-	members, err := load(ctx, chatID)
-	if err != nil {
-		return nil, err
-	}
-	args := make([]any, 0, len(members)+3)
-	args = append(args, seen, m.ttl.Milliseconds(), loadedMarker)
-	for _, uid := range members {
-		args = append(args, uid)
-	}
-	if err := fillScript.Run(ctx, m.rdb, []string{m.key(chatID), m.versionKey(chatID)}, args...).Err(); err != nil {
-		// The members are correct; only the cache stays empty.
-		return members, fmt.Errorf("members fill: %w", err)
-	}
-	return members, nil
+	return nil, ErrMembershipChanging
 }
 
 // IsMember reports whether the user is in the chat.
@@ -116,7 +130,7 @@ func (m *Members) IsMember(ctx context.Context, chatID, userID int64, load LoadM
 		return res[1], nil
 	}
 	members, err := m.fill(ctx, chatID, load)
-	if err != nil && members == nil {
+	if err != nil {
 		return false, err
 	}
 	for _, uid := range members {

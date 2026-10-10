@@ -68,6 +68,15 @@ func TestHookSetsDeadline(t *testing.T) {
 	if has {
 		t.Fatal("blocking command got a deadline")
 	}
+	// A stream read without BLOCK returns at once and keeps the timeout.
+	_ = h.ProcessHook(next)(ctx, goredis.NewCmd(ctx, "xread", "COUNT", 10, "STREAMS", "s", "0"))
+	if !has {
+		t.Fatal("non-blocking XREAD lost its deadline")
+	}
+	_ = h.ProcessHook(next)(ctx, goredis.NewCmd(ctx, "blpop", "k", 0))
+	if has {
+		t.Fatal("BLPOP got a deadline")
+	}
 
 	var pipeHas bool
 	_ = h.ProcessPipelineHook(func(ctx context.Context, _ []goredis.Cmder) error {
