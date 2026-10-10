@@ -361,3 +361,29 @@ func (f *Fanout) RequestCreated(ctx context.Context, r chats.RequestView) {
 	}
 	f.publish(ctx, map[int64]frame{r.Request.RecipientID: {Kind: kindEvent, Event: raw}})
 }
+
+var _ chats.GroupNotifier = (*Fanout)(nil)
+
+func (f *Fanout) groupEvent(ctx context.Context, typ string, chatID int64, views map[int64]chats.GroupView) {
+	frames := make(map[int64]frame, len(views))
+	for uid, v := range views {
+		raw, err := f.encode(typ, chatID, map[string]any{"group": httpapi.PresentGroup(v, f.basePath)}, "")
+		if err != nil {
+			f.log.ErrorContext(ctx, "encode event", "error", err, "type", typ)
+			return
+		}
+		frames[uid] = frame{Kind: kindEvent, ChatID: chatID, Event: raw}
+	}
+	f.publish(ctx, frames)
+}
+
+// GroupCreated implements chats.GroupNotifier: the users are in the group now, and their gateways deliver its
+// events again if they had been removed from it before.
+func (f *Fanout) GroupCreated(ctx context.Context, chatID int64, views map[int64]chats.GroupView) {
+	f.groupEvent(ctx, "group_created", chatID, views)
+}
+
+// GroupUpdated implements chats.GroupNotifier.
+func (f *Fanout) GroupUpdated(ctx context.Context, chatID int64, views map[int64]chats.GroupView) {
+	f.groupEvent(ctx, "group_updated", chatID, views)
+}

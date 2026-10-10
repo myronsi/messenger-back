@@ -115,6 +115,7 @@ type Service struct {
 	d Deps
 	// rebuilds runs one rebuild of a user's unread counters at a time; concurrent readers share it.
 	rebuilds singleflight.Group
+	groups   groupQueue
 }
 
 // New returns the service.
@@ -122,7 +123,7 @@ func New(d Deps) *Service {
 	if d.Log == nil {
 		d.Log = slog.New(slog.DiscardHandler)
 	}
-	return &Service{d: d}
+	return &Service{d: d, groups: groupQueue{pending: map[int64]*pendingGroup{}, slots: make(chan struct{}, groupRenders)}}
 }
 
 func badCursor() error { return fmt.Errorf("%w: the cursor is not one of ours", ErrBadCursor) }
@@ -195,6 +196,10 @@ func DecodeCursor(s string) (postgres.ChatCursor, error) {
 
 // List returns a page of the user's chats and the cursor of the next page ("" at the end).
 func (s *Service) List(ctx context.Context, userID int64, after string, limit int) ([]View, string, error) {
+	return s.list(ctx, userID, "", after, limit)
+}
+
+func (s *Service) list(ctx context.Context, userID int64, t postgres.ChatType, after string, limit int) ([]View, string, error) {
 	var cur *postgres.ChatCursor
 	if after != "" {
 		c, err := DecodeCursor(after)
@@ -206,7 +211,7 @@ func (s *Service) List(ctx context.Context, userID int64, after string, limit in
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
-	entries, err := s.d.Store.Chats().Entries(ctx, userID, cur, limit+1)
+	entries, err := s.d.Store.Chats().EntriesOfType(ctx, userID, t, cur, limit+1)
 	if err != nil {
 		return nil, "", unavailable(err)
 	}
@@ -768,8 +773,20 @@ func (s *Service) Requests(ctx context.Context, userID int64, after string, limi
 		return nil, "", unavailable(err)
 	}
 	out := make([]RequestView, len(reqs))
+	names := map[int64]*string{}
 	for i, r := range reqs {
 		out[i] = RequestView{Request: r, Requester: people[r.RequesterID]}
+		if r.ChatID == nil {
+			continue
+		}
+		name, ok := names[*r.ChatID]
+		if !ok {
+			if c, err := s.d.Store.Chats().Get(ctx, *r.ChatID); err == nil {
+				name = c.Name
+			}
+			names[*r.ChatID] = name
+		}
+		out[i].GroupName = name
 	}
 	return out, next, nil
 }
@@ -781,8 +798,12 @@ func requestError(err error) error {
 	return notFoundOr(err)
 }
 
-// Approve accepts a direct-message request: the chat opens with the request's message as its first message.
+// Approve accepts a request: a direct-message request opens the chat with the request's message as its first
+// message, a group invitation adds the user to the group.
 func (s *Service) Approve(ctx context.Context, userID, requestID int64) (View, error) {
+	if r, err := s.d.Store.Approvals().Get(ctx, requestID); err == nil && r.Type == postgres.RequestGroupInvite {
+		return s.approveInvite(ctx, userID, requestID)
+	}
 	req, chat, created, closed, err := s.d.Store.Approvals().ApproveDirect(ctx, requestID, userID)
 	if err != nil {
 		return View{}, requestError(err)

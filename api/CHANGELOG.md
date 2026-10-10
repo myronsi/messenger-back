@@ -2,6 +2,14 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.0.0-alpha.6
+
+Groups, found while implementing them:
+
+- `POST /groups` can answer `403`: a member who does not allow invitations from the caller fails the request.
+- `PUT /groups/{chat_id}/avatar` (`422`: not an image the caller uploaded as an avatar) and
+  `POST /groups/{chat_id}/transfer-owner` (`422`: to yourself) document their validation errors.
+
 ## 2.0.0-alpha.5
 
 Chats, found while implementing the chat list:

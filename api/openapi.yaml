@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.0.0-alpha.5
+  version: 2.0.0-alpha.6
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -1333,7 +1333,9 @@ paths:
       tags: [groups]
       operationId: createGroup
       summary: Create a group
-      description: Members whose `group_invites` setting requires approval get an approval request instead of being added.
+      description: |
+        Members whose `group_invites` setting requires approval get an approval request instead of being added.
+        If any of them does not allow invitations from the caller at all, nothing is created (`403`).
       requestBody:
         required: true
         content:
@@ -1348,6 +1350,7 @@ paths:
               schema: { $ref: "#/components/schemas/Group" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
   /groups/{chat_id}:
@@ -1411,6 +1414,7 @@ paths:
       tags: [groups]
       operationId: setGroupAvatar
       summary: Set the group avatar from an uploaded attachment
+      description: The attachment must be an image the caller uploaded with purpose `avatar` (`422` otherwise).
       requestBody:
         required: true
         content:
@@ -1427,6 +1431,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
   /groups/{chat_id}/participants:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
@@ -1501,6 +1506,7 @@ paths:
       tags: [groups]
       operationId: transferGroupOwnership
       summary: Make another member the owner
+      description: The previous owner becomes an admin. Transferring to yourself is `422`.
       requestBody:
         required: true
         content:
@@ -1517,6 +1523,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
   /groups/{chat_id}/leave:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"

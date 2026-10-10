@@ -40,25 +40,7 @@ func (r chatRepo) TouchActivity(ctx context.Context, chatID, messageID int64, at
 }
 
 func (r chatRepo) Entries(ctx context.Context, userID int64, after *ChatCursor, limit int) ([]ChatEntry, error) {
-	ctx, cancel := r.s.call(ctx)
-	defer cancel()
-	p := sqlcdb.ListChatEntriesParams{UserID: userID, MaxRows: clampLimit(limit)}
-	if after != nil {
-		unpinned := int32(0)
-		if after.Unpinned {
-			unpinned = 1
-		}
-		p.AfterChatID, p.AfterUnpinned, p.AfterSortAt = &after.ChatID, &unpinned, &after.SortAt
-	}
-	rows, err := r.s.q.ListChatEntries(ctx, p)
-	if err != nil {
-		return nil, mapError(err)
-	}
-	out := make([]ChatEntry, len(rows))
-	for i, row := range rows {
-		out[i] = entryFrom(row)
-	}
-	return out, nil
+	return r.EntriesOfType(ctx, userID, "", after, limit)
 }
 
 func (r chatRepo) Entry(ctx context.Context, userID, chatID int64) (ChatEntry, error) {
@@ -191,18 +173,21 @@ func (r approvalRepo) Pending(ctx context.Context, recipientID, beforeID int64, 
 	return out, nil
 }
 
-// respond locks a pending direct-message request of the recipient and records the answer. The pair's lock is
-// taken first, in the order every path that opens a chat or asks for one takes its locks.
-func respond(ctx context.Context, q *sqlcdb.Queries, id, recipientID int64, status string) (ApprovalRequest, error) {
+// respond locks a pending request of the recipient and records the answer; directOnly refuses group
+// invitations. For a direct-message request the pair's lock is taken first, in the order every path that opens
+// a chat or asks for one takes its locks.
+func respond(ctx context.Context, q *sqlcdb.Queries, id, recipientID int64, status string, directOnly bool) (ApprovalRequest, error) {
 	peek, err := q.GetApprovalRequest(ctx, id)
-	if errors.Is(err, pgx.ErrNoRows) || (err == nil && (peek.RecipientID != recipientID || peek.Type != RequestDirectMessage)) {
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && (peek.RecipientID != recipientID || (directOnly && peek.Type != RequestDirectMessage))) {
 		return ApprovalRequest{}, ErrNotFound
 	}
 	if err != nil {
 		return ApprovalRequest{}, err
 	}
-	if err := q.LockDirectPair(ctx, directKey(peek.RequesterID, peek.RecipientID)); err != nil {
-		return ApprovalRequest{}, err
+	if peek.Type == RequestDirectMessage {
+		if err := q.LockDirectPair(ctx, directKey(peek.RequesterID, peek.RecipientID)); err != nil {
+			return ApprovalRequest{}, err
+		}
 	}
 	row, err := q.LockApprovalRequest(ctx, id)
 	if err != nil {
@@ -229,7 +214,7 @@ func (r approvalRepo) ApproveDirect(ctx context.Context, id, recipientID int64) 
 	)
 	err := r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
 		var err error
-		if req, err = respond(ctx, q, id, recipientID, RequestApproved); err != nil {
+		if req, err = respond(ctx, q, id, recipientID, RequestApproved, true); err != nil {
 			return err
 		}
 		chat, created, closed, err = createDirect(ctx, q, req.RequesterID, req.RecipientID)
@@ -245,7 +230,7 @@ func (r approvalRepo) Reject(ctx context.Context, id, recipientID int64) (Approv
 	var req ApprovalRequest
 	err := r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
 		var err error
-		req, err = respond(ctx, q, id, recipientID, RequestRejected)
+		req, err = respond(ctx, q, id, recipientID, RequestRejected, false)
 		return err
 	})
 	if err != nil {

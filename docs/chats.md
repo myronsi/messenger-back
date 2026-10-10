@@ -1,6 +1,6 @@
 # Chats
 
-The chat list, direct chats, pins, read markers and approval requests: `internal/chats` (the use cases) and `internal/httpapi/chat_server.go` (the endpoints). Groups, their members and invitations follow with the group endpoints; messages over REST with the message endpoints.
+The chat list, direct chats, groups, pins, read markers and approval requests: `internal/chats` (the use cases) and `internal/httpapi/chat_server.go`, `group_server.go` (the endpoints). Messages over REST are in [messages.md](messages.md).
 
 ## The chat list: `GET /chats`
 
@@ -50,8 +50,37 @@ Groups are deleted or left with the group endpoints (`422` here).
 
 ## Approval requests
 
-- `GET /requests` is the caller's inbox of pending direct-message requests, newest first, paged by request id (a cursor that is not one of these is `400`). The requester is rendered as the caller sees them, and `preview` is the message they asked with. Group invitations come with the group endpoints.
-- `POST /requests/{id}/approve` opens the direct chat. Its first message is the request's message, sent by the requester. The answer is the chat as the caller sees it; both users get `chat_created`.
+- `GET /requests` is the caller's inbox of pending requests (direct messages and group invitations), newest first, paged by request id (a cursor that is not one of these is `400`). The requester is rendered as the caller sees them; `preview` is the message a direct-message request asked with, `group_name` the group of an invitation.
+- `POST /requests/{id}/approve` on a group invitation adds the caller to the group (members get `group_updated`, the caller `group_created`); the answer is the group's chat entry.
+- `POST /requests/{id}/approve` on a direct-message request opens the direct chat. Its first message is the request's message, sent by the requester. The answer is the chat as the caller sees it; both users get `chat_created`.
 - `POST /requests/{id}/reject` turns the request down; the requester is not told.
 - Answering a request twice is `409`, and someone else's request is `404`. The request is locked while it is answered, so two answers cannot both win.
 - The recipient gets `approval_request_created` for a new request.
+
+## Groups
+
+| Who | May |
+|---|---|
+| owner | everything an admin may, delete the group, transfer ownership |
+| admin | change name, description and avatar; add and remove members (not the owner); make members admins or members again |
+| member | read and write, leave |
+
+In group messages, owners, admins and v1 moderators may also delete anyone's message for everyone. The contract knows `owner`, `admin` and `member`; v1 moderators show as `member`, since deleting messages is all they may do beyond a member.
+
+- **Role checks:** every group change checks the actor's role under the group's row lock in the transaction that makes the change (`ChatRepository.*As`), so a role taken away a moment before cannot still be used. Changes are rate limited per user (60 per minute, bursts of 30).
+- **Members:** `POST /groups` (at most 200 members at once) and `POST /groups/{id}/participants` follow each invitee's `group_invites` setting, as v1 did:
+  - an allow exception lets the caller add them;
+  - otherwise `wait_approval` makes an invitation that waits in the invitee's inbox (the group lists them once they accept);
+  - a deny exception refuses;
+  - then `everyone`, `shared_chats` (a shared chat), `nobody` and the `*_except` values decide;
+  - a block refuses.
+
+  A member who refuses invitations fails group creation (`403`) or the add (`403`). Adding a member twice is `409`. An outsider gets `404` for everything, before any setting of the invitee is looked at.
+- **Invitations:** accepting one adds the user only while whoever invited them may still add members (`409` otherwise). Joining, by an invitation or by being added, settles every other pending invitation of the user to that group.
+- **Leaving and removing:** `POST /groups/{id}/leave` and `DELETE /groups/{id}/participants/{user_id}` remove the member and their pin of the group. The removed member gets `chat_deleted` and no further events of the group, and their unread counter for it is dropped. The owner cannot leave (`409`) or be removed (`403`) and has to transfer ownership first (`POST /groups/{id}/transfer-owner`; the old owner becomes an admin).
+- **Avatar:** `PUT /groups/{id}/avatar` takes an image the caller uploaded with purpose `avatar`. The group's members may download it through `/attachments/{id}/content`.
+- **Deleting:** `DELETE /groups/{id}` (the owner) deletes the group for everyone. Members get `chat_deleted`, and the worker deletes the messages.
+- **Events:** after a change the members get `group_updated` with the group as each of them sees it, and added members get `group_created`. They are sent in the background, so they can arrive before or after the HTTP answer:
+  - Changes that come while a group is being rendered are folded into one more run with the latest state. The runs of one group never overlap, so nobody gets an older state after a newer one.
+  - At most 4 groups render at once.
+  - Groups of more than 100 members send their events with an empty `members` list; clients load the members with `GET /groups/{id}`. Every member sees the list rendered for them, so the cost grows with the square of the size.
