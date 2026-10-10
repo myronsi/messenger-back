@@ -22,7 +22,7 @@ Never deploy a frontend that needs a contract version the deployed backend does 
 1. All PRs for the release are merged to `master` with Conventional Commit titles and CI is green.
 2. Check that every issue in the milestone is closed or moved to the next milestone.
 3. Release: create the tag and the GitHub Release (`vX.Y.Z`, notes from `CHANGELOG.md`). Merging the release-please PR does this and also builds the image with no manual steps.
-4. Deploy: happens automatically after the release: the release workflow moves the `edge` branch to the release commit and dispatches `deploy.yml` on it (environment `production` only accepts deployments from `edge`). It uploads `compose.yaml`, backs up the database with `pg_dump` (the last 10 backups are kept in `backups/`), pulls `ghcr.io/myronsi/messenger-back:vX.Y.Z`, restarts the stack and checks `http://127.0.0.1:8000/`. If the check fails the previous image is restored automatically and the workflow fails.
+4. Deploy: happens automatically after the release. Go releases (`1.x`) deploy with `deploy-go.yml` to staging (and to production once `GO_PRODUCTION` is `true`), see [deploy-go.md](deploy-go.md). For Python releases (`0.x`) the release workflow moves the `edge` branch to the release commit and dispatches `deploy.yml` on it (environment `production` only accepts deployments from `edge`). It uploads `compose.yaml`, backs up the database with `pg_dump` (the last 10 backups are kept in `backups/`), pulls `ghcr.io/myronsi/messenger-back:vX.Y.Z`, restarts the stack and checks `http://127.0.0.1:8000/`. If the check fails the previous image is restored automatically and the workflow fails.
 5. Check the version shown in the app (Profile → About) and the logs after the deployment.
 
 ## Docker images
@@ -31,9 +31,12 @@ Images are published to `ghcr.io/myronsi/messenger-back` by `release.yml`:
 
 | Event | Tags |
 | --- | --- |
-| Release `v0.5.0` | `0.5.0`, `0.5`, `latest` and `v0.5.0` (used by the deploy workflow) |
-| Pre-release `v1.0.0-alpha.1` | `1.0.0-alpha.1` and `v1.0.0-alpha.1` (no `0.5`/`latest`) |
-| Every merge to `master` | `master` and `sha-<short sha>` |
+| Release `v0.5.0` (Python, `Dockerfile`) | `0.5.0`, `0.5`, `latest` and `v0.5.0` (used by the deploy workflow) |
+| Pre-release `v1.0.0-alpha.1` (Go, `go.Dockerfile`) | `1.0.0-alpha.1` and `v1.0.0-alpha.1` (no `1.0`/`latest`) |
+| Release `v1.0.0` (Go) | `1.0.0`, `1.0`, `latest` and `v1.0.0` |
+| Every merge to `master` | `master` and `sha-<short sha>` (Python), `go-master` and `go-sha-<short sha>` (Go) |
+
+The major version of the tag picks the Dockerfile: `0.x` is the Python backend, `1.x` and later the Go backend. The `compose.stack.yaml` asset is the Python stack and is attached to `0.x` releases only.
 
 The commit is baked into the image (build argument `COMMIT` -> `APP_COMMIT`) and shown by `GET /version`.
 
@@ -47,13 +50,13 @@ Add a `Release-As: X.Y.0` footer to a commit so that `MAJOR.MINOR` matches the f
 
 ## Rollback
 
-1. Run the **Deploy** workflow manually (Actions → Deploy → Run workflow, branch `edge`) with the previous tag, for example `v0.5.0`.
+1. Run the **Deploy** workflow manually (Actions → Deploy → Run workflow, branch `edge`) with the previous tag, for example `v0.5.0`. Go releases roll back with **Deploy (Go)** instead ([deploy-go.md](deploy-go.md)).
 2. If the release changed the database schema, restore the backup made before the deployment or apply the down migration.
 3. Fix forward with a `fix:` commit; never move or delete a published tag.
 
 ## CI/CD setup
 
-Workflows in `.github/workflows/`: `ci.yml` (tests against PostgreSQL and a Docker build on every PR), `pr-title.yml`, `api-ci.yml` (contract checks), `labeler.yml` (`api-change` label), `frontend-compat.yml`, `api-publish.yml` (npm, called by `release.yml`), `release.yml` (release-please, GHCR release and snapshot images, contract package, compose stack asset, then promote to `edge` and deploy) and `deploy.yml` (SSH deploy, also runnable manually for rollbacks).
+Workflows in `.github/workflows/`: `ci.yml` (tests against PostgreSQL and a Docker build on every PR), `pr-title.yml`, `api-ci.yml` (contract checks), `labeler.yml` (`api-change` label), `frontend-compat.yml`, `api-publish.yml` (npm, called by `release.yml`), `release.yml` (release-please, GHCR release and snapshot images, contract package, compose stack asset, then promote to `edge` and deploy), `deploy.yml` (SSH deploy of the Python backend, also runnable manually for rollbacks) and `deploy-go.yml` (the Go backend to staging or production, [deploy-go.md](deploy-go.md)).
 
 One-time setup:
 

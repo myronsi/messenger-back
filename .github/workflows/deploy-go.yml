@@ -1,0 +1,83 @@
+name: Deploy (Go)
+
+# Deploys a Go release (1.x) with deploy/go: dispatched by the release workflow, to staging for every Go
+# release and to production (from edge) once GO_PRODUCTION is true. Run it manually to roll back to an
+# earlier tag. Python releases (0.x) go through deploy.yml. See docs/deploy-go.md.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Released Go tag to deploy, for example v1.0.0-alpha.1
+        required: true
+        type: string
+      environment:
+        description: Where to deploy
+        required: true
+        type: choice
+        options: [staging, production]
+        default: staging
+
+concurrency:
+  group: deploy-go-${{ inputs.environment }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    env:
+      TAG: ${{ inputs.tag }}
+      TARGET: ${{ inputs.environment }}
+      # Staging has secrets of its own, so it can never reach the production host through a fallback to
+      # the repository's (or production's) SSH secrets.
+      SSH_USER: ${{ inputs.environment == 'staging' && secrets.STAGING_SSH_USER || secrets.SSH_USER }}
+      SSH_HOST: ${{ inputs.environment == 'staging' && secrets.STAGING_SSH_HOST || secrets.SSH_HOST }}
+      APP_DIR: ${{ vars.GO_DEPLOY_PATH || '/opt/messenger-go' }}
+    steps:
+      - name: Check the request
+        env:
+          GO_PRODUCTION: ${{ vars.GO_PRODUCTION }}
+        run: |
+          case "$TAG" in
+            v0.*) echo "::error::$TAG is a Python release; deploy it with deploy.yml"; exit 1 ;;
+            v[1-9]*) ;;
+            *) echo "::error::$TAG is not a release tag"; exit 1 ;;
+          esac
+          if [ "$TARGET" = production ] && [ "$GO_PRODUCTION" != true ]; then
+            echo "::error::Production runs the Python backend until the switch (docs/switchover.md); GO_PRODUCTION is not true"
+            exit 1
+          fi
+          if [ -z "$SSH_HOST" ] || [ -z "$SSH_USER" ]; then
+            echo "::error::The $TARGET environment has no SSH host or user (docs/deploy-go.md)"
+            exit 1
+          fi
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ inputs.tag }}
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ inputs.environment == 'staging' && secrets.STAGING_SSH_KEY || secrets.SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ inputs.environment == 'staging' && secrets.STAGING_SSH_KNOWN_HOSTS || secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf 'Host deploy\n  HostName %s\n  User %s\n  IdentityFile ~/.ssh/id_deploy\n  StrictHostKeyChecking yes\n' "$SSH_HOST" "$SSH_USER" > ~/.ssh/config
+      - name: Upload the stack, its scripts and the migrations
+        run: |
+          bash deploy/go/bundle.sh "$RUNNER_TEMP/bundle"
+          tar -C "$RUNNER_TEMP/bundle" -czf - . | ssh deploy "mkdir -p '$APP_DIR' && tar -xzf - -C '$APP_DIR'"
+      - name: Log in to GHCR on the server
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_ACTOR: ${{ github.actor }}
+        run: printf '%s' "$GH_TOKEN" | ssh deploy "docker login ghcr.io -u '$GH_ACTOR' --password-stdin"
+      - name: Deploy
+        env:
+          IMAGE_REPO: ghcr.io/${{ github.repository }}
+        run: ssh deploy "bash '$APP_DIR/deploy.sh' '$APP_DIR' '$IMAGE_REPO:$TAG'"

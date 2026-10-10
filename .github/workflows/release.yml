@@ -14,6 +14,9 @@ jobs:
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
+      # 0.x releases are the Python backend (Dockerfile, deploy.yml); 1.x and later the Go backend
+      # (go.Dockerfile, deploy-go.yml). See docs/deploy-go.md.
+      python: ${{ startsWith(steps.release.outputs.tag_name, 'v0.') }}
     steps:
       - id: release
         uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4.4.1
@@ -48,15 +51,32 @@ jobs:
             type=semver,pattern={{major}}.{{minor}},value=${{ needs.release-please.outputs.tag_name }}
             type=raw,value=${{ needs.release-please.outputs.tag_name }}
             type=raw,value=latest,enable=${{ !contains(needs.release-please.outputs.tag_name, '-') }}
+      - name: Python or Go
+        id: kind
+        env:
+          PYTHON: ${{ needs.release-please.outputs.python }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          if [ "$PYTHON" = true ]; then
+            echo "file=Dockerfile" >> "$GITHUB_OUTPUT"
+            echo "scope=python" >> "$GITHUB_OUTPUT"
+          else
+            echo "file=go.Dockerfile" >> "$GITHUB_OUTPUT"
+            echo "scope=go" >> "$GITHUB_OUTPUT"
+          fi
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
       - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
+          file: ${{ steps.kind.outputs.file }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: COMMIT=${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          build-args: |
+            COMMIT=${{ github.sha }}
+            VERSION=${{ steps.kind.outputs.version }}
+          cache-from: type=gha,scope=${{ steps.kind.outputs.scope }}
+          cache-to: type=gha,mode=max,scope=${{ steps.kind.outputs.scope }}
 
   # Publishes the API contract as @myronsi/messenger-api: the stable version after a release when
   # info.version is not on npm yet, otherwise a `next` snapshot if api/ changed in this commit.
@@ -71,10 +91,10 @@ jobs:
       channel: ${{ needs.release-please.outputs.release_created == 'true' && 'release' || 'next' }}
 
   # Attaches the images-only compose file with the image pinned to this release, so a frontend can
-  # start the matching backend with all its stores.
+  # start the matching backend with all its stores. It is the Python stack, so Python releases only.
   stack:
     needs: [release-please, image]
-    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    if: ${{ needs.release-please.outputs.release_created == 'true' && needs.release-please.outputs.python == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -91,8 +111,14 @@ jobs:
           grep -q "messenger-back:${version}}" "$RUNNER_TEMP/compose.stack.yaml"
           gh release upload "$TAG" "$RUNNER_TEMP/compose.stack.yaml" --clobber --repo "$GITHUB_REPOSITORY"
 
-  # Every merge to master also publishes a snapshot image: master and sha-<short sha>.
+  # Every merge to master also publishes snapshot images: the Python backend as master and sha-<short sha>
+  # (the frontend's compatibility tests use them), the Go backend as go-master and go-sha-<short sha>.
   snapshot-image:
+    strategy:
+      matrix:
+        include:
+          - { file: Dockerfile, prefix: "", scope: python }
+          - { file: go.Dockerfile, prefix: go-, scope: go }
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -111,22 +137,26 @@ jobs:
           images: ghcr.io/${{ github.repository }}
           flavor: latest=false
           tags: |
-            type=ref,event=branch
-            type=sha
+            type=ref,event=branch,prefix=${{ matrix.prefix }}
+            type=sha,prefix=${{ matrix.prefix }}sha-
       - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
+          file: ${{ matrix.file }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: COMMIT=${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          build-args: |
+            COMMIT=${{ github.sha }}
+            VERSION=master
+          cache-from: type=gha,scope=${{ matrix.scope }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.scope }}
 
   # The production environment only accepts deployments from `edge`, so the release
   # commit is moved there and the deploy workflow is dispatched on that branch.
   promote:
     needs: [release-please, image, contract, stack]
+    if: ${{ needs.release-please.outputs.python == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -140,3 +170,29 @@ jobs:
           gh api -X PATCH "repos/${{ github.repository }}/git/refs/heads/edge" -f sha="$GITHUB_SHA" -F force=true \
             || gh api -X POST "repos/${{ github.repository }}/git/refs" -f ref=refs/heads/edge -f sha="$GITHUB_SHA"
           gh workflow run deploy.yml --repo "${{ github.repository }}" --ref edge -f tag="$TAG"
+
+  # Go releases deploy to staging, every one of them (pre-releases included). Production gets a Go
+  # release only once the switch has happened and the repository variable GO_PRODUCTION is true
+  # (docs/switchover.md); until then it keeps the Python backend.
+  promote-go:
+    needs: [release-please, image, contract]
+    if: ${{ needs.release-please.outputs.release_created == 'true' && needs.release-please.outputs.python != 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - name: Deploy to staging
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: gh workflow run deploy-go.yml --repo "${{ github.repository }}" --ref master -f tag="$TAG" -f environment=staging
+      - name: Deploy to production (after the switch, stable releases only)
+        if: ${{ vars.GO_PRODUCTION == 'true' && !contains(needs.release-please.outputs.tag_name, '-') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          gh api -X PATCH "repos/${{ github.repository }}/git/refs/heads/edge" -f sha="$GITHUB_SHA" -F force=true \
+            || gh api -X POST "repos/${{ github.repository }}/git/refs" -f ref=refs/heads/edge -f sha="$GITHUB_SHA"
+          gh workflow run deploy-go.yml --repo "${{ github.repository }}" --ref edge -f tag="$TAG" -f environment=production

@@ -2,7 +2,8 @@
 
 `compose.dev.yaml` is a development stack with one node per store, no TLS and throwaway data. Do not use
 it in production. This page lists what production needs; the application settings are in
-[go-backend.md](go-backend.md) and `.env.example`.
+[go-backend.md](go-backend.md) and `.env.example`. How releases are deployed (the `deploy/go` stack,
+staging and production) is in [deploy-go.md](deploy-go.md).
 
 ## Application
 

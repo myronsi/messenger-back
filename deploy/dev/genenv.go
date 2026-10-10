@@ -5,6 +5,7 @@
 // passwords). It never overwrites an existing .env.
 //
 //	go run deploy/dev/genenv.go
+//	go run deploy/dev/genenv.go deploy/go/env.example /opt/messenger-go/.env   # the Go stack (staging)
 package main
 
 import (
@@ -59,7 +60,13 @@ func leaveAlone(name string) {
 }
 
 func main() {
-	const src, dst = ".env.example", ".env"
+	src, dst := ".env.example", ".env"
+	if len(os.Args) == 3 {
+		src, dst = os.Args[1], os.Args[2]
+	} else if len(os.Args) != 1 {
+		fmt.Fprintln(os.Stderr, "usage: go run deploy/dev/genenv.go [example env]")
+		os.Exit(2)
+	}
 	if _, err := os.Stat(dst); err == nil {
 		leaveAlone(dst)
 		return
@@ -118,5 +125,8 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	fmt.Printf("Created %s with generated secrets. Next: make up\n", dst)
+	fmt.Printf("Created %s with generated secrets.\n", dst)
+	if src == ".env.example" {
+		fmt.Println("Next: make up")
+	}
 }

@@ -19,6 +19,7 @@
 !docs/accounts.md
 !docs/chats.md
 !docs/switchover.md
+!docs/deploy-go.md
 !docs/search.md
 !docs/load-testing.md
 !docs/testing.md
@@ -73,6 +74,8 @@
 !deploy/
 !deploy/deploy.sh
 !deploy/compose.stack.yaml
+!deploy/go/
+!deploy/go/**
 !release-please-config.json
 !.release-please-manifest.json
 !.gitattributes
