@@ -13443,14 +13443,15 @@ func (response GetUserAvatar200ImageResponse) VisitGetUserAvatarResponse(w http.
 	return err
 }
 
-type GetUserAvatar206ApplicationoctetStreamResponse struct {
+type GetUserAvatar206ImageResponse struct {
 	Body          io.Reader
+	ContentType   string
 	ContentLength int64
 }
 
-func (response GetUserAvatar206ApplicationoctetStreamResponse) VisitGetUserAvatarResponse(w http.ResponseWriter) error {
+func (response GetUserAvatar206ImageResponse) VisitGetUserAvatarResponse(w http.ResponseWriter) error {
 
-	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Type", response.ContentType)
 	if response.ContentLength != 0 {
 		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
 	}

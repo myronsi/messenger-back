@@ -8,6 +8,8 @@ Found by validating every response of the backend's HTTP tests against this cont
 
 - `GET /attachments/{attachment_id}/content` and `GET /users/{user_id}/avatar` list `206` (byte ranges), `304`
   (`ETag`) and `416`; the attachment download also its `302` to a signed URL.
+- `POST /ws/ticket` answers `201`, as listed (the server sent `200`).
+- The conventions name the statuses any operation may answer: `413`, `415`, `500`, `503`.
 
 ## 2.0.0-alpha.7
 

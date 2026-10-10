@@ -1,10 +1,11 @@
 // History pages and searches under load. Targets: p99 of a history page under 50 ms, of a search under 300 ms.
+// Each request goes out as a random seeded user: one user may search 60 times a minute (bursts of 20).
 // Run messages.js first (or against migrated data) so there is history to read and find.
 //
 //   k6 run -e RATE=200 -e DURATION=120 loadtest/reads.js
 import http from "k6/http";
 import { check } from "k6";
-import { BASE, headers, userFor } from "./lib.js";
+import { BASE, anyUser, headers } from "./lib.js";
 
 const RATE = Number(__ENV.RATE || 200);
 const DURATION = Number(__ENV.DURATION || 120);
@@ -29,13 +30,13 @@ export const options = {
 };
 
 export function history() {
-  const u = userFor(__VU);
+  const u = anyUser();
   const res = http.get(`${BASE}/chats/${u.chat_id}/messages?limit=50`, headers(u));
   check(res, { "history 200": (r) => r.status === 200 });
 }
 
 export function search() {
-  const u = userFor(__VU);
+  const u = anyUser();
   const q = WORDS[Math.floor(Math.random() * WORDS.length)];
   const res = http.get(`${BASE}/search/messages?q=${q}`, headers(u));
   check(res, { "search 200": (r) => r.status === 200 });

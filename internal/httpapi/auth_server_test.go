@@ -425,6 +425,7 @@ func TestRequestBodyChecks(t *testing.T) {
 		}
 		rec := reply{httptest.NewRecorder()}
 		e.router.ServeHTTP(rec.ResponseRecorder, req)
+		checkContract(t, http.MethodPost, apiBase+"/auth/login", rec.Code, rec.Header().Get("Content-Type"), rec.Body.Bytes())
 		if rec.Code != tc.want || rec.code() != tc.code {
 			t.Fatalf("%s: %d %s", name, rec.Code, rec.Body)
 		}

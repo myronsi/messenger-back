@@ -17,14 +17,18 @@ export const options = {
   },
   thresholds: {
     ws_closed_early: ["count==0"],
-    checks: ["rate>0.99"],
+    ws_ticket_failures: ["count==0"],
+    // Every socket must reach hello: the upgrade alone is answered before the ticket is checked.
+    ws_hello: [`count>=${VUS}`],
   },
 };
 
 export default function () {
   const u = userFor(__VU);
   const opened = Date.now();
-  const res = ws.connect(socketURL(u), {}, (socket) => {
+  const url = socketURL(u);
+  if (!url) return;
+  const res = ws.connect(url, {}, (socket) => {
     socket.on("message", (raw) => {
       if (JSON.parse(raw).type === "hello") hellos.add(1);
     });

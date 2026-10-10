@@ -1,8 +1,10 @@
 // Command seed prepares users for the load tests: it registers (or logs in) load_00000…, pairs them into direct
 // chats and writes their access tokens and chats as JSON for the k6 scripts. It runs with the API's
-// environment (DATABASE_URL, REDIS_URL, JWT_SECRET, …) against a test environment, never production.
+// environment (DATABASE_URL, REDIS_URL, JWT_SECRET, …) against a test environment, never production: it refuses
+// to run unless APP_ENV is test, or -allow-env names the environment (staging runs with APP_ENV=production).
+// The users' password comes from LOADTEST_PASSWORD, so nobody else knows it.
 //
-//	go run ./loadtest/seed -users 1000 -out loadtest/users.json
+//	LOADTEST_PASSWORD=… go run ./loadtest/seed -users 1000 -out loadtest/users.json
 package main
 
 import (
@@ -33,27 +35,32 @@ type User struct {
 	PeerID string `json:"peer_id"`
 }
 
-// password of every load test user.
-const password = "load-test-password-not-secret"
-
 func main() {
-	n := flag.Int("users", 100, "how many users")
+	n := flag.Int("users", 100, "how many users (even: they share chats in pairs)")
 	out := flag.String("out", "loadtest/users.json", "where to write the users")
+	allow := flag.String("allow-env", "", "seed although APP_ENV is this (not test), e.g. on staging")
 	flag.Parse()
-	if err := run(*n, *out); err != nil {
+	if err := run(*n, *out, *allow); err != nil {
 		fmt.Fprintln(os.Stderr, "seed:", err)
 		os.Exit(1)
 	}
 }
 
-func run(n int, out string) error {
+func run(n int, out, allowEnv string) error {
 	ctx := context.Background()
+	if n < 2 || n%2 != 0 {
+		return errors.New("-users must be even and at least 2: users share direct chats in pairs")
+	}
+	password := os.Getenv("LOADTEST_PASSWORD")
+	if len(password) < 16 {
+		return errors.New("LOADTEST_PASSWORD must be set (16+ characters): the load test users' password")
+	}
 	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
-	if cfg.Env == "production" {
-		return errors.New("refusing to seed load test users into a production environment")
+	if cfg.Env != "test" && (allowEnv == "" || allowEnv != cfg.Env) {
+		return fmt.Errorf("refusing to seed with APP_ENV=%s: only test environments, or -allow-env %s for this one", cfg.Env, cfg.Env)
 	}
 	log := slog.New(slog.DiscardHandler)
 	pg, err := postgres.New(ctx, cfg.DatabaseURL.Reveal(), postgres.Options{MaxConns: 4})
@@ -105,7 +112,8 @@ func run(n int, out string) error {
 		users[i].ChatID, users[i+1].ChatID = id, id
 		users[i].PeerID, users[i+1].PeerID = users[i+1].ID, users[i].ID
 	}
-	f, err := os.Create(out) //nolint:gosec // a path the operator chose
+	// The file holds access tokens: readable for its owner only.
+	f, err := os.OpenFile(out, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600) //nolint:gosec // a path the operator chose
 	if err != nil {
 		return err
 	}

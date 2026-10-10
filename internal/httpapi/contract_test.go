@@ -183,17 +183,26 @@ func contractViolation(method, rawPath string, status int, contentType string, b
 		return err
 	}
 	path, _, _ := strings.Cut(rawPath, "?")
+	inAPI := strings.HasPrefix(path, apiBase+"/")
 	path = strings.TrimPrefix(path, apiBase)
 	tmpl, op := c.operationFor(method, path)
 	if op == nil {
-		return nil // not part of the contract (the WebSocket upgrade, ops endpoints)
+		// Outside the API (ops endpoints) and the WebSocket upgrade are not in the contract. Anything else
+		// under the base path must be an operation, unless the router refused it as unknown.
+		if !inAPI || path == "/ws" || status == 404 || status == 405 {
+			return nil
+		}
+		return fmt.Errorf("%s %s answered %d but the contract has no such operation", method, path, status)
 	}
 	responses := op["responses"].(map[string]any)
 	resp, ok := responses[strconv.Itoa(status)]
 	loc := "/paths/" + pointer(tmpl) + "/" + strings.ToLower(method) + "/responses/" + strconv.Itoa(status)
 	if !ok {
-		// 500 and 503 are not listed per operation: they are the server failing, not the contract.
-		if status >= 500 {
+		// The conventions of the contract list the statuses any operation may answer: 413 and 415 (the body
+		// checks of the router) and 503 (a store away); 501 is an operation not built yet. 500 is listed there
+		// too, but a handler that fails must make its test fail.
+		switch status {
+		case 413, 415, 501, 503:
 			return nil
 		}
 		return fmt.Errorf("%s %s answered %d, which the operation does not list", method, tmpl, status)
@@ -203,6 +212,9 @@ func contractViolation(method, rawPath string, status int, contentType string, b
 		loc = ref
 	}
 	content, _ := r["content"].(map[string]any)
+	if status/100 == 3 {
+		return nil // redirects carry whatever little body net/http writes for them
+	}
 	if len(content) == 0 {
 		if len(bytes.TrimSpace(body)) > 0 {
 			return fmt.Errorf("%s %s %d has a body, the contract none", method, tmpl, status)
@@ -212,9 +224,11 @@ func contractViolation(method, rawPath string, status int, contentType string, b
 	mt, _, _ := mime.ParseMediaType(contentType)
 	media, ok := content[mt].(map[string]any)
 	if !ok {
-		// Binary downloads (images, audio, default avatars) are described by their media ranges.
+		// Binary downloads are described by a media range (image/*) or as application/octet-stream, which the
+		// server answers with the file's real type; JSON or no type at all never passes for them.
+		binary := mt != "" && !strings.Contains(mt, "json")
 		for k := range content {
-			if (strings.HasSuffix(k, "/*") && strings.HasPrefix(mt, strings.TrimSuffix(k, "*"))) || k == "*/*" || k == "application/octet-stream" {
+			if binary && (k == "application/octet-stream" || (strings.HasSuffix(k, "/*") && strings.HasPrefix(mt, strings.TrimSuffix(k, "*")))) {
 				return nil
 			}
 		}
@@ -251,8 +265,12 @@ func TestContractCheckRejectsViolations(t *testing.T) {
 		{"wrong type", "GET", apiBase + "/chats/1", 200, `{"id":1}`, false},
 		{"bad id pattern", "GET", apiBase + "/chats", 200, `{"items":[],"next_cursor":5}`, false},
 		{"body on 204", "DELETE", apiBase + "/chats/1", 204, `{"x":1}`, false},
-		{"server failure", "GET", apiBase + "/chats", 503, `{}`, true},
+		{"store away", "GET", apiBase + "/chats", 503, `{}`, true},
+		{"handler failure", "GET", apiBase + "/chats", 500, `{}`, false},
 		{"outside the contract", "GET", "/healthz", 200, `{}`, true},
+		{"unknown operation", "PUT", apiBase + "/chats/1", 200, `{}`, false},
+		{"unknown path refused", "GET", apiBase + "/nope", 404, `{}`, true},
+		{"json as a download", "GET", apiBase + "/attachments/5f0c8a64-2f2b-4c7e-9d0e-6b1f3a2c4d5e/content", 200, `{}`, false},
 	}
 	for _, c := range cases {
 		err := contractViolation(c.method, c.path, c.status, "application/json", []byte(c.body))

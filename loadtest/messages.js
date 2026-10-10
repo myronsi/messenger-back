@@ -15,6 +15,10 @@ const DURATION = Number(__ENV.DURATION || 120);
 const delivery = new Trend("message_delivery_ms", true);
 const acks = new Trend("message_ack_ms", true);
 const errors = new Counter("message_errors");
+const delivered = new Counter("messages_delivered");
+// client_temp_id makes sends idempotent: a later run reusing ids would get its earlier messages back.
+const RUN = __ENV.RUN_ID || String(Date.now());
+const closedEarly = new Counter("ws_closed_early");
 
 export const options = {
   scenarios: {
@@ -23,6 +27,10 @@ export const options = {
   thresholds: {
     message_delivery_ms: ["p(99)<150"],
     message_errors: ["count<10"],
+    ws_ticket_failures: ["count==0"],
+    ws_closed_early: ["count==0"],
+    // A run that delivered (almost) nothing measured nothing: at least 90 % of what was sent must arrive.
+    messages_delivered: [`count>=${Math.floor(RATE * DURATION * 0.9)}`],
   },
 };
 
@@ -31,7 +39,13 @@ export default function () {
   const interval = (1000 * VUS) / RATE; // ms between this user's sends
   const sentAt = {};
   let n = 0;
-  const res = ws.connect(socketURL(u), {}, (socket) => {
+  const url = socketURL(u);
+  if (!url) return;
+  const opened = Date.now();
+  const res = ws.connect(url, {}, (socket) => {
+    socket.on("close", () => {
+      if (Date.now() - opened < DURATION * 1000) closedEarly.add(1);
+    });
     socket.on("message", (raw) => {
       const ev = JSON.parse(raw);
       if (ev.type === "ack" && sentAt[ev.client_temp_id]) {
@@ -43,11 +57,12 @@ export default function () {
         // The partner's messages carry their send time.
         if (m.sender && m.sender.id !== u.id && m.content && m.content.startsWith("t=")) {
           delivery.add(Date.now() - Number(m.content.slice(2)));
+          delivered.add(1);
         }
       }
     });
     socket.setInterval(() => {
-      const temp = `${__VU}-${n++}`;
+      const temp = `${RUN}-${__VU}-${n++}`;
       sentAt[temp] = Date.now();
       socket.send(JSON.stringify({ type: "message", client_temp_id: temp, chat_id: u.chat_id, data: { type: "text", content: `t=${Date.now()}` } }));
     }, interval);

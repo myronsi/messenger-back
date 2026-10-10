@@ -25,6 +25,10 @@ info:
       `min_client_api_version` gets `426` with `code: client_outdated`.
     - Files are never referenced by a client-supplied URL: upload with `POST /attachments`,
       then refer to the returned `attachment_id`.
+    - Statuses any operation may answer, not repeated per operation: `413` (body over the size
+      limit, `payload_too_large`) and `415` (a body that is not `application/json`,
+      `unsupported_media_type`) for operations with a body; `500` (a bug) and `503` (a store is
+      away; retry after `Retry-After`) for all.
   license:
     name: MIT
     identifier: MIT
@@ -745,9 +749,9 @@ paths:
             image/*:
               schema: { type: string, format: binary }
         "206":
-          description: The requested byte range (`Range` header); players use it to seek
+          description: The requested byte range (`Range` header)
           content:
-            application/octet-stream:
+            image/*:
               schema: { type: string, format: binary }
         "304":
           description: Not modified (`If-None-Match` with the `ETag` of an earlier answer)

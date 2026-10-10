@@ -83,7 +83,8 @@ func serverEventSchema() (*jsonschema.Schema, error) {
 		c := jsonschema.NewCompiler()
 		c.UseLoader(specLoader{})
 		c.AssertFormat()
-		eventSchema, eventSchemaErr = c.Compile("file:///" + strings.TrimPrefix(filepath.ToSlash(abs), "/"))
+		u := url.URL{Scheme: "file", Path: "/" + strings.TrimPrefix(filepath.ToSlash(abs), "/")}
+		eventSchema, eventSchemaErr = c.Compile(u.String())
 	})
 	return eventSchema, eventSchemaErr
 }
