@@ -42,3 +42,14 @@ INSERT INTO user_privacy_settings (user_id) VALUES (@user_id) ON CONFLICT (user_
 
 -- name: ListUsersByIDs :many
 SELECT * FROM users WHERE id = ANY(@ids::BIGINT[]);
+
+-- name: PatchUserProfile :one
+-- Changes only what is given, so concurrent edits of different fields do not undo each other.
+UPDATE users
+SET display_name = COALESCE(sqlc.narg(display_name), display_name),
+    bio = CASE WHEN @set_bio::bool THEN sqlc.narg(bio) ELSE bio END
+WHERE id = @id
+RETURNING *;
+
+-- name: DeleteSessionsOfUser :many
+DELETE FROM user_sessions WHERE user_id = @user_id RETURNING id;

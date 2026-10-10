@@ -3,6 +3,9 @@ package postgres
 import (
 	"context"
 	"errors"
+	"slices"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -97,6 +100,16 @@ func (r userRepo) UpdateProfile(ctx context.Context, id int64, p Profile) (User,
 	return userFrom(u), nil
 }
 
+func (r userRepo) PatchProfile(ctx context.Context, id int64, p ProfilePatch) (User, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	u, err := r.s.q.PatchUserProfile(ctx, sqlcdb.PatchUserProfileParams{ID: id, DisplayName: p.DisplayName, SetBio: p.SetBio, Bio: p.Bio})
+	if err != nil {
+		return User{}, mapError(err)
+	}
+	return userFrom(u), nil
+}
+
 func (r userRepo) SetPasswordHash(ctx context.Context, id int64, passwordHash string) error {
 	ctx, cancel := r.s.call(ctx)
 	defer cancel()
@@ -176,9 +189,14 @@ func (r userRepo) TouchLastSeen(ctx context.Context, id int64) error {
 func (r userRepo) DeleteAccount(ctx context.Context, id int64) (DeletedAccount, error) {
 	var out DeletedAccount
 	err := r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
-		out = DeletedAccount{} // the transaction can be retried
+		out = DeletedAccount{DeletedChats: map[int64][]int64{}} // the transaction can be retried
+		var err error
 		// Concurrent writers that reference the user wait for this lock instead of racing the deletion.
 		if _, err := q.LockUser(ctx, id); err != nil {
+			return err
+		}
+		// Deleted here, under the lock, so a login that commits meanwhile is in the list as well.
+		if out.Sessions, err = q.DeleteSessionsOfUser(ctx, id); err != nil {
 			return err
 		}
 		// Lock every chat that references the user (member, creator, uploader, invitation party or pinner) in id order before reading roles: a concurrent ownership
@@ -187,7 +205,8 @@ func (r userRepo) DeleteAccount(ctx context.Context, id int64) (DeletedAccount, 
 			return err
 		}
 		// A direct chat cannot outlive one of its two sides.
-		doomed, err := q.ListDirectChatIDsOfUser(ctx, id)
+		var doomed []int64
+		doomed, err = q.ListDirectChatIDsOfUser(ctx, id)
 		if err != nil {
 			return err
 		}
@@ -216,9 +235,23 @@ func (r userRepo) DeleteAccount(ctx context.Context, id int64) (DeletedAccount, 
 		if out.AttachmentKeys, err = q.ListAttachmentKeysOfChats(ctx, doomed); err != nil {
 			return err
 		}
+		all, err := q.ListChatIDsOfUser(ctx, id)
+		if err != nil {
+			return err
+		}
 		for _, chatID := range doomed {
+			members, err := q.ListParticipantIDs(ctx, chatID)
+			if err != nil {
+				return err
+			}
+			out.DeletedChats[chatID] = slices.DeleteFunc(members, func(m int64) bool { return m == id })
 			if _, err := q.DeleteChat(ctx, chatID); err != nil {
 				return err
+			}
+		}
+		for _, chatID := range all {
+			if _, gone := out.DeletedChats[chatID]; !gone {
+				out.LeftGroups = append(out.LeftGroups, chatID)
 			}
 		}
 		_, err = q.DeleteUser(ctx, id)
@@ -250,4 +283,43 @@ func setRole(ctx context.Context, q *sqlcdb.Queries, chatID, userID int64, role 
 		return ErrNotFound
 	}
 	return nil
+}
+
+// minTrigramQuery is the shortest query whose display-name match can use the trigram index.
+const minTrigramQuery = 3
+
+// likeEscape makes user input safe inside a LIKE pattern.
+func likeEscape(s string) string {
+	r := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+	return r.Replace(s)
+}
+
+func (r userRepo) Search(ctx context.Context, viewerID int64, query, after string, limit int) ([]User, error) {
+	q := likeEscape(strings.ToLower(strings.TrimSpace(query)))
+	if q == "" {
+		return nil, nil
+	}
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	p := sqlcdb.SearchUsersParams{Prefix: q, Contains: q, ViewerID: viewerID, MaxRows: clampLimit(limit)}
+	if after != "" {
+		a := strings.ToLower(after)
+		p.After = &a
+	}
+	var rows []sqlcdb.User
+	var err error
+	if utf8.RuneCountInString(query) < minTrigramQuery {
+		// pg_trgm finds nothing to index in fewer than three characters: the display name would be a scan.
+		rows, err = r.s.q.SearchUsersByUsername(ctx, sqlcdb.SearchUsersByUsernameParams{Prefix: p.Prefix, ViewerID: viewerID, After: p.After, MaxRows: p.MaxRows})
+	} else {
+		rows, err = r.s.q.SearchUsers(ctx, p)
+	}
+	if err != nil {
+		return nil, mapError(err)
+	}
+	out := make([]User, len(rows))
+	for i, u := range rows {
+		out[i] = userFrom(u)
+	}
+	return out, nil
 }

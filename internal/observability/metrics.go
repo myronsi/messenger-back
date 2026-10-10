@@ -23,6 +23,7 @@ type Metrics struct {
 	storeErrors    *prometheus.CounterVec
 	storeCheckTime *prometheus.HistogramVec
 	events         *prometheus.CounterVec
+	clientAPI      *prometheus.CounterVec
 }
 
 // NewMetrics registers the collectors together with the Go runtime and process collectors.
@@ -54,6 +55,10 @@ func NewMetrics() *Metrics {
 			Name: "messenger_store_errors_total",
 			Help: "Failed operations per data store.",
 		}, []string{"store"}),
+		clientAPI: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "messenger_client_api_requests_total",
+			Help: "Requests by the contract version clients send in X-Client-Api-Version (none: no header; at most 50 versions, then other). Raise MIN_CLIENT_API_VERSION once old versions are gone.",
+		}, []string{"api_version"}),
 		events: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "messenger_events_handled_total",
 			Help: "Stream events handled by the worker, by consumer group and outcome (ok, failed, dead_letter). Alert on dead_letter.",
@@ -67,7 +72,7 @@ func NewMetrics() *Metrics {
 	m.Registry.MustRegister(
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
-		m.requests, m.duration, m.inFlight, m.webSockets, m.messages, m.storeErrors, m.storeCheckTime, m.events,
+		m.requests, m.duration, m.inFlight, m.webSockets, m.messages, m.storeErrors, m.storeCheckTime, m.events, m.clientAPI,
 	)
 	return m
 }
@@ -102,6 +107,9 @@ func (m *Metrics) MessageAccepted() { m.messages.Inc() }
 // StoreError counts a failed operation of the named store ("postgres", "redis", "scylla",
 // "elasticsearch").
 func (m *Metrics) StoreError(store string) { m.storeErrors.WithLabelValues(store).Inc() }
+
+// ClientAPIRequest counts a request by its client contract version.
+func (m *Metrics) ClientAPIRequest(apiVersion string) { m.clientAPI.WithLabelValues(apiVersion).Inc() }
 
 // EventHandled counts one event handled by a consumer group.
 func (m *Metrics) EventHandled(group string, ok, deadLettered bool) {

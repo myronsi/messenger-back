@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gocql/gocql"
@@ -21,6 +22,7 @@ import (
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/redis"
 	"github.com/myronsi/messenger-back/internal/store/scylla"
+	"github.com/myronsi/messenger-back/internal/version"
 )
 
 func main() { app.Exit("api", run) }
@@ -126,11 +128,17 @@ func run() error {
 			httpapi.NewMediaServer(httpapi.MediaOptions{
 				Service: mediaSvc, Store: pg, Directory: rt.directory, Limiter: rt.limiter, BasePath: cfg.HTTP.BasePath, Log: log,
 			}),
-		),
-		Authenticator:  authSvc,
-		WebSocket:      rt.gateway,
-		UploadMaxBytes: mediaSvc.Limits().Max(),
-		Checks:         checks,
+		).WithAccount(httpapi.NewAccountServer(httpapi.AccountOptions{
+			Store: pg, Directory: rt.directory, Deleter: authSvc, AfterDeletion: rt.accountDeleted(storage, log),
+			Events: rt.events, Limiter: rt.limiter, BasePath: cfg.HTTP.BasePath, Log: log,
+		})).WithMeta(httpapi.MetaInfo{
+			BackendVersion: version.Backend, Commit: os.Getenv("APP_COMMIT"), MinClientAPIVersion: cfg.Realtime.MinClientAPIVersion,
+		}),
+		Authenticator:       authSvc,
+		WebSocket:           rt.gateway,
+		UploadMaxBytes:      mediaSvc.Limits().Max(),
+		MinClientAPIVersion: cfg.Realtime.MinClientAPIVersion,
+		Checks:              checks,
 	})
 
 	srv := app.NewServer(cfg.HTTP.Addr, router, cfg.HTTP)

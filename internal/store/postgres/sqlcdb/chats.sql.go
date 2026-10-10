@@ -237,6 +237,30 @@ func (q *Queries) ListOwnedGroupIDs(ctx context.Context, userID int64) ([]int64,
 	return items, nil
 }
 
+const listParticipantIDs = `-- name: ListParticipantIDs :many
+SELECT user_id FROM participants WHERE chat_id = $1 ORDER BY user_id
+`
+
+func (q *Queries) ListParticipantIDs(ctx context.Context, chatID int64) ([]int64, error) {
+	rows, err := q.db.Query(ctx, listParticipantIDs, chatID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int64{}
+	for rows.Next() {
+		var user_id int64
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listParticipants = `-- name: ListParticipants :many
 SELECT chat_id, user_id, role, last_read_message_id, joined_at FROM participants WHERE chat_id = $1 ORDER BY joined_at, user_id
 `

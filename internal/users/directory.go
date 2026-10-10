@@ -85,12 +85,16 @@ type facts struct {
 	shares     bool
 	contact    *string
 	online     bool
+	// blocked: the subject blocked the viewer, who then sees nothing that privacy settings guard.
+	blocked bool
 }
 
 func (d *Directory) render(u postgres.User, viewer int64, f facts) View {
 	v := View{ID: u.ID, Username: u.Username, DisplayName: u.DisplayName, ContactName: f.contact}
 	self := u.ID == viewer
-	allowed := func(setting, key string) bool { return self || Visible(setting, f.exceptions[key], f.shares) }
+	allowed := func(setting, key string) bool {
+		return self || (!f.blocked && Visible(setting, f.exceptions[key], f.shares))
+	}
 	if u.HasAvatar() && allowed(f.settings.AvatarVisibility, postgres.SettingAvatar) {
 		url := d.AvatarURL(u.ID)
 		v.AvatarURL = &url
@@ -135,6 +139,10 @@ func (d *Directory) ForViewer(ctx context.Context, viewer int64, ids []int64) (m
 	if err != nil {
 		return nil, err
 	}
+	blocks, err := social.Blocks(ctx, ids, []int64{viewer})
+	if err != nil {
+		return nil, err
+	}
 	online := d.onlineOf(ctx, ids)
 	for _, id := range ids {
 		u, ok := users[id]
@@ -142,7 +150,7 @@ func (d *Directory) ForViewer(ctx context.Context, viewer int64, ids []int64) (m
 			out[id] = d.deleted(id)
 			continue
 		}
-		f := facts{settings: settings[id], exceptions: exceptions[id], shares: shared[id], online: online[id]}
+		f := facts{settings: settings[id], exceptions: exceptions[id], shares: shared[id], online: online[id], blocked: blocks[[2]int64{id, viewer}]}
 		if n, ok := names[id]; ok {
 			f.contact = &n
 		}
@@ -189,9 +197,13 @@ func (d *Directory) ToViewers(ctx context.Context, subject int64, viewers []int6
 	if err != nil {
 		return nil, err
 	}
+	blocks, err := social.Blocks(ctx, []int64{subject}, viewers)
+	if err != nil {
+		return nil, err
+	}
 	online := d.onlineOf(ctx, []int64{subject})[subject]
 	for _, v := range viewers {
-		f := facts{settings: settings[subject], exceptions: exceptions[v], shares: sharesChat || shared[v], online: online}
+		f := facts{settings: settings[subject], exceptions: exceptions[v], shares: sharesChat || shared[v], online: online, blocked: blocks[[2]int64{subject, v}]}
 		if n, ok := names[v]; ok {
 			f.contact = &n
 		}
@@ -233,9 +245,13 @@ func (d *Directory) PresenceVisibleTo(ctx context.Context, subject int64, viewer
 			return nil, err
 		}
 	}
+	blocks, err := social.Blocks(ctx, []int64{subject}, viewers)
+	if err != nil {
+		return nil, err
+	}
 	setting := settings[subject].PresenceVisibility
 	for _, v := range viewers {
-		out[v] = v == subject || Visible(setting, exceptions[v][postgres.SettingPresence], sharesChat || shared[v])
+		out[v] = v == subject || (!blocks[[2]int64{subject, v}] && Visible(setting, exceptions[v][postgres.SettingPresence], sharesChat || shared[v]))
 	}
 	return out, nil
 }

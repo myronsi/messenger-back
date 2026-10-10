@@ -7,6 +7,7 @@ package sqlcdb
 
 import (
 	"context"
+	"time"
 )
 
 const blockUser = `-- name: BlockUser :exec
@@ -78,6 +79,21 @@ func (q *Queries) DeletePrivacyException(ctx context.Context, arg DeletePrivacyE
 	return result.RowsAffected(), nil
 }
 
+const deletePrivacyExceptionsByEffect = `-- name: DeletePrivacyExceptionsByEffect :exec
+DELETE FROM user_privacy_exceptions WHERE owner_id = $1 AND setting_key = $2 AND effect = $3
+`
+
+type DeletePrivacyExceptionsByEffectParams struct {
+	OwnerID    int64
+	SettingKey string
+	Effect     string
+}
+
+func (q *Queries) DeletePrivacyExceptionsByEffect(ctx context.Context, arg DeletePrivacyExceptionsByEffectParams) error {
+	_, err := q.db.Exec(ctx, deletePrivacyExceptionsByEffect, arg.OwnerID, arg.SettingKey, arg.Effect)
+	return err
+}
+
 const listBlocked = `-- name: ListBlocked :many
 SELECT blocker_id, blocked_id, created_at FROM user_blocks WHERE blocker_id = $1 ORDER BY created_at DESC
 `
@@ -92,6 +108,89 @@ func (q *Queries) ListBlocked(ctx context.Context, blockerID int64) ([]UserBlock
 	for rows.Next() {
 		var i UserBlock
 		if err := rows.Scan(&i.BlockerID, &i.BlockedID, &i.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBlockedPage = `-- name: ListBlockedPage :many
+SELECT b.blocked_id, b.created_at
+FROM user_blocks b
+WHERE b.blocker_id = $1
+  AND ($2::timestamptz IS NULL OR (b.created_at, b.blocked_id) < ($2::timestamptz, $3::bigint))
+ORDER BY b.created_at DESC, b.blocked_id DESC
+LIMIT $4
+`
+
+type ListBlockedPageParams struct {
+	BlockerID    int64
+	AfterCreated *time.Time
+	AfterID      *int64
+	MaxRows      int32
+}
+
+type ListBlockedPageRow struct {
+	BlockedID int64
+	CreatedAt time.Time
+}
+
+// The users the blocker blocked, newest block first, after the cursor (the blocked user id of the last row).
+func (q *Queries) ListBlockedPage(ctx context.Context, arg ListBlockedPageParams) ([]ListBlockedPageRow, error) {
+	rows, err := q.db.Query(ctx, listBlockedPage,
+		arg.BlockerID,
+		arg.AfterCreated,
+		arg.AfterID,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListBlockedPageRow{}
+	for rows.Next() {
+		var i ListBlockedPageRow
+		if err := rows.Scan(&i.BlockedID, &i.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBlocksBetween = `-- name: ListBlocksBetween :many
+SELECT blocker_id, blocked_id FROM user_blocks
+WHERE blocker_id = ANY($1::bigint[]) AND blocked_id = ANY($2::bigint[])
+`
+
+type ListBlocksBetweenParams struct {
+	BlockerIds []int64
+	BlockedIds []int64
+}
+
+type ListBlocksBetweenRow struct {
+	BlockerID int64
+	BlockedID int64
+}
+
+// Which of the blockers blocked which of the blocked users.
+func (q *Queries) ListBlocksBetween(ctx context.Context, arg ListBlocksBetweenParams) ([]ListBlocksBetweenRow, error) {
+	rows, err := q.db.Query(ctx, listBlocksBetween, arg.BlockerIds, arg.BlockedIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListBlocksBetweenRow{}
+	for rows.Next() {
+		var i ListBlocksBetweenRow
+		if err := rows.Scan(&i.BlockerID, &i.BlockedID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -321,6 +420,171 @@ func (q *Queries) ListPrivacySettings(ctx context.Context, userIds []int64) ([]U
 			&i.DirectMessages,
 			&i.GroupInvites,
 			&i.SearchVisibility,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const patchPrivacySettings = `-- name: PatchPrivacySettings :one
+UPDATE user_privacy_settings
+SET avatar_visibility = COALESCE($1, avatar_visibility),
+    profile_visibility = COALESCE($2, profile_visibility),
+    presence_visibility = COALESCE($3, presence_visibility),
+    read_receipts_enabled = COALESCE($4::bool, read_receipts_enabled),
+    direct_messages = COALESCE($5, direct_messages),
+    group_invites = COALESCE($6, group_invites),
+    search_visibility = COALESCE($7, search_visibility)
+WHERE user_id = $8
+RETURNING user_id, avatar_visibility, profile_visibility, presence_visibility, read_receipts_enabled, direct_messages, group_invites, search_visibility
+`
+
+type PatchPrivacySettingsParams struct {
+	AvatarVisibility    *string
+	ProfileVisibility   *string
+	PresenceVisibility  *string
+	ReadReceiptsEnabled *bool
+	DirectMessages      *string
+	GroupInvites        *string
+	SearchVisibility    *string
+	UserID              int64
+}
+
+// Changes only the settings that are given (the row exists: EnsurePrivacySettings runs first).
+func (q *Queries) PatchPrivacySettings(ctx context.Context, arg PatchPrivacySettingsParams) (UserPrivacySetting, error) {
+	row := q.db.QueryRow(ctx, patchPrivacySettings,
+		arg.AvatarVisibility,
+		arg.ProfileVisibility,
+		arg.PresenceVisibility,
+		arg.ReadReceiptsEnabled,
+		arg.DirectMessages,
+		arg.GroupInvites,
+		arg.SearchVisibility,
+		arg.UserID,
+	)
+	var i UserPrivacySetting
+	err := row.Scan(
+		&i.UserID,
+		&i.AvatarVisibility,
+		&i.ProfileVisibility,
+		&i.PresenceVisibility,
+		&i.ReadReceiptsEnabled,
+		&i.DirectMessages,
+		&i.GroupInvites,
+		&i.SearchVisibility,
+	)
+	return i, err
+}
+
+const searchUsers = `-- name: SearchUsers :many
+SELECT u.id, u.username, u.display_name, u.password_hash, u.avatar_url, u.bio, u.last_seen_at, u.created_at, u.updated_at, u.avatar_attachment_id
+FROM users u
+LEFT JOIN user_privacy_settings p ON p.user_id = u.id
+WHERE (LOWER(u.username) LIKE $1::text || '%' OR LOWER(u.display_name) LIKE '%' || $2::text || '%')
+  AND (u.id = $3 OR COALESCE(p.search_visibility, 'everyone') <> 'nobody')
+  AND NOT EXISTS (SELECT 1 FROM user_blocks b WHERE b.blocker_id = u.id AND b.blocked_id = $3)
+  AND ($4::text IS NULL OR LOWER(u.username) > $4::text)
+ORDER BY LOWER(u.username)
+LIMIT $5
+`
+
+type SearchUsersParams struct {
+	Prefix   string
+	Contains string
+	ViewerID int64
+	After    *string
+	MaxRows  int32
+}
+
+// Users whose username starts with the query or whose display name contains it, who allow being found and
+// did not block the viewer. Ordered by username, after the cursor (a lower-cased username).
+func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]User, error) {
+	rows, err := q.db.Query(ctx, searchUsers,
+		arg.Prefix,
+		arg.Contains,
+		arg.ViewerID,
+		arg.After,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []User{}
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.DisplayName,
+			&i.PasswordHash,
+			&i.AvatarUrl,
+			&i.Bio,
+			&i.LastSeenAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.AvatarAttachmentID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const searchUsersByUsername = `-- name: SearchUsersByUsername :many
+SELECT u.id, u.username, u.display_name, u.password_hash, u.avatar_url, u.bio, u.last_seen_at, u.created_at, u.updated_at, u.avatar_attachment_id
+FROM users u
+LEFT JOIN user_privacy_settings p ON p.user_id = u.id
+WHERE LOWER(u.username) LIKE $1::text || '%'
+  AND (u.id = $2 OR COALESCE(p.search_visibility, 'everyone') <> 'nobody')
+  AND NOT EXISTS (SELECT 1 FROM user_blocks b WHERE b.blocker_id = u.id AND b.blocked_id = $2)
+  AND ($3::text IS NULL OR LOWER(u.username) > $3::text)
+ORDER BY LOWER(u.username)
+LIMIT $4
+`
+
+type SearchUsersByUsernameParams struct {
+	Prefix   string
+	ViewerID int64
+	After    *string
+	MaxRows  int32
+}
+
+// SearchUsers for queries too short for the trigram index: the username prefix only.
+func (q *Queries) SearchUsersByUsername(ctx context.Context, arg SearchUsersByUsernameParams) ([]User, error) {
+	rows, err := q.db.Query(ctx, searchUsersByUsername,
+		arg.Prefix,
+		arg.ViewerID,
+		arg.After,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []User{}
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.DisplayName,
+			&i.PasswordHash,
+			&i.AvatarUrl,
+			&i.Bio,
+			&i.LastSeenAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.AvatarAttachmentID,
 		); err != nil {
 			return nil, err
 		}

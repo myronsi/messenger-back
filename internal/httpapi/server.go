@@ -7,8 +7,19 @@ import "net/http"
 // implemented yet answer 501 through the AuthServer's embedded Unimplemented.
 type Server struct {
 	*AuthServer
-	media *MediaServer
+	media   *MediaServer
+	account *AccountServer
+	meta    MetaInfo
 }
+
+// WithAccount adds the profile, privacy, blocking and user endpoints.
+func (s *Server) WithAccount(a *AccountServer) *Server { s.account = a; return s }
+
+// WithMeta sets what GET /meta reports.
+func (s *Server) WithMeta(m MetaInfo) *Server { s.meta = m; return s }
+
+// GetMeta implements GET /meta.
+func (s *Server) GetMeta(w http.ResponseWriter, _ *http.Request) { s.meta.serve(w) }
 
 var _ ServerInterface = (*Server)(nil)
 
@@ -60,4 +71,121 @@ func (s *Server) ListUserAvatars(w http.ResponseWriter, r *http.Request, userID 
 		return
 	}
 	s.media.ListUserAvatars(w, r, userID, params)
+}
+
+// UpdateMe delegates to the account endpoints.
+func (s *Server) UpdateMe(w http.ResponseWriter, r *http.Request, params UpdateMeParams) {
+	if s.account == nil {
+		s.AuthServer.UpdateMe(w, r, params)
+		return
+	}
+	s.account.UpdateMe(w, r, params)
+}
+
+// DeleteMe delegates to the account endpoints.
+func (s *Server) DeleteMe(w http.ResponseWriter, r *http.Request, params DeleteMeParams) {
+	if s.account == nil {
+		s.AuthServer.DeleteMe(w, r, params)
+		return
+	}
+	s.account.DeleteMe(w, r, params)
+}
+
+// GetPrivacySettings delegates to the account endpoints.
+func (s *Server) GetPrivacySettings(w http.ResponseWriter, r *http.Request, params GetPrivacySettingsParams) {
+	if s.account == nil {
+		s.AuthServer.GetPrivacySettings(w, r, params)
+		return
+	}
+	s.account.GetPrivacySettings(w, r, params)
+}
+
+// UpdatePrivacySettings delegates to the account endpoints.
+func (s *Server) UpdatePrivacySettings(w http.ResponseWriter, r *http.Request, params UpdatePrivacySettingsParams) {
+	if s.account == nil {
+		s.AuthServer.UpdatePrivacySettings(w, r, params)
+		return
+	}
+	s.account.UpdatePrivacySettings(w, r, params)
+}
+
+// ListBlockedUsers delegates to the account endpoints.
+func (s *Server) ListBlockedUsers(w http.ResponseWriter, r *http.Request, params ListBlockedUsersParams) {
+	if s.account == nil {
+		s.AuthServer.ListBlockedUsers(w, r, params)
+		return
+	}
+	s.account.ListBlockedUsers(w, r, params)
+}
+
+// SearchUsers delegates to the account endpoints.
+func (s *Server) SearchUsers(w http.ResponseWriter, r *http.Request, params SearchUsersParams) {
+	if s.account == nil {
+		s.AuthServer.SearchUsers(w, r, params)
+		return
+	}
+	s.account.SearchUsers(w, r, params)
+}
+
+// BlockUser delegates to the account endpoints.
+func (s *Server) BlockUser(w http.ResponseWriter, r *http.Request, userID UserId, params BlockUserParams) {
+	if s.account == nil {
+		s.AuthServer.BlockUser(w, r, userID, params)
+		return
+	}
+	s.account.BlockUser(w, r, userID, params)
+}
+
+// UnblockUser delegates to the account endpoints.
+func (s *Server) UnblockUser(w http.ResponseWriter, r *http.Request, userID UserId, params UnblockUserParams) {
+	if s.account == nil {
+		s.AuthServer.UnblockUser(w, r, userID, params)
+		return
+	}
+	s.account.UnblockUser(w, r, userID, params)
+}
+
+// GetUser delegates to the account endpoints.
+func (s *Server) GetUser(w http.ResponseWriter, r *http.Request, userID UserId, params GetUserParams) {
+	if s.account == nil {
+		s.AuthServer.GetUser(w, r, userID, params)
+		return
+	}
+	s.account.GetUser(w, r, userID, params)
+}
+
+// SetContactName delegates to the account endpoints.
+func (s *Server) SetContactName(w http.ResponseWriter, r *http.Request, userID UserId, params SetContactNameParams) {
+	if s.account == nil {
+		s.AuthServer.SetContactName(w, r, userID, params)
+		return
+	}
+	s.account.SetContactName(w, r, userID, params)
+}
+
+// RemoveContactName delegates to the account endpoints.
+func (s *Server) RemoveContactName(w http.ResponseWriter, r *http.Request, userID UserId, params RemoveContactNameParams) {
+	if s.account == nil {
+		s.AuthServer.RemoveContactName(w, r, userID, params)
+		return
+	}
+	s.account.RemoveContactName(w, r, userID, params)
+}
+
+// GetUserByUsername delegates to the account endpoints.
+func (s *Server) GetUserByUsername(w http.ResponseWriter, r *http.Request, username Username, params GetUserByUsernameParams) {
+	if s.account == nil {
+		s.AuthServer.GetUserByUsername(w, r, username, params)
+		return
+	}
+	s.account.GetUserByUsername(w, r, username, params)
+}
+
+// ReplacePrivacyExceptions delegates to the account endpoints.
+func (s *Server) ReplacePrivacyExceptions(w http.ResponseWriter, r *http.Request, settingKey, effect string, params ReplacePrivacyExceptionsParams) {
+	if s.account == nil {
+		s.AuthServer.ReplacePrivacyExceptions(w, r, settingKey, effect, params)
+		return
+	}
+	s.account.ReplacePrivacyExceptions(w, r, settingKey, effect, params)
 }

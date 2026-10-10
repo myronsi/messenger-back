@@ -38,11 +38,25 @@ type Profile struct {
 	AvatarURL   *string
 }
 
+// ProfilePatch changes some profile fields: a nil DisplayName stays, Bio is set (possibly to nil) when SetBio.
+type ProfilePatch struct {
+	DisplayName *string
+	SetBio      bool
+	Bio         *string
+}
+
 // DeletedAccount reports what a deletion left behind for the caller to clean up.
 type DeletedAccount struct {
 	// AttachmentKeys are the object-storage keys of the files that belonged to chats removed with the
 	// account. The rows are gone; delete the objects.
 	AttachmentKeys []string
+	// DeletedChats are the chats removed with the account (its direct chats, groups nobody else was in), each
+	// with the other members it had.
+	DeletedChats map[int64][]int64
+	// LeftGroups are the groups the user was removed from (they pass to the next owner).
+	LeftGroups []int64
+	// Sessions are the sessions deleted with the account (to drop from caches and close their sockets).
+	Sessions []uuid.UUID
 }
 
 // UserRepository stores accounts.
@@ -56,6 +70,8 @@ type UserRepository interface {
 	GetByUsername(ctx context.Context, username string) (User, error)
 	Credentials(ctx context.Context, username string) (Credentials, error)
 	UpdateProfile(ctx context.Context, id int64, p Profile) (User, error)
+	// PatchProfile changes only the given fields.
+	PatchProfile(ctx context.Context, id int64, p ProfilePatch) (User, error)
 	SetPasswordHash(ctx context.Context, id int64, passwordHash string) error
 	// Register creates the account together with its settings rows in one transaction.
 	Register(ctx context.Context, username, displayName, passwordHash string) (User, error)
@@ -66,6 +82,9 @@ type UserRepository interface {
 	// revokes every session except keepID in the same transaction. It returns the revoked ids.
 	ChangePassword(ctx context.Context, id int64, oldHash, newHash string, keepID uuid.UUID) ([]uuid.UUID, error)
 	TouchLastSeen(ctx context.Context, id int64) error
+	// Search finds users for the viewer: a username prefix or a part of the display name (case-insensitive),
+	// without users who opted out of search or blocked the viewer, ordered by username after `after`.
+	Search(ctx context.Context, viewerID int64, query, after string, limit int) ([]User, error)
 	// DeleteAccount removes the account in one transaction: its direct chats, the groups nobody else is
 	// in, and everything that references the user. Groups it owned pass to the next admin, moderator or
 	// longest member. Files it uploaded to chats that survive stay, without an uploader.

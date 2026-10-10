@@ -9,8 +9,9 @@ RUN --mount=type=cache,target=/go/pkg/mod go mod download
 
 COPY cmd ./cmd
 COPY internal ./internal
+ARG VERSION=dev
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/ ./cmd/...
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X github.com/myronsi/messenger-back/internal/version.Backend=${VERSION}" -o /out/ ./cmd/...
 
 # Static ffmpeg and ffprobe, which measure voice messages (duration and waveform).
 FROM mwader/static-ffmpeg:8.0.1 AS ffmpeg

@@ -832,6 +832,20 @@ func (s *Service) verifyPassword(ctx context.Context, uid int64, password string
 	return creds.PasswordHash, nil
 }
 
+// DeleteAccount deletes the caller's account after checking the password (rate limited like a password
+// change). Every session ends; the result tells the caller what else to clean up (chats, files).
+func (s *Service) DeleteAccount(ctx context.Context, p Principal, password string) (postgres.DeletedAccount, error) {
+	if _, err := s.verifyPassword(ctx, p.UserID, password); err != nil {
+		return postgres.DeletedAccount{}, err
+	}
+	deleted, err := s.store.Users().DeleteAccount(ctx, p.UserID)
+	if err != nil {
+		return postgres.DeletedAccount{}, err
+	}
+	// The rows are gone with the account; the cache must not keep any of them alive.
+	return deleted, s.revokeInCache(ctx, deleted.Sessions...)
+}
+
 // ChangePassword sets a new password and revokes every other session.
 func (s *Service) ChangePassword(ctx context.Context, c Client, p Principal, current, next string) error {
 	if err := validatePassword(next); err != nil {

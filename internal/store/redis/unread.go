@@ -108,6 +108,14 @@ func (u *Unread) Forget(ctx context.Context, chatID int64, userIDs ...int64) err
 	return nil
 }
 
+// Drop removes all counters of the user (the account is gone).
+func (u *Unread) Drop(ctx context.Context, userID int64) error {
+	if err := u.rdb.Del(ctx, u.key(userID)).Err(); err != nil {
+		return fmt.Errorf("unread drop: %w", err)
+	}
+	return nil
+}
+
 // Get returns the counts of the user's chats that have unread messages. built is false when the hash has to
 // be rebuilt (see Counts).
 func (u *Unread) Get(ctx context.Context, userID int64) (counts map[int64]int64, built bool, err error) {

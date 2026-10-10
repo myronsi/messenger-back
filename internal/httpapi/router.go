@@ -9,6 +9,7 @@ import (
 
 	"github.com/myronsi/messenger-back/internal/config"
 	"github.com/myronsi/messenger-back/internal/observability"
+	"github.com/myronsi/messenger-back/internal/version"
 )
 
 // Options configures the router.
@@ -31,6 +32,8 @@ type Options struct {
 	WebSocket http.Handler
 	// UploadMaxBytes is the body limit of POST /attachments (0: HTTP_MAX_BODY_BYTES like everything else).
 	UploadMaxBytes int64
+	// MinClientAPIVersion is the oldest contract version served (empty: the server's own major version only).
+	MinClientAPIVersion string
 }
 
 // Router is the HTTP handler of the API server.
@@ -69,6 +72,7 @@ func NewRouter(o Options) *Router {
 		recoverPanic(o.Log),
 		securityHeaders(o.Production),
 		cors(o.HTTP.CORSOrigins),
+		clientVersions(minClientVersion(o.MinClientAPIVersion), o.HTTP.BasePath, o.Metrics),
 		bodyLimit(o.HTTP.MaxBodyBytes, UploadPath(o.HTTP.BasePath), o.UploadMaxBytes),
 		timeout(o.HTTP.RequestTimeout, o.HTTP.TransferTimeout, transferRoute(o.HTTP.BasePath)),
 	)
@@ -76,6 +80,14 @@ func NewRouter(o Options) *Router {
 		handler = otelhttp.NewHandler(handler, "http.server")
 	}
 	return &Router{handler: handler, health: h}
+}
+
+func minClientVersion(s string) version.SemVer {
+	if v, err := version.Parse(s); err == nil {
+		return v
+	}
+	v := version.MustParse(version.API)
+	return version.SemVer{Major: v.Major, Pre: []string{"0"}} // every version of this major
 }
 
 // ServeHTTP implements http.Handler.

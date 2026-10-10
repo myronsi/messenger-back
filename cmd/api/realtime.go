@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/myronsi/messenger-back/internal/app"
 	"github.com/myronsi/messenger-back/internal/events"
 	"github.com/myronsi/messenger-back/internal/ids"
+	"github.com/myronsi/messenger-back/internal/media"
 	"github.com/myronsi/messenger-back/internal/messages"
 	"github.com/myronsi/messenger-back/internal/realtime"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
@@ -27,6 +29,9 @@ type realtimeStack struct {
 	fanout    *realtime.Fanout
 	messages  *messages.Service
 	directory *users.Directory
+	members   *redis.Members
+	unread    *redis.Unread
+	events    *events.Log
 	limiter   *redis.RateLimiter
 	bus       *redis.Bus
 	// ctx runs the background loops; it ends in stop, after the sockets are closed, so their last
@@ -126,6 +131,7 @@ func startRealtime(p *app.Process, pg *postgres.Store, rd *redis.Store, sc *scyl
 	idsrc := startIDs(p, rdb, instance, st)
 
 	repo := scylla.NewMessages(sc, cfg.Scylla.Timeout)
+	st.events = events.NewLog(redis.NewStreams(rdb, "", 0))
 	members := redis.NewMembers(rdb, "", cfg.Redis.MembersCacheTTL)
 
 	var gw *realtime.Gateway
@@ -155,7 +161,7 @@ func startRealtime(p *app.Process, pg *postgres.Store, rd *redis.Store, sc *scyl
 	svc = messages.New(messages.Deps{
 		Messages: repo, Store: pg, Members: members, Unread: redis.NewUnread(rdb, ""),
 		Dedup: redis.NewDedup(rdb, "", 0), IDs: idsrc, Notifier: fan, Accepted: p.Metrics.MessageAccepted, Log: log,
-		Events: events.NewLog(redis.NewStreams(rdb, "", 0)),
+		Events: st.events,
 	})
 	gw, err = realtime.New(realtime.Options{
 		Auth: ticketAuth, Messages: svc, Fanout: fan, Bus: bus, Presence: presence,
@@ -168,6 +174,7 @@ func startRealtime(p *app.Process, pg *postgres.Store, rd *redis.Store, sc *scyl
 	}
 	st.gateway, st.fanout, st.messages, st.bus, st.directory = gw, fan, svc, bus, dir
 	st.limiter = redis.NewRateLimiter(rdb, "")
+	st.members, st.unread = members, redis.NewUnread(rdb, "")
 	st.done.Go(func() { bus.Run(st.ctx) })
 	st.done.Go(func() { presence.Run(st.ctx) })
 	return st, nil
@@ -188,4 +195,40 @@ func (st *realtimeStack) stop(ctx context.Context) {
 	st.gateway.Close()
 	st.cancel()
 	st.done.Wait()
+}
+
+// accountDeleted cleans up after a deleted account: the chats it took along are announced to their other
+// members and handed to the worker (which deletes their messages), the groups it left get a fresh member list,
+// and the files of v1 chats are deleted.
+func (st *realtimeStack) accountDeleted(storage media.Storage, log *slog.Logger) func(ctx context.Context, userID int64, d postgres.DeletedAccount) {
+	return func(ctx context.Context, userID int64, d postgres.DeletedAccount) {
+		changed := make([]int64, 0, len(d.DeletedChats)+len(d.LeftGroups))
+		for chatID, others := range d.DeletedChats {
+			changed = append(changed, chatID)
+			st.fanout.Removed(ctx, chatID, others)
+			if err := st.unread.Forget(ctx, chatID, others...); err != nil {
+				log.WarnContext(ctx, "forget unread", "error", err)
+			}
+			if err := st.events.Emit(ctx, events.Event{Type: events.ChatDeleted, ChatID: chatID, ActorID: userID}); err != nil {
+				log.WarnContext(ctx, "emit chat.deleted", "error", err)
+			}
+		}
+		for _, chatID := range d.LeftGroups {
+			changed = append(changed, chatID)
+			if err := st.events.Emit(ctx, events.Event{Type: events.ChatMemberRemoved, ChatID: chatID, UserID: userID, ActorID: userID}); err != nil {
+				log.WarnContext(ctx, "emit chat.member_removed", "error", err)
+			}
+		}
+		if err := st.members.Invalidate(ctx, changed...); err != nil {
+			log.WarnContext(ctx, "invalidate members", "error", err)
+		}
+		if err := st.unread.Drop(ctx, userID); err != nil {
+			log.WarnContext(ctx, "drop unread counters", "error", err)
+		}
+		for _, key := range d.AttachmentKeys {
+			if err := storage.Delete(ctx, key); err != nil {
+				log.WarnContext(ctx, "delete file of a deleted chat", "error", err)
+			}
+		}
+	}
 }

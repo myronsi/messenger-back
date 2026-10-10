@@ -74,6 +74,8 @@ type SocialRepository interface {
 	// Privacy returns the settings of the users; users without a row get DefaultPrivacy.
 	Privacy(ctx context.Context, userIDs []int64) (map[int64]PrivacySettings, error)
 	UpdatePrivacy(ctx context.Context, p PrivacySettings) (PrivacySettings, error)
+	// PatchPrivacy changes only the given settings.
+	PatchPrivacy(ctx context.Context, userID int64, p PrivacyPatch) (PrivacySettings, error)
 	// Exceptions lists every exception the owner made.
 	Exceptions(ctx context.Context, ownerID int64) ([]PrivacyException, error)
 	// ExceptionsOf returns the owner's exceptions for each of the targets: target -> setting -> effect.
@@ -81,13 +83,20 @@ type SocialRepository interface {
 	// ExceptionsFor returns what each owner decided for one target: owner -> setting -> effect.
 	ExceptionsFor(ctx context.Context, ownerIDs []int64, targetID int64) (map[int64]map[string]string, error)
 	SetException(ctx context.Context, e PrivacyException) error
+	// ReplaceExceptions makes targets the complete list of the owner's exceptions with this setting and effect
+	// (a target that had the other effect switches).
+	ReplaceExceptions(ctx context.Context, ownerID int64, settingKey, effect string, targetIDs []int64) error
 	DeleteException(ctx context.Context, ownerID int64, settingKey string, targetID int64) error
 
 	Block(ctx context.Context, blockerID, blockedID int64) error
 	Unblock(ctx context.Context, blockerID, blockedID int64) error
 	Blocked(ctx context.Context, blockerID int64) ([]Block, error)
+	// BlockedPage pages through the blocked users, newest first, after the given block (nil: from the start).
+	BlockedPage(ctx context.Context, blockerID int64, after *Block, limit int) ([]Block, error)
 	// BlockedEither reports whether one of the two users blocked the other.
 	BlockedEither(ctx context.Context, a, b int64) (bool, error)
+	// Blocks returns the pairs (blocker, blocked) among the given users.
+	Blocks(ctx context.Context, blockerIDs, blockedIDs []int64) (map[[2]int64]bool, error)
 
 	SetContactName(ctx context.Context, ownerID, targetID int64, name string) error
 	DeleteContactName(ctx context.Context, ownerID, targetID int64) error
@@ -148,6 +157,51 @@ func (r socialRepo) UpdatePrivacy(ctx context.Context, p PrivacySettings) (Priva
 		return PrivacySettings{}, mapError(err)
 	}
 	return privacyFrom(row), nil
+}
+
+// PrivacyPatch changes some privacy settings; nil fields stay as they are.
+type PrivacyPatch struct {
+	AvatarVisibility    *string
+	ProfileVisibility   *string
+	PresenceVisibility  *string
+	ReadReceiptsEnabled *bool
+	DirectMessages      *string
+	GroupInvites        *string
+	SearchVisibility    *string
+}
+
+func (r socialRepo) PatchPrivacy(ctx context.Context, userID int64, p PrivacyPatch) (PrivacySettings, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	if err := r.s.q.EnsurePrivacySettings(ctx, userID); err != nil {
+		return PrivacySettings{}, mapError(err)
+	}
+	row, err := r.s.q.PatchPrivacySettings(ctx, sqlcdb.PatchPrivacySettingsParams{
+		UserID: userID, AvatarVisibility: p.AvatarVisibility, ProfileVisibility: p.ProfileVisibility,
+		PresenceVisibility: p.PresenceVisibility, ReadReceiptsEnabled: p.ReadReceiptsEnabled,
+		DirectMessages: p.DirectMessages, GroupInvites: p.GroupInvites, SearchVisibility: p.SearchVisibility,
+	})
+	if err != nil {
+		return PrivacySettings{}, mapError(err)
+	}
+	return privacyFrom(row), nil
+}
+
+func (r socialRepo) Blocks(ctx context.Context, blockerIDs, blockedIDs []int64) (map[[2]int64]bool, error) {
+	out := map[[2]int64]bool{}
+	if len(blockerIDs) == 0 || len(blockedIDs) == 0 {
+		return out, nil
+	}
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	rows, err := r.s.q.ListBlocksBetween(ctx, sqlcdb.ListBlocksBetweenParams{BlockerIds: blockerIDs, BlockedIds: blockedIDs})
+	if err != nil {
+		return nil, mapError(err)
+	}
+	for _, b := range rows {
+		out[[2]int64{b.BlockerID, b.BlockedID}] = true
+	}
+	return out, nil
 }
 
 func (r socialRepo) Exceptions(ctx context.Context, ownerID int64) ([]PrivacyException, error) {
@@ -320,4 +374,36 @@ func (r socialRepo) ChatIDs(ctx context.Context, userID int64) ([]int64, error) 
 	defer cancel()
 	ids, err := r.s.q.ListChatIDsOfUser(ctx, userID)
 	return ids, mapError(err)
+}
+
+func (r socialRepo) ReplaceExceptions(ctx context.Context, ownerID int64, settingKey, effect string, targetIDs []int64) error {
+	return r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
+		if err := q.DeletePrivacyExceptionsByEffect(ctx, sqlcdb.DeletePrivacyExceptionsByEffectParams{OwnerID: ownerID, SettingKey: settingKey, Effect: effect}); err != nil {
+			return err
+		}
+		for _, t := range targetIDs {
+			if err := q.SetPrivacyException(ctx, sqlcdb.SetPrivacyExceptionParams{OwnerID: ownerID, SettingKey: settingKey, TargetUserID: t, Effect: effect}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+func (r socialRepo) BlockedPage(ctx context.Context, blockerID int64, after *Block, limit int) ([]Block, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	p := sqlcdb.ListBlockedPageParams{BlockerID: blockerID, MaxRows: clampLimit(limit)}
+	if after != nil {
+		p.AfterCreated, p.AfterID = &after.CreatedAt, &after.BlockedID
+	}
+	rows, err := r.s.q.ListBlockedPage(ctx, p)
+	if err != nil {
+		return nil, mapError(err)
+	}
+	out := make([]Block, len(rows))
+	for i, b := range rows {
+		out[i] = Block{BlockerID: blockerID, BlockedID: b.BlockedID, CreatedAt: b.CreatedAt}
+	}
+	return out, nil
 }
