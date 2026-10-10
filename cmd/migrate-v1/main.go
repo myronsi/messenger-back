@@ -160,6 +160,9 @@ type migrator struct {
 	log     *slog.Logger
 	mu      sync.Mutex // guards report
 	report  *report
+	// dryChats and drySkipped are what the chats phase of a dry run decided (it writes no mapping).
+	dryChats   map[int64]int64
+	drySkipped map[int64]bool
 }
 
 // report is what the run did (or would do), with counts only: no names or message content.
@@ -209,6 +212,7 @@ func (m *migrator) writeReport(path string) error {
 }
 
 // state keeps the mapping tables of the migration in the v2 database, so a rerun continues where it stopped.
+// The chats phase also records the v1 chats it leaves out on purpose, whose messages go with them.
 // A file is mapped per purpose: the same path as a message file and as an avatar are two attachments with
 // different access rules. A mapping goes with its attachment.
 const stateSchema = `
@@ -217,6 +221,7 @@ CREATE TABLE IF NOT EXISTS migrate_v1_files (
     path TEXT NOT NULL, purpose TEXT NOT NULL, attachment_id UUID NOT NULL REFERENCES attachments (id) ON DELETE CASCADE,
     kind TEXT NOT NULL, PRIMARY KEY (path, purpose));
 CREATE TABLE IF NOT EXISTS migrate_v1_state (key TEXT PRIMARY KEY, value BIGINT NOT NULL);
+CREATE TABLE IF NOT EXISTS migrate_v1_skipped_chats (v1_id BIGINT PRIMARY KEY);
 `
 
 func (m *migrator) ensureState(ctx context.Context) error {

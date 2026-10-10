@@ -95,6 +95,10 @@ func (m *migrator) messages(ctx context.Context, restart bool) error {
 	if err != nil {
 		return err
 	}
+	skipped, err := m.skippedChats(ctx)
+	if err != nil {
+		return err
+	}
 	after := int64(0)
 	if !m.dry && !restart {
 		_ = m.pg.Pool().QueryRow(ctx, `SELECT value FROM migrate_v1_state WHERE key = 'messages_after'`).Scan(&after)
@@ -111,23 +115,32 @@ func (m *migrator) messages(ctx context.Context, restart bool) error {
 		if err != nil {
 			return err
 		}
-		msgs := make([]scylla.Message, len(batch))
-		for i, r := range batch {
+		var (
+			rows []v1Message
+			msgs []scylla.Message
+		)
+		for _, r := range batch {
 			v2chat, ok := mapping[r.chat]
-			if !ok {
+			switch {
+			case ok:
+				rows = append(rows, r)
+				msgs = append(msgs, m.toMessage(r, v2chat, owned[r.id], files))
+			case skipped[r.chat]:
+				// A chat the chats phase left out (a direct chat with a missing user or with oneself).
+				m.count("messages_skipped_chat", 1)
+			default:
 				// The chat is newer than the chats phase: skipping its messages would lose them for good, as the
 				// position moves past them.
 				return fmt.Errorf("message %d is in chat %d, which the chats phase has not copied: run it again", r.id, r.chat)
 			}
-			msgs[i] = m.toMessage(r, v2chat, owned[r.id], files)
 		}
-		m.count("messages", int64(len(batch)))
+		m.count("messages", int64(len(rows)))
 		after = batch[len(batch)-1].id
 		if !m.dry {
-			if err := m.writeMessages(ctx, batch, msgs); err != nil {
+			if err := m.writeMessages(ctx, rows, msgs); err != nil {
 				return err
 			}
-			if err := m.flushBatch(ctx, batch, msgs, after); err != nil {
+			if err := m.flushBatch(ctx, rows, msgs, after); err != nil {
 				return err
 			}
 		}
@@ -136,6 +149,27 @@ func (m *migrator) messages(ctx context.Context, restart bool) error {
 		}
 		m.log.InfoContext(ctx, "messages copied", "up_to", after)
 	}
+}
+
+// skippedChats reads the v1 chats the chats phase left out on purpose.
+func (m *migrator) skippedChats(ctx context.Context) (map[int64]bool, error) {
+	if m.dry {
+		return m.drySkipped, nil // nil without a chats phase, which maps every chat
+	}
+	out := map[int64]bool{}
+	rows, err := m.pg.Pool().Query(ctx, `SELECT v1_id FROM migrate_v1_skipped_chats`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out[id] = true
+	}
+	return out, rows.Err()
 }
 
 // messageRows reads the next batch of v1 messages after the given id.

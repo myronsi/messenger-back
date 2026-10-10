@@ -90,6 +90,7 @@ func (m *migrator) chats(ctx context.Context) error {
 
 	pairs := map[string]int64{} // direct key -> the v1 chat that won
 	mapping := map[int64]int64{}
+	skipped := map[int64]bool{}
 	batch := newQueue("chats")
 	for _, c := range all {
 		created := time.Now()
@@ -141,6 +142,8 @@ func (m *migrator) chats(ctx context.Context) error {
 		default: // one-on-one
 			if c.u1 == nil || c.u2 == nil || *c.u1 == *c.u2 || !users[*c.u1] || !users[*c.u2] {
 				m.count("direct_chats_skipped", 1)
+				skipped[c.id] = true
+				batch.Queue(`INSERT INTO migrate_v1_skipped_chats (v1_id) VALUES ($1) ON CONFLICT DO NOTHING`, c.id)
 				continue
 			}
 			key := fmt.Sprintf("%d:%d", min(*c.u1, *c.u2), max(*c.u1, *c.u2))
@@ -159,6 +162,9 @@ func (m *migrator) chats(ctx context.Context) error {
 			}
 			m.count("direct_chats", 1)
 		}
+	}
+	if m.dry {
+		m.dryChats, m.drySkipped = mapping, skipped
 	}
 	for v1id, v2id := range mapping {
 		batch.Queue(`INSERT INTO migrate_v1_chats (v1_id, v2_id) VALUES ($1, $2) ON CONFLICT (v1_id) DO UPDATE SET v2_id = EXCLUDED.v2_id`, v1id, v2id)
@@ -249,8 +255,12 @@ func (m *migrator) pinsAndRequests(ctx context.Context, mapping map[int64]int64)
 // chatMapping reads the v1 → v2 chat mapping of an earlier chats phase.
 func (m *migrator) chatMapping(ctx context.Context) (map[int64]int64, error) {
 	out := map[int64]int64{}
+	if m.dry && m.dryChats != nil {
+		return m.dryChats, nil
+	}
 	if m.dry {
-		// A dry run wrote no mapping: every chat maps to itself, which is what a real run does except merges.
+		// A dry run without its chats phase: every chat maps to itself, which is what a real run does except
+		// merges and skipped chats.
 		rows, err := m.v1.Query(ctx, `SELECT id FROM chats`)
 		if err != nil {
 			return nil, err
