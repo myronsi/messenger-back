@@ -10,8 +10,9 @@ swapped for Apache Cassandra (same CQL) or a fake in tests.
 Message IDs are 64-bit **Snowflake IDs** (`internal/ids`): 41 bits of milliseconds since 2024-01-01, 10 bits of
 node, 12 bits of sequence. They sort by time and are unique across instances as long as every running instance
 has its own node number: `NODE_ID`, or a free number leased from Redis (`redis.AcquireNode`: key
-`ids:node:{n}`, renewed every 20 s; a process that loses its lease must stop creating IDs). v1 message IDs are small serial numbers, so they are kept
-as they are and always sort before the new ones. IDs travel as strings in JSON (they exceed 2^53).
+`ids:node:{n}`, renewed every 20 s; a process that loses its lease must stop creating IDs). Generators issue no IDs for times before 2025-01-01, so
+every Snowflake ID is at least `ids.MinSnowflake` (about 1.3e17); v1 message IDs are serial numbers far below
+that, so they are kept as they are, always sort before the new ones, and `ids.IsSnowflake` tells the two apart. IDs travel as strings in JSON (they exceed 2^53).
 
 ## Tables
 
@@ -32,10 +33,13 @@ looked up in `message_locations`.
 
 - **Insert** writes the bucket (once per chat and bucket per process) and the location before the message, so
   every readable message is reachable; all writes are idempotent, so a failed insert is retried with the same
-  ID.
+  ID. They carry the message's creation time as write timestamp (`USING TIMESTAMP`), so a delayed retry loses
+  against every later edit, delete or chat deletion instead of bringing the message back. (This assumes the
+  API instances' clocks are not ahead of the database nodes by more than the time between a send and the
+  change; keep clocks synchronized.)
 - **History** (`Page`): the newest page starts at the current bucket, so for an active chat 50 messages are one
   partition read. Older pages continue in the bucket of the `before` cursor and then in older buckets from
-  `chat_buckets`; `after` walks the other way, `around` combines both around the message. Messages hidden for
+  `chat_buckets`; `after` walks the other way, `around` centres the window on the message and gives the room one side cannot use to the other. Messages hidden for
   the viewer are left out with one range query per partition read, and the page is filled up from further rows.
 - **Edit and delete** are lightweight transactions (`IF deleted = false`, `IF EXISTS`), so they are serialized per
   message and an edit racing a delete for everyone can never bring the text back. A deleted message keeps its

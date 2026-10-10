@@ -262,25 +262,41 @@ func (r *Messages) Page(ctx context.Context, q PageQuery) (Page, error) {
 		if err != nil {
 			return Page{}, err
 		}
-		before := (limit - 1) / 2
-		after := limit - 1 - before
-		old, hasOlder, err := older(q.Around, before)
-		if err != nil {
-			return Page{}, err
-		}
-		nw, hasNewer, err := newer(q.Around, after)
-		if err != nil {
-			return Page{}, err
-		}
 		hidden, err := r.hiddenIn(ctx, sess, q.Viewer, q.ChatID, q.Around, q.Around)
 		if err != nil {
 			return Page{}, err
 		}
-		msgs := old
+		room := limit
+		if !hidden[q.Around] {
+			room--
+		}
+		// Read up to a full page on both sides, then centre the window: room one side cannot use goes
+		// to the other.
+		old, oldMore, err := older(q.Around, room)
+		if err != nil {
+			return Page{}, err
+		}
+		nw, newMore, err := newer(q.Around, room)
+		if err != nil {
+			return Page{}, err
+		}
+		before := room / 2
+		after := room - before
+		if len(old) < before {
+			after += before - len(old)
+			before = len(old)
+		}
+		if len(nw) < after {
+			before = min(len(old), before+after-len(nw))
+			after = len(nw)
+		}
+		hasOlder := oldMore || len(old) > before
+		hasNewer := newMore || len(nw) > after
+		msgs := slices.Clone(old[len(old)-before:])
 		if !hidden[q.Around] {
 			msgs = append(msgs, target)
 		}
-		return Page{Messages: append(msgs, nw...), HasOlder: hasOlder, HasNewer: hasNewer}, nil
+		return Page{Messages: append(msgs, nw[:after]...), HasOlder: hasOlder, HasNewer: hasNewer}, nil
 	default:
 		msgs, more, err := older(q.Before, limit)
 		return Page{Messages: msgs, HasOlder: more, HasNewer: q.Before != 0}, err

@@ -241,16 +241,21 @@ func (r *Messages) Insert(ctx context.Context, m Message) error {
 	// The bucket and the location are written before the message, so a message that can be read is always
 	// reachable by paging and by id. A failure leaves at most a bucket or location without a message, which
 	// readers skip; retrying the insert completes it.
+	//
+	// Every creation write carries the creation time as its write timestamp. Later changes (edits, deletes,
+	// the deletion of the chat) are written at their own, later time, so a delayed retry of the insert can
+	// never overwrite them and bring back a message or its text.
+	ts := m.CreatedAt.UnixMicro()
 	var wg sync.WaitGroup
 	errs := make([]error, 2)
 	if !known {
 		wg.Go(func() {
-			errs[0] = sess.Query(`INSERT INTO chat_buckets (chat_id, bucket) VALUES (?, ?)`, m.ChatID, bucket).
+			errs[0] = sess.Query(`INSERT INTO chat_buckets (chat_id, bucket) VALUES (?, ?) USING TIMESTAMP ?`, m.ChatID, bucket, ts).
 				WithContext(ctx).Idempotent(true).Exec()
 		})
 	}
 	wg.Go(func() {
-		errs[1] = sess.Query(`INSERT INTO message_locations (message_id, chat_id, bucket) VALUES (?, ?, ?)`, m.ID, m.ChatID, bucket).
+		errs[1] = sess.Query(`INSERT INTO message_locations (message_id, chat_id, bucket) VALUES (?, ?, ?) USING TIMESTAMP ?`, m.ID, m.ChatID, bucket, ts).
 			WithContext(ctx).Idempotent(true).Exec()
 	})
 	wg.Wait()
@@ -271,9 +276,9 @@ func (r *Messages) Insert(ctx context.Context, m Message) error {
 	if f := m.Forwarded; f != nil {
 		fwdID, fwdSender, fwdName = &f.MessageID, f.SenderID, &f.SenderName
 	}
-	err = sess.Query(`INSERT INTO messages (chat_id, bucket, `+messageColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	err = sess.Query(`INSERT INTO messages (chat_id, bucket, `+messageColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) USING TIMESTAMP ?`,
 		m.ChatID, bucket, m.ID, m.SenderID, m.Type, m.Content, m.AttachmentID, m.ReplyTo,
-		fwdID, fwdSender, fwdName, m.EditedAt, m.Deleted, m.CreatedAt,
+		fwdID, fwdSender, fwdName, m.EditedAt, m.Deleted, m.CreatedAt, ts,
 	).WithContext(ctx).Idempotent(true).Exec()
 	if err != nil {
 		return fmt.Errorf("insert message: %w", err)
@@ -410,8 +415,9 @@ func (r *Messages) AddReaction(ctx context.Context, chatID, messageID, userID in
 		return err
 	}
 	defer cancel()
-	err = sess.Query(`INSERT INTO message_reactions (chat_id, message_id, reaction, user_id, created_at) VALUES (?, ?, ?, ?, ?)`,
-		chatID, messageID, emoji, userID, at).WithContext(ctx).Idempotent(true).Exec()
+	// Written at the time of the request, so a delayed retry cannot undo a removal that came after it.
+	err = sess.Query(`INSERT INTO message_reactions (chat_id, message_id, reaction, user_id, created_at) VALUES (?, ?, ?, ?, ?) USING TIMESTAMP ?`,
+		chatID, messageID, emoji, userID, at, at.UnixMicro()).WithContext(ctx).Idempotent(true).Exec()
 	if err != nil {
 		return fmt.Errorf("add reaction: %w", err)
 	}

@@ -214,6 +214,23 @@ func TestPagingAcrossBuckets(t *testing.T) {
 	if err != nil || !slices.Equal(idsOf(p.Messages), all[13:18]) || !p.HasOlder || !p.HasNewer {
 		t.Fatalf("around: %v %v", idsOf(p.Messages), err)
 	}
+	// Near the ends the window moves over, so the page stays full.
+	p, _ = r.Page(ctx, PageQuery{ChatID: chat, Viewer: 2, Limit: 5, Around: all[1]})
+	if !slices.Equal(idsOf(p.Messages), all[0:5]) || p.HasOlder || !p.HasNewer {
+		t.Fatalf("around the second oldest: %v older=%v newer=%v", idsOf(p.Messages), p.HasOlder, p.HasNewer)
+	}
+	p, _ = r.Page(ctx, PageQuery{ChatID: chat, Viewer: 2, Limit: 5, Around: all[29]})
+	if !slices.Equal(idsOf(p.Messages), all[25:30]) || !p.HasOlder || p.HasNewer {
+		t.Fatalf("around the newest: %v older=%v newer=%v", idsOf(p.Messages), p.HasOlder, p.HasNewer)
+	}
+	// A hidden target leaves its slot to the others.
+	if err := r.Hide(ctx, 9, chat, all[1], HiddenDeletedForMe); err != nil {
+		t.Fatal(err)
+	}
+	p, _ = r.Page(ctx, PageQuery{ChatID: chat, Viewer: 9, Limit: 5, Around: all[1]})
+	if !slices.Equal(idsOf(p.Messages), []int64{all[0], all[2], all[3], all[4], all[5]}) {
+		t.Fatalf("around a hidden message: %v", idsOf(p.Messages))
+	}
 	if _, err := r.Page(ctx, PageQuery{ChatID: chat, Around: all[15] + 1}); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("around a missing message: %v", err)
 	}
@@ -444,6 +461,45 @@ func TestCountAfter(t *testing.T) {
 		if err != nil || n != c.want {
 			t.Errorf("after %d limit %d: %d (want %d) %v", c.after, c.limit, n, c.want, err)
 		}
+	}
+}
+
+// A retry of an insert that arrives after the message was deleted (or edited) must not bring it back.
+func TestLateInsertRetryLosesToLaterChanges(t *testing.T) {
+	r := testRepo(t)
+	ctx := context.Background()
+	chat := newChat()
+	sender := int64(1)
+	g, _ := ids.NewGenerator(2)
+	id, _ := g.Next()
+	m := Message{ChatID: chat, ID: id, SenderID: &sender, Type: TypeText, Content: text("secret"), CreatedAt: ids.Time(id)}
+	if err := r.Insert(ctx, m); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Delete(ctx, chat, id); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Insert(ctx, m); err != nil { // the delayed retry
+		t.Fatal(err)
+	}
+	if got, _ := r.Get(ctx, chat, id); !got.Deleted {
+		t.Fatal("a late insert undeleted the message")
+	}
+
+	other := newChat()
+	id2, _ := g.Next()
+	m2 := Message{ChatID: other, ID: id2, SenderID: &sender, Type: TypeText, Content: text("x"), CreatedAt: ids.Time(id2)}
+	if err := r.Insert(ctx, m2); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.DeleteChat(ctx, other); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Insert(ctx, m2); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := r.Page(ctx, PageQuery{ChatID: other}); len(p.Messages) != 0 {
+		t.Fatal("a late insert brought a message back into a deleted chat")
 	}
 }
 

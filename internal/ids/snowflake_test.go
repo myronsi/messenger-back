@@ -31,7 +31,7 @@ func TestIDsIncreaseAndCarryTimeAndNode(t *testing.T) {
 		}
 		last = id
 	}
-	if !IsSnowflake(last) || IsSnowflake(4_000_000) {
+	if !IsSnowflake(last) || IsSnowflake(4_000_000) || IsSnowflake(MinSnowflake-1) {
 		t.Fatal("IsSnowflake")
 	}
 	if ts := Time(last); ts.Before(before) || ts.After(time.Now().Add(time.Second)) {
@@ -45,6 +45,19 @@ func TestIDsIncreaseAndCarryTimeAndNode(t *testing.T) {
 	}
 	if MinAt(Epoch.Add(-time.Hour)) != 0 {
 		t.Fatal("MinAt before Epoch")
+	}
+}
+
+func TestNoIDsBeforeCutover(t *testing.T) {
+	g, _ := NewGenerator(1)
+	g.now = func() time.Time { return Cutover.Add(-time.Millisecond) }
+	if _, err := g.Next(); err == nil {
+		t.Fatal("generated an ID before the cutover")
+	}
+	g.now = func() time.Time { return Cutover }
+	id, err := g.Next()
+	if err != nil || id != MinSnowflake+(1<<seqBits) || !IsSnowflake(id) {
+		t.Fatalf("first ID at the cutover: %d %v", id, err)
 	}
 }
 
