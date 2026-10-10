@@ -3,6 +3,7 @@ package httpapi
 import (
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
@@ -69,7 +70,7 @@ func NewRouter(o Options) *Router {
 		securityHeaders(o.Production),
 		cors(o.HTTP.CORSOrigins),
 		bodyLimit(o.HTTP.MaxBodyBytes, UploadPath(o.HTTP.BasePath), o.UploadMaxBytes),
-		timeout(o.HTTP.RequestTimeout),
+		timeout(o.HTTP.RequestTimeout, o.HTTP.TransferTimeout, transferRoute(o.HTTP.BasePath)),
 	)
 	if o.Tracing {
 		handler = otelhttp.NewHandler(handler, "http.server")
@@ -83,3 +84,20 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) { r.handler
 // Drain makes /readyz answer 503 so load balancers stop sending new traffic before the server
 // stops listening.
 func (r *Router) Drain() { r.health.draining.Store(true) }
+
+// transferRoute reports the requests that move file bytes: uploads, attachment contents and avatars.
+func transferRoute(basePath string) func(*http.Request) bool {
+	upload := UploadPath(basePath)
+	return func(r *http.Request) bool {
+		p := r.URL.Path
+		if r.Method == http.MethodPost {
+			return p == upload
+		}
+		if r.Method != http.MethodGet && r.Method != http.MethodHead || !strings.HasPrefix(p, basePath+"/") {
+			return false
+		}
+		return (strings.HasPrefix(p, upload+"/") && strings.HasSuffix(p, "/content")) ||
+			(strings.HasPrefix(p, basePath+"/users/") && strings.HasSuffix(p, "/avatar")) ||
+			(strings.HasPrefix(p, basePath+"/chats/") && strings.HasSuffix(p, "/avatar"))
+	}
+}

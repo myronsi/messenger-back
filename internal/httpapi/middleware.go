@@ -288,11 +288,20 @@ func bodyLimit(defaultLimit int64, uploadPath string, uploadLimit int64) middlew
 
 // timeout puts a deadline on the request context of every request. It is a context deadline, not
 // http.TimeoutHandler, so streaming keeps working. A WebSocket handler that has completed the
-// upgrade must detach the connection from this deadline itself (context.WithoutCancel).
-func timeout(d time.Duration) middleware {
+// upgrade must detach the connection from this deadline itself (context.WithoutCancel). File transfers
+// (transfer reports them) get the longer deadline, and the connection's read and write deadlines are moved
+// with it.
+func timeout(d, long time.Duration, transfer func(*http.Request) bool) middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx, cancel := context.WithTimeout(r.Context(), d)
+			limit := d
+			if long > d && transfer != nil && transfer(r) {
+				limit = long
+				rc := http.NewResponseController(w)
+				_ = rc.SetReadDeadline(time.Now().Add(long))
+				_ = rc.SetWriteDeadline(time.Now().Add(long))
+			}
+			ctx, cancel := context.WithTimeout(r.Context(), limit)
 			defer cancel()
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})

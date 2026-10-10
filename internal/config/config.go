@@ -107,6 +107,8 @@ type Media struct {
 	// them the client's duration and waveform are used.
 	FFprobe string `env:"FFPROBE_PATH"`
 	FFmpeg  string `env:"FFMPEG_PATH"`
+	// ImageWorkers is how many uploaded images are decoded at once; each can take a few hundred MB.
+	ImageWorkers int `env:"MEDIA_IMAGE_WORKERS" envDefault:"2"`
 }
 
 // Realtime configures the WebSocket gateway.
@@ -148,7 +150,10 @@ type HTTP struct {
 	WriteTimeout      time.Duration `env:"HTTP_WRITE_TIMEOUT" envDefault:"60s"`
 	IdleTimeout       time.Duration `env:"HTTP_IDLE_TIMEOUT" envDefault:"120s"`
 	RequestTimeout    time.Duration `env:"HTTP_REQUEST_TIMEOUT" envDefault:"30s"`
-	ShutdownTimeout   time.Duration `env:"HTTP_SHUTDOWN_TIMEOUT" envDefault:"25s"`
+	// TransferTimeout replaces the read, write and request timeouts for uploads and downloads of files,
+	// which can be large and slow.
+	TransferTimeout time.Duration `env:"HTTP_TRANSFER_TIMEOUT" envDefault:"10m"`
+	ShutdownTimeout time.Duration `env:"HTTP_SHUTDOWN_TIMEOUT" envDefault:"25s"`
 	// DrainDelay is how long /readyz answers 503 before the server stops listening, so load
 	// balancers notice first. 0 stops immediately (fine for local runs).
 	DrainDelay   time.Duration `env:"HTTP_DRAIN_DELAY" envDefault:"0s"`
@@ -433,6 +438,7 @@ func (h HTTP) validate() []string {
 		"HTTP_WRITE_TIMEOUT":       h.WriteTimeout,
 		"HTTP_IDLE_TIMEOUT":        h.IdleTimeout,
 		"HTTP_REQUEST_TIMEOUT":     h.RequestTimeout,
+		"HTTP_TRANSFER_TIMEOUT":    h.TransferTimeout,
 		"HTTP_SHUTDOWN_TIMEOUT":    h.ShutdownTimeout,
 		"READINESS_TIMEOUT":        h.ReadinessTimeout,
 	} {

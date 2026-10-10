@@ -54,8 +54,14 @@ WHERE a.created_at < @older_than
 ORDER BY a.created_at
 LIMIT @max_rows;
 
+-- name: LockAttachment :one
+-- Waits for transactions that are linking the attachment (their foreign key checks share-lock the row), so
+-- the reference check that follows sees their links.
+SELECT id FROM attachments WHERE id = @id FOR UPDATE;
+
 -- name: DeleteAttachmentIfUnreferenced :one
--- Deletes the row only if it is still unreferenced (a send may have linked it since it was listed).
+-- Deletes the row only if it is still unreferenced (a send may have linked it since it was listed). Run it
+-- after LockAttachment in the same transaction.
 DELETE FROM attachments a
 WHERE a.id = @id
   AND NOT EXISTS (SELECT 1 FROM attachment_links l WHERE l.attachment_id = a.id)

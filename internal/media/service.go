@@ -76,13 +76,20 @@ type Options struct {
 	SignedURLs bool
 	// SignedURLTTL is how long a redirect to object storage is valid (default 5 minutes).
 	SignedURLTTL time.Duration
+	// ImageWorkers is how many images are decoded at once (default 2); each can take a few hundred MB.
+	// Further uploads wait for a slot, within their request's deadline.
+	ImageWorkers int
 	Log          *slog.Logger
 }
 
 // Service stores uploads and serves them to the users allowed to see them.
 type Service struct {
-	o Options
+	o      Options
+	images chan struct{}
 }
+
+// ErrBusy is returned when an upload could not get a processing slot before its deadline.
+var ErrBusy = errors.New("media: too many uploads are being processed")
 
 // NewService returns the service.
 func NewService(o Options) *Service {
@@ -95,10 +102,28 @@ func NewService(o Options) *Service {
 	if o.SignedURLTTL <= 0 {
 		o.SignedURLTTL = 5 * time.Minute
 	}
+	if o.ImageWorkers <= 0 {
+		o.ImageWorkers = 2
+	}
 	if o.Log == nil {
 		o.Log = slog.New(slog.DiscardHandler)
 	}
-	return &Service{o: o}
+	return &Service{o: o, images: make(chan struct{}, o.ImageWorkers)}
+}
+
+// processImage decodes and re-encodes an image in one of the ImageWorkers slots.
+func (s *Service) processImage(ctx context.Context, path, contentType string) (ProcessedImage, error) {
+	select {
+	case s.images <- struct{}{}:
+	case <-ctx.Done():
+		return ProcessedImage{}, ErrBusy
+	}
+	defer func() { <-s.images }()
+	data, err := os.ReadFile(path) //nolint:gosec // our temporary file
+	if err != nil {
+		return ProcessedImage{}, err
+	}
+	return ProcessImage(data, contentType)
 }
 
 // Limits returns the upload limits.
@@ -189,11 +214,7 @@ func (s *Service) Upload(ctx context.Context, u Upload) (postgres.Attachment, er
 	var body io.Reader
 	switch det.Kind {
 	case KindImage:
-		data, err := os.ReadFile(tmp.Name())
-		if err != nil {
-			return postgres.Attachment{}, err
-		}
-		img, err := ProcessImage(data, det.ContentType)
+		img, err := s.processImage(ctx, tmp.Name(), det.ContentType)
 		if err != nil {
 			return postgres.Attachment{}, err
 		}
@@ -206,6 +227,9 @@ func (s *Service) Upload(ctx context.Context, u Upload) (postgres.Attachment, er
 			if info, err = s.o.Prober.Probe(ctx, tmp.Name(), det.Kind == KindVoice); err != nil {
 				if errors.Is(err, ErrNotAudio) {
 					return postgres.Attachment{}, ErrUnsupported
+				}
+				if errors.Is(err, ErrMeasureTimeout) {
+					return postgres.Attachment{}, ErrBusy
 				}
 				return postgres.Attachment{}, err
 			}

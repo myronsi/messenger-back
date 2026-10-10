@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -159,6 +160,11 @@ func TestUploadAndDownloadOverHTTP(t *testing.T) {
 		r.Header().Get("Content-Security-Policy") == "" || r.Body.Len() == 0 {
 		t.Fatalf("download: %d %v", r.Code, r.Header())
 	}
+	// Players seek with byte ranges.
+	part := e.do(t, request{method: http.MethodGet, path: "/attachments/" + id + "/content", token: bob.access, header: map[string]string{"Range": "bytes=0-9"}})
+	if part.Code != http.StatusPartialContent || part.Body.Len() != 10 || part.Header().Get("Content-Range") == "" || part.Header().Get("ETag") == "" {
+		t.Fatalf("range: %d %v", part.Code, part.Header())
+	}
 	if th := get(bob.access, "?variant=thumbnail"); th.Code != http.StatusOK || th.Header().Get("Content-Type") != "image/jpeg" {
 		t.Fatalf("thumbnail: %d %v", th.Code, th.Header())
 	}
@@ -192,6 +198,36 @@ func TestUploadAndDownloadOverHTTP(t *testing.T) {
 	}
 	if r := e.do(t, request{method: http.MethodPost, path: "/attachments", token: alice.access, body: map[string]string{"purpose": "message"}}); r.Code != http.StatusUnsupportedMediaType {
 		t.Fatalf("json body: %d", r.Code)
+	}
+	// A body that ends in the middle of the form is the client's fault.
+	cut := httptest.NewRequest(http.MethodPost, apiBase+"/attachments", strings.NewReader("--b\r\nContent-Disposition: form-data; name=\"file\"; filename=\"x\"\r\n\r\nabc"))
+	cut.Header.Set("Content-Type", "multipart/form-data; boundary=b")
+	cut.Header.Set("Authorization", "Bearer "+alice.access)
+	cutRec := httptest.NewRecorder()
+	e.router.ServeHTTP(cutRec, cut)
+	if cutRec.Code != http.StatusBadRequest {
+		t.Fatalf("truncated form: %d %s", cutRec.Code, cutRec.Body)
+	}
+}
+
+func TestTransferRoutes(t *testing.T) {
+	long := transferRoute(apiBase)
+	for path, want := range map[string]bool{
+		"POST " + apiBase + "/attachments":             true,
+		"GET " + apiBase + "/attachments/x/content":    true,
+		"HEAD " + apiBase + "/attachments/x/content":   true,
+		"GET " + apiBase + "/users/1/avatar":           true,
+		"GET " + apiBase + "/chats/1/avatar":           true,
+		"GET " + apiBase + "/users/1/avatars":          false,
+		"GET " + apiBase + "/attachments":              false,
+		"POST " + apiBase + "/attachments/x/content":   false,
+		"GET " + apiBase + "/me":                       false,
+		"GET /elsewhere" + apiBase + "/users/1/avatar": false,
+	} {
+		method, p, _ := strings.Cut(path, " ")
+		if got := long(httptest.NewRequest(method, p, nil)); got != want {
+			t.Errorf("%s: %v, want %v", path, got, want)
+		}
 	}
 }
 

@@ -228,3 +228,31 @@ func TestCleanName(t *testing.T) {
 		t.Errorf("name of %d bytes", len(long))
 	}
 }
+
+// craftedGIF is a GIF of n frames that claim w x h pixels each, with empty image data: it is never decoded.
+func craftedGIF(n int, w, h uint16) []byte {
+	b := []byte("GIF89a\x01\x00\x01\x00\x00\x00\x00")
+	for range n {
+		b = append(b, 0x21, 0xF9, 4, 0, 5, 0, 0, 0) // graphic control extension
+		b = append(b, 0x2C, 0, 0, 0, 0)
+		b = binary.LittleEndian.AppendUint16(b, w)
+		b = binary.LittleEndian.AppendUint16(b, h)
+		b = append(b, 0, 2, 0) // no local palette, LZW code size, no data
+	}
+	return append(b, 0x3B)
+}
+
+func TestGIFFramesAreCountedBeforeDecoding(t *testing.T) {
+	if frames, area, err := scanGIF(craftedGIF(3, 4, 5)); err != nil || frames != 3 || area != 60 {
+		t.Fatalf("scan: %d frames, %d px, %v", frames, area, err)
+	}
+	if _, err := ProcessImage(craftedGIF(maxGIFFrames+1, 1, 1), "image/gif"); !errors.Is(err, ErrImageTooLarge) {
+		t.Fatalf("too many frames: %v", err)
+	}
+	if _, err := ProcessImage(craftedGIF(5, 16000, 2500), "image/gif"); !errors.Is(err, ErrImageTooLarge) {
+		t.Fatalf("too many pixels: %v", err)
+	}
+	if _, _, err := scanGIF([]byte("GIF89a\x01\x00\x01\x00\x00\x00\x00\x2C\x00")); err == nil {
+		t.Fatal("truncated descriptor accepted")
+	}
+}

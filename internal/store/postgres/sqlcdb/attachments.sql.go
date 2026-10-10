@@ -189,7 +189,8 @@ type DeleteAttachmentIfUnreferencedRow struct {
 	ThumbnailKey *string
 }
 
-// Deletes the row only if it is still unreferenced (a send may have linked it since it was listed).
+// Deletes the row only if it is still unreferenced (a send may have linked it since it was listed). Run it
+// after LockAttachment in the same transaction.
 func (q *Queries) DeleteAttachmentIfUnreferenced(ctx context.Context, id uuid.UUID) (DeleteAttachmentIfUnreferencedRow, error) {
 	row := q.db.QueryRow(ctx, deleteAttachmentIfUnreferenced, id)
 	var i DeleteAttachmentIfUnreferencedRow
@@ -511,6 +512,19 @@ func (q *Queries) ListUnreferencedAttachments(ctx context.Context, arg ListUnref
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockAttachment = `-- name: LockAttachment :one
+SELECT id FROM attachments WHERE id = $1 FOR UPDATE
+`
+
+// Waits for transactions that are linking the attachment (their foreign key checks share-lock the row), so
+// the reference check that follows sees their links.
+func (q *Queries) LockAttachment(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockAttachment, id)
+	var id_2 uuid.UUID
+	err := row.Scan(&id_2)
+	return id_2, err
 }
 
 const setChatAvatar = `-- name: SetChatAvatar :execrows

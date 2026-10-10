@@ -225,7 +225,7 @@ func TestVoiceMessagesAreMeasured(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a.Duration == nil || *a.Duration < 1.9 || *a.Duration > 2.1 || len(a.Waveform) != media.WaveformBars {
+	if a.Duration == nil || *a.Duration < 1.9 || *a.Duration > 2.1 || len(a.Waveform) != media.WaveformBars || a.Waveform[media.WaveformBars/2] < 200 {
 		t.Fatalf("measured %v s, %d bars", a.Duration, len(a.Waveform))
 	}
 	// Text pretending to be Ogg is refused once the tools look at it.

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -85,6 +86,16 @@ func (f *uploadForm) close() {
 
 var errFormInvalid = errors.New("invalid upload form")
 
+// formError keeps a body over the size limit recognisable (413); any other failure to read the form is the
+// client's (malformed multipart, a truncated body, an abort or a read timeout).
+func formError(err error) error {
+	var tooLarge *http.MaxBytesError
+	if errors.As(err, &tooLarge) {
+		return err
+	}
+	return fmt.Errorf("%w: %w", errFormInvalid, err)
+}
+
 func readUploadForm(r *http.Request, limit int64) (*uploadForm, error) {
 	mr, err := r.MultipartReader()
 	if err != nil {
@@ -98,7 +109,7 @@ func readUploadForm(r *http.Request, limit int64) (*uploadForm, error) {
 		}
 		if err != nil {
 			f.close()
-			return nil, err
+			return nil, formError(err)
 		}
 		name := part.FormName()
 		if name == "file" {
@@ -114,7 +125,7 @@ func readUploadForm(r *http.Request, limit int64) (*uploadForm, error) {
 			n, err := io.Copy(tmp, io.LimitReader(part, limit+1))
 			if err != nil {
 				f.close()
-				return nil, err
+				return nil, formError(err)
 			}
 			if n > limit {
 				f.close()
@@ -176,10 +187,15 @@ func (m *MediaServer) UploadAttachment(w http.ResponseWriter, r *http.Request, _
 		WriteProblem(w, http.StatusUnsupportedMediaType, ErrorCodeUnsupportedMediaType)
 		return
 	}
-	if res, err := m.o.Limiter.Allow(r.Context(), RateUpload, strconv.FormatInt(p.UserID, 10)); err != nil || !res.Allowed {
-		if err == nil {
-			w.Header().Set("Retry-After", strconv.Itoa(int(res.RetryAfter/time.Second)+1))
-		}
+	res, err := m.o.Limiter.Allow(r.Context(), RateUpload, strconv.FormatInt(p.UserID, 10))
+	if err != nil {
+		m.o.Log.WarnContext(r.Context(), "upload rate limit", "error", err)
+		w.Header().Set("Retry-After", "5")
+		WriteProblem(w, http.StatusServiceUnavailable, ErrorCodeInternalError)
+		return
+	}
+	if !res.Allowed {
+		w.Header().Set("Retry-After", strconv.Itoa(int(res.RetryAfter/time.Second)+1))
 		WriteProblem(w, http.StatusTooManyRequests, ErrorCodeRateLimited)
 		return
 	}
@@ -209,6 +225,9 @@ func (m *MediaServer) uploadFailed(w http.ResponseWriter, r *http.Request, err e
 		WriteProblem(w, http.StatusUnsupportedMediaType, ErrorCodeUnsupportedMediaType)
 	case errors.Is(err, media.ErrInvalid), errors.Is(err, errFormInvalid):
 		WriteProblem(w, http.StatusBadRequest, ErrorCodeInvalidRequest)
+	case errors.Is(err, media.ErrBusy):
+		w.Header().Set("Retry-After", "10")
+		WriteProblem(w, http.StatusServiceUnavailable, ErrorCodeInternalError)
 	default:
 		m.o.Log.ErrorContext(r.Context(), "upload failed", "error", err)
 		WriteProblem(w, http.StatusInternalServerError, ErrorCodeInternalError)
@@ -216,19 +235,29 @@ func (m *MediaServer) uploadFailed(w http.ResponseWriter, r *http.Request, err e
 }
 
 // serve writes a download: a redirect to object storage, or the bytes with headers no browser can turn
-// into a page.
-func (m *MediaServer) serve(w http.ResponseWriter, r *http.Request, d media.Download, cache string) {
+// into a page. Byte ranges are served (players need them to seek, and Safari to play at all); etag names
+// the stored bytes, which never change.
+func (m *MediaServer) serve(w http.ResponseWriter, r *http.Request, d media.Download, cache, etag string) {
 	h := w.Header()
 	h.Set("X-Content-Type-Options", "nosniff")
-	h.Set("Cache-Control", cache)
 	if d.RedirectURL != "" {
+		// The signed URL expires within minutes, so the redirect must not outlive it in a cache.
+		h.Set("Cache-Control", "no-store")
 		http.Redirect(w, r, d.RedirectURL, http.StatusFound)
 		return
 	}
 	defer func() { _ = d.Object.Body.Close() }()
+	h.Set("Cache-Control", cache)
 	h.Set("Content-Type", d.ContentType)
 	h.Set("Content-Disposition", d.Disposition)
 	h.Set("Content-Security-Policy", "default-src 'none'; sandbox")
+	if etag != "" {
+		h.Set("ETag", `"`+etag+`"`)
+	}
+	if rs, ok := d.Object.Body.(io.ReadSeeker); ok {
+		http.ServeContent(w, r, "", time.Time{}, rs)
+		return
+	}
 	if d.Object.Size >= 0 {
 		h.Set("Content-Length", strconv.FormatInt(d.Object.Size, 10))
 	}
@@ -256,7 +285,11 @@ func (m *MediaServer) GetAttachmentContent(w http.ResponseWriter, r *http.Reques
 		WriteProblem(w, http.StatusInternalServerError, ErrorCodeInternalError)
 		return
 	}
-	m.serve(w, r, d, "private, max-age=3600")
+	etag := id.String()
+	if thumb {
+		etag += "-thumb"
+	}
+	m.serve(w, r, d, "private, max-age=3600", etag)
 }
 
 // SetMyAvatar implements PUT /me/avatar.
@@ -355,7 +388,7 @@ func (m *MediaServer) GetUserAvatar(w http.ResponseWriter, r *http.Request, user
 		return
 	}
 	// Short: visibility can change, and the URL stays the same when the avatar does.
-	m.serve(w, r, d, "private, max-age=60")
+	m.serve(w, r, d, "private, max-age=60", attachment.String())
 }
 
 // ListUserAvatars implements GET /users/{id}/avatars.

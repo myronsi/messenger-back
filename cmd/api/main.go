@@ -94,7 +94,7 @@ func run() error {
 	prober := media.NewProber(cfg.Media.FFprobe, cfg.Media.FFmpeg)
 	mediaSvc := media.NewService(media.Options{
 		Storage: storage, Attachments: pg.Attachments(), Visibility: rt.messages, Membership: rt.messages,
-		Prober: prober, SignedURLs: cfg.Media.SignedURLs, Log: log,
+		Prober: prober, SignedURLs: cfg.Media.SignedURLs, ImageWorkers: cfg.Media.ImageWorkers, Log: log,
 	})
 	if !prober.Available() {
 		log.Warn("ffprobe/ffmpeg not found: voice messages keep the duration and waveform the client sends")

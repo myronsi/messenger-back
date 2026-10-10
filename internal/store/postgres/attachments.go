@@ -169,16 +169,28 @@ func (r attachmentRepo) Unreferenced(ctx context.Context, olderThan time.Time, l
 }
 
 func (r attachmentRepo) DeleteIfUnreferenced(ctx context.Context, id uuid.UUID) ([]string, bool, error) {
-	ctx, cancel := r.s.call(ctx)
-	defer cancel()
-	row, err := r.s.q.DeleteAttachmentIfUnreferenced(ctx, id)
+	var keys []string
+	err := r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
+		keys = nil // the transaction can be retried
+		// A single DELETE ... WHERE NOT EXISTS would wait for a linking transaction and then delete anyway: its
+		// snapshot predates the link. The lock first, then the check in a statement of its own.
+		if _, err := q.LockAttachment(ctx, id); err != nil {
+			return err
+		}
+		row, err := q.DeleteAttachmentIfUnreferenced(ctx, id)
+		if err != nil {
+			return err
+		}
+		keys = keysOf(row.StorageKey, row.ThumbnailKey)
+		return nil
+	})
 	if err != nil {
 		if err = mapError(err); errors.Is(err, ErrNotFound) {
 			return nil, false, nil
 		}
 		return nil, false, err
 	}
-	return keysOf(row.StorageKey, row.ThumbnailKey), true, nil
+	return keys, true, nil
 }
 
 func (r attachmentRepo) SetUserAvatar(ctx context.Context, userID int64, attachmentID *uuid.UUID) error {

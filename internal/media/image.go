@@ -22,6 +22,8 @@ const (
 	MaxImageSide   = 16_384
 	ThumbnailSide  = 320
 	maxGIFFrames   = 300
+	// maxGIFArea bounds the pixels of all frames together (one byte each once decoded).
+	maxGIFArea = 4 * MaxImagePixels
 )
 
 // ErrImageTooLarge is returned for images over the limits.
@@ -64,7 +66,7 @@ func ProcessImage(data []byte, contentType string) (ProcessedImage, error) {
 		err = jpeg.Encode(&buf, img, &jpeg.Options{Quality: 88})
 	} else {
 		out.ContentType = "image/png"
-		err = (&png.Encoder{CompressionLevel: png.BestCompression}).Encode(&buf, img)
+		err = (&png.Encoder{CompressionLevel: png.DefaultCompression}).Encode(&buf, img)
 	}
 	if err != nil {
 		return ProcessedImage{}, err
@@ -77,12 +79,17 @@ func ProcessImage(data []byte, contentType string) (ProcessedImage, error) {
 }
 
 func processGIF(data []byte, cfg image.Config) (ProcessedImage, error) {
+	// DecodeAll holds every frame in memory, so the frames are counted and measured before decoding.
+	frames, area, err := scanGIF(data)
+	if err != nil {
+		return ProcessedImage{}, ErrUnsupported
+	}
+	if frames > maxGIFFrames || area > maxGIFArea {
+		return ProcessedImage{}, ErrImageTooLarge
+	}
 	g, err := gif.DecodeAll(bytes.NewReader(data))
 	if err != nil || len(g.Image) == 0 {
 		return ProcessedImage{}, ErrUnsupported
-	}
-	if len(g.Image) > maxGIFFrames || len(g.Image)*cfg.Width*cfg.Height > 4*MaxImagePixels {
-		return ProcessedImage{}, ErrImageTooLarge
 	}
 	// EncodeAll writes frames, timing and the palette only: comments and application extensions are gone.
 	var buf bytes.Buffer
@@ -94,6 +101,65 @@ func processGIF(data []byte, cfg image.Config) (ProcessedImage, error) {
 		return ProcessedImage{}, err
 	}
 	return ProcessedImage{Data: buf.Bytes(), ContentType: "image/gif", Width: cfg.Width, Height: cfg.Height, Thumbnail: thumb}, nil
+}
+
+var errBadGIF = errors.New("media: malformed GIF")
+
+// scanGIF walks the blocks of a GIF without decoding it: the number of frames and their pixels together.
+// It stops early once either is over the limits.
+func scanGIF(data []byte) (frames int, area int64, err error) {
+	if len(data) < 13 || (string(data[:6]) != "GIF87a" && string(data[:6]) != "GIF89a") {
+		return 0, 0, errBadGIF
+	}
+	pos := 13
+	if data[10]&0x80 != 0 { // global color table
+		pos += 3 << (int(data[10]&0x07) + 1)
+	}
+	// subBlocks skips data sub-blocks up to and including the terminator.
+	subBlocks := func() bool {
+		for pos < len(data) {
+			n := int(data[pos])
+			pos++
+			if n == 0 {
+				return true
+			}
+			pos += n
+		}
+		return false
+	}
+	for pos < len(data) {
+		switch data[pos] {
+		case 0x21: // extension: label, then sub-blocks
+			pos += 2
+			if !subBlocks() {
+				return 0, 0, errBadGIF
+			}
+		case 0x2C: // image descriptor
+			if pos+10 > len(data) {
+				return 0, 0, errBadGIF
+			}
+			w, h := int64(binary.LittleEndian.Uint16(data[pos+5:])), int64(binary.LittleEndian.Uint16(data[pos+7:]))
+			flags := data[pos+9]
+			pos += 10
+			if flags&0x80 != 0 { // local color table
+				pos += 3 << (int(flags&0x07) + 1)
+			}
+			pos++ // LZW minimum code size
+			if !subBlocks() {
+				return 0, 0, errBadGIF
+			}
+			frames++
+			area += w * h
+			if frames > maxGIFFrames || area > maxGIFArea {
+				return frames, area, nil
+			}
+		case 0x3B: // trailer
+			return frames, area, nil
+		default:
+			return 0, 0, errBadGIF
+		}
+	}
+	return frames, area, nil // no trailer: the decoder accepts that too
 }
 
 func opaque(img image.Image) bool {
@@ -186,20 +252,26 @@ func exifOrientation(tiff []byte) int {
 	return 1
 }
 
-// orient turns the image the way its EXIF orientation says it is meant to be seen.
+// orient turns the image the way its EXIF orientation says it is meant to be seen. It works on RGBA pixels
+// directly: one copy of four bytes per pixel.
 func orient(img image.Image, o int) image.Image {
 	if o <= 1 || o > 8 {
 		return img
 	}
 	b := img.Bounds()
+	src, ok := img.(*image.RGBA)
+	if !ok || b.Min != (image.Point{}) {
+		src = image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
+		draw.Draw(src, src.Bounds(), img, b.Min, draw.Src)
+	}
 	w, h := b.Dx(), b.Dy()
-	swap := o >= 5
 	dw, dh := w, h
-	if swap {
+	if o >= 5 {
 		dw, dh = h, w
 	}
 	dst := image.NewRGBA(image.Rect(0, 0, dw, dh))
 	for y := range h {
+		row := src.Pix[y*src.Stride : y*src.Stride+4*w]
 		for x := range w {
 			var dx, dy int
 			switch o {
@@ -218,7 +290,8 @@ func orient(img image.Image, o int) image.Image {
 			case 8:
 				dx, dy = y, w-1-x
 			}
-			dst.Set(dx, dy, img.At(b.Min.X+x, b.Min.Y+y))
+			i := dy*dst.Stride + 4*dx
+			copy(dst.Pix[i:i+4], row[4*x:4*x+4])
 		}
 	}
 	return dst

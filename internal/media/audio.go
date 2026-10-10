@@ -1,11 +1,11 @@
 package media
 
 import (
-	"bytes"
 	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"os/exec"
 	"strconv"
@@ -55,14 +55,20 @@ func (p *Prober) Available() bool { return p != nil && p.ffprobe != "" && p.ffmp
 // ErrNotAudio is returned when the tools cannot read the file as audio.
 var ErrNotAudio = errors.New("media: not a readable audio file")
 
+// ErrMeasureTimeout is returned when ffprobe or ffmpeg did not finish in time: a problem of the server (or a
+// file that is very slow to decode), not proof that the file is not audio.
+var ErrMeasureTimeout = errors.New("media: measuring the audio took too long")
+
 // Probe measures the file at path (a temporary copy of the upload). waveform asks for the bars as well.
+// ffprobe and ffmpeg get probeTimeout each, and may read only the file itself (no network, no other files).
 func (p *Prober) Probe(ctx context.Context, path string, waveform bool) (AudioInfo, error) {
-	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
-	defer cancel()
-	out, err := exec.CommandContext(ctx, p.ffprobe, "-v", "error", "-select_streams", "a:0", //nolint:gosec // fixed tool and arguments; path is our temporary file
+	pctx, cancel := context.WithTimeout(ctx, probeTimeout)
+	out, err := exec.CommandContext(pctx, p.ffprobe, "-v", "error", "-protocol_whitelist", "file", "-select_streams", "a:0", //nolint:gosec // fixed tool and arguments; path is our temporary file
 		"-show_entries", "format=duration:stream=codec_type", "-of", "default=noprint_wrappers=1", path).Output()
+	timedOut := pctx.Err() != nil
+	cancel()
 	if err != nil {
-		return AudioInfo{}, ErrNotAudio
+		return AudioInfo{}, toolFailed(ctx, timedOut)
 	}
 	var info AudioInfo
 	audio := false
@@ -91,43 +97,120 @@ func (p *Prober) Probe(ctx context.Context, path string, waveform bool) (AudioIn
 	return info, nil
 }
 
-// waveform decodes to 8 kHz mono PCM and takes the peak of WaveformBars equal slices.
-func (p *Prober) waveform(ctx context.Context, path string) ([]int16, error) {
-	cmd := exec.CommandContext(ctx, p.ffmpeg, "-v", "error", "-i", path, "-ac", "1", "-ar", "8000", "-f", "s16le", "pipe:1") //nolint:gosec // see Probe
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	if err := cmd.Run(); err != nil {
-		return nil, ErrNotAudio
+// toolFailed tells a timeout or a cancelled request apart from a file the tools cannot read.
+func toolFailed(ctx context.Context, timedOut bool) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
 	}
-	return Bars(out.Bytes(), WaveformBars), nil
+	if timedOut {
+		return ErrMeasureTimeout
+	}
+	return ErrNotAudio
 }
 
-// Bars turns signed 16-bit little-endian PCM into n peak amplitudes scaled to 0-255.
-func Bars(pcm []byte, n int) []int16 {
-	samples := len(pcm) / 2
+// pcmWindow is how many 8 kHz samples one stored peak covers while streaming (10 ms).
+const pcmWindow = 80
+
+// waveform decodes to 8 kHz mono PCM and takes the peak of WaveformBars equal slices. The PCM is streamed
+// through a peak accumulator, never held: the container's duration is the uploader's claim, and the decoded
+// audio is cut at MaxAudioDuration whatever it says.
+func (p *Prober) waveform(ctx context.Context, path string) ([]int16, error) {
+	wctx, cancel := context.WithTimeout(ctx, probeTimeout)
+	defer cancel()
+	limit := strconv.Itoa(int(MaxAudioDuration.Seconds()))
+	cmd := exec.CommandContext(wctx, p.ffmpeg, "-v", "error", "-protocol_whitelist", "file,pipe", "-i", path, //nolint:gosec // see Probe
+		"-t", limit, "-ac", "1", "-ar", "8000", "-f", "s16le", "pipe:1")
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	acc := &peaks{window: pcmWindow}
+	maxBytes := int64(MaxAudioDuration/time.Second) * 8000 * 2
+	_, copyErr := io.Copy(acc, io.LimitReader(stdout, maxBytes))
+	_ = cmd.Process.Kill() // done reading: whatever ffmpeg still has is beyond the limit
+	waitErr := cmd.Wait()
+	timedOut := wctx.Err() == context.DeadlineExceeded
+	if copyErr != nil || (waitErr != nil && acc.samples == 0) || timedOut {
+		return nil, toolFailed(ctx, timedOut)
+	}
+	return acc.bars(WaveformBars), nil
+}
+
+// peaks accumulates the absolute peak of every `window` samples of signed 16-bit little-endian PCM.
+type peaks struct {
+	window  int
+	cur     float64
+	inCur   int
+	samples int
+	odd     []byte
+	list    []float64
+}
+
+func (p *peaks) Write(b []byte) (int, error) {
+	n := len(b)
+	if len(p.odd) > 0 {
+		b = append(p.odd, b...)
+		p.odd = nil
+	}
+	for len(b) >= 2 {
+		v := math.Abs(float64(int16(binary.LittleEndian.Uint16(b)))) //nolint:gosec // reinterpreting PCM bits as signed is intended
+		b = b[2:]
+		p.cur = math.Max(p.cur, v)
+		p.inCur++
+		p.samples++
+		if p.inCur == p.window {
+			p.list = append(p.list, p.cur)
+			p.cur, p.inCur = 0, 0
+		}
+	}
+	if len(b) == 1 {
+		p.odd = []byte{b[0]}
+	}
+	return n, nil
+}
+
+// bars spreads the peaks over n equal slices, scaled to 0-255.
+func (p *peaks) bars(n int) []int16 {
+	list := p.list
+	if p.inCur > 0 {
+		list = append(list, p.cur)
+	}
 	bars := make([]int16, n)
-	if samples == 0 {
+	if len(list) == 0 {
 		return bars
 	}
-	peaks := make([]float64, n)
-	for i := range samples {
-		v := math.Abs(float64(int16(binary.LittleEndian.Uint16(pcm[2*i:])))) //nolint:gosec // reinterpreting PCM bits as signed is intended
-		b := i * n / samples
-		if v > peaks[b] {
-			peaks[b] = v
+	slices := make([]float64, n)
+	if len(list) >= n {
+		for i, v := range list {
+			b := i * n / len(list)
+			slices[b] = math.Max(slices[b], v)
+		}
+	} else {
+		for b := range slices {
+			slices[b] = list[b*len(list)/n]
 		}
 	}
 	top := 0.0
-	for _, p := range peaks {
-		top = math.Max(top, p)
+	for _, v := range slices {
+		top = math.Max(top, v)
 	}
 	if top == 0 {
 		return bars
 	}
-	for i, p := range peaks {
-		bars[i] = int16(math.Round(p / top * 255))
+	for i, v := range slices {
+		bars[i] = int16(math.Round(v / top * 255))
 	}
 	return bars
+}
+
+// Bars turns signed 16-bit little-endian PCM into n peak amplitudes scaled to 0-255.
+func Bars(pcm []byte, n int) []int16 {
+	acc := &peaks{window: 1}
+	_, _ = acc.Write(pcm)
+	return acc.bars(n)
 }
 
 // ClientAudio validates the duration and waveform a client sent, used when the server cannot measure.

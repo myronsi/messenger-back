@@ -711,3 +711,47 @@ func TestQueryTimeout(t *testing.T) {
 		t.Fatalf("transaction: got %v, want a deadline error", err)
 	}
 }
+
+// The garbage collector must not delete an upload that a message is linking at the same moment.
+func TestGarbageCollectionWaitsForALinkInFlight(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	a, b := mustUser(t, s, "gc_a"), mustUser(t, s, "gc_b")
+	chat, _, err := s.Chats().CreateDirect(ctx, a.ID, b.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	att, err := s.Attachments().Create(ctx, NewAttachment{UploaderID: &a.ID, Purpose: "message", Kind: "file", Filename: "f",
+		StorageKey: "attachments/" + uuid.NewString(), MimeType: "application/octet-stream", Size: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, "INSERT INTO attachment_links (attachment_id, chat_id, message_id) VALUES ($1, $2, 1)", att.ID, chat.ID); err != nil {
+		t.Fatal(err)
+	}
+	type result struct {
+		deleted bool
+		err     error
+	}
+	done := make(chan result, 1)
+	go func() {
+		_, deleted, err := s.Attachments().DeleteIfUnreferenced(ctx, att.ID)
+		done <- result{deleted, err}
+	}()
+	time.Sleep(300 * time.Millisecond) // the collector is waiting for the link's row lock
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	r := <-done
+	if r.err != nil || r.deleted {
+		t.Fatalf("collector: deleted=%v err=%v", r.deleted, r.err)
+	}
+	if _, err := s.Attachments().Get(ctx, att.ID); err != nil {
+		t.Fatalf("the linked upload is gone: %v", err)
+	}
+}
