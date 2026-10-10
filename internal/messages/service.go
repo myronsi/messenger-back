@@ -437,7 +437,8 @@ func (s *Service) Edit(ctx context.Context, userID, chatID, messageID int64, con
 	if m.Deleted {
 		return scylla.Message{}, ErrNotFound
 	}
-	if m.SenderID == nil || *m.SenderID != userID || m.Type != scylla.TypeText {
+	// A forwarded copy shows someone else's words: editing it would put new words in their mouth.
+	if m.SenderID == nil || *m.SenderID != userID || m.Type != scylla.TypeText || m.Forwarded != nil {
 		return scylla.Message{}, ErrForbidden
 	}
 	if err := s.requireNotBlocked(ctx, userID, chatID); err != nil {

@@ -53,6 +53,11 @@ func NewMessageServer(o MessageOptions) *MessageServer {
 // render renders messages of one chat for one viewer: senders as the viewer sees them, files, reactions and
 // read receipts. clientTempID goes on the viewer's own copy of a message just sent.
 func (m *MessageServer) render(ctx context.Context, viewer, chatID int64, msgs []scylla.Message, clientTempID string) ([]Message, error) {
+	return m.renderWith(ctx, viewer, chatID, msgs, clientTempID, nil)
+}
+
+// renderWith is render with files that are known already (the media lists read them with the links).
+func (m *MessageServer) renderWith(ctx context.Context, viewer, chatID int64, msgs []scylla.Message, clientTempID string, known map[uuid.UUID]postgres.Attachment) ([]Message, error) {
 	deco, err := m.o.Service.Decorate(ctx, viewer, chatID, msgs)
 	if err != nil {
 		return nil, err
@@ -64,14 +69,22 @@ func (m *MessageServer) render(ctx context.Context, viewer, chatID int64, msgs [
 			senders = append(senders, *msg.SenderID)
 		}
 		if msg.AttachmentID != nil && !msg.Deleted {
-			files[uuid.UUID(*msg.AttachmentID)] = nil
+			id := uuid.UUID(*msg.AttachmentID)
+			if a, ok := known[id]; ok {
+				files[id] = &a
+			} else {
+				files[id] = nil
+			}
 		}
 	}
 	people, err := m.o.Directory.ForViewer(ctx, viewer, uniq(senders))
 	if err != nil {
 		return nil, err
 	}
-	for id := range files {
+	for id, have := range files {
+		if have != nil {
+			continue
+		}
 		a, err := m.o.Store.Attachments().Get(ctx, id)
 		if err == nil {
 			files[id] = &a
@@ -238,7 +251,7 @@ func (m *MessageServer) EditMessage(w http.ResponseWriter, r *http.Request, mess
 	if !decode(w, r, &body) {
 		return
 	}
-	chat, err := m.o.Service.Locate(r.Context(), p.UserID, id)
+	chat, err := m.o.Service.LocateVisible(r.Context(), p.UserID, id)
 	if err != nil {
 		serviceError(w, r, m.o.Log, "locate message", err)
 		return
@@ -271,7 +284,12 @@ func (m *MessageServer) DeleteMessage(w http.ResponseWriter, r *http.Request, me
 		WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "scope", Message: "me or everyone"})
 		return
 	}
-	chat, err := m.o.Service.Locate(r.Context(), p.UserID, id)
+	// Deleting for oneself works on any message of one's chats; for everyone only on messages one can see.
+	locate := m.o.Service.LocateVisible
+	if params.Scope == DeleteMessageParamsScopeMe {
+		locate = m.o.Service.Locate
+	}
+	chat, err := locate(r.Context(), p.UserID, id)
 	if err != nil {
 		serviceError(w, r, m.o.Log, "locate message", err)
 		return
@@ -303,20 +321,30 @@ func (m *MessageServer) ForwardMessage(w http.ResponseWriter, r *http.Request, m
 			return
 		}
 	}
-	if !allow(w, r, m.o.Limiter, RateForward, strconv.FormatInt(p.UserID, 10), m.o.Log) {
+	subject := strconv.FormatInt(p.UserID, 10)
+	if !allow(w, r, m.o.Limiter, RateForward, subject, m.o.Log) {
+		return
+	}
+	// Every copy is a message: it uses up the sender's send budget like one.
+	if !allowN(w, r, m.o.Limiter, RateSend, subject, len(targets), m.o.Log) {
 		return
 	}
 	copies, err := m.o.Service.Forward(r.Context(), p.UserID, id, targets)
-	if err != nil {
+	if err != nil && len(copies) == 0 {
 		serviceError(w, r, m.o.Log, "forward message", err)
 		return
+	}
+	if err != nil {
+		// Some copies are delivered: answering an error would make the client forward them again.
+		m.o.Log.WarnContext(r.Context(), "forward stopped midway", "error", err, "written", len(copies))
 	}
 	items := make([]Message, 0, len(copies))
 	for _, c := range copies {
 		rendered, err := m.render(r.Context(), p.UserID, c.ChatID, []scylla.Message{c}, "")
 		if err != nil {
-			serviceError(w, r, m.o.Log, "render message", err)
-			return
+			// Written already; a plainer rendering beats an error.
+			m.o.Log.WarnContext(r.Context(), "render forwarded copy", "error", err)
+			rendered = []Message{PresentMessage(c, MessageParts{BasePath: m.o.BasePath})}
 		}
 		items = append(items, rendered...)
 	}
@@ -345,12 +373,17 @@ func (m *MessageServer) ListChatMedia(w http.ResponseWriter, r *http.Request, ch
 			return
 		}
 	}
-	msgs, more, err := m.o.Service.Media(r.Context(), p.UserID, id, kinds, before, pageLimit(params.Limit))
+	found, next, err := m.o.Service.Media(r.Context(), p.UserID, id, kinds, before, pageLimit(params.Limit))
 	if err != nil {
 		serviceError(w, r, m.o.Log, "chat media", err)
 		return
 	}
-	rendered, err := m.render(r.Context(), p.UserID, id, msgs, "")
+	msgs := make([]scylla.Message, len(found))
+	files := make(map[uuid.UUID]postgres.Attachment, len(found))
+	for i, it := range found {
+		msgs[i], files[it.Attachment.ID] = it.Message, it.Attachment
+	}
+	rendered, err := m.renderWith(r.Context(), p.UserID, id, msgs, "", files)
 	if err != nil {
 		serviceError(w, r, m.o.Log, "render media", err)
 		return
@@ -359,9 +392,9 @@ func (m *MessageServer) ListChatMedia(w http.ResponseWriter, r *http.Request, ch
 	for i, msg := range rendered {
 		out.Items[i] = SearchHit{Message: msg}
 	}
-	if more && len(msgs) > 0 {
-		next := FormatID(msgs[len(msgs)-1].ID)
-		out.NextCursor = &next
+	if next != 0 {
+		c := FormatID(next)
+		out.NextCursor = &c
 	}
 	noStore(w)
 	writeJSONStatus(w, http.StatusOK, out)

@@ -145,6 +145,19 @@ func TestMessagesOverHTTP(t *testing.T) {
 	if r := e.do(t, request{method: http.MethodPost, path: "/messages/" + src + "/forward", token: alice.access, body: map[string]any{"chat_ids": []string{other, other}}}); r.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("repeated targets: %d", r.Code)
 	}
+	// A forwarded copy shows the original sender's words: it cannot be edited.
+	if r := e.do(t, request{method: http.MethodPatch, path: "/messages/" + c["id"].(string), token: alice.access, body: map[string]any{"content": "changed"}}); r.Code != http.StatusForbidden {
+		t.Fatalf("edit a forwarded copy: %d", r.Code)
+	}
+	// around a message of another chat.
+	if r := e.do(t, request{method: http.MethodGet, path: "/chats/" + chat + "/messages?around=" + c["id"].(string), token: alice.access}); r.Code != http.StatusNotFound {
+		t.Fatalf("around a foreign message: %d %s", r.Code, r.Body)
+	}
+	// Bob blocks alice: his receipts disappear from her view.
+	e.do(t, request{method: http.MethodPut, path: "/me/blocked-users/" + e.uid(t, alice), token: bob.access})
+	if a, _ := e.history(t, alice, chat, ""); len(a[2]["read_by"].([]any)) != 0 {
+		t.Fatalf("read_by of a user who blocked the viewer: %v", a[2]["read_by"])
+	}
 }
 
 func TestChatMediaLists(t *testing.T) {
