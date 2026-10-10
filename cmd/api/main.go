@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gocql/gocql"
+
 	"github.com/myronsi/messenger-back/internal/app"
 	"github.com/myronsi/messenger-back/internal/auth"
 	"github.com/myronsi/messenger-back/internal/config"
@@ -46,7 +48,10 @@ func run() error {
 		return err
 	}
 	defer func() { _ = rd.Close() }()
-	sc := scylla.New(cfg.ScyllaHosts, cfg.ScyllaKeyspace)
+	sc := scylla.New(cfg.ScyllaHosts, cfg.ScyllaKeyspace, scylla.Options{
+		Consistency:    gocql.ParseConsistency(cfg.Scylla.Consistency),
+		RequestTimeout: cfg.Scylla.Timeout,
+	})
 	defer func() { _ = sc.Close() }()
 	es, err := elastic.New(cfg.ElasticsearchURL.Reveal())
 	if err != nil {

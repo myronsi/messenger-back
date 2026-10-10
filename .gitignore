@@ -12,6 +12,7 @@
 !docs/auth.md
 !docs/deployment.md
 !docs/redis.md
+!docs/messages.md
 !CHANGELOG.md
 !server/
 !server/version.py
@@ -92,6 +93,8 @@
 !compose.dev.yaml
 !deploy/dev/
 !deploy/dev/**
+!deploy/ci/
+!deploy/ci/**
 !cmd/
 !cmd/**
 !internal/

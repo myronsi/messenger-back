@@ -187,7 +187,7 @@ services:
     image: migrate/migrate:v4.20.1
     entrypoint: ["sh", "/migrate.sh", "/migrations"]
     environment:
-      MIGRATE_DATABASE: cassandra://scylla:9042/${SCYLLA_KEYSPACE:-messenger}
+      MIGRATE_DATABASE: cassandra://scylla:9042/${SCYLLA_KEYSPACE:-messenger}?x-multi-statement=true
     volumes:
       - ./deploy/dev/migrate.sh:/migrate.sh:ro
       - ./migrations/scylla:/migrations:ro

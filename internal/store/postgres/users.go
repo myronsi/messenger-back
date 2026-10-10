@@ -46,6 +46,23 @@ func (r userRepo) Get(ctx context.Context, id int64) (User, error) {
 	return userFrom(u), nil
 }
 
+func (r userRepo) GetMany(ctx context.Context, ids []int64) (map[int64]User, error) {
+	out := make(map[int64]User, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	rows, err := r.s.q.ListUsersByIDs(ctx, ids)
+	if err != nil {
+		return nil, mapError(err)
+	}
+	for _, u := range rows {
+		out[u.ID] = userFrom(u)
+	}
+	return out, nil
+}
+
 func (r userRepo) GetByUsername(ctx context.Context, username string) (User, error) {
 	ctx, cancel := r.s.call(ctx)
 	defer cancel()

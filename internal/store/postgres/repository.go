@@ -45,6 +45,9 @@ type UserRepository interface {
 	// Create fails with ErrUsernameTaken (case-insensitive) or ErrInvalid.
 	Create(ctx context.Context, username, displayName, passwordHash string) (User, error)
 	Get(ctx context.Context, id int64) (User, error)
+	// GetMany loads several users in one query, for example the senders of a page of messages. Unknown ids
+	// are missing from the result.
+	GetMany(ctx context.Context, ids []int64) (map[int64]User, error)
 	GetByUsername(ctx context.Context, username string) (User, error)
 	Credentials(ctx context.Context, username string) (Credentials, error)
 	UpdateProfile(ctx context.Context, id int64, p Profile) (User, error)

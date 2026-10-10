@@ -19,7 +19,7 @@ MIGRATE := go run -tags 'postgres,cassandra' github.com/golang-migrate/migrate/v
 IMAGE ?= messenger-api:local
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 
-.PHONY: help run run-worker build test lint vet vuln fmt generate tidy migrate migrate-postgres migrate-postgres-down migrate-scylla docker env up down dev-logs
+.PHONY: help run run-worker build test lint vet vuln fmt generate tidy migrate migrate-postgres migrate-postgres-down migrate-scylla migrate-scylla-down docker env up down dev-logs
 
 help: ## List the targets
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
@@ -62,8 +62,13 @@ migrate-postgres: ## Apply the PostgreSQL migrations in migrations/postgres
 migrate-postgres-down: ## Roll back every PostgreSQL migration (development only: drops all data)
 	$(MIGRATE) -path migrations/postgres -database "$${DATABASE_URL:?DATABASE_URL is required}" down -all
 
-migrate-scylla: ## Apply the ScyllaDB migrations in migrations/scylla
-	$(MIGRATE) -path migrations/scylla -database "cassandra://$$(printf %s "$${SCYLLA_HOSTS:?SCYLLA_HOSTS is required}" | cut -d, -f1 | tr -d ' ')/$${SCYLLA_KEYSPACE:?SCYLLA_KEYSPACE is required}" up
+SCYLLA_MIGRATE_URL = cassandra://$$(printf %s "$${SCYLLA_HOSTS:?SCYLLA_HOSTS is required}" | cut -d, -f1 | tr -d ' ')/$${SCYLLA_KEYSPACE:?SCYLLA_KEYSPACE is required}?x-multi-statement=true
+
+migrate-scylla: ## Apply the ScyllaDB migrations in migrations/scylla (the keyspace must exist)
+	$(MIGRATE) -path migrations/scylla -database "$(SCYLLA_MIGRATE_URL)" up
+
+migrate-scylla-down: ## Roll back every ScyllaDB migration (development only: drops all messages)
+	$(MIGRATE) -path migrations/scylla -database "$(SCYLLA_MIGRATE_URL)" down -all
 
 DEV_COMPOSE := docker compose -f compose.dev.yaml
 
