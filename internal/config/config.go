@@ -52,7 +52,8 @@ type Config struct {
 
 	DatabaseURL Secret `env:"DATABASE_URL,required,notEmpty"`
 	Postgres    Postgres
-	RedisURL    Secret   `env:"REDIS_URL,required,notEmpty"`
+	RedisURL    Secret `env:"REDIS_URL,required,notEmpty"`
+	Redis       Redis
 	ScyllaHosts []string `env:"SCYLLA_HOSTS,required,notEmpty" envSeparator:","`
 	// ScyllaKeyspace is optional so the readiness check works before the keyspace is migrated.
 	ScyllaKeyspace   string `env:"SCYLLA_KEYSPACE"`
@@ -71,6 +72,12 @@ type Postgres struct {
 	MaxConns int32 `env:"POSTGRES_MAX_CONNS" envDefault:"10"`
 	// QueryTimeout bounds every repository call (a whole transaction counts as one call).
 	QueryTimeout time.Duration `env:"POSTGRES_QUERY_TIMEOUT" envDefault:"5s"`
+}
+
+// Redis tunes the Redis client; the connection URL is REDIS_URL.
+type Redis struct {
+	// Timeout bounds every command (blocking stream reads excepted).
+	Timeout time.Duration `env:"REDIS_TIMEOUT" envDefault:"2s"`
 }
 
 // HTTP configures the API server.
@@ -262,6 +269,9 @@ func (c Config) Validate() error {
 	}
 	if c.Postgres.QueryTimeout <= 0 {
 		add("POSTGRES_QUERY_TIMEOUT must be positive")
+	}
+	if c.Redis.Timeout <= 0 {
+		add("REDIS_TIMEOUT must be positive")
 	}
 	problems = append(problems, c.HTTP.validate()...)
 	problems = append(problems, c.Auth.validate(c.Env == "production")...)

@@ -14,7 +14,7 @@ The Go backend replaces the Python one (`server/`). Its skeleton is in place; fe
 | `internal/observability` | JSON `slog` logger with redaction, Prometheus metrics, optional OpenTelemetry tracing |
 | `internal/httpapi` | router, middleware, health checks, generated server (`api.gen.go`) |
 | `internal/realtime` | WebSocket registry and graceful "reconnect" close (code 1012) |
-| `internal/store/{postgres,redis,scylla,elastic}` | store clients with `Ping` for `/readyz`; PostgreSQL also has the repositories ([schema](postgres-schema.md)) |
+| `internal/store/{postgres,redis,scylla,elastic}` | store clients with `Ping` for `/readyz`; PostgreSQL also has the repositories ([schema](postgres-schema.md)); Redis has presence, pub/sub, unread counters, the membership cache and rate limits ([redis.md](redis.md)) |
 | `internal/{auth,users,chats,groups,messages,media,search}` | domain packages, empty for now |
 | `migrations/{postgres,scylla}` | schema migrations (`make migrate`, applied automatically by the dev stack) |
 | `compose.dev.yaml`, `deploy/dev` | development stack and its init steps, see [dev-environment.md](dev-environment.md); production notes are in [deployment.md](deployment.md) |

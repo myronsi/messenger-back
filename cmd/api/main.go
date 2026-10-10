@@ -38,7 +38,10 @@ func run() error {
 		return err
 	}
 	defer pg.Close()
-	rd, err := redis.New(cfg.RedisURL.Reveal())
+	rd, err := redis.New(cfg.RedisURL.Reveal(), redis.Options{
+		Timeout: cfg.Redis.Timeout,
+		OnError: func() { p.Metrics.StoreError("redis") },
+	})
 	if err != nil {
 		return err
 	}

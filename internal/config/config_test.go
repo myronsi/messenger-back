@@ -70,6 +70,7 @@ func TestValidation(t *testing.T) {
 		"zero pool size":       {"POSTGRES_MAX_CONNS": "0"},
 		"negative pool size":   {"POSTGRES_MAX_CONNS": "-1"},
 		"zero query timeout":   {"POSTGRES_QUERY_TIMEOUT": "0s"},
+		"zero redis timeout":   {"REDIS_TIMEOUT": "0s"},
 		"bad base path":        {"API_BASE_PATH": "api/"},
 		"root base path":       {"API_BASE_PATH": "/"},
 		"cors userinfo":        {"CORS_ORIGINS": "https://user@app.example.com"},
