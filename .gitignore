@@ -11,6 +11,7 @@
 !docs/postgres-schema.md
 !docs/auth.md
 !docs/deployment.md
+!docs/redis.md
 !CHANGELOG.md
 !server/
 !server/version.py

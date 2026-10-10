@@ -41,8 +41,9 @@ it in production. This page lists what production needs; the application setting
 
 - A **primary with at least one replica and Sentinel** (three Sentinels), or a managed service with
   automatic failover. Enable AOF (`appendonly yes`) and require a password and TLS.
-- Treat Redis as a cache and coordination store: size `maxmemory` and decide the eviction policy per
-  feature as features start to rely on it.
+- Treat Redis as a cache and coordination store: set `maxmemory` with headroom, keep the eviction policy
+  `noeviction` and alert on memory use (the reasons and a sizing estimate are in [redis.md](redis.md)).
+- Redis Cluster is not supported; the application expects one primary.
 
 ### PostgreSQL (accounts and metadata)
 
