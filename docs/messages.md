@@ -146,8 +146,4 @@ WebSocket, with the same rules as the WebSocket events:
 
 ## Migration from v1 (cutover prerequisite)
 
-Before message reads switch to this store, the v1 history must be copied: `cmd/migrate-v1`
-(#54) writes every PostgreSQL message with its v1 ID and creation time (bucket from the creation time, plus a
-`message_locations` row), turns `deleted_for` into `hidden_messages` rows with `deleted_for_me` and
-`undelivered_to` into `not_delivered`, and copies the reactions. Switching reads without it would lose the
-history and show messages that users had hidden, so the cutover (#56) checks that the migration finished.
+`cmd/migrate-v1` copies the v1 history into this store, with the v1 ids, times, reactions and hidden markers ([migration-v1.md](migration-v1.md)). The switch (#56) runs it and checks its report before reads go to this store.
