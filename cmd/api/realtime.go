@@ -222,6 +222,9 @@ func (st *realtimeStack) accountDeleted(storage media.Storage, log *slog.Logger)
 		if err := st.members.Invalidate(ctx, changed...); err != nil {
 			log.WarnContext(ctx, "invalidate members", "error", err)
 		}
+		if err := st.unread.Drop(ctx, userID); err != nil {
+			log.WarnContext(ctx, "drop unread counters", "error", err)
+		}
 		for _, key := range d.AttachmentKeys {
 			if err := storage.Delete(ctx, key); err != nil {
 				log.WarnContext(ctx, "delete file of a deleted chat", "error", err)

@@ -2,6 +2,8 @@ package httpapi
 
 import (
 	"net/http"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -55,7 +57,7 @@ func clientVersions(minimum version.SemVer, basePath string, counter VersionCoun
 				return
 			}
 			if counter != nil {
-				counter.ClientAPIRequest(label(raw))
+				counter.ClientAPIRequest(label(versionLabel(v)))
 			}
 			if !version.Supported(v, minimum) {
 				WriteProblem(w, http.StatusUpgradeRequired, ErrorCodeClientOutdated)
@@ -64,6 +66,23 @@ func clientVersions(minimum version.SemVer, basePath string, counter VersionCoun
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// releasePre matches the pre-release tags the project publishes (alpha.N, beta.N, rc.N).
+var releasePre = regexp.MustCompile(`^(alpha|beta|rc)\.[0-9]{1,3}$`)
+
+// versionLabel is the metric label of a client version: build metadata dropped, and pre-releases that no
+// release uses folded into "other", so made-up values cannot use up the label slots.
+func versionLabel(v version.SemVer) string {
+	s := strconv.Itoa(v.Major) + "." + strconv.Itoa(v.Minor) + "." + strconv.Itoa(v.Patch)
+	if len(v.Pre) == 0 {
+		return s
+	}
+	pre := strings.Join(v.Pre, ".")
+	if !releasePre.MatchString(pre) {
+		return "other"
+	}
+	return s + "-" + pre
 }
 
 // MetaInfo is what GET /meta reports.

@@ -120,6 +120,11 @@ func TestProfileAndPrivacy(t *testing.T) {
 	if r.Code != http.StatusOK || r.json()["avatar_visibility"] != "contacts" || r.json()["profile_visibility"] != "nobody" || r.json()["read_receipts_enabled"] != false {
 		t.Fatalf("patch privacy: %d %s", r.Code, r.Body)
 	}
+	// A patch leaves the settings it does not name alone.
+	r = e.do(t, request{method: http.MethodPatch, path: "/me/privacy", token: alice.access, body: map[string]any{"search_visibility": "nobody"}})
+	if r.json()["avatar_visibility"] != "contacts" || r.json()["search_visibility"] != "nobody" || r.json()["read_receipts_enabled"] != false {
+		t.Fatalf("partial patch: %s", r.Body)
+	}
 	if r := e.do(t, request{method: http.MethodPatch, path: "/me/privacy", token: alice.access, body: map[string]any{"avatar_visibility": "friends"}}); r.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("unknown value: %d", r.Code)
 	}
@@ -168,8 +173,22 @@ func TestBlocksContactsAndSearch(t *testing.T) {
 	if r := e.do(t, request{method: http.MethodDelete, path: "/me/blocked-users/" + carolID, token: alice.access}); r.Code != http.StatusNoContent {
 		t.Fatalf("unblock: %d", r.Code)
 	}
-	if r := e.do(t, request{method: http.MethodDelete, path: "/me/blocked-users/" + carolID, token: alice.access}); r.Code != http.StatusNotFound {
+	if r := e.do(t, request{method: http.MethodDelete, path: "/me/blocked-users/" + carolID, token: alice.access}); r.Code != http.StatusNoContent {
 		t.Fatalf("unblock twice: %d", r.Code)
+	}
+	if r := e.do(t, request{method: http.MethodDelete, path: "/me/blocked-users/999999", token: alice.access}); r.Code != http.StatusNotFound {
+		t.Fatalf("unblock an unknown user: %d", r.Code)
+	}
+	if r := e.do(t, request{method: http.MethodGet, path: "/users/abc", token: alice.access}); r.Code != http.StatusBadRequest {
+		t.Fatalf("malformed id: %d", r.Code)
+	}
+	// The blocked user sees nothing of the blocker that privacy guards.
+	e.do(t, request{method: http.MethodPatch, path: "/me", token: alice.access, body: map[string]any{"bio": "hello"}})
+	if v := e.do(t, request{method: http.MethodGet, path: "/usernames/alice", token: bob.access}).json(); v["bio"] != nil || v["last_seen"] != nil {
+		t.Fatalf("blocker as the blocked user sees them: %v", v)
+	}
+	if v := e.do(t, request{method: http.MethodGet, path: "/usernames/alice", token: carol.access}).json(); v["bio"] != "hello" {
+		t.Fatalf("blocker as others see them: %v", v)
 	}
 	if r := e.do(t, request{method: http.MethodPut, path: "/me/blocked-users/999999", token: alice.access}); r.Code != http.StatusNotFound {
 		t.Fatalf("block unknown: %d", r.Code)
@@ -215,6 +234,13 @@ func TestBlocksContactsAndSearch(t *testing.T) {
 	if got := search(carol.access, "ali"); len(got) != 0 {
 		t.Fatalf("opted-out user found: %v", got)
 	}
+	// Two characters match usernames only (the trigram index needs three).
+	if got := search(carol.access, "bo"); len(got) != 1 || got[0] != "bobby_tables" {
+		t.Fatalf("two-character search: %v", got)
+	}
+	if got := search(carol.access, "is"); len(got) != 0 {
+		t.Fatalf("two-character display-name match: %v", got)
+	}
 	if r := e.do(t, request{method: http.MethodGet, path: "/users?q=a", token: carol.access}); r.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("short query: %d", r.Code)
 	}
@@ -245,5 +271,16 @@ func TestDeleteAccountOverHTTP(t *testing.T) {
 	}
 	if r := e.login(t, "alice"); r.Code != http.StatusUnauthorized {
 		t.Fatalf("login of a deleted account: %d", r.Code)
+	}
+}
+
+func TestVersionLabels(t *testing.T) {
+	for raw, want := range map[string]string{
+		"2.0.0": "2.0.0", "2.0.0-alpha.4": "2.0.0-alpha.4", "2.0.0-alpha.4+build.7": "2.0.0-alpha.4",
+		"2.1.3+x": "2.1.3", "2.0.0-made.up.value": "other", "2.0.0-alpha.12345": "other",
+	} {
+		if got := versionLabel(version.MustParse(raw)); got != want {
+			t.Errorf("%s: %s, want %s", raw, got, want)
+		}
 	}
 }

@@ -838,20 +838,12 @@ func (s *Service) DeleteAccount(ctx context.Context, p Principal, password strin
 	if _, err := s.verifyPassword(ctx, p.UserID, password); err != nil {
 		return postgres.DeletedAccount{}, err
 	}
-	sessions, err := s.store.Sessions().ListActive(ctx, p.UserID)
-	if err != nil {
-		return postgres.DeletedAccount{}, err
-	}
 	deleted, err := s.store.Users().DeleteAccount(ctx, p.UserID)
 	if err != nil {
 		return postgres.DeletedAccount{}, err
 	}
-	ids := make([]uuid.UUID, len(sessions))
-	for i, sess := range sessions {
-		ids[i] = sess.ID
-	}
 	// The rows are gone with the account; the cache must not keep any of them alive.
-	return deleted, s.revokeInCache(ctx, ids...)
+	return deleted, s.revokeInCache(ctx, deleted.Sessions...)
 }
 
 // ChangePassword sets a new password and revokes every other session.

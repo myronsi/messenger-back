@@ -87,7 +87,7 @@ func principalOr401(w http.ResponseWriter, r *http.Request) (auth.Principal, boo
 func parseUserID(w http.ResponseWriter, s string) (int64, bool) {
 	id, err := strconv.ParseInt(s, 10, 64)
 	if err != nil || id <= 0 {
-		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
+		WriteProblem(w, http.StatusBadRequest, ErrorCodeInvalidRequest, ProblemError{Field: "id", Message: "not an id"})
 		return 0, false
 	}
 	return id, true
@@ -109,12 +109,7 @@ func (a *AccountServer) UpdateMe(w http.ResponseWriter, r *http.Request, _ Updat
 		WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "body", Message: "send at least one field"})
 		return
 	}
-	u, err := a.o.Store.Users().Get(r.Context(), p.UserID)
-	if err != nil {
-		a.internal(w, r, "load profile", err)
-		return
-	}
-	prof := postgres.Profile{DisplayName: u.DisplayName, Bio: u.Bio, AvatarURL: u.AvatarURL}
+	var prof postgres.ProfilePatch
 	for k, v := range raw {
 		switch k {
 		case "display_name":
@@ -123,7 +118,8 @@ func (a *AccountServer) UpdateMe(w http.ResponseWriter, r *http.Request, _ Updat
 				WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "display_name", Message: "1 to 64 characters"})
 				return
 			}
-			prof.DisplayName = strings.TrimSpace(name)
+			name = strings.TrimSpace(name)
+			prof.DisplayName = &name
 		case "bio":
 			var bio *string
 			if json.Unmarshal(v, &bio) != nil || (bio != nil && utf8.RuneCountInString(*bio) > 500) {
@@ -137,13 +133,13 @@ func (a *AccountServer) UpdateMe(w http.ResponseWriter, r *http.Request, _ Updat
 					bio = nil
 				}
 			}
-			prof.Bio = bio
+			prof.Bio, prof.SetBio = bio, true
 		default:
 			WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: k, Message: "unknown field"})
 			return
 		}
 	}
-	u, err = a.o.Store.Users().UpdateProfile(r.Context(), p.UserID, prof)
+	u, err := a.o.Store.Users().PatchProfile(r.Context(), p.UserID, prof)
 	if err != nil {
 		a.internal(w, r, "update profile", err)
 		return
@@ -270,14 +266,10 @@ func (a *AccountServer) UpdatePrivacySettings(w http.ResponseWriter, r *http.Req
 	if !decode(w, r, &body) {
 		return
 	}
-	all, err := a.o.Store.Social().Privacy(r.Context(), []int64{p.UserID})
-	if err != nil {
-		a.internal(w, r, "privacy settings", err)
-		return
-	}
-	s := all[p.UserID]
+	var s postgres.PrivacyPatch
 	changed := false
-	vis := func(dst *string, v *Visibility, field string) bool {
+	set := func(dst **string, v string) { *dst, changed = &v, true }
+	vis := func(dst **string, v *Visibility, field string) bool {
 		if v == nil {
 			return true
 		}
@@ -285,7 +277,7 @@ func (a *AccountServer) UpdatePrivacySettings(w http.ResponseWriter, r *http.Req
 			WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: field, Message: "unknown value"})
 			return false
 		}
-		*dst, changed = visibilityToDB(string(*v)), true
+		set(dst, visibilityToDB(string(*v)))
 		return true
 	}
 	if !vis(&s.AvatarVisibility, body.AvatarVisibility, "avatar_visibility") ||
@@ -294,34 +286,34 @@ func (a *AccountServer) UpdatePrivacySettings(w http.ResponseWriter, r *http.Req
 		return
 	}
 	if body.ReadReceiptsEnabled != nil {
-		s.ReadReceiptsEnabled, changed = *body.ReadReceiptsEnabled, true
+		s.ReadReceiptsEnabled, changed = body.ReadReceiptsEnabled, true
 	}
 	if body.DirectMessages != nil {
 		if !body.DirectMessages.Valid() {
 			WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "direct_messages", Message: "unknown value"})
 			return
 		}
-		s.DirectMessages, changed = string(*body.DirectMessages), true
+		set(&s.DirectMessages, string(*body.DirectMessages))
 	}
 	if body.GroupInvites != nil {
 		if !body.GroupInvites.Valid() {
 			WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "group_invites", Message: "unknown value"})
 			return
 		}
-		s.GroupInvites, changed = visibilityToDB(string(*body.GroupInvites)), true
+		set(&s.GroupInvites, visibilityToDB(string(*body.GroupInvites)))
 	}
 	if body.SearchVisibility != nil {
 		if !body.SearchVisibility.Valid() {
 			WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "search_visibility", Message: "unknown value"})
 			return
 		}
-		s.SearchVisibility, changed = string(*body.SearchVisibility), true
+		set(&s.SearchVisibility, string(*body.SearchVisibility))
 	}
 	if !changed {
 		WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "body", Message: "send at least one setting"})
 		return
 	}
-	if _, err := a.o.Store.Social().UpdatePrivacy(r.Context(), s); err != nil {
+	if _, err := a.o.Store.Social().PatchPrivacy(r.Context(), p.UserID, s); err != nil {
 		if errors.Is(err, postgres.ErrInvalid) {
 			WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed)
 			return
@@ -471,10 +463,14 @@ func (a *AccountServer) UnblockUser(w http.ResponseWriter, r *http.Request, user
 	if !ok {
 		return
 	}
+	// Unblocking someone who is not blocked is fine (a retried request); only an unknown user is 404.
 	err := a.o.Store.Social().Unblock(r.Context(), p.UserID, target)
 	if errors.Is(err, postgres.ErrNotFound) {
-		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
-		return
+		if _, gerr := a.o.Store.Users().Get(r.Context(), target); errors.Is(gerr, postgres.ErrNotFound) {
+			WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
+			return
+		}
+		err = nil
 	}
 	if err != nil {
 		a.internal(w, r, "unblock user", err)

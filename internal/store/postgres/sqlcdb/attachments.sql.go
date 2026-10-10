@@ -270,9 +270,15 @@ func (q *Queries) LinkAttachment(ctx context.Context, arg LinkAttachmentParams) 
 }
 
 const listAttachmentKeysOfChats = `-- name: ListAttachmentKeysOfChats :many
-SELECT storage_key FROM attachments WHERE chat_id = ANY($1::bigint[]) ORDER BY storage_key
+SELECT k::text FROM (
+    SELECT storage_key AS k FROM attachments WHERE chat_id = ANY($1::bigint[])
+    UNION ALL
+    SELECT thumbnail_key FROM attachments WHERE chat_id = ANY($1::bigint[]) AND thumbnail_key IS NOT NULL
+) keys
+ORDER BY k
 `
 
+// The stored objects of the chats' v1 attachments: files and thumbnails.
 func (q *Queries) ListAttachmentKeysOfChats(ctx context.Context, chatIds []int64) ([]string, error) {
 	rows, err := q.db.Query(ctx, listAttachmentKeysOfChats, chatIds)
 	if err != nil {
@@ -281,11 +287,11 @@ func (q *Queries) ListAttachmentKeysOfChats(ctx context.Context, chatIds []int64
 	defer rows.Close()
 	items := []string{}
 	for rows.Next() {
-		var storage_key string
-		if err := rows.Scan(&storage_key); err != nil {
+		var k string
+		if err := rows.Scan(&k); err != nil {
 			return nil, err
 		}
-		items = append(items, storage_key)
+		items = append(items, k)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

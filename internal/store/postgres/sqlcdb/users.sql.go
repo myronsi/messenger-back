@@ -7,6 +7,8 @@ package sqlcdb
 
 import (
 	"context"
+
+	"github.com/google/uuid"
 )
 
 const createUser = `-- name: CreateUser :one
@@ -37,6 +39,30 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.AvatarAttachmentID,
 	)
 	return i, err
+}
+
+const deleteSessionsOfUser = `-- name: DeleteSessionsOfUser :many
+DELETE FROM user_sessions WHERE user_id = $1 RETURNING id
+`
+
+func (q *Queries) DeleteSessionsOfUser(ctx context.Context, userID int64) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, deleteSessionsOfUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const deleteUser = `-- name: DeleteUser :execrows
@@ -172,6 +198,45 @@ func (q *Queries) LockUserShared(ctx context.Context, id int64) (int64, error) {
 	var id_2 int64
 	err := row.Scan(&id_2)
 	return id_2, err
+}
+
+const patchUserProfile = `-- name: PatchUserProfile :one
+UPDATE users
+SET display_name = COALESCE($1, display_name),
+    bio = CASE WHEN $2::bool THEN $3 ELSE bio END
+WHERE id = $4
+RETURNING id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id
+`
+
+type PatchUserProfileParams struct {
+	DisplayName *string
+	SetBio      bool
+	Bio         *string
+	ID          int64
+}
+
+// Changes only what is given, so concurrent edits of different fields do not undo each other.
+func (q *Queries) PatchUserProfile(ctx context.Context, arg PatchUserProfileParams) (User, error) {
+	row := q.db.QueryRow(ctx, patchUserProfile,
+		arg.DisplayName,
+		arg.SetBio,
+		arg.Bio,
+		arg.ID,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.DisplayName,
+		&i.PasswordHash,
+		&i.AvatarUrl,
+		&i.Bio,
+		&i.LastSeenAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.AvatarAttachmentID,
+	)
+	return i, err
 }
 
 const rehashPassword = `-- name: RehashPassword :execrows
