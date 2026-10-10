@@ -32,13 +32,13 @@ Run the dry run first: it decrypts every TOTP secret too, so a wrong `V1_SECRET_
 
 Every write is idempotent (upserts, `ON CONFLICT DO NOTHING`, idempotent ScyllaDB writes), so a run can be repeated or interrupted and started again. A rerun also takes over what changed in v1 since:
 - **Users:** password hashes, display names, bios and last-seen times are updated. Sessions revoked or expired in v1 since are revoked in v2 too.
-- **Messages:** continue after the last batch a run finished (`migrate_v1_state`); `-restart-messages` copies them all again. A message in a chat the chats phase has not copied yet stops the run (run the chats phase again) rather than being skipped for good.
+- **Messages:** continue after the last batch a run finished (`migrate_v1_state`); `-restart-messages` copies them all again. A message in a chat the chats phase has not copied yet stops the run (run the chats phase again) rather than being skipped for good. Messages of chats the chats phase left out on purpose are counted (`messages_skipped_chat`) and skipped.
 - **Files:** copied once each (`migrate_v1_files` maps the v1 path and purpose to its attachment, whose id follows from them), so a rerun or a forwarded file never copies twice. A file that exists but cannot be stored stops the run.
-- **Merged chats:** `migrate_v1_chats` maps every v1 chat to the v2 chat it became.
+- **Merged and skipped chats:** `migrate_v1_chats` maps every v1 chat to the v2 chat it became; `migrate_v1_skipped_chats` lists the ones left out.
 
 A row v2 refuses does not stop its whole batch: it is counted (`<table>_rows_refused`) and logged by id.
 
-The three `migrate_v1_*` tables can be dropped once the switch is final.
+The four `migrate_v1_*` tables can be dropped once the switch is final.
 
 ## What becomes what
 
@@ -56,7 +56,7 @@ The three `migrate_v1_*` tables can be dropped once the switch is final.
   - Access tokens do not carry over: clients refresh once.
   - The recovery shares are copied as they are; their redesign is #57.
 - **Chats:**
-  - `one-on-one` chats become direct chats. A pair that v1 had several chats for gets one (the lowest id), and the others' messages and pins move into it.
+  - `one-on-one` chats become direct chats. A pair that v1 had several chats for gets one (the lowest id), and the others' messages and pins move into it. Direct chats with a missing user or with oneself are left out, with their messages.
   - Groups keep their id. `groups.admin_id` is the owner, any other `owner` role becomes `admin`, and unknown roles become `member`.
   - Pins and approval requests move along; requests of a shape v2 refuses are dropped.
 - **Messages:**

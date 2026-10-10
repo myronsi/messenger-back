@@ -112,7 +112,7 @@ After the window, there is no rollback: fix forward on `1.0.x`.
 
 ## After a stable period
 
-- Drop the `migrate_v1_chats`, `migrate_v1_files` and `migrate_v1_state` tables, and remove `V1_SECRET_KEY` from the secret manager.
+- Drop the `migrate_v1_*` tables (`docs/migration-v1.md`), and remove `V1_SECRET_KEY` from the secret manager.
 - After the agreed time, archive and then delete the v1 database, the `messenger_static` copy and the v1 backups.
 - Remove the Python code from `master`: `server/`, `tests/`, `Dockerfile`, `compose.yaml`, `requirements*.txt`, `start.sh` and the Python CI jobs. Update the README.
 - Close B10–B20 as superseded by the Go backend.

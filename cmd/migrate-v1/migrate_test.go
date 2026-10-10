@@ -163,6 +163,9 @@ func fixture(t *testing.T, v1 *pgxpool.Pool, static string, fkey []byte) {
 	// File JSON pointing at someone's avatar is not a file message, whatever message_attachments says.
 	exec(`INSERT INTO messages (id, chat_id, sender_id, sender_name, content, timestamp) VALUES
 		(12, 20, 2, 'Bob', '{"file_url":"/static/avatars/id-1/abc.png","file_name":"a.png","file_type":"image"}', $1)`, at(12))
+	// A direct chat with oneself, which v2 has no place for: it and its message are left out.
+	exec(`INSERT INTO chats (id, name, type, user1_id, user2_id) VALUES (30, 'me', 'one-on-one', 4, 4)`)
+	exec(`INSERT INTO messages (id, chat_id, sender_id, sender_name, content, timestamp) VALUES (14, 30, 4, 'Carol', 'note to self', $1)`, at(14))
 	// A message of a user who deleted the account since.
 	exec(`INSERT INTO messages (id, chat_id, sender_id, sender_name, content, timestamp) VALUES (13, 20, 99, 'Gone', 'bye', $1)`, at(13))
 	exec(`INSERT INTO message_attachments (message_id, file_path) VALUES (4, 'uploads/5f0c8a64_photo.png'), (5, 'uploads/gone_doc.pdf'),
@@ -218,7 +221,7 @@ func TestMigration(t *testing.T) {
 	}
 	var users int
 	_ = pg.Pool().QueryRow(ctx, `SELECT count(*) FROM users`).Scan(&users)
-	if users != 0 || dry.report.Counts["messages"] != 13 || dry.report.Counts["users_renamed"] != 2 || dry.report.Counts["message_files_missing"] != 1 ||
+	if users != 0 || dry.report.Counts["messages"] != 13 || dry.report.Counts["messages_skipped_chat"] != 1 || dry.report.Counts["users_renamed"] != 2 || dry.report.Counts["message_files_missing"] != 1 ||
 		dry.report.Counts["files_to_copy"] != 3 || dry.report.Counts["file_messages_kept_as_text"] != 0 {
 		t.Fatalf("dry run: %d users written, counts %v", users, dry.report.Counts)
 	}
@@ -434,7 +437,7 @@ func TestMigration(t *testing.T) {
 		t.Fatal(err)
 	}
 	after, err := repo.Page(ctx, scylla.PageQuery{ChatID: 10, Limit: 50})
-	if err != nil || len(after.Messages) != 4 || restart.report.Counts["messages"] != 13 {
+	if err != nil || len(after.Messages) != 4 || restart.report.Counts["messages"] != 13 || restart.report.Counts["messages_skipped_chat"] != 1 {
 		t.Fatalf("restart: %d messages, %v %v", len(after.Messages), err, restart.report.Counts)
 	}
 	if r, _ := repo.Reactions(ctx, 10, []int64{1}); len(r[1]) != 1 {
