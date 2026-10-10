@@ -108,6 +108,7 @@ func run() error {
 		{Name: "redis", Ping: rd.Ping},
 		{Name: "scylla", Ping: sc.Ping},
 		{Name: "elasticsearch", Ping: es.Ping},
+		{Name: "ids", Ping: rt.ids.Ready},
 	}
 	if storagePing != nil {
 		checks = append(checks, httpapi.Check{Name: "object_storage", Ping: storagePing})

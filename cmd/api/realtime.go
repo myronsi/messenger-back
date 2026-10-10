@@ -35,6 +35,8 @@ type realtimeStack struct {
 	events    *events.Log
 	limiter   *redis.RateLimiter
 	bus       *redis.Bus
+	// ids issues message ids once the node number is leased; /readyz waits for it.
+	ids *lazyIDs
 	// ctx runs the background loops; it ends in stop, after the sockets are closed, so their last
 	// presence changes still go out.
 	ctx    context.Context
@@ -65,6 +67,17 @@ func (l *lazyIDs) Next() (int64, error) {
 		return 0, errNoNode
 	}
 	return g.Next()
+}
+
+// Ready fails until IDs can be issued: on a fresh Redis that is only after the lease quarantine, and an API
+// that took traffic before would accept chats and refuse their messages.
+func (l *lazyIDs) Ready(context.Context) error {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	if l.gen == nil {
+		return errNoNode
+	}
+	return nil
 }
 
 // startIDs gives the process its Snowflake generator: from NODE_ID, or by leasing a free node number from
@@ -130,6 +143,7 @@ func startRealtime(p *app.Process, pg *postgres.Store, rd *redis.Store, sc *scyl
 	instance := app.InstanceID(cfg.Realtime.InstanceID)
 	rdb := rd.Client()
 	idsrc := startIDs(p, rdb, instance, st)
+	st.ids = idsrc
 
 	repo := scylla.NewMessages(sc, cfg.Scylla.Timeout)
 	st.events = events.NewLog(redis.NewStreams(rdb, "", 0))

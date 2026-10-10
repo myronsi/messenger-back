@@ -47,7 +47,7 @@ make docker            # distroless, non-root image from go.Dockerfile
 ## Behaviour worth knowing
 
 - The process exits with a non-zero status and a message that names the variables (never the values) when a required setting is missing or weak: `JWT_SECRET` and `RECOVERY_PEPPER` need 32+ characters, `ENCRYPTION_KEY` is base64 of 32 bytes.
-- `/healthz` is process liveness. `/readyz` checks PostgreSQL, Redis, ScyllaDB and Elasticsearch and answers only `ok` / `unavailable` per store. Neither, nor `/metrics`, should be exposed through the public proxy.
+- `/healthz` is process liveness. `/readyz` checks PostgreSQL, Redis, ScyllaDB and Elasticsearch (object storage too, when it is S3), and in the API that it can issue message ids (`ids`: the Snowflake node lease, which on a fresh Redis waits about 40 s). It answers only `ok` / `unavailable` per check. Neither, nor `/metrics`, should be exposed through the public proxy.
 - Logs are JSON and carry a `request_id`. Message content, tokens and secrets are never logged: sensitive attribute names are redacted and request paths with query strings are not logged, only the route pattern.
 - Shutdown on SIGINT/SIGTERM: `/readyz` turns 503, optionally waits `HTTP_DRAIN_DELAY`, closes WebSockets with code 1012 "reconnect", and finishes in-flight requests within `HTTP_SHUTDOWN_TIMEOUT`.
 - CORS origins come from `CORS_ORIGINS`; `*` is rejected. Request bodies are limited by `HTTP_MAX_BODY_BYTES`.

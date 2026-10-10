@@ -35,7 +35,8 @@ func (h *health) healthz(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// readyz reports whether PostgreSQL, Redis, ScyllaDB and Elasticsearch answer. The response names
+// readyz reports whether PostgreSQL, Redis, ScyllaDB and Elasticsearch answer (and whatever else the
+// process adds, such as the id lease of the API). The response names
 // the failing stores but never the error text, which can contain host names.
 func (h *health) readyz(w http.ResponseWriter, r *http.Request) {
 	results := make(map[string]string, len(h.checks))

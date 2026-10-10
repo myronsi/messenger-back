@@ -22,7 +22,7 @@ GB of images and takes a few minutes (ScyllaDB needs up to a minute to start); l
 under a minute.
 
 ```sh
-curl http://127.0.0.1:8080/readyz   # {"checks":{"elasticsearch":"ok","postgres":"ok","redis":"ok","scylla":"ok"},"status":"ready"}
+curl http://127.0.0.1:8080/readyz   # {"checks":{"elasticsearch":"ok","ids":"ok","postgres":"ok","redis":"ok","scylla":"ok"},"status":"ready"}
 make dev-logs                       # follow all logs
 make down                           # stop, keep the data
 docker compose -f compose.dev.yaml down --volumes   # stop and wipe all data
@@ -51,7 +51,9 @@ in `.env.example`-style before generating, or edit the matching URL in `.env` by
 
 `api` and `worker` start only after every store reports healthy and every init step has finished. They have no Compose
 healthcheck (the images are distroless), so `--wait` returns once they are running: the listeners may need a moment, so retry
-`curl http://127.0.0.1:8080/readyz` if the first call is refused.
+`curl http://127.0.0.1:8080/readyz` if the first call is refused. On a fresh Redis (a first start, or after `down --volumes`) it
+reports `"ids":"unavailable"` for about 40 s: the API waits that long before it issues message ids, in case another instance
+still holds a node number Redis has forgotten.
 
 ## Init steps
 
