@@ -28,6 +28,7 @@ type realtimeStack struct {
 	gateway   *realtime.Gateway
 	fanout    *realtime.Fanout
 	messages  *messages.Service
+	store     scylla.MessageRepository
 	directory *users.Directory
 	members   *redis.Members
 	unread    *redis.Unread
@@ -174,7 +175,7 @@ func startRealtime(p *app.Process, pg *postgres.Store, rd *redis.Store, sc *scyl
 	}
 	st.gateway, st.fanout, st.messages, st.bus, st.directory = gw, fan, svc, bus, dir
 	st.limiter = redis.NewRateLimiter(rdb, "")
-	st.members, st.unread = members, redis.NewUnread(rdb, "")
+	st.members, st.unread, st.store = members, redis.NewUnread(rdb, ""), repo
 	st.done.Go(func() { bus.Run(st.ctx) })
 	st.done.Go(func() { presence.Run(st.ctx) })
 	return st, nil

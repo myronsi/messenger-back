@@ -15,6 +15,7 @@ import (
 
 	"github.com/myronsi/messenger-back/internal/app"
 	"github.com/myronsi/messenger-back/internal/auth"
+	"github.com/myronsi/messenger-back/internal/chats"
 	"github.com/myronsi/messenger-back/internal/config"
 	"github.com/myronsi/messenger-back/internal/httpapi"
 	"github.com/myronsi/messenger-back/internal/media"
@@ -131,6 +132,12 @@ func run() error {
 		).WithAccount(httpapi.NewAccountServer(httpapi.AccountOptions{
 			Store: pg, Directory: rt.directory, Deleter: authSvc, AfterDeletion: rt.accountDeleted(storage, log),
 			Events: rt.events, Limiter: rt.limiter, BasePath: cfg.HTTP.BasePath, Log: log,
+		})).WithChats(httpapi.NewChatServer(httpapi.ChatOptions{
+			Service: chats.New(chats.Deps{
+				Store: pg, Messages: rt.store, Unread: rt.unread, Members: rt.members, Sender: rt.messages,
+				Directory: rt.directory, Notifier: rt.fanout, Events: rt.events, DeleteFile: storage.Delete, Log: log,
+			}),
+			Limiter: rt.limiter, BasePath: cfg.HTTP.BasePath, Log: log,
 		})).WithMeta(httpapi.MetaInfo{
 			BackendVersion: version.Backend, Commit: os.Getenv("APP_COMMIT"), MinClientAPIVersion: cfg.Realtime.MinClientAPIVersion,
 		}),

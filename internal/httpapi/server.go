@@ -9,8 +9,12 @@ type Server struct {
 	*AuthServer
 	media   *MediaServer
 	account *AccountServer
+	chats   *ChatServer
 	meta    MetaInfo
 }
+
+// WithChats adds the chat list, direct chat, pin, read and request endpoints.
+func (s *Server) WithChats(c *ChatServer) *Server { s.chats = c; return s }
 
 // WithAccount adds the profile, privacy, blocking and user endpoints.
 func (s *Server) WithAccount(a *AccountServer) *Server { s.account = a; return s }
@@ -188,4 +192,94 @@ func (s *Server) ReplacePrivacyExceptions(w http.ResponseWriter, r *http.Request
 		return
 	}
 	s.account.ReplacePrivacyExceptions(w, r, settingKey, effect, params)
+}
+
+// ListChats delegates to the chat endpoints (GET /chats).
+func (s *Server) ListChats(w http.ResponseWriter, r *http.Request, params ListChatsParams) {
+	if s.chats == nil {
+		s.AuthServer.ListChats(w, r, params)
+		return
+	}
+	s.chats.ListChats(w, r, params)
+}
+
+// CreateChat delegates to the chat endpoints (POST /chats).
+func (s *Server) CreateChat(w http.ResponseWriter, r *http.Request, params CreateChatParams) {
+	if s.chats == nil {
+		s.AuthServer.CreateChat(w, r, params)
+		return
+	}
+	s.chats.CreateChat(w, r, params)
+}
+
+// GetChat delegates to the chat endpoints (GET /chats/{id}).
+func (s *Server) GetChat(w http.ResponseWriter, r *http.Request, chatID ChatId, params GetChatParams) {
+	if s.chats == nil {
+		s.AuthServer.GetChat(w, r, chatID, params)
+		return
+	}
+	s.chats.GetChat(w, r, chatID, params)
+}
+
+// DeleteChat delegates to the chat endpoints (DELETE /chats/{id}).
+func (s *Server) DeleteChat(w http.ResponseWriter, r *http.Request, chatID ChatId, params DeleteChatParams) {
+	if s.chats == nil {
+		s.AuthServer.DeleteChat(w, r, chatID, params)
+		return
+	}
+	s.chats.DeleteChat(w, r, chatID, params)
+}
+
+// PinChat delegates to the chat endpoints (PUT /chats/{id}/pin).
+func (s *Server) PinChat(w http.ResponseWriter, r *http.Request, chatID ChatId, params PinChatParams) {
+	if s.chats == nil {
+		s.AuthServer.PinChat(w, r, chatID, params)
+		return
+	}
+	s.chats.PinChat(w, r, chatID, params)
+}
+
+// UnpinChat delegates to the chat endpoints (DELETE /chats/{id}/pin).
+func (s *Server) UnpinChat(w http.ResponseWriter, r *http.Request, chatID ChatId, params UnpinChatParams) {
+	if s.chats == nil {
+		s.AuthServer.UnpinChat(w, r, chatID, params)
+		return
+	}
+	s.chats.UnpinChat(w, r, chatID, params)
+}
+
+// MarkChatRead delegates to the chat endpoints (POST /chats/{id}/read).
+func (s *Server) MarkChatRead(w http.ResponseWriter, r *http.Request, chatID ChatId, params MarkChatReadParams) {
+	if s.chats == nil {
+		s.AuthServer.MarkChatRead(w, r, chatID, params)
+		return
+	}
+	s.chats.MarkChatRead(w, r, chatID, params)
+}
+
+// ListApprovalRequests delegates to the chat endpoints (GET /requests).
+func (s *Server) ListApprovalRequests(w http.ResponseWriter, r *http.Request, params ListApprovalRequestsParams) {
+	if s.chats == nil {
+		s.AuthServer.ListApprovalRequests(w, r, params)
+		return
+	}
+	s.chats.ListApprovalRequests(w, r, params)
+}
+
+// ApproveRequest delegates to the chat endpoints (POST /requests/{id}/approve).
+func (s *Server) ApproveRequest(w http.ResponseWriter, r *http.Request, requestID RequestId, params ApproveRequestParams) {
+	if s.chats == nil {
+		s.AuthServer.ApproveRequest(w, r, requestID, params)
+		return
+	}
+	s.chats.ApproveRequest(w, r, requestID, params)
+}
+
+// RejectRequest delegates to the chat endpoints (POST /requests/{id}/reject).
+func (s *Server) RejectRequest(w http.ResponseWriter, r *http.Request, requestID RequestId, params RejectRequestParams) {
+	if s.chats == nil {
+		s.AuthServer.RejectRequest(w, r, requestID, params)
+		return
+	}
+	s.chats.RejectRequest(w, r, requestID, params)
 }

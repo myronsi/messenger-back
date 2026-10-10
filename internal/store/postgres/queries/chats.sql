@@ -53,7 +53,7 @@ UPDATE participants SET role = @role WHERE chat_id = @chat_id AND user_id = @use
 -- name: MarkRead :execrows
 -- The read marker only moves forward: no row is updated when it is already at or past the message.
 UPDATE participants
-SET last_read_message_id = @message_id::bigint
+SET last_read_message_id = @message_id::bigint, last_read_at = now()
 WHERE chat_id = @chat_id AND user_id = @user_id
   AND (last_read_message_id IS NULL OR last_read_message_id < @message_id::bigint);
 

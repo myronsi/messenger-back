@@ -123,6 +123,61 @@ type Chat struct {
 	CreatedBy          *int64
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
+	// LastMessageID is the newest message (nil before the first one); LastActivityAt orders the chat list.
+	LastMessageID  *int64
+	LastActivityAt time.Time
+}
+
+// ChatEntry is a chat in one user's list: the chat and the user's own relation to it.
+type ChatEntry struct {
+	Chat              Chat
+	Role              Role
+	LastReadMessageID *int64
+	PinnedAt          *time.Time
+	// SortAt is the pin time of a pinned chat and the last activity of any other.
+	SortAt time.Time
+}
+
+// ChatCursor continues a chat list after the entry it was made from.
+type ChatCursor struct {
+	Unpinned bool
+	SortAt   time.Time
+	ChatID   int64
+}
+
+// CursorOf returns the cursor that continues after the entry.
+func (e ChatEntry) CursorOf() ChatCursor {
+	return ChatCursor{Unpinned: e.PinnedAt == nil, SortAt: e.SortAt, ChatID: e.Chat.ID}
+}
+
+// ReadMarker is how far a member has read a chat.
+type ReadMarker struct {
+	ChatID    int64
+	UserID    int64
+	MessageID *int64
+	At        *time.Time
+}
+
+// Approval request types and statuses.
+const (
+	RequestDirectMessage = "direct_message"
+	RequestGroupInvite   = "group_invite"
+	RequestPending       = "pending"
+	RequestApproved      = "approved"
+	RequestRejected      = "rejected"
+)
+
+// ApprovalRequest asks a user to accept a direct chat or a group invitation.
+type ApprovalRequest struct {
+	ID          int64
+	Type        string
+	RequesterID int64
+	RecipientID int64
+	Status      string
+	MessageText *string
+	ChatID      *int64
+	CreatedAt   time.Time
+	RespondedAt *time.Time
 }
 
 // Participant is a user's membership of a chat.
@@ -131,6 +186,7 @@ type Participant struct {
 	UserID            int64
 	Role              Role
 	LastReadMessageID *int64
+	LastReadAt        *time.Time
 	JoinedAt          time.Time
 }
 
@@ -169,6 +225,40 @@ type ChatRepository interface {
 	MarkRead(ctx context.Context, chatID, userID, messageID int64) (advanced bool, err error)
 	// Delete removes the chat and returns the object-storage keys of its attachments.
 	Delete(ctx context.Context, chatID int64) (attachmentKeys []string, err error)
+
+	// OpenDirect is CreateDirect that also closes the pair's pending direct-message requests and returns them.
+	OpenDirect(ctx context.Context, creatorID, otherID int64) (chat Chat, created bool, closed []ApprovalRequest, err error)
+	// DirectBetween returns the direct chat of two users (ErrNotFound when they have none).
+	DirectBetween(ctx context.Context, a, b int64) (Chat, error)
+	// TouchActivity records a new message: the chat moves up in its members' lists.
+	TouchActivity(ctx context.Context, chatID, messageID int64, at time.Time) error
+	// Entries pages through a user's chats: pinned first, then by last activity (after: nil from the start).
+	Entries(ctx context.Context, userID int64, after *ChatCursor, limit int) ([]ChatEntry, error)
+	// Entry is one chat of the user's list; ErrNotFound when the user is not in it.
+	Entry(ctx context.Context, userID, chatID int64) (ChatEntry, error)
+	// OtherMembers returns the read markers of the other members of the chats.
+	OtherMembers(ctx context.Context, userID int64, chatIDs []int64) ([]ReadMarker, error)
+	// Pin pins a chat of the user; ErrConflict when maxPins chats are pinned already, ErrNotFound when the
+	// user is not in the chat. Pinning a pinned chat changes nothing.
+	Pin(ctx context.Context, userID, chatID int64, maxPins int) error
+	// Unpin unpins the chat (unpinned already is fine).
+	Unpin(ctx context.Context, userID, chatID int64) error
+}
+
+// ApprovalRepository keeps the approval requests.
+type ApprovalRepository interface {
+	// RequestDirect asks the recipient for a direct chat; a pending request of the pair is returned as it is
+	// (created false). ErrConflict: the pair has a chat (opened meanwhile).
+	RequestDirect(ctx context.Context, requesterID, recipientID int64, message *string) (req ApprovalRequest, created bool, err error)
+	Get(ctx context.Context, id int64) (ApprovalRequest, error)
+	// Pending is the recipient's inbox, newest first, before the request id (0: from the start).
+	Pending(ctx context.Context, recipientID, beforeID int64, limit int) ([]ApprovalRequest, error)
+	// ApproveDirect accepts a pending direct-message request of the recipient and returns the chat it opens
+	// (created false when the pair had one) and the other requests of the pair it closed. ErrNotFound: no
+	// such direct-message request for this recipient; ErrConflict: it was answered already.
+	ApproveDirect(ctx context.Context, id, recipientID int64) (req ApprovalRequest, chat Chat, created bool, closed []ApprovalRequest, err error)
+	// Reject turns down a pending direct-message request of the recipient (ErrNotFound, ErrConflict as above).
+	Reject(ctx context.Context, id, recipientID int64) (ApprovalRequest, error)
 }
 
 // Attachment purposes and kinds (see media).

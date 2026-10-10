@@ -59,6 +59,8 @@ type Chat struct {
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
 	AvatarAttachmentID *uuid.UUID
+	LastMessageID      *int64
+	LastActivityAt     time.Time
 }
 
 type Participant struct {
@@ -67,6 +69,7 @@ type Participant struct {
 	Role              string
 	LastReadMessageID *int64
 	JoinedAt          time.Time
+	LastReadAt        *time.Time
 }
 
 type RecoveryToken struct {

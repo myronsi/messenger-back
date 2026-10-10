@@ -2,6 +2,16 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.0.0-alpha.5
+
+Chats, found while implementing the chat list:
+
+- `DELETE /chats/{chat_id}` deletes a direct chat for both users (as v1 did), not "for yourself"; a group is `422`.
+- `POST /chats` can answer `422` (a chat with yourself, a too long `initial_message`).
+- `PUT /chats/{chat_id}/pin`: at most 10 pinned chats (`409`).
+- `GET /chats` documents its order, what `last_message` and its `read_by` hold, and that `unread_count` stops at 999.
+- `DELETE /me` can answer `429` (repeated wrong passwords).
+
 ## 2.0.0-alpha.4
 
 Media, found while implementing uploads:

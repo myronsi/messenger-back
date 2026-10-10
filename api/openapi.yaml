@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.0.0-alpha.4
+  version: 2.0.0-alpha.5
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -324,6 +324,7 @@ paths:
           description: Account deleted
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
   /me/avatar:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
@@ -884,7 +885,12 @@ paths:
       tags: [chats]
       operationId: listChats
       summary: My chats with last message and unread count
-      description: One request replaces `GET /chats/list/{username}` and `GET /groups/list/{username}`; pinned chats come first.
+      description: |
+        One request replaces `GET /chats/list/{username}` and `GET /groups/list/{username}`.
+        Pinned chats come first (most recently pinned first), then the others by their last
+        message (newest first). `last_message` is the newest message the caller can see; in
+        direct chats its `read_by` holds the other user once they read it (with read receipts
+        on), in groups it is empty. `unread_count` stops at 999.
       parameters:
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/After"
@@ -931,6 +937,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
   /chats/{chat_id}:
     parameters:
@@ -954,8 +961,11 @@ paths:
     delete:
       tags: [chats]
       operationId: deleteChat
-      summary: Delete a direct chat for yourself
-      description: For groups use `DELETE /groups/{chat_id}` (owner) or `POST /groups/{chat_id}/leave`.
+      summary: Delete a direct chat
+      description: |
+        Deletes the chat and its messages for both users (as v1 did); both get `chat_deleted`.
+        For groups use `DELETE /groups/{chat_id}` (owner) or `POST /groups/{chat_id}/leave`;
+        a group here is `422`.
       responses:
         "426": { $ref: "#/components/responses/ClientOutdated" }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -963,6 +973,7 @@ paths:
           description: Deleted
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
   /chats/{chat_id}/pin:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
@@ -972,6 +983,7 @@ paths:
       tags: [chats]
       operationId: pinChat
       summary: Pin a chat
+      description: At most 10 chats can be pinned (`409` beyond that). Pinning a pinned chat changes nothing.
       responses:
         "426": { $ref: "#/components/responses/ClientOutdated" }
         "400": { $ref: "#/components/responses/BadRequest" }

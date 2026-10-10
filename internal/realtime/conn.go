@@ -228,7 +228,7 @@ func (c *conn) handle(ev clientEvent) {
 	case "delete":
 		err = svc.Delete(ctx, c.userID, ev.ChatID, ev.Delete.MessageID, ev.Delete.Scope)
 	case "read":
-		err = svc.Read(ctx, c.userID, ev.ChatID, ev.Target.MessageID)
+		_, err = svc.Read(ctx, c.userID, ev.ChatID, ev.Target.MessageID)
 	case "reaction_add", "reaction_remove":
 		err = svc.React(ctx, c.userID, ev.ChatID, ev.Reaction.MessageID, ev.Reaction.Emoji, ev.Type == "reaction_add")
 	case "typing":

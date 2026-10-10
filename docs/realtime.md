@@ -109,5 +109,6 @@ ID node lease stop.
 
 ## Not here yet
 
-`chat_created`, `chat_list_update`, `group_created`, `group_updated` and `approval_request_created` are sent by the
-chat, group and request endpoints (#53). Load tests with 10 000 idle connections per instance are part of #55.
+`group_created` and `group_updated` come with the group endpoints (#53); `chat_created`, `chat_list_update`,
+`chat_deleted` and `approval_request_created` are sent by the chat and request endpoints ([chats.md](chats.md)). Load
+tests with 10 000 idle connections per instance are part of #55.
