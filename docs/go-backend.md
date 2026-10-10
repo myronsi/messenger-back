@@ -7,7 +7,7 @@ The Go backend replaces the Python one (`server/`). Its skeleton is in place; fe
 | Path | Purpose |
 |---|---|
 | `cmd/api` | REST API and realtime gateway |
-| `cmd/worker` | event consumers (search indexing, background jobs); serves `/healthz` and `/metrics` on `WORKER_ADDR` |
+| `cmd/worker` | event consumers ([events.md](events.md)) and maintenance jobs; serves `/healthz` and `/metrics` on `WORKER_ADDR` |
 | `cmd/migrate-v1` | one-time data migration from the Python backend (MSGC-77), a stub for now |
 | `internal/app` | process plumbing shared by the commands: config, logger, tracing, signals, HTTP server lifecycle |
 | `internal/config` | environment configuration, validated on startup |
@@ -17,6 +17,7 @@ The Go backend replaces the Python one (`server/`). Its skeleton is in place; fe
 | `internal/messages` | message use cases with their authorization checks |
 | `internal/users` | users as other users may see them (privacy) |
 | `internal/version` | the contract version and SemVer comparison |
+| `internal/events`, `internal/jobs` | domain events on Redis streams and the worker's handlers |
 | `internal/testenv` | fresh stores for integration tests |
 | `internal/store/{postgres,redis,scylla,elastic}` | store clients with `Ping` for `/readyz`; PostgreSQL also has the repositories ([schema](postgres-schema.md)); Redis has presence, pub/sub, unread counters, the membership cache and rate limits ([redis.md](redis.md)); ScyllaDB has the message store ([messages.md](messages.md)) |
 | `internal/ids` | Snowflake IDs for messages |

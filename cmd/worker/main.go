@@ -1,13 +1,20 @@
-// Command worker runs the event consumers: search indexing and background jobs.
+// Command worker runs the event consumers (chat cleanup, later search indexing and push) and the
+// maintenance jobs.
 package main
 
 import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync"
+
+	"github.com/gocql/gocql"
 
 	"github.com/myronsi/messenger-back/internal/app"
+	"github.com/myronsi/messenger-back/internal/jobs"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
+	"github.com/myronsi/messenger-back/internal/store/redis"
+	"github.com/myronsi/messenger-back/internal/store/scylla"
 )
 
 func main() { app.Exit("worker", run) }
@@ -18,25 +25,55 @@ func run() error {
 		return err
 	}
 	defer p.Close()
+	cfg, log := p.Cfg, p.Log
 
-	pg, err := postgres.New(p.Ctx, p.Cfg.DatabaseURL.Reveal(), postgres.Options{
-		MaxConns:     p.Cfg.Postgres.MaxConns,
-		QueryTimeout: p.Cfg.Postgres.QueryTimeout,
+	pg, err := postgres.New(p.Ctx, cfg.DatabaseURL.Reveal(), postgres.Options{
+		MaxConns:     cfg.Postgres.MaxConns,
+		QueryTimeout: cfg.Postgres.QueryTimeout,
 	})
 	if err != nil {
 		return err
 	}
 	defer pg.Close()
-	maintCtx, stopMaintenance := context.WithCancel(p.Ctx)
-	maintenanceDone := make(chan struct{})
-	go func() {
-		defer close(maintenanceDone)
-		maintain(maintCtx, p.Log, pg, maintenanceEvery)
-	}()
+	rd, err := redis.New(cfg.RedisURL.Reveal(), redis.Options{
+		Timeout: cfg.Redis.Timeout,
+		OnError: func() { p.Metrics.StoreError("redis") },
+	})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rd.Close() }()
+	sc := scylla.New(cfg.ScyllaHosts, cfg.ScyllaKeyspace, scylla.Options{
+		Consistency:    gocql.ParseConsistency(cfg.Scylla.Consistency),
+		RequestTimeout: cfg.Scylla.Timeout,
+	})
+	defer func() { _ = sc.Close() }()
+
+	// Background work stops with its own context, after the HTTP endpoints are drained.
+	bg, stopBackground := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
 	defer func() {
-		stopMaintenance()
-		<-maintenanceDone
+		stopBackground()
+		wg.Wait()
 	}()
+	wg.Go(func() { maintain(bg, log, pg, maintenanceEvery) })
+
+	instance := app.InstanceID(cfg.Realtime.InstanceID)
+	consumers := []redis.ConsumerOptions{{
+		Stream: redis.StreamChats, Group: jobs.GroupChatCleanup,
+		Handler: jobs.ChatCleanup(scylla.NewMessages(sc, cfg.Scylla.Timeout), redis.NewUnread(rd.Client(), ""), scylla.DeleteGracePeriod, log),
+	}}
+	for _, o := range consumers {
+		group := o.Group
+		o.Name, o.Log = instance, log
+		o.OnResult = func(ok, dead bool) { p.Metrics.EventHandled(group, ok, dead) }
+		c, err := redis.NewConsumer(rd.Client(), o)
+		if err != nil {
+			return err
+		}
+		wg.Go(func() { c.Run(bg) })
+		log.Info("consumer started", "stream", o.Stream, "group", group)
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -44,16 +81,15 @@ func run() error {
 		_, _ = w.Write([]byte(`{"status":"ok"}` + "\n"))
 	})
 	mux.Handle("GET /metrics", p.Metrics.Handler())
-	srv := app.NewServer(p.Cfg.WorkerAddr, mux, p.Cfg.HTTP)
+	srv := app.NewServer(cfg.WorkerAddr, mux, cfg.HTTP)
 
-	p.Log.Info("worker started", "addr", p.Cfg.WorkerAddr)
-	// Event consumers (search indexing, background jobs) are started here by later features.
+	log.Info("worker started", "addr", cfg.WorkerAddr, "instance", instance)
 	if err := p.Serve(srv); err != nil {
 		return err
 	}
 
-	p.Log.Info("worker shutting down")
-	ctx, cancel := context.WithTimeout(context.Background(), p.Cfg.HTTP.ShutdownTimeout)
+	log.Info("worker shutting down")
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.HTTP.ShutdownTimeout)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
 		return fmt.Errorf("shutdown: %w", err)

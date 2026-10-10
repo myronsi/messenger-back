@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/myronsi/messenger-back/internal/events"
 	"github.com/myronsi/messenger-back/internal/ids"
 	"github.com/myronsi/messenger-back/internal/messages"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
@@ -54,7 +56,31 @@ func (r *recorder) Read(_ context.Context, _, _, _ int64, _ time.Time, recipient
 	r.mu.Unlock()
 }
 
+// eventLog records emitted events.
+type eventLog struct {
+	mu  sync.Mutex
+	got []events.Event
+}
+
+func (l *eventLog) Emit(_ context.Context, e events.Event) error {
+	l.mu.Lock()
+	l.got = append(l.got, e)
+	l.mu.Unlock()
+	return nil
+}
+
+func (l *eventLog) types() []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	out := make([]string, len(l.got))
+	for i, e := range l.got {
+		out[i] = e.Type
+	}
+	return out
+}
+
 type fixture struct {
+	events *eventLog
 	t      *testing.T
 	pg     *postgres.Store
 	svc    *messages.Service
@@ -69,12 +95,13 @@ func newFixture(t *testing.T) *fixture {
 	repo := scylla.NewMessages(testenv.Scylla(t), 10*time.Second)
 	gen, _ := ids.NewGenerator(1)
 	rec := &recorder{}
+	log := &eventLog{}
 	unread := redis.NewUnread(rd.Client(), prefix)
 	svc := messages.New(messages.Deps{
 		Messages: repo, Store: pg, Members: redis.NewMembers(rd.Client(), prefix, time.Minute), Unread: unread,
-		Dedup: redis.NewDedup(rd.Client(), prefix, 0), IDs: gen, Notifier: rec,
+		Dedup: redis.NewDedup(rd.Client(), prefix, 0), IDs: gen, Notifier: rec, Events: log,
 	})
-	return &fixture{t: t, pg: pg, svc: svc, unread: unread, rec: rec}
+	return &fixture{t: t, pg: pg, svc: svc, unread: unread, rec: rec, events: log}
 }
 
 func (f *fixture) user(name string) int64 {
@@ -356,5 +383,37 @@ func TestClientTempIDsArePerChat(t *testing.T) {
 	b := f.send(c2.ID, alice, "c-1", "to carol")
 	if a.ID == b.ID {
 		t.Fatal("the same client_temp_id in another chat was treated as a retry")
+	}
+}
+
+func TestChangesAreRecordedAsEvents(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	alice, bob := f.user("alice"), f.user("bob")
+	chat, _, _ := f.pg.Chats().CreateDirect(ctx, alice, bob)
+	m := f.send(chat.ID, alice, "e-1", "hi")
+	f.send(chat.ID, alice, "e-1", "hi") // a retry is no new event
+	if _, err := f.svc.Edit(ctx, alice, chat.ID, m.ID, "hello"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.svc.React(ctx, bob, chat.ID, m.ID, "👍", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.svc.Delete(ctx, bob, chat.ID, m.ID, messages.ScopeMe); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.svc.Delete(ctx, alice, chat.ID, m.ID, messages.ScopeEveryone); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{events.MessageCreated, events.MessageEdited, events.ReactionChanged, events.MessageHidden, events.MessageDeleted}
+	if got := f.events.types(); !slices.Equal(got, want) {
+		t.Fatalf("events %v, want %v", got, want)
+	}
+	first := f.events.got[0]
+	if first.ChatID != chat.ID || first.MessageID != m.ID || first.ActorID != alice || !first.At.Equal(m.CreatedAt) {
+		t.Fatalf("message.created: %+v", first)
+	}
+	if hid := f.events.got[3]; hid.UserID != bob {
+		t.Fatalf("message.hidden: %+v", hid)
 	}
 }

@@ -4,6 +4,8 @@ package app
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -88,6 +90,24 @@ func (p *Process) Close() {
 	if err := p.shutdownTracing(ctx); err != nil {
 		p.Log.Warn("flush traces", "error", err)
 	}
+}
+
+// InstanceID returns the configured id, or the host name with a random suffix (a restarted process is a new
+// instance).
+func InstanceID(configured string) string {
+	if configured != "" {
+		return configured
+	}
+	host, err := os.Hostname()
+	if err != nil || host == "" {
+		host = "messenger"
+	}
+	if len(host) > 48 {
+		host = host[:48]
+	}
+	b := make([]byte, 4)
+	_, _ = rand.Read(b)
+	return host + "-" + hex.EncodeToString(b)
 }
 
 // NewServer builds an http.Server with the timeouts from the configuration.

@@ -2,17 +2,15 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"os"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/myronsi/messenger-back/internal/app"
+	"github.com/myronsi/messenger-back/internal/events"
 	"github.com/myronsi/messenger-back/internal/ids"
 	"github.com/myronsi/messenger-back/internal/messages"
 	"github.com/myronsi/messenger-back/internal/realtime"
@@ -34,23 +32,6 @@ type realtimeStack struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	done   sync.WaitGroup
-}
-
-// instanceID returns INSTANCE_ID, or the host name with a random suffix (a restarted pod is a new instance).
-func instanceID(configured string) string {
-	if configured != "" {
-		return configured
-	}
-	host, err := os.Hostname()
-	if err != nil || host == "" {
-		host = "api"
-	}
-	if len(host) > 48 {
-		host = host[:48]
-	}
-	b := make([]byte, 4)
-	_, _ = rand.Read(b)
-	return host + "-" + hex.EncodeToString(b)
 }
 
 // lazyIDs hands out IDs once a node number is known. Until the lease from Redis succeeds, Next fails and
@@ -138,7 +119,7 @@ func startRealtime(p *app.Process, pg *postgres.Store, rd *redis.Store, sc *scyl
 	cfg, log := p.Cfg, p.Log
 	st := &realtimeStack{hub: realtime.NewHub(log, p.Metrics)}
 	st.ctx, st.cancel = context.WithCancel(context.Background())
-	instance := instanceID(cfg.Realtime.InstanceID)
+	instance := app.InstanceID(cfg.Realtime.InstanceID)
 	rdb := rd.Client()
 	idsrc := startIDs(p, rdb, instance, st)
 
@@ -172,6 +153,7 @@ func startRealtime(p *app.Process, pg *postgres.Store, rd *redis.Store, sc *scyl
 	svc = messages.New(messages.Deps{
 		Messages: repo, Store: pg, Members: members, Unread: redis.NewUnread(rdb, ""),
 		Dedup: redis.NewDedup(rdb, "", 0), IDs: idsrc, Notifier: fan, Accepted: p.Metrics.MessageAccepted, Log: log,
+		Events: events.NewLog(redis.NewStreams(rdb, "", 0)),
 	})
 	gw, err = realtime.New(realtime.Options{
 		Auth: ticketAuth, Messages: svc, Fanout: fan, Bus: bus, Presence: presence,
