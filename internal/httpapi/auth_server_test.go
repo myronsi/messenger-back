@@ -220,6 +220,7 @@ func (e *authEnv) do(t *testing.T, q request) reply {
 	}
 	rec := httptest.NewRecorder()
 	e.router.ServeHTTP(rec, req)
+	checkContract(t, q.method, apiBase+q.path, rec.Code, rec.Header().Get("Content-Type"), rec.Body.Bytes())
 	return reply{rec}
 }
 

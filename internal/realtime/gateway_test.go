@@ -215,6 +215,9 @@ func (e *env) dial(in *instance, userID int64, query string) *client {
 				t.Errorf("not JSON: %s", b)
 				continue
 			}
+			if err := eventViolation(b); err != nil {
+				t.Errorf("event breaks the contract: %v", err)
+			}
 			c.events <- ev
 		}
 	}()

@@ -19,6 +19,8 @@
 !docs/accounts.md
 !docs/chats.md
 !docs/search.md
+!docs/load-testing.md
+!docs/testing.md
 !CHANGELOG.md
 !server/
 !server/version.py
@@ -109,3 +111,9 @@
 !migrations/
 !migrations/**
 bin/
+
+# Load tests (docs/load-testing.md); the seeded users with their tokens stay local.
+!loadtest/
+!loadtest/*.js
+!loadtest/seed/
+!loadtest/seed/*.go

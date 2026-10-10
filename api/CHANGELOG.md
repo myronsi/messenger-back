@@ -2,6 +2,13 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.0.0-alpha.8
+
+Found by validating every response of the backend's HTTP tests against this contract:
+
+- `GET /attachments/{attachment_id}/content` and `GET /users/{user_id}/avatar` list `206` (byte ranges), `304`
+  (`ETag`) and `416`; the attachment download also its `302` to a signed URL.
+
 ## 2.0.0-alpha.7
 
 Search:

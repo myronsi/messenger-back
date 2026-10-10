@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.0.0-alpha.7
+  version: 2.0.0-alpha.8
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -744,6 +744,15 @@ paths:
           content:
             image/*:
               schema: { type: string, format: binary }
+        "206":
+          description: The requested byte range (`Range` header); players use it to seek
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "304":
+          description: Not modified (`If-None-Match` with the `ETag` of an earlier answer)
+        "416":
+          description: The requested range is outside the file
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
   /users/{user_id}/avatars:
@@ -872,6 +881,17 @@ paths:
           content:
             application/octet-stream:
               schema: { type: string, format: binary }
+        "206":
+          description: The requested byte range (`Range` header); players use it to seek
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "304":
+          description: Not modified (`If-None-Match` with the `ETag` of an earlier answer)
+        "416":
+          description: The requested range is outside the file
+        "302":
+          description: Redirect to a short-lived signed URL of object storage (`MEDIA_SIGNED_URLS`); not cached
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }

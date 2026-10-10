@@ -7506,6 +7506,42 @@ func (response GetAttachmentContent200ApplicationoctetStreamResponse) VisitGetAt
 	return err
 }
 
+type GetAttachmentContent206ApplicationoctetStreamResponse struct {
+	Body          io.Reader
+	ContentLength int64
+}
+
+func (response GetAttachmentContent206ApplicationoctetStreamResponse) VisitGetAttachmentContentResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "application/octet-stream")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	w.WriteHeader(206)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type GetAttachmentContent302Response struct {
+}
+
+func (response GetAttachmentContent302Response) VisitGetAttachmentContentResponse(w http.ResponseWriter) error {
+	w.WriteHeader(302)
+	return nil
+}
+
+type GetAttachmentContent304Response struct {
+}
+
+func (response GetAttachmentContent304Response) VisitGetAttachmentContentResponse(w http.ResponseWriter) error {
+	w.WriteHeader(304)
+	return nil
+}
+
 type GetAttachmentContent400ApplicationProblemPlusJSONResponse struct {
 	BadRequestApplicationProblemPlusJSONResponse
 }
@@ -7568,6 +7604,14 @@ func (response GetAttachmentContent404ApplicationProblemPlusJSONResponse) VisitG
 	w.WriteHeader(404)
 	_, err := buf.WriteTo(w)
 	return err
+}
+
+type GetAttachmentContent416Response struct {
+}
+
+func (response GetAttachmentContent416Response) VisitGetAttachmentContentResponse(w http.ResponseWriter) error {
+	w.WriteHeader(416)
+	return nil
 }
 
 type GetAttachmentContent426ApplicationProblemPlusJSONResponse struct {
@@ -13399,6 +13443,34 @@ func (response GetUserAvatar200ImageResponse) VisitGetUserAvatarResponse(w http.
 	return err
 }
 
+type GetUserAvatar206ApplicationoctetStreamResponse struct {
+	Body          io.Reader
+	ContentLength int64
+}
+
+func (response GetUserAvatar206ApplicationoctetStreamResponse) VisitGetUserAvatarResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "application/octet-stream")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	w.WriteHeader(206)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type GetUserAvatar304Response struct {
+}
+
+func (response GetUserAvatar304Response) VisitGetUserAvatarResponse(w http.ResponseWriter) error {
+	w.WriteHeader(304)
+	return nil
+}
+
 type GetUserAvatar400ApplicationProblemPlusJSONResponse struct {
 	BadRequestApplicationProblemPlusJSONResponse
 }
@@ -13445,6 +13517,14 @@ func (response GetUserAvatar404ApplicationProblemPlusJSONResponse) VisitGetUserA
 	w.WriteHeader(404)
 	_, err := buf.WriteTo(w)
 	return err
+}
+
+type GetUserAvatar416Response struct {
+}
+
+func (response GetUserAvatar416Response) VisitGetUserAvatarResponse(w http.ResponseWriter) error {
+	w.WriteHeader(416)
+	return nil
 }
 
 type GetUserAvatar426ApplicationProblemPlusJSONResponse struct {
