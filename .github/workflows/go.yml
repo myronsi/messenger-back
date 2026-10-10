@@ -178,3 +178,50 @@ jobs:
       - name: Stop
         if: always()
         run: docker compose -f compose.dev.yaml down --volumes
+
+  # The production stack (deploy/go) through its own deploy script, as deploy-go.yml runs it on a server:
+  # a first deploy with the bundled stores, a repeated one, and a broken image that is rolled back.
+  go-stack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      APP: ${{ github.workspace }}/../go-stack
+      # The images are built here, not pulled: a prune would delete them before they are used.
+      PRUNE_IMAGES: "false"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - name: Build the image, and one whose API cannot start
+        run: |
+          docker build -f go.Dockerfile --build-arg VERSION=1.0.0-ci --build-arg COMMIT=${{ github.sha }} -t messenger-go:ci .
+          printf 'FROM messenger-go:ci\nCMD ["/app/missing"]\n' | docker build -t messenger-go:broken -
+      - name: Bundle and .env with generated secrets
+        run: |
+          bash deploy/go/bundle.sh "$APP"
+          go run deploy/dev/genenv.go deploy/go/env.example "$APP/.env"
+      - name: First deploy
+        run: |
+          bash "$APP/deploy.sh" "$APP" messenger-go:ci
+          curl -fsS http://127.0.0.1:8080/api/v2/meta | grep -q '"backend_version":"1.0.0-ci"'
+      - name: Deploy again (backup and migrations are repeatable)
+        run: bash "$APP/deploy.sh" "$APP" messenger-go:ci
+      - name: A broken image is rolled back
+        run: |
+          if bash "$APP/deploy.sh" "$APP" messenger-go:broken; then
+            echo "::error::the broken image was deployed"
+            exit 1
+          fi
+          test "$(docker inspect --format '{{.Config.Image}}' messenger-go-api-1)" = messenger-go:ci
+          grep -qx 'BACKEND_IMAGE=messenger-go:ci' "$APP/.env"
+          curl -fsS http://127.0.0.1:8080/readyz
+          test "$(ls "$APP"/backups/*.dump | wc -l)" -eq 3
+      - name: Logs
+        if: failure()
+        working-directory: ${{ env.APP }}
+        run: docker compose logs --no-color --tail 200
+      - name: Stop
+        if: always()
+        working-directory: ${{ env.APP }}
+        run: docker compose down --volumes || true

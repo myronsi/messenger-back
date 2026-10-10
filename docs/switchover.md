@@ -20,21 +20,20 @@ The data copy is [migration-v1.md](migration-v1.md), the production stores are i
 - The last `0.x` release is the last Python version: `v0.5.4` today, and the pending `0.5.5` release PR if it is merged.
 - Create a `python` branch from its tag for hotfixes until the switch. Release-please keeps working on `master`.
 
-### 2. Release and deploy path for the Go backend (#124)
+### 2. Release and deploy path for the Go backend
 
-Releases still build and deploy the Python image (`Dockerfile`, `compose.yaml`, `deploy/deploy.sh`). Before anything below:
+[deploy-go.md](deploy-go.md) describes it:
+- `1.x` releases are built from `go.Dockerfile` and deployed by `deploy-go.yml` with the stack in `deploy/go`;
+- every Go release goes to staging;
+- production gets one only once the repository variable `GO_PRODUCTION` is `true`.
 
-- releases must publish `go.Dockerfile` images;
-- a production stack with `api`, `worker`, the migrations and the stores ([deployment.md](deployment.md)) must exist;
-- `deploy.sh` must do for that stack what it does today: a backup, a health check on `/readyz`, and a rollback to the previous image.
-
-Until that is merged, every merged release PR deploys Python, as it should.
+Until then, `0.x` releases keep deploying Python to production, as they should. Set up both hosts and the `staging` environment as described there.
 
 ### 3. Production stores and secrets
 
 - **Stores:** PostgreSQL, ScyllaDB, Redis, Elasticsearch and object storage as in [deployment.md](deployment.md), with backups set up and one restore tested.
 - **New secrets in the secret manager:** `JWT_SECRET`, `ENCRYPTION_KEY` and `RECOVERY_PEPPER`. Do not reuse a development value.
-- **The v1 key:** `V1_SECRET_KEY` is the Python backend's `SECRET_KEY` (in `/opt/messenger/.env` on the server). Pass it to the migration job from the secret manager. It is never pasted anywhere else, and it is dropped after the switch.
+- **The v1 key:** `V1_SECRET_KEY` is the Python backend's `SECRET_KEY` (in `/opt/messenger/.env` on the server). Put it, from the secret manager, in `/opt/messenger-go/v1.env`, which only the migration container reads ([deploy-go.md](deploy-go.md)). It is never pasted anywhere else, and it is deleted after the switch.
 - **The refresh cookie path:** set `REFRESH_COOKIE_PATH` to v1's cookie path (`<COOKIE_PATH_PREFIX>/auth`). Copied sessions only stay logged in if browsers keep sending the cookie.
 
 ### 4. The releases
@@ -67,22 +66,28 @@ All steps are **production**.
    - keep both, and the database itself, untouched until the rollback window is over.
 
    The migration only reads v1 (give its `V1_DATABASE_URL` a read-only user, and mount `static/` read-only).
-4. **Start the Go stores and migrations** (`migrate-postgres`, `migrate-scylla`) with `1.0.0`. Do not let the API take traffic yet.
+4. **Deploy `1.0.0` to production:**
+   - set the repository variable `GO_PRODUCTION` to `true`;
+   - run Actions → Deploy (Go) from `edge` with `v1.0.0` and `production`. `deploy.sh` migrates the empty stores and starts `api` and `worker` in `/opt/messenger-go`.
+
+   The proxy does not send them traffic yet.
 5. **Dry run:**
 
    ```sh
-   migrate-v1 -dry-run -report dry.json
+   /opt/messenger-go/migrate-v1.sh /opt/messenger-go -dry-run -report dry.json
    ```
+
+   It reads v1 through the Python stack's network and volume; the `V1_*` settings are in [deploy-go.md](deploy-go.md).
 
    It stops if a TOTP secret cannot be decrypted. That most likely means `V1_SECRET_KEY` is wrong: fix the key, do not reach for `-drop-unreadable-2fa`. Use that flag only if the rehearsal showed a known number of broken secrets.
 6. **The run**, into empty v2 stores:
 
    ```sh
-   migrate-v1 -report run.json
+   /opt/messenger-go/migrate-v1.sh /opt/messenger-go -report run.json
    ```
 
    It is resumable: if it stops, fix the cause and start it again with the same command. Do not pre-copy into production before the window. Reactions removed and messages delivered in v1 after an early run would not be taken back.
-7. **Read the report** (`run.json`, mode 0600; counts only). Go on only if all of these hold:
+7. **Read the report** (`reports/run.json`, mode 0600; counts only). Go on only if all of these hold:
    - `verification` has the same count for v1 and v2 in every table, or the differences match the rehearsal: merged direct chats, dropped self-blocks, skipped requests;
    - every `chat_samples` entry has `v1_messages` = `v2_messages`;
    - `*_rows_refused` is 0, or explained by the rehearsal;

@@ -1,0 +1,175 @@
+# The Go backend on one host (#124): api and worker from the released image, the migrations as one-shot
+# steps, and, with COMPOSE_PROFILES=stores, single-node stores for staging. Production points .env at its
+# own clusters instead (docs/deployment.md). deploy.sh runs it; see docs/deploy-go.md.
+#
+# The root compose.yaml is the Python backend and stays as it is until the switch (docs/switchover.md).
+name: messenger-go
+
+x-app: &app
+  image: ${BACKEND_IMAGE:-unset}
+  # The whole .env: the backend's settings are documented in .env.example and docs/go-backend.md.
+  env_file: [.env]
+  restart: unless-stopped
+  # The image has no shell for a healthcheck; deploy.sh checks /readyz and /healthz from the host.
+
+x-migrate: &migrate
+  image: migrate/migrate:v4.20.1
+  entrypoint: ["sh", "/migrate.sh", "/migrations"]
+  profiles: ["migrate"]
+  restart: "no"
+
+services:
+  api:
+    <<: *app
+    ports:
+      - "${API_BIND:-127.0.0.1}:${API_PORT:-8080}:8080"
+
+  worker:
+    <<: *app
+    command: ["/app/worker"]
+    ports:
+      - "127.0.0.1:${WORKER_PORT:-8081}:8081"
+
+  # --- One-shot steps, run by deploy.sh before api and worker start. ---
+
+  postgres-migrate:
+    <<: *migrate
+    environment:
+      MIGRATE_DATABASE: ${DATABASE_URL:-}
+    volumes:
+      - ./migrate.sh:/migrate.sh:ro
+      - ./migrations/postgres:/migrations:ro
+
+  scylla-migrate:
+    <<: *migrate
+    environment:
+      MIGRATE_DATABASE: ${SCYLLA_MIGRATE_URL:-}
+    volumes:
+      - ./migrate.sh:/migrate.sh:ro
+      - ./migrations/scylla:/migrations:ro
+
+  # A custom-format dump of DATABASE_URL to stdout (deploy.sh keeps it in backups/).
+  postgres-backup:
+    image: postgres:18-alpine
+    profiles: ["backup"]
+    restart: "no"
+    environment:
+      DATABASE_URL: ${BACKUP_DATABASE_URL:-${DATABASE_URL:-}}
+    entrypoint: ["sh", "-c", "exec pg_dump --format=custom --no-owner \"$$DATABASE_URL\""]
+
+  # --- Single-node stores (COMPOSE_PROFILES=stores): staging only, no ports on the host. ---
+
+  postgres:
+    image: postgres:18-alpine
+    profiles: ["stores"]
+    environment:
+      POSTGRES_DB: messenger
+      POSTGRES_USER: messenger
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U messenger -d messenger"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:8-alpine
+    profiles: ["stores"]
+    command: ["sh", "-c", "exec redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\""]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDISCLI_AUTH: ${REDIS_PASSWORD:-}
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  scylla:
+    image: scylladb/scylla:2026.1
+    profiles: ["stores"]
+    command: ["--smp", "1", "--memory", "1G", "--overprovisioned", "1", "--developer-mode", "1"]
+    volumes:
+      - scylla-data:/var/lib/scylla
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'DESCRIBE KEYSPACES' >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 40s
+    restart: unless-stopped
+
+  # The keyspace golang-migrate needs. A cluster gets its own, with replication factor 3 (docs/deployment.md).
+  scylla-keyspace:
+    image: scylladb/scylla:2026.1
+    profiles: ["stores"]
+    restart: "no"
+    entrypoint: ["cqlsh", "scylla", "-e"]
+    command: ["CREATE KEYSPACE IF NOT EXISTS messenger WITH replication = {'class': 'NetworkTopologyStrategy', 'datacenter1': 1}"]
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.5.3
+    profiles: ["stores"]
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "true"
+      # Plain HTTP inside the compose network, which has no published port.
+      xpack.security.http.ssl.enabled: "false"
+      xpack.ml.enabled: "false"
+      ES_JAVA_OPTS: -Xms1g -Xmx1g
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:-}
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs -u elastic:$${ELASTIC_PASSWORD} 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s' >/dev/null"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
+
+  object-storage:
+    image: rustfs/rustfs:1.0.1
+    profiles: ["stores"]
+    environment:
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY:-}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY:-}
+    volumes:
+      - object-storage-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:9000/health >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  object-storage-init:
+    image: amazon/aws-cli:2.37.9
+    profiles: ["stores"]
+    restart: "no"
+    entrypoint: ["sh", "/init/create-buckets.sh"]
+    environment:
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY:-}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:-}
+      AWS_DEFAULT_REGION: us-east-1
+      S3_ENDPOINT: http://object-storage:9000
+      S3_BUCKETS: ${S3_BUCKET:-messenger-media}
+    volumes:
+      - ./object-storage:/init:ro
+
+volumes:
+  postgres-data:
+  redis-data:
+  scylla-data:
+  elasticsearch-data:
+  object-storage-data:

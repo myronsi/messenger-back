@@ -1,0 +1,29 @@
+# The data copy from the Python backend (cmd/migrate-v1, docs/migration-v1.md), run by migrate-v1.sh only.
+# It joins the Python stack's network to read its database and mounts its static/ volume read-only.
+services:
+  migrate-v1:
+    image: ${BACKEND_IMAGE:-unset}
+    profiles: ["migrate-v1"]
+    restart: "no"
+    entrypoint: ["/app/migrate-v1"]
+    # .env for the stores, v1.env for the Python backend's credentials (only this container gets them).
+    env_file: [.env, v1.env]
+    environment:
+      V1_STATIC_DIR: /v1-static
+    # The deploy user (set by migrate-v1.sh), so the report in reports/ belongs to it.
+    user: ${MIGRATE_V1_USER:-65532:65532}
+    working_dir: /reports
+    volumes:
+      - v1-static:/v1-static:ro
+      - ./reports:/reports
+    networks: [default, v1]
+
+volumes:
+  v1-static:
+    external: true
+    name: ${V1_STATIC_VOLUME:-messenger_messenger_static}
+
+networks:
+  v1:
+    external: true
+    name: ${V1_NETWORK:-messenger_default}
