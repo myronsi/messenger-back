@@ -1,0 +1,6 @@
+# A test vector made with Python's cryptography, exactly as the Python backend did it, from the made-up
+# SECRET_KEY "x" * 40 (not a real secret):
+#   HKDF(SHA256, 32, salt=None, info=b"messenger-totp-encryption-v1").derive(b"x" * 40), urlsafe base64
+#   Fernet(that).encrypt(b"JBSWY3DPEHPK3PXP")
+5E3idhHPuhnncty26VrA4pUL8NK-cXL5sB7YWK2rcYI=
+gAAAAABqykloI7EIbvYahZclo3wGxZkladbiE1RqjneF1IoMoMG8pdBBYXKC7Xx31RVD0u3KN75pLRbqDPbJ9y_jhaY5SK683jCBZYC3rgIRxkqYa1FNI9M=
