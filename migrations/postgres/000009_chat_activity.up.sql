@@ -4,7 +4,7 @@
 -- the chat list is ordered by it.
 ALTER TABLE chats ADD COLUMN last_message_id BIGINT CHECK (last_message_id > 0);
 ALTER TABLE chats ADD COLUMN last_activity_at TIMESTAMPTZ;
-UPDATE chats SET last_activity_at = created_at;
+UPDATE chats SET last_activity_at = created_at WHERE last_activity_at IS NULL;
 ALTER TABLE chats ALTER COLUMN last_activity_at SET NOT NULL;
 ALTER TABLE chats ALTER COLUMN last_activity_at SET DEFAULT now();
 
