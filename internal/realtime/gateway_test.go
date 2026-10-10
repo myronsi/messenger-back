@@ -1,6 +1,7 @@
 package realtime
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -132,12 +133,19 @@ func (e *env) instance(name string) *instance {
 		Messages: e.repo, Store: e.pg, Members: in.members, Unread: redis.NewUnread(rdb, e.prefix),
 		Dedup: redis.NewDedup(rdb, e.prefix, 0), IDs: gen, Notifier: in.fanout,
 	})
-	hub := NewHub(slog.New(slog.DiscardHandler), nil)
+	logs := &syncBuffer{}
+	log := slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("instance %s log:\n%s", name, logs.String())
+		}
+	})
+	hub := NewHub(log, nil)
 	in.hub = hub
 	in.gw, err = New(Options{
 		Auth: e.tickets, Messages: in.svc, Fanout: in.fanout, Bus: bus, Presence: in.presence,
 		Limiter: redis.NewRateLimiter(rdb, e.prefix), LastSeen: e.pg.Users(), Hub: hub,
-		MinClientAPIVersion: "2.0.0-alpha.1", PingInterval: e.ping,
+		MinClientAPIVersion: "2.0.0-alpha.1", PingInterval: e.ping, Log: log,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -674,3 +682,16 @@ func TestShutdownReleasesPresence(t *testing.T) {
 		t.Fatal("alice still online after the shutdown")
 	}
 }
+
+// syncBuffer is a bytes.Buffer safe for concurrent writers.
+type syncBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+func (s *syncBuffer) String() string { s.mu.Lock(); defer s.mu.Unlock(); return s.b.String() }

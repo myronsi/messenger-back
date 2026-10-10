@@ -228,7 +228,19 @@ func (g *Gateway) register(c *conn) error {
 
 	ctx, cancel := context.WithTimeout(g.ctx, eventTimeout)
 	defer cancel()
-	if err := g.o.Bus.Subscribe(ctx, c.userID); err != nil {
+	// A few quick attempts ride out a reconnecting pub/sub connection.
+	var err error
+	for attempt := range 3 {
+		if err = g.o.Bus.Subscribe(ctx, c.userID); err == nil {
+			break
+		}
+		g.o.Log.WarnContext(ctx, "subscribe user", "error", err, "attempt", attempt+1)
+		select {
+		case <-ctx.Done():
+		case <-time.After(time.Duration(attempt+1) * 100 * time.Millisecond):
+		}
+	}
+	if err != nil {
 		return err
 	}
 	change, changed, err := g.o.Presence.Connect(ctx, c.userID)

@@ -93,7 +93,9 @@ func (b *Bus) Subscribe(ctx context.Context, userID int64) error {
 		return nil
 	}
 	if err := b.ps.Subscribe(ctx, b.channel(userID)); err != nil {
-		// Keep the count: the subscription is in the PubSub's set and is sent again on its reconnect.
+		// Undo, so the caller can simply try again: the count and the PubSub's channel set stay in step.
+		delete(b.subs, userID)
+		_ = b.ps.Unsubscribe(context.WithoutCancel(ctx), b.channel(userID))
 		return fmt.Errorf("bus subscribe: %w", err)
 	}
 	return nil
