@@ -41,6 +41,9 @@ type IDIssuer interface {
 //     that is behind.
 //   - The generator is only valid for TTL/2 after each successful renewal. A holder that was paused or cut
 //     off stops issuing IDs before its lease can expire and be taken over.
+//   - ids:epoch exists as long as Redis keeps its data. When a lease finds it missing, Redis started empty
+//     (first start, or the data was lost) and may have forgotten leases that are still in use: the lease then
+//     asks for a quarantine longer than any previous holder can still issue IDs (see Quarantine).
 type NodeLease struct {
 	rdb       Client
 	prefix    string
@@ -49,13 +52,17 @@ type NodeLease struct {
 	node      int
 	highWater int64
 	acquired  time.Time
+	cold      bool
 }
 
 var (
-	// KEYS: lease, high water; ARGV: token, ttl ms. Returns the high-water mark, or -1 when taken.
+	// KEYS: lease, high water, epoch; ARGV: token, ttl ms. Returns {high-water mark, cold start}, or {-1, 0}
+	// when the node is taken. cold start is 1 when the epoch marker had to be created.
 	acquireScript = goredis.NewScript(`
-if not redis.call('SET', KEYS[1], ARGV[1], 'NX', 'PX', ARGV[2]) then return -1 end
-return tonumber(redis.call('GET', KEYS[2]) or '0')`)
+if not redis.call('SET', KEYS[1], ARGV[1], 'NX', 'PX', ARGV[2]) then return {-1, 0} end
+local cold = 0
+if redis.call('SET', KEYS[3], '1', 'NX') then cold = 1 end
+return {tonumber(redis.call('GET', KEYS[2]) or '0'), cold}`)
 
 	// KEYS: lease, high water; ARGV: token, ttl ms, last millis, high-water ttl ms. Renews only a lease this
 	// acquisition still holds and raises the high-water mark.
@@ -95,12 +102,12 @@ func AcquireNode(ctx context.Context, rdb Client, prefix, instance string, maxNo
 	for i := range n {
 		node := (first + i) % n
 		start := time.Now()
-		hw, err := acquireScript.Run(ctx, rdb, l.keys(node), l.token, ttl.Milliseconds()).Int64()
-		if err != nil {
+		res, err := acquireScript.Run(ctx, rdb, append(l.keys(node), prefix+"ids:epoch"), l.token, ttl.Milliseconds()).Int64Slice()
+		if err != nil || len(res) != 2 {
 			return nil, fmt.Errorf("node lease: %w", err)
 		}
-		if hw >= 0 {
-			l.node, l.highWater, l.acquired = node, hw, start
+		if res[0] >= 0 {
+			l.node, l.highWater, l.acquired, l.cold = node, res[0], start, res[1] == 1
 			return l, nil
 		}
 	}
@@ -121,6 +128,20 @@ func (l *NodeLease) HighWater() int64 { return l.highWater }
 
 // validity is how long after a renewal the generator may issue IDs: well before the lease can expire.
 func (l *NodeLease) validity() time.Duration { return l.ttl / 2 }
+
+// quarantineMargin covers IDs a previous holder borrowed from the future and small clock differences.
+const quarantineMargin = 10 * time.Second
+
+// Quarantine is how long to wait after acquiring before the first ID, measured from the acquisition: 0
+// normally, and longer than any previous holder can still issue IDs when Redis started empty (a holder
+// whose lease Redis forgot stays valid for up to TTL/2 after its last renewal, which happened before
+// Redis lost the data and so before this acquisition). Keep must already run while waiting.
+func (l *NodeLease) Quarantine() time.Duration {
+	if !l.cold {
+		return 0
+	}
+	return l.validity() + quarantineMargin
+}
 
 // ErrLeaseLost means another instance may now use the node number: the process must stop creating IDs.
 var ErrLeaseLost = errors.New("node lease: lost")

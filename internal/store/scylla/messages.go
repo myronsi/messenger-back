@@ -112,7 +112,8 @@ type MessageRepository interface {
 	// It rebuilds unread counters.
 	CountAfter(ctx context.Context, chatID, viewer, afterID int64, limit int) (int, error)
 	// DeleteChat removes every message, reaction, location and hidden marker of the chat. It may take long
-	// for a big chat; when it fails or is cancelled, calling it again continues where it stopped.
+	// for a big chat; when it fails or is cancelled, calling it again continues where it stopped. Call it once
+	// more after DeleteGracePeriod to catch writes that were in flight.
 	DeleteChat(ctx context.Context, chatID int64) error
 }
 
@@ -394,7 +395,8 @@ func (r *Messages) Hide(ctx context.Context, userID, chatID, messageID int64, re
 			return fmt.Errorf("hide message: %w", err)
 		}
 		if applied || reason == HiddenNotDelivered {
-			return nil // a row exists either way; not_delivered never replaces anything
+			// A row exists either way; not_delivered never replaces anything.
+			return r.markHidden(ctx, sess, chatID, userID)
 		}
 		// Hidden as not delivered so far: upgrade to deleted. When Unhide removed the row in between, the
 		// update does not apply and the insert is tried again.
@@ -404,10 +406,22 @@ func (r *Messages) Hide(ctx context.Context, userID, chatID, messageID int64, re
 			return fmt.Errorf("hide message: %w", err)
 		}
 		if applied {
-			return nil
+			return r.markHidden(ctx, sess, chatID, userID)
 		}
 	}
 	return errors.New("hide message: the row kept changing")
+}
+
+// markHidden records the user in hidden_message_users. Hide writes it before and after the row: a crash
+// after the row leaves the first marker, and a chat deletion that ran in between (removing the first marker)
+// leaves the second one for its grace pass to find.
+func (r *Messages) markHidden(ctx context.Context, sess *gocql.Session, chatID, userID int64) error {
+	err := sess.Query(`INSERT INTO hidden_message_users (chat_id, user_id) VALUES (?, ?)`, chatID, userID).
+		WithContext(ctx).Idempotent(true).Exec()
+	if err != nil {
+		return fmt.Errorf("hide message: %w", err)
+	}
+	return nil
 }
 
 // hideAttempts bounds the insert/upgrade rounds of Hide against concurrent Unhide calls.
@@ -490,12 +504,20 @@ func (r *Messages) Reactions(ctx context.Context, chatID int64, messageIDs []int
 	return out, nil
 }
 
+// DeleteGracePeriod is longer than any request can take, so a second DeleteChat after it finds every write
+// that was in flight during the first.
+const DeleteGracePeriod = 2 * time.Minute
+
 // deleteParallelism bounds the concurrent statements of one chat deletion.
 const deleteParallelism = 32
 
 // DeleteChat works bucket by bucket and, within a bucket, in chunks of deleteChunk messages, each with the
 // repository timeout of its own. Finished chunks and buckets are gone, so a deletion that fails or is
 // cancelled continues where it stopped when it is called again. Callers run it in the background.
+//
+// Requests that were in flight when the chat was deleted can still write afterwards (a hide, a reaction).
+// Creation writes lose against the tombstones by their timestamps; for the rest, callers run DeleteChat a
+// second time once DeleteGracePeriod has passed since the chat was deleted (the worker does).
 func (r *Messages) DeleteChat(ctx context.Context, chatID int64) error {
 	sess, err := r.s.Session(ctx)
 	if err != nil {

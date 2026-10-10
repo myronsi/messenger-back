@@ -24,6 +24,9 @@ the gateway sends messages (#50):
 - The generator is only valid for half the lease TTL after each successful renewal (`Generator.ValidUntil`). A
   process that was paused or cut off from Redis stops issuing IDs before its lease can expire and be taken over,
   and a lost lease stops the process.
+- `ids:epoch` lives as long as Redis keeps its data. A lease that finds it missing (first start, or Redis lost its
+  data and with it leases still in use) waits `NodeLease.Quarantine` (half the TTL plus 10 s) before the first
+  ID, longer than any forgotten holder can still issue IDs.
 
 With a fixed `NODE_ID` the operator guarantees uniqueness: never run two processes with the same number, and
 keep the clock from stepping back across a restart.
@@ -71,7 +74,10 @@ looked up in `message_locations`.
 - **DeleteChat** first removes the hidden markers, then works bucket by bucket in chunks of 500 messages: the
   reactions and locations of the chunk (32 statements in parallel), then a range delete of exactly the chunk's
   rows. An empty bucket's row in `chat_buckets` goes last. Each chunk has its own timeout and finished work is
-  gone, so calling it again after a failure repeats at most one chunk. It is meant for the background worker.
+  gone, so calling it again after a failure repeats at most one chunk. It is meant for the background worker,
+  which runs it a second time after `DeleteGracePeriod` (2 minutes, longer than any request) to remove what
+  requests that were in flight wrote afterwards (creation writes lose against the tombstones anyway; `Hide`
+  writes its marker before and after the row, so the second pass finds it).
 - **Locate** only reports messages whose row exists. A new location is written with a 7-day TTL and rewritten
   without one once the message is stored, so an insert that never completes leaves nothing behind for long.
 

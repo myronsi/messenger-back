@@ -37,6 +37,10 @@ func TestNodeLease(t *testing.T) {
 	if a.Node() == b.Node() || a.HighWater() != 0 {
 		t.Fatalf("nodes %d %d, high water %d", a.Node(), b.Node(), a.HighWater())
 	}
+	// The first lease of an empty Redis waits out leases Redis may have forgotten; later ones do not.
+	if a.Quarantine() < 30*time.Second || b.Quarantine() != 0 {
+		t.Fatalf("quarantine %v %v", a.Quarantine(), b.Quarantine())
+	}
 	if _, err := AcquireNode(ctx, s.Client(), prefix, "x", -1, time.Minute); err == nil {
 		t.Fatal("accepted a negative bound")
 	}
