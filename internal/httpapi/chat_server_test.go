@@ -15,9 +15,11 @@ import (
 	"github.com/myronsi/messenger-back/internal/auth"
 	"github.com/myronsi/messenger-back/internal/chats"
 	"github.com/myronsi/messenger-back/internal/config"
+	"github.com/myronsi/messenger-back/internal/events"
 	"github.com/myronsi/messenger-back/internal/ids"
 	"github.com/myronsi/messenger-back/internal/messages"
 	"github.com/myronsi/messenger-back/internal/observability"
+	"github.com/myronsi/messenger-back/internal/search"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/redis"
 	"github.com/myronsi/messenger-back/internal/store/scylla"
@@ -69,9 +71,39 @@ type chatEnv struct {
 	*authEnv
 	store  *postgres.Store
 	events *chatEvents
+	index  *search.Index
 }
 
-func newChatEnv(t *testing.T) *chatEnv {
+func newChatEnv(t *testing.T) *chatEnv { return newChatEnvWith(t, false) }
+
+// indexLog hands the message service's events straight to the search indexer, like the worker would.
+type indexLog struct{ in *search.Indexer }
+
+func (l indexLog) Emit(ctx context.Context, e events.Event) error {
+	fields := map[string]string{}
+	for k, v := range e.Fields() {
+		switch x := v.(type) {
+		case string:
+			fields[k] = x
+		case int64:
+			fields[k] = strconv.FormatInt(x, 10)
+		}
+	}
+	return l.in.Handle(ctx, redis.Entry{ID: "1-0", Fields: fields})
+}
+
+// searchAccess answers the searcher from the message service and the social repository.
+type searchAccess struct {
+	*messages.Service
+	pg *postgres.Store
+}
+
+func (a searchAccess) ChatIDs(ctx context.Context, userID int64) ([]int64, error) {
+	return a.pg.Social().ChatIDs(ctx, userID)
+}
+
+// newChatEnvWith is newChatEnv with message search (Elasticsearch, TEST_ELASTIC_URL) when withSearch.
+func newChatEnvWith(t *testing.T, withSearch bool) *chatEnv {
 	t.Helper()
 	store, rdb := newPostgres(t), newRedis(t)
 	sc := testenv.Scylla(t)
@@ -94,9 +126,19 @@ func newChatEnv(t *testing.T) *chatEnv {
 	gen, _ := ids.NewGenerator(1)
 	members := redis.NewMembers(rdb, prefix, time.Minute)
 	unread := redis.NewUnread(rdb, prefix)
-	msgs := messages.New(messages.Deps{
+	deps := messages.Deps{
 		Messages: repo, Store: store, Members: members, Unread: unread, Dedup: redis.NewDedup(rdb, prefix, 0), IDs: gen,
-	})
+	}
+	var index *search.Index
+	if withSearch {
+		es, alias := testenv.Elastic(t)
+		index = search.NewIndex(es, alias, 0)
+		if err := index.Ensure(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		deps.Events = indexLog{search.NewIndexer(index, repo, store.Attachments(), nil)}
+	}
+	msgs := messages.New(deps)
 	dir := users.NewDirectory(store, nil, apiBase)
 	ev := &chatEvents{created: map[int64][]int64{}, updated: map[int64][]int64{}, removed: map[int64][]int64{},
 		groupCreated: map[int64][]int64{}, groupUpdates: map[int64]int{}}
@@ -104,7 +146,7 @@ func newChatEnv(t *testing.T) *chatEnv {
 	api := NewServer(NewAuthServer(AuthOptions{Service: authSvc, Log: log, BasePath: apiBase, CookieSecure: true}), nil).
 		WithAccount(NewAccountServer(AccountOptions{Store: store, Directory: dir, Deleter: authSvc, BasePath: apiBase, Log: log})).
 		WithChats(NewChatServer(ChatOptions{Service: svc, BasePath: apiBase, Log: log})).
-		WithMessages(NewMessageServer(MessageOptions{Service: msgs, Store: store, Directory: dir, BasePath: apiBase, Log: log}))
+		WithMessages(NewMessageServer(MessageOptions{Service: msgs, Store: store, Directory: dir, BasePath: apiBase, Log: log, Searcher: searcher(index, msgs, store, repo)}))
 	return &chatEnv{
 		authEnv: &authEnv{router: NewRouter(Options{
 			HTTP:          config.HTTP{BasePath: apiBase, RequestTimeout: 10 * time.Second, ReadinessTimeout: time.Second, MaxBodyBytes: 4096},
@@ -113,8 +155,15 @@ func newChatEnv(t *testing.T) *chatEnv {
 			API:           api,
 			Authenticator: authSvc,
 		})},
-		store: store, events: ev,
+		store: store, events: ev, index: index,
 	}
+}
+
+func searcher(ix *search.Index, msgs *messages.Service, store *postgres.Store, repo *scylla.Messages) *search.Searcher {
+	if ix == nil {
+		return nil
+	}
+	return search.NewSearcher(ix, searchAccess{msgs, store}, repo)
 }
 
 func (e *chatEnv) uid(t *testing.T, s session) string {

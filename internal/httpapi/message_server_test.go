@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -201,5 +202,43 @@ func TestChatMediaLists(t *testing.T) {
 	}
 	if r := e.do(t, request{method: http.MethodGet, path: "/chats/" + chat + "/media?kind=video", token: bob.access}); r.Code != http.StatusUnprocessableEntity && r.Code != http.StatusBadRequest {
 		t.Fatalf("unknown kind: %d", r.Code)
+	}
+}
+
+func TestSearchOverHTTP(t *testing.T) {
+	e := newChatEnvWith(t, true)
+	alice, bob, carol := e.register(t, "alice"), e.register(t, "bob"), e.register(t, "carol")
+	ab := e.create(t, alice, e.uid(t, bob), "").json()["id"].(string)
+	ac := e.create(t, alice, e.uid(t, carol), "").json()["id"].(string)
+	e.send(t, alice, ab, "s-1", "The quarterly report is ready")
+	e.send(t, alice, ac, "s-2", "Report for carol")
+	if err := e.index.Refresh(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	find := func(s session, path string) []map[string]any {
+		t.Helper()
+		return items(t, e.do(t, request{method: http.MethodGet, path: path, token: s.access}))
+	}
+	all := find(alice, "/search/messages?q=report")
+	if len(all) != 2 {
+		t.Fatalf("alice finds %d", len(all))
+	}
+	if h, _ := all[0]["highlight"].(string); !strings.Contains(h, "\ue000") {
+		t.Fatalf("highlight: %q", h)
+	}
+	if got := find(bob, "/search/messages?q=report"); len(got) != 1 || got[0]["message"].(map[string]any)["chat_id"] != ab {
+		t.Fatalf("bob: %v", got)
+	}
+	if got := find(alice, "/chats/"+ac+"/messages/search?q=report"); len(got) != 1 {
+		t.Fatalf("in one chat: %v", got)
+	}
+	if r := e.do(t, request{method: http.MethodGet, path: "/chats/" + ac + "/messages/search?q=report", token: bob.access}); r.Code != http.StatusNotFound {
+		t.Fatalf("a chat bob is not in: %d", r.Code)
+	}
+	if r := e.do(t, request{method: http.MethodGet, path: "/search/messages?q=r", token: bob.access}); r.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("short query: %d", r.Code)
+	}
+	if r := e.do(t, request{method: http.MethodGet, path: "/search/messages?q=report&after=nope", token: bob.access}); r.Code != http.StatusBadRequest {
+		t.Fatalf("bad cursor: %d", r.Code)
 	}
 }

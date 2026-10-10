@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.0.0-alpha.6
+  version: 2.0.0-alpha.7
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -1127,6 +1127,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
   /chats/{chat_id}/media:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
@@ -1236,6 +1237,62 @@ paths:
                     items: { $ref: "#/components/schemas/Message" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  # -------------------------------------------------------------- search
+  /search/messages:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    get:
+      tags: [messages]
+      operationId: searchAllMessages
+      summary: Search messages in all my chats
+      description: |
+        Full-text search across every chat the caller is in, newest first. Only chats the caller
+        is a member of are searched, messages they deleted for themselves are left out, and every
+        hit is checked against the message store before it is returned (a deleted message never
+        shows, even when the index lags behind). Edits and deletions reach the results within a
+        few seconds.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 2, maxLength: 128 }
+        - name: chat_id
+          in: query
+          description: Only this chat
+          schema: { $ref: "#/components/schemas/Id" }
+        - name: sender_id
+          in: query
+          description: Only messages of this user
+          schema: { $ref: "#/components/schemas/Id" }
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [text, file, voice]
+        - name: from
+          in: query
+          description: Messages created at or after this time
+          schema: { $ref: "#/components/schemas/Timestamp" }
+        - name: to
+          in: query
+          description: Messages created before this time
+          schema: { $ref: "#/components/schemas/Timestamp" }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/After"
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Matches, newest first
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MessageSearchPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
@@ -2196,7 +2253,11 @@ components:
         message: { $ref: "#/components/schemas/Message" }
         highlight:
           type: [string, "null"]
-          description: Plain-text excerpt; never HTML.
+          description: |
+            Plain-text excerpt of the matching text or file name; never HTML. The matched words are
+            wrapped in U+E000 (start) and U+E001 (end), characters of the Unicode private use area,
+            so a client can mark them without parsing markup. `null` when the message matched without
+            an excerpt.
     MessageSearchPage:
       type: object
       required: [items, next_cursor]

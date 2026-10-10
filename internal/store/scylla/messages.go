@@ -110,6 +110,9 @@ type MessageRepository interface {
 	UnhideAll(ctx context.Context, chatID, messageID int64) ([]int64, error)
 	// HiddenAmong returns which of the users have the message hidden (for any reason).
 	HiddenAmong(ctx context.Context, chatID, messageID int64, userIDs []int64) (map[int64]bool, error)
+	// DeletedForMe returns, for the messages of the chat that users deleted for themselves, who did (the
+	// search index keeps them out of those users' results).
+	DeletedForMe(ctx context.Context, chatID int64) (map[int64][]int64, error)
 	AddReaction(ctx context.Context, chatID, messageID, userID int64, emoji string, at time.Time) error
 	RemoveReaction(ctx context.Context, chatID, messageID, userID int64, emoji string) error
 	// Reactions returns the reactions of the messages, keyed by message id, in one query.
@@ -475,6 +478,35 @@ func (r *Messages) hiddenUsers(ctx context.Context, sess *gocql.Session, chatID 
 	}
 	if err := iter.Close(); err != nil {
 		return nil, fmt.Errorf("hidden users: %w", err)
+	}
+	return out, nil
+}
+
+func (r *Messages) DeletedForMe(ctx context.Context, chatID int64) (map[int64][]int64, error) {
+	ctx, cancel, sess, err := r.session(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer cancel()
+	users, err := r.hiddenUsers(ctx, sess, chatID)
+	if err != nil {
+		return nil, err
+	}
+	out := map[int64][]int64{}
+	for _, uid := range users {
+		iter := sess.Query(`SELECT message_id, reason FROM hidden_messages WHERE user_id = ? AND chat_id = ?`, uid, chatID).WithContext(ctx).Iter()
+		var (
+			id     int64
+			reason string
+		)
+		for iter.Scan(&id, &reason) {
+			if reason == HiddenDeletedForMe {
+				out[id] = append(out[id], uid)
+			}
+		}
+		if err := iter.Close(); err != nil {
+			return nil, fmt.Errorf("deleted for me: %w", err)
+		}
 	}
 	return out, nil
 }

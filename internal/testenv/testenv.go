@@ -21,6 +21,7 @@ import (
 	"github.com/gocql/gocql"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/myronsi/messenger-back/internal/store/elastic"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/redis"
 	"github.com/myronsi/messenger-back/internal/store/scylla"
@@ -83,6 +84,14 @@ func Postgres(t testing.TB) *postgres.Store {
 			t.Fatalf("%s: %v", filepath.Base(f), err)
 		}
 	}
+	// Each test has a database of its own, but the ScyllaDB keyspace and the search index are shared: chat ids
+	// start at random, so tests do not read each other's messages.
+	var start [5]byte
+	_, _ = rand.Read(start[:])
+	n := int64(start[0])<<32 | int64(start[1])<<24 | int64(start[2])<<16 | int64(start[3])<<8 | int64(start[4])
+	if _, err := db.Exec(ctx, fmt.Sprintf("ALTER TABLE chats ALTER COLUMN id RESTART WITH %d", 1+n)); err != nil {
+		t.Fatal(err)
+	}
 	_ = db.Close(ctx)
 
 	s, err := postgres.New(context.Background(), u.String(), postgres.Options{MaxConns: 8, QueryTimeout: 10 * time.Second})
@@ -91,6 +100,40 @@ func Postgres(t testing.TB) *postgres.Store {
 	}
 	t.Cleanup(s.Close)
 	return s
+}
+
+// Elastic returns a store and an index alias of the test's own; the alias's indices and template are deleted
+// afterwards. It needs TEST_ELASTIC_URL.
+func Elastic(t testing.TB) (*elastic.Store, string) {
+	t.Helper()
+	u := os.Getenv("TEST_ELASTIC_URL")
+	if u == "" {
+		t.Skip("TEST_ELASTIC_URL is not set")
+	}
+	s, err := elastic.New(u)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Ping(context.Background()); err != nil {
+		t.Fatalf("elasticsearch: %v", err)
+	}
+	alias := randomName("t")
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		// By name: Elasticsearch refuses wildcard deletes.
+		var rows []struct {
+			Index string `json:"index"`
+		}
+		if s.Do(ctx, "GET", "/_cat/indices/"+alias+"-v*?format=json&h=index", nil, &rows) == nil {
+			for _, r := range rows {
+				_ = s.Do(ctx, "DELETE", "/"+r.Index, nil, nil)
+			}
+		}
+		_ = s.Do(ctx, "DELETE", "/_index_template/"+alias, nil, nil)
+		s.Close()
+	})
+	return s, alias
 }
 
 // Redis returns a client and a key prefix of the test's own. It needs TEST_REDIS_URL.

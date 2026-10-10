@@ -287,6 +287,67 @@ func (q *Queries) ListChatEntries(ctx context.Context, arg ListChatEntriesParams
 	return items, nil
 }
 
+const listChatIDsActiveSince = `-- name: ListChatIDsActiveSince :many
+SELECT id FROM chats WHERE last_activity_at >= $1 AND id > $2 ORDER BY id LIMIT $3
+`
+
+type ListChatIDsActiveSinceParams struct {
+	Since   time.Time
+	AfterID int64
+	MaxRows int32
+}
+
+// Chats with a message since the time, for the search index reconciliation.
+func (q *Queries) ListChatIDsActiveSince(ctx context.Context, arg ListChatIDsActiveSinceParams) ([]int64, error) {
+	rows, err := q.db.Query(ctx, listChatIDsActiveSince, arg.Since, arg.AfterID, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int64{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listChatIDsAfter = `-- name: ListChatIDsAfter :many
+SELECT id FROM chats WHERE id > $1 ORDER BY id LIMIT $2
+`
+
+type ListChatIDsAfterParams struct {
+	AfterID int64
+	MaxRows int32
+}
+
+// Every chat, in id order, for jobs that walk all of them (rebuilding the search index).
+func (q *Queries) ListChatIDsAfter(ctx context.Context, arg ListChatIDsAfterParams) ([]int64, error) {
+	rows, err := q.db.Query(ctx, listChatIDsAfter, arg.AfterID, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int64{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOtherParticipants = `-- name: ListOtherParticipants :many
 SELECT chat_id, user_id, last_read_message_id, last_read_at
 FROM participants

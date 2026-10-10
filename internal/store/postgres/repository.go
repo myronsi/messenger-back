@@ -244,6 +244,8 @@ type ChatRepository interface {
 	// Unpin unpins the chat (unpinned already is fine).
 	Unpin(ctx context.Context, userID, chatID int64) error
 
+	// IDsAfter walks every chat in id order (with since: only chats with activity since then).
+	IDsAfter(ctx context.Context, afterID int64, since *time.Time, limit int) ([]int64, error)
 	// EntriesOfType is Entries of one chat type ("" for all).
 	EntriesOfType(ctx context.Context, userID int64, t ChatType, after *ChatCursor, limit int) ([]ChatEntry, error)
 

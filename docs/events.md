@@ -63,7 +63,7 @@ were in flight are reclaimed.
 | Group | Stream | Does |
 |---|---|---|
 | `chat-cleanup` | `events:chats` | `chat.deleted`: deletes the chat's messages from ScyllaDB, then once more after the grace period (`scylla.DeleteGracePeriod`) for writes that were in flight; `chat.member_removed`: drops the chat from the member's unread counters unless they are a member again by then (entries can be handled late or replayed) |
-| `search-indexer` | `events:messages` | #52 |
+| `search-indexer` | `events:messages`, `events:chats` | keeps the message search index current ([search.md](search.md)) |
 
 ## Reconciliation
 

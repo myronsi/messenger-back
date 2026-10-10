@@ -440,3 +440,21 @@ func (s *Server) TransferGroupOwnership(w http.ResponseWriter, r *http.Request, 
 	}
 	s.chats.TransferGroupOwnership(w, r, chatID, params)
 }
+
+// SearchMessages delegates to the message endpoints.
+func (s *Server) SearchMessages(w http.ResponseWriter, r *http.Request, chatID ChatId, params SearchMessagesParams) {
+	if s.messages == nil {
+		s.AuthServer.SearchMessages(w, r, chatID, params)
+		return
+	}
+	s.messages.SearchMessages(w, r, chatID, params)
+}
+
+// SearchAllMessages delegates to the message endpoints.
+func (s *Server) SearchAllMessages(w http.ResponseWriter, r *http.Request, params SearchAllMessagesParams) {
+	if s.messages == nil {
+		s.AuthServer.SearchAllMessages(w, r, params)
+		return
+	}
+	s.messages.SearchAllMessages(w, r, params)
+}

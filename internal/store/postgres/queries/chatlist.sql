@@ -88,3 +88,11 @@ SET status = 'approved', responded_at = now()
 WHERE type = 'direct_message' AND status = 'pending'
   AND ((requester_id = @a AND recipient_id = @b) OR (requester_id = @b AND recipient_id = @a))
 RETURNING *;
+
+-- name: ListChatIDsAfter :many
+-- Every chat, in id order, for jobs that walk all of them (rebuilding the search index).
+SELECT id FROM chats WHERE id > @after_id ORDER BY id LIMIT @max_rows;
+
+-- name: ListChatIDsActiveSince :many
+-- Chats with a message since the time, for the search index reconciliation.
+SELECT id FROM chats WHERE last_activity_at >= @since AND id > @after_id ORDER BY id LIMIT @max_rows;

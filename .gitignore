@@ -18,6 +18,7 @@
 !docs/media.md
 !docs/accounts.md
 !docs/chats.md
+!docs/search.md
 !CHANGELOG.md
 !server/
 !server/version.py

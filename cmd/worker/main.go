@@ -1,11 +1,13 @@
-// Command worker runs the event consumers (chat cleanup, later search indexing and push) and the
-// maintenance jobs.
+// Command worker runs the event consumers (chat cleanup, search indexing) and the maintenance jobs.
+//
+// "worker reindex" rebuilds the search index from the message store, switches to it and exits.
 package main
 
 import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"sync"
 
 	"github.com/gocql/gocql"
@@ -13,6 +15,8 @@ import (
 	"github.com/myronsi/messenger-back/internal/app"
 	"github.com/myronsi/messenger-back/internal/jobs"
 	"github.com/myronsi/messenger-back/internal/media"
+	"github.com/myronsi/messenger-back/internal/search"
+	"github.com/myronsi/messenger-back/internal/store/elastic"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/redis"
 	"github.com/myronsi/messenger-back/internal/store/scylla"
@@ -49,6 +53,26 @@ func run() error {
 		RequestTimeout: cfg.Scylla.Timeout,
 	})
 	defer func() { _ = sc.Close() }()
+	es, err := elastic.New(cfg.ElasticsearchURL.Reveal())
+	if err != nil {
+		return err
+	}
+	defer es.Close()
+	msgs := scylla.NewMessages(sc, cfg.Scylla.Timeout)
+	index := search.NewIndex(es, cfg.Search.Alias, cfg.Search.Replicas)
+	indexer := search.NewIndexer(index, msgs, pg.Attachments(), log)
+	if len(os.Args) > 1 && os.Args[1] == "reindex" {
+		if err := index.Ensure(p.Ctx); err != nil {
+			return err
+		}
+		log.Info("rebuilding the search index")
+		name, err := indexer.Rebuild(p.Ctx, pg.Chats())
+		if err != nil {
+			return err
+		}
+		log.Info("search index rebuilt", "index", name)
+		return nil
+	}
 
 	// Background work stops with its own context, after the HTTP endpoints are drained.
 	bg, stopBackground := context.WithCancel(context.Background())
@@ -64,13 +88,16 @@ func run() error {
 	}
 	mediaSvc := media.NewService(media.Options{Storage: storage, Attachments: pg.Attachments(), Log: log})
 	wg.Go(func() { collectUploads(bg, log, mediaSvc, maintenanceEvery) })
+	// Elasticsearch being away must not stop the other consumers: the template and first index are set up as
+	// soon as it answers, and index writes fail (and are retried) until then.
+	if cfg.Search.ReconcileEvery > 0 {
+		wg.Go(func() {
+			reconcileSearch(bg, log, indexer, pg.Chats(), cfg.Search.ReconcileEvery, cfg.Search.ReconcileWindow)
+		})
+	}
 
 	instance := app.InstanceID(cfg.Realtime.InstanceID)
-	consumers := []redis.ConsumerOptions{{
-		Stream: redis.StreamChats, Group: jobs.GroupChatCleanup,
-		Handler: jobs.ChatCleanup(scylla.NewMessages(sc, cfg.Scylla.Timeout), redis.NewUnread(rd.Client(), ""), pg.Chats(), scylla.DeleteGracePeriod, log),
-	}}
-	for _, o := range consumers {
+	start := func(o redis.ConsumerOptions) error {
 		group := o.Group
 		o.Name, o.Log = instance, log
 		o.OnResult = func(ok, dead bool) { p.Metrics.EventHandled(group, ok, dead) }
@@ -80,7 +107,26 @@ func run() error {
 		}
 		wg.Go(func() { c.Run(bg) })
 		log.Info("consumer started", "stream", o.Stream, "group", group)
+		return nil
 	}
+	if err := start(redis.ConsumerOptions{
+		Stream: redis.StreamChats, Group: jobs.GroupChatCleanup,
+		Handler: jobs.ChatCleanup(msgs, redis.NewUnread(rd.Client(), ""), pg.Chats(), scylla.DeleteGracePeriod, log),
+	}); err != nil {
+		return err
+	}
+	// The search consumers start once the index exists: writes before that would fail (they require the alias)
+	// and burn their retries. While Elasticsearch is away the entries wait in the streams.
+	wg.Go(func() {
+		if !ensureIndex(bg, log, index) {
+			return
+		}
+		for _, stream := range []string{redis.StreamMessages, redis.StreamChats} {
+			if err := start(redis.ConsumerOptions{Stream: stream, Group: search.Group, Handler: indexer.Handle}); err != nil {
+				log.Error("search consumer", "error", err)
+			}
+		}
+	})
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {

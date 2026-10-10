@@ -238,3 +238,18 @@ func (r approvalRepo) Reject(ctx context.Context, id, recipientID int64) (Approv
 	}
 	return req, nil
 }
+
+func (r chatRepo) IDsAfter(ctx context.Context, afterID int64, since *time.Time, limit int) ([]int64, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	var (
+		ids []int64
+		err error
+	)
+	if since != nil {
+		ids, err = r.s.q.ListChatIDsActiveSince(ctx, sqlcdb.ListChatIDsActiveSinceParams{Since: *since, AfterID: afterID, MaxRows: clampLimit(limit)})
+	} else {
+		ids, err = r.s.q.ListChatIDsAfter(ctx, sqlcdb.ListChatIDsAfterParams{AfterID: afterID, MaxRows: clampLimit(limit)})
+	}
+	return ids, mapError(err)
+}

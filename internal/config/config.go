@@ -60,6 +60,7 @@ type Config struct {
 	// ScyllaKeyspace is optional so the readiness check works before the keyspace is migrated.
 	ScyllaKeyspace   string `env:"SCYLLA_KEYSPACE"`
 	Scylla           Scylla
+	Search           Search
 	ElasticsearchURL Secret `env:"ELASTICSEARCH_URL,required,notEmpty"`
 
 	Auth     Auth
@@ -129,6 +130,18 @@ type Realtime struct {
 	SendBuffer int `env:"WS_SEND_BUFFER" envDefault:"256"`
 	// PingInterval is how often idle connections are pinged.
 	PingInterval time.Duration `env:"WS_PING_INTERVAL" envDefault:"25s"`
+}
+
+// Search configures the message search index in Elasticsearch (ELASTICSEARCH_URL).
+type Search struct {
+	// Alias is what searches and writes go through; the indices behind it are <alias>-v<n>.
+	Alias string `env:"SEARCH_ALIAS" envDefault:"messages"`
+	// Replicas of the indices the worker creates (0 for a single node).
+	Replicas int `env:"SEARCH_REPLICAS" envDefault:"1"`
+	// ReconcileEvery is how often the worker re-indexes the messages of ReconcileWindow, to repair what the
+	// event stream missed. 0 turns it off.
+	ReconcileEvery  time.Duration `env:"SEARCH_RECONCILE_EVERY" envDefault:"1h"`
+	ReconcileWindow time.Duration `env:"SEARCH_RECONCILE_WINDOW" envDefault:"2h"`
 }
 
 // Scylla tunes the ScyllaDB session; the hosts are SCYLLA_HOSTS.

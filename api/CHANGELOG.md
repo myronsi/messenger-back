@@ -2,6 +2,15 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.0.0-alpha.7
+
+Search:
+
+- New `GET /search/messages`: full-text search across all chats of the caller, with filters (`chat_id`, `sender_id`,
+  `type`, `from`, `to`) and `search_after` paging.
+- `SearchHit.highlight` wraps the matched words in U+E000 and U+E001.
+- `GET /chats/{chat_id}/messages/search` can answer `429` (searches are rate limited).
+
 ## 2.0.0-alpha.6
 
 Groups, found while implementing them:

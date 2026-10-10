@@ -62,7 +62,7 @@ One-shot containers that are safe to run again, so `make up` can be repeated at 
 | `postgres-migrate` | applies `migrations/postgres/*.up.sql` with golang-migrate |
 | `scylla-keyspace` | creates the keyspace (`SCYLLA_KEYSPACE`, default `messenger`) |
 | `scylla-migrate` | applies `migrations/scylla/*.up.cql` with golang-migrate |
-| `elasticsearch-init` | installs the `messenger-messages` index template, creates `messages-000001` behind the `messages` write alias, sets the `kibana_system` password |
+| `elasticsearch-init` | sets the `kibana_system` password (the worker sets up the message index itself, [search.md](search.md)) |
 | `object-storage-init` | creates every bucket in `S3_BUCKETS` (default `messenger-media`) |
 
 An empty migrations directory is fine; the step just says there is nothing to apply. Add a migration as
