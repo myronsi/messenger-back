@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/myronsi/messenger-back/internal/events"
+	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/redis"
 )
 
@@ -34,6 +35,16 @@ func (f *forgetter) Forget(_ context.Context, chat int64, users ...int64) error 
 	return nil
 }
 
+// members holds the current memberships as "chat/user".
+type members map[[2]int64]bool
+
+func (m members) Participant(_ context.Context, chat, user int64) (postgres.Participant, error) {
+	if m[[2]int64{chat, user}] {
+		return postgres.Participant{ChatID: chat, UserID: user}, nil
+	}
+	return postgres.Participant{}, postgres.ErrNotFound
+}
+
 func entry(e events.Event) redis.Entry {
 	f := map[string]string{}
 	for k, v := range e.Fields() {
@@ -49,7 +60,7 @@ func entry(e events.Event) redis.Entry {
 
 func TestChatDeletedRunsTwice(t *testing.T) {
 	d, f := &deleter{}, &forgetter{}
-	h := ChatCleanup(d, f, time.Minute, nil)
+	h := ChatCleanup(d, f, members{}, time.Minute, nil)
 	ctx := context.Background()
 
 	// Fresh deletion: the first pass, then come back after the grace period.
@@ -74,12 +85,20 @@ func TestChatDeletedRunsTwice(t *testing.T) {
 
 func TestMemberRemovedForgetsUnread(t *testing.T) {
 	d, f := &deleter{}, &forgetter{}
-	h := ChatCleanup(d, f, time.Minute, nil)
+	h := ChatCleanup(d, f, members{}, time.Minute, nil)
 	if err := h(context.Background(), entry(events.Event{Type: events.ChatMemberRemoved, ChatID: 4, UserID: 2})); err != nil {
 		t.Fatal(err)
 	}
 	if len(f.got) != 1 || f.got[0] != [2]int64{4, 2} || len(d.calls) != 0 {
 		t.Fatalf("forgot %v, deleted %v", f.got, d.calls)
+	}
+	// A user who is back in the chat keeps the counter: the entry was handled late.
+	h = ChatCleanup(d, f, members{{4, 3}: true}, time.Minute, nil)
+	if err := h(context.Background(), entry(events.Event{Type: events.ChatMemberRemoved, ChatID: 4, UserID: 3})); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.got) != 1 {
+		t.Fatalf("forgot the counter of a member: %v", f.got)
 	}
 	// Malformed entries are skipped, other types ignored.
 	if err := h(context.Background(), redis.Entry{Fields: map[string]string{"type": "??"}}); err != nil {

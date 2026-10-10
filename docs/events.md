@@ -41,10 +41,17 @@ entry; the instances of the worker share the group's entries):
   (keyed by message or chat id).
 - **Retries with backoff.** A failed entry stays pending and is tried again after `RetryAfter` (10 s), then
   2 × that, 3 × that, … The schedule is kept in `<stream>:retry:<group>` (entry id → "not before, failures").
+  A handler that panics fails like one that returns an error; the worker keeps running.
 - **Dead letters.** After 5 failures the entry is copied to `<stream>:dead` with `dead_group`, `dead_entry` and
-  `dead_error`, and acknowledged. `messenger_events_handled_total{outcome="dead_letter"}` counts them; alert on it.
+  `dead_error`, and acknowledged. A reclaimed entry is counted as failed *before* its handler runs, so an entry that
+  takes the whole process down every time (out of memory, killed) is dead-lettered too, instead of crash-looping.
+  `messenger_events_handled_total{outcome="dead_letter"}` counts them, as well as pending entries that were trimmed
+  from the stream before anyone handled them (logged as an error); alert on it.
 - **Crashed consumers.** Entries a consumer took but never acknowledged are reclaimed with `XAUTOCLAIM` by any
-  consumer of the group once they are idle for `RetryAfter`.
+  consumer of the group once they are idle for `RetryAfter`. While a consumer works through a batch it touches the
+  entries it has not finished every `RetryAfter / 3` (`XCLAIM … JUSTID`, only for entries it still owns), so slow
+  handlers are not mistaken for crashed ones and run twice in parallel. Retry records are written only while the
+  consumer still owns the entry.
 - **Later, not failed.** A handler can return `redis.RetryLater{After}` to get the entry back after a delay without
   it counting as a failure (the second pass of a chat deletion uses this).
 - **New groups** start at the beginning of what the stream still holds, so adding a consumer replays the retained
@@ -55,7 +62,7 @@ were in flight are reclaimed.
 
 | Group | Stream | Does |
 |---|---|---|
-| `chat-cleanup` | `events:chats` | `chat.deleted`: deletes the chat's messages from ScyllaDB, then once more after the grace period (`scylla.DeleteGracePeriod`) for writes that were in flight; `chat.member_removed`: drops the chat from the member's unread counters |
+| `chat-cleanup` | `events:chats` | `chat.deleted`: deletes the chat's messages from ScyllaDB, then once more after the grace period (`scylla.DeleteGracePeriod`) for writes that were in flight; `chat.member_removed`: drops the chat from the member's unread counters unless they are a member again by then (entries can be handled late or replayed) |
 | `search-indexer` | `events:messages` | #52 |
 
 ## Reconciliation

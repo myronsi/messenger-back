@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/myronsi/messenger-back/internal/events"
+	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/redis"
 )
 
@@ -27,12 +28,18 @@ type UnreadForgetter interface {
 	Forget(ctx context.Context, chatID int64, userIDs ...int64) error
 }
 
+// Members tells whether a user is in a chat now (postgres chat repository).
+type Members interface {
+	Participant(ctx context.Context, chatID, userID int64) (postgres.Participant, error)
+}
+
 // ChatCleanup handles events:chats:
 //
 //   - chat.deleted removes the chat's messages from ScyllaDB, and once more after the grace period, for
 //     writes that were in flight when the chat was deleted;
-//   - chat.member_removed drops the chat from the user's unread counters.
-func ChatCleanup(messages ChatDeleter, unread UnreadForgetter, grace time.Duration, log *slog.Logger) redis.Handler {
+//   - chat.member_removed drops the chat from the user's unread counters, unless the user is a member again
+//     (the entry can be handled late, or replayed).
+func ChatCleanup(messages ChatDeleter, unread UnreadForgetter, members Members, grace time.Duration, log *slog.Logger) redis.Handler {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
@@ -56,9 +63,17 @@ func ChatCleanup(messages ChatDeleter, unread UnreadForgetter, grace time.Durati
 			}
 			log.InfoContext(ctx, "chat messages deleted", "chat_id", e.ChatID)
 		case events.ChatMemberRemoved:
-			if e.ChatID != 0 && e.UserID != 0 {
-				return unread.Forget(ctx, e.ChatID, e.UserID)
+			if e.ChatID == 0 || e.UserID == 0 {
+				return nil
 			}
+			_, err := members.Participant(ctx, e.ChatID, e.UserID)
+			if err == nil {
+				return nil // added back since: the counter is live again
+			}
+			if !errors.Is(err, postgres.ErrNotFound) {
+				return err
+			}
+			return unread.Forget(ctx, e.ChatID, e.UserID)
 		}
 		return nil
 	}

@@ -5,9 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	goredis "github.com/redis/go-redis/v9"
 )
 
 // sink records handled entries by their "n" field, like an idempotent indexer keyed by message id.
@@ -216,5 +219,110 @@ func TestFailuresAreRetriedThenDeadLettered(t *testing.T) {
 	defer mu.Unlock()
 	if attempts["poison"] != 3 || attempts["later"] != 2 {
 		t.Fatalf("attempts: %v", attempts)
+	}
+}
+
+func TestPanickingHandlerIsDeadLettered(t *testing.T) {
+	s, prefix := testStore(t)
+	st := NewStreams(s.Client(), prefix, 0)
+	out := newSink()
+	run(t, prefix, "w", func(_ context.Context, e Entry) error {
+		if e.Fields["n"] == "0" {
+			panic("cannot index entry")
+		}
+		out.record(e)
+		return nil
+	}, ConsumerOptions{RetryAfter: 100 * time.Millisecond, MaxFailures: 2})
+	add(t, st, 0, 2)
+	out.waitFor(t, 1) // the consumer survived the panic
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		dead, _ := s.Client().XRange(context.Background(), prefix+StreamMessages+":dead", "-", "+").Result()
+		if len(dead) == 1 {
+			if e, _ := dead[0].Values["dead_error"].(string); !strings.Contains(e, "panicked") {
+				t.Fatalf("dead letter: %v", dead[0].Values)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the panicking entry was not dead-lettered")
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+func TestEntriesInProgressAreNotReclaimed(t *testing.T) {
+	s, prefix := testStore(t)
+	st := NewStreams(s.Client(), prefix, 0)
+	out := newSink()
+	slow := func(_ context.Context, e Entry) error {
+		time.Sleep(400 * time.Millisecond) // longer than RetryAfter: idle time alone would hand it to the other
+		out.record(e)
+		return nil
+	}
+	run(t, prefix, "a", slow, ConsumerOptions{Batch: 4})
+	add(t, st, 0, 4)
+	time.Sleep(100 * time.Millisecond) // a has taken the batch
+	run(t, prefix, "b", slow, ConsumerOptions{Batch: 4})
+	out.waitFor(t, 4)
+	time.Sleep(600 * time.Millisecond)
+	out.mu.Lock()
+	defer out.mu.Unlock()
+	for n, times := range out.seen {
+		if times != 1 {
+			t.Fatalf("entry %s was handled %d times", n, times)
+		}
+	}
+}
+
+func TestCrashLoopsAreCountedAndRecordsSwept(t *testing.T) {
+	s, prefix := testStore(t)
+	ctx := context.Background()
+	st := NewStreams(s.Client(), prefix, 0)
+	key, retry := prefix+StreamMessages, prefix+StreamMessages+":retry:test-group"
+	if err := s.Client().XGroupCreateMkStream(ctx, key, "test-group", "0").Err(); err != nil {
+		t.Fatal(err)
+	}
+	add(t, st, 0, 2)
+	// A consumer that died twice with the entries: "1" already reached the limit before its handler returned.
+	got, err := s.Client().XReadGroup(ctx, &goredis.XReadGroupArgs{Group: "test-group", Consumer: "ghost", Streams: []string{key, ">"}, Count: 2}).Result()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := got[0].Messages
+	s.Client().HSet(ctx, retry, ids[1].ID, "0,3", "9-9", "0,1")
+	time.Sleep(250 * time.Millisecond)
+
+	var mu sync.Mutex
+	var seen []string
+	run(t, prefix, "w", func(ctx context.Context, e Entry) error {
+		rec, _ := s.Client().HGet(ctx, retry, e.ID).Result()
+		mu.Lock()
+		seen = append(seen, e.Fields["n"]+"="+rec)
+		mu.Unlock()
+		return nil
+	}, ConsumerOptions{MaxFailures: 3})
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		dead, _ := s.Client().XRange(ctx, key+":dead", "-", "+").Result()
+		mu.Lock()
+		done := len(seen) == 1 && len(dead) == 1
+		mu.Unlock()
+		if done {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("handled %v, dead letters %d", seen, len(dead))
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	mu.Lock()
+	// The failure is recorded before a reclaimed entry's handler runs.
+	if !strings.HasPrefix(seen[0], "0=") || !strings.HasSuffix(seen[0], ",1") {
+		t.Fatalf("record during the handler: %v", seen)
+	}
+	mu.Unlock()
+	if n, _ := s.Client().HLen(ctx, retry).Result(); n != 0 {
+		t.Fatalf("%d retry records left (the orphan was not swept)", n)
 	}
 }

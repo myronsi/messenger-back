@@ -61,7 +61,7 @@ func run() error {
 	instance := app.InstanceID(cfg.Realtime.InstanceID)
 	consumers := []redis.ConsumerOptions{{
 		Stream: redis.StreamChats, Group: jobs.GroupChatCleanup,
-		Handler: jobs.ChatCleanup(scylla.NewMessages(sc, cfg.Scylla.Timeout), redis.NewUnread(rd.Client(), ""), scylla.DeleteGracePeriod, log),
+		Handler: jobs.ChatCleanup(scylla.NewMessages(sc, cfg.Scylla.Timeout), redis.NewUnread(rd.Client(), ""), pg.Chats(), scylla.DeleteGracePeriod, log),
 	}}
 	for _, o := range consumers {
 		group := o.Group
