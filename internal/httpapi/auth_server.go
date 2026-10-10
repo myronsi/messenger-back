@@ -346,23 +346,7 @@ func (a *AuthServer) GetMe(w http.ResponseWriter, r *http.Request, _ GetMeParams
 		a.fail(w, r, err, true)
 		return
 	}
-	id := strconv.FormatInt(u.ID, 10)
-	me := Me{
-		Id:          id,
-		Username:    u.Username,
-		DisplayName: u.DisplayName,
-		Bio:         u.Bio,
-		CreatedAt:   u.CreatedAt,
-		IsOnline:    true,
-	}
-	if !u.LastSeenAt.IsZero() {
-		seen := u.LastSeenAt
-		me.LastSeen = &seen
-	}
-	if u.AvatarURL != nil {
-		path := a.basePath + "/users/" + id + "/avatar"
-		me.AvatarUrl = &path
-	}
+	me := PresentMe(u, a.basePath)
 	noStore(w)
 	writeJSONStatus(w, http.StatusOK, me)
 }

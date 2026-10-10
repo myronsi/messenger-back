@@ -16,6 +16,7 @@ import (
 	"github.com/myronsi/messenger-back/internal/auth"
 	"github.com/myronsi/messenger-back/internal/config"
 	"github.com/myronsi/messenger-back/internal/httpapi"
+	"github.com/myronsi/messenger-back/internal/media"
 	"github.com/myronsi/messenger-back/internal/store/elastic"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/redis"
@@ -86,28 +87,50 @@ func run() error {
 		return err
 	}
 
+	storage, storagePing, err := media.StorageFrom(cfg.Media)
+	if err != nil {
+		return err
+	}
+	prober := media.NewProber(cfg.Media.FFprobe, cfg.Media.FFmpeg)
+	mediaSvc := media.NewService(media.Options{
+		Storage: storage, Attachments: pg.Attachments(), Visibility: rt.messages, Membership: rt.messages,
+		Prober: prober, SignedURLs: cfg.Media.SignedURLs, ImageWorkers: cfg.Media.ImageWorkers, Log: log,
+	})
+	if !prober.Available() {
+		log.Warn("ffprobe/ffmpeg not found: voice messages keep the duration and waveform the client sends")
+	}
+	checks := []httpapi.Check{
+		{Name: "postgres", Ping: pg.Ping},
+		{Name: "redis", Ping: rd.Ping},
+		{Name: "scylla", Ping: sc.Ping},
+		{Name: "elasticsearch", Ping: es.Ping},
+	}
+	if storagePing != nil {
+		checks = append(checks, httpapi.Check{Name: "object_storage", Ping: storagePing})
+	}
 	router := httpapi.NewRouter(httpapi.Options{
 		HTTP:       cfg.HTTP,
 		Production: cfg.Env == "production",
 		Tracing:    cfg.Tracing.Enabled,
 		Log:        log,
 		Metrics:    p.Metrics,
-		API: httpapi.NewAuthServer(httpapi.AuthOptions{
-			Service:        authSvc,
-			Log:            log,
-			BasePath:       cfg.HTTP.BasePath,
-			CookiePath:     cfg.Auth.RefreshCookiePath,
-			CookieSecure:   cfg.Auth.CookieSecure,
-			TrustedProxies: trustedProxies,
-		}),
-		Authenticator: authSvc,
-		WebSocket:     rt.gateway,
-		Checks: []httpapi.Check{
-			{Name: "postgres", Ping: pg.Ping},
-			{Name: "redis", Ping: rd.Ping},
-			{Name: "scylla", Ping: sc.Ping},
-			{Name: "elasticsearch", Ping: es.Ping},
-		},
+		API: httpapi.NewServer(
+			httpapi.NewAuthServer(httpapi.AuthOptions{
+				Service:        authSvc,
+				Log:            log,
+				BasePath:       cfg.HTTP.BasePath,
+				CookiePath:     cfg.Auth.RefreshCookiePath,
+				CookieSecure:   cfg.Auth.CookieSecure,
+				TrustedProxies: trustedProxies,
+			}),
+			httpapi.NewMediaServer(httpapi.MediaOptions{
+				Service: mediaSvc, Store: pg, Directory: rt.directory, Limiter: rt.limiter, BasePath: cfg.HTTP.BasePath, Log: log,
+			}),
+		),
+		Authenticator:  authSvc,
+		WebSocket:      rt.gateway,
+		UploadMaxBytes: mediaSvc.Limits().Max(),
+		Checks:         checks,
 	})
 
 	srv := app.NewServer(cfg.HTTP.Addr, router, cfg.HTTP)

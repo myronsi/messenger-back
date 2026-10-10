@@ -14,11 +14,16 @@ type User struct {
 	ID          int64
 	Username    string
 	DisplayName string
-	AvatarURL   *string
-	Bio         *string
-	LastSeenAt  time.Time
-	CreatedAt   time.Time
+	// AvatarURL is the v1 avatar path; AvatarAttachmentID the v2 avatar (an attachment with purpose avatar).
+	AvatarURL          *string
+	AvatarAttachmentID *uuid.UUID
+	Bio                *string
+	LastSeenAt         time.Time
+	CreatedAt          time.Time
 }
+
+// HasAvatar reports whether the user has an avatar of either generation.
+func (u User) HasAvatar() bool { return u.AvatarAttachmentID != nil || u.AvatarURL != nil }
 
 // Credentials is what login needs.
 type Credentials struct {
@@ -94,9 +99,11 @@ type Chat struct {
 	Name        *string
 	Description string
 	AvatarURL   *string
-	CreatedBy   *int64
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	// AvatarAttachmentID is the v2 group avatar.
+	AvatarAttachmentID *uuid.UUID
+	CreatedBy          *int64
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
 }
 
 // Participant is a user's membership of a chat.
@@ -145,16 +152,28 @@ type ChatRepository interface {
 	Delete(ctx context.Context, chatID int64) (attachmentKeys []string, err error)
 }
 
+// Attachment purposes and kinds (see media).
+const (
+	PurposeMessage = "message"
+	PurposeAvatar  = "avatar"
+)
+
 // Attachment is the metadata of an uploaded file.
 type Attachment struct {
 	ID         uuid.UUID
 	UploaderID *int64
-	ChatID     int64
-	StorageKey string
-	MimeType   string
-	Size       int64
-	Width      *int32
-	Height     *int32
+	// ChatID is set for v1 attachments, which belonged to one chat from the upload on. v2 uploads are linked
+	// to messages instead (AttachmentLink).
+	ChatID       *int64
+	Purpose      string
+	Kind         string
+	Filename     string
+	StorageKey   string
+	ThumbnailKey *string
+	MimeType     string
+	Size         int64
+	Width        *int32
+	Height       *int32
 	// Duration is in seconds (audio and video).
 	Duration  *float64
 	Waveform  []int16
@@ -163,25 +182,77 @@ type Attachment struct {
 
 // NewAttachment describes a file that was stored under StorageKey.
 type NewAttachment struct {
-	UploaderID *int64
-	ChatID     int64
-	StorageKey string
-	MimeType   string
-	Size       int64
-	Width      *int32
-	Height     *int32
-	Duration   *float64
-	Waveform   []int16
+	UploaderID   *int64
+	ChatID       *int64
+	Purpose      string
+	Kind         string
+	Filename     string
+	StorageKey   string
+	ThumbnailKey *string
+	MimeType     string
+	Size         int64
+	Width        *int32
+	Height       *int32
+	Duration     *float64
+	Waveform     []int16
 }
 
-// AttachmentRepository stores attachment metadata.
+// AttachmentLink is a message that uses an attachment.
+type AttachmentLink struct {
+	ChatID    int64
+	MessageID int64
+}
+
+// LinkedAttachment is an attachment as it appears in a chat's media list.
+type LinkedAttachment struct {
+	Attachment
+	MessageID int64
+	LinkedAt  time.Time
+}
+
+// UnreferencedAttachment is an upload nothing uses.
+type UnreferencedAttachment struct {
+	ID           uuid.UUID
+	StorageKey   string
+	ThumbnailKey *string
+}
+
+// AvatarVersion is an entry of a user's avatar history.
+type AvatarVersion struct {
+	ID           int64
+	AttachmentID uuid.UUID
+	IsCurrent    bool
+	CreatedAt    time.Time
+}
+
+// AttachmentRepository stores attachment metadata, the links of attachments to messages and avatars.
 type AttachmentRepository interface {
 	Create(ctx context.Context, a NewAttachment) (Attachment, error)
 	Get(ctx context.Context, id uuid.UUID) (Attachment, error)
-	// ListByChat returns the newest attachments of a chat. limit is capped at 500.
+	// ListByChat returns the newest v1 attachments of a chat. limit is capped at 500.
 	ListByChat(ctx context.Context, chatID int64, limit int) ([]Attachment, error)
-	// Delete removes the row and returns the storage key, so the caller can delete the object.
-	Delete(ctx context.Context, id uuid.UUID) (storageKey string, err error)
+	// Delete removes the row and returns the storage keys (file and thumbnail), so the caller can delete the objects.
+	Delete(ctx context.Context, id uuid.UUID) (keys []string, err error)
+	// Link records that a message uses the attachment (idempotent).
+	Link(ctx context.Context, attachmentID uuid.UUID, chatID, messageID int64) error
+	// LinksForViewer returns the messages using the attachment in chats the viewer is a member of (at most 50).
+	LinksForViewer(ctx context.Context, attachmentID uuid.UUID, viewerID int64) ([]AttachmentLink, error)
+	// ListLinked returns a chat's attachments of the kinds, newest first, linked before `before` (zero: now).
+	ListLinked(ctx context.Context, chatID int64, kinds []string, before time.Time, limit int) ([]LinkedAttachment, error)
+	// Unreferenced lists uploads older than the time that nothing uses.
+	Unreferenced(ctx context.Context, olderThan time.Time, limit int) ([]UnreferencedAttachment, error)
+	// DeleteIfUnreferenced deletes the row when it is still unused and returns its storage keys; deleted is false
+	// when something started using it meanwhile.
+	DeleteIfUnreferenced(ctx context.Context, id uuid.UUID) (keys []string, deleted bool, err error)
+	// SetUserAvatar makes the attachment the user's avatar and the current entry of the history; nil removes
+	// the avatar.
+	SetUserAvatar(ctx context.Context, userID int64, attachmentID *uuid.UUID) error
+	// AvatarHistory returns the user's avatars, newest first, with ids below beforeID (0: from the newest).
+	AvatarHistory(ctx context.Context, userID, beforeID int64, limit int) ([]AvatarVersion, error)
+	// SetChatAvatar sets or (nil) removes the avatar of a group.
+	SetChatAvatar(ctx context.Context, chatID int64, attachmentID *uuid.UUID) error
+	// ChatsWithAvatar returns the groups that use the attachment as their avatar.
+	ChatsWithAvatar(ctx context.Context, attachmentID uuid.UUID) ([]int64, error)
 }
 
 // SecurityEvent is one entry of the security log of an account.

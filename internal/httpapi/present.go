@@ -41,6 +41,24 @@ func PresentUser(v users.View) User {
 	return u
 }
 
+// KindVoiceString is the stored kind of a voice message upload.
+const KindVoiceString = "voice"
+
+// PresentMe renders the caller's own account.
+func PresentMe(u postgres.User, basePath string) Me {
+	id := FormatID(u.ID)
+	me := Me{Id: id, Username: u.Username, DisplayName: u.DisplayName, Bio: u.Bio, CreatedAt: utc(u.CreatedAt), IsOnline: true}
+	if !u.LastSeenAt.IsZero() {
+		seen := utc(u.LastSeenAt)
+		me.LastSeen = &seen
+	}
+	if u.HasAvatar() {
+		path := basePath + "/users/" + id + "/avatar"
+		me.AvatarUrl = &path
+	}
+	return me
+}
+
 // AttachmentKindOf derives the kind shown to clients from the stored type and the message type.
 func AttachmentKindOf(mime, messageType string) AttachmentKind {
 	switch {
@@ -58,11 +76,17 @@ func AttachmentKindOf(mime, messageType string) AttachmentKind {
 
 // PresentAttachment renders attachment metadata; the URL always points at the authenticated endpoint.
 func PresentAttachment(a postgres.Attachment, messageType, basePath string) Attachment {
-	id := a.ID.String()
-	url := basePath + "/attachments/" + id + "/content"
+	url := basePath + "/attachments/" + a.ID.String() + "/content"
 	out := Attachment{
-		Id: id, Kind: AttachmentKindOf(a.MimeType, messageType), ContentType: a.MimeType,
-		Filename: "attachment", Size: int(a.Size), Url: &url,
+		Id: a.ID, Kind: AttachmentKindOf(a.MimeType, messageType), ContentType: a.MimeType,
+		Filename: a.Filename, Size: int(a.Size), Url: &url,
+	}
+	if a.Kind == KindVoiceString {
+		out.Kind = AttachmentKindVoice
+	}
+	if a.ThumbnailKey != nil {
+		thumb := url + "?variant=thumbnail"
+		out.ThumbnailUrl = &thumb
 	}
 	if a.Width != nil {
 		w := int(*a.Width)

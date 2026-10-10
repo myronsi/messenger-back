@@ -102,6 +102,8 @@ type MessageRepository interface {
 	Delete(ctx context.Context, chatID, messageID int64) error
 	// Hide hides the message from one user.
 	Hide(ctx context.Context, userID, chatID, messageID int64, reason string) error
+	// Hidden reports whether the message is hidden for the user.
+	Hidden(ctx context.Context, userID, chatID, messageID int64) (bool, error)
 	// Unhide shows a message hidden as not delivered once it is delivered; true when it was hidden so.
 	Unhide(ctx context.Context, userID, chatID, messageID int64) (bool, error)
 	// UnhideAll shows the message to every user it was hidden from as not delivered and returns them.
@@ -430,6 +432,19 @@ func (r *Messages) markHidden(ctx context.Context, sess *gocql.Session, chatID, 
 
 // hideAttempts bounds the insert/upgrade rounds of Hide against concurrent Unhide calls.
 const hideAttempts = 5
+
+func (r *Messages) Hidden(ctx context.Context, userID, chatID, messageID int64) (bool, error) {
+	ctx, cancel, sess, err := r.session(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer cancel()
+	h, err := r.hiddenIn(ctx, sess, userID, chatID, messageID, messageID)
+	if err != nil {
+		return false, err
+	}
+	return h[messageID], nil
+}
 
 func (r *Messages) Unhide(ctx context.Context, userID, chatID, messageID int64) (bool, error) {
 	ctx, cancel, sess, err := r.session(ctx)

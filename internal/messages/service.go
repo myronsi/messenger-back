@@ -153,6 +153,32 @@ func (s *Service) Members(ctx context.Context, chatID int64) ([]int64, error) {
 	return m, nil
 }
 
+// IsMember reports whether the user is in the chat (from the members cache).
+func (s *Service) IsMember(ctx context.Context, chatID, userID int64) (bool, error) {
+	return s.d.Members.IsMember(ctx, chatID, userID, s.loadMembers)
+}
+
+// Visible reports whether the viewer can see the message: a member of its chat, the message exists, is not
+// deleted for everyone and not hidden for the viewer.
+func (s *Service) Visible(ctx context.Context, viewerID, chatID, messageID int64) (bool, error) {
+	ok, err := s.IsMember(ctx, chatID, viewerID)
+	if err != nil || !ok {
+		return false, err
+	}
+	m, err := s.message(ctx, chatID, messageID)
+	if errors.Is(err, ErrNotFound) {
+		return false, nil
+	}
+	if err != nil || m.Deleted {
+		return false, err
+	}
+	hidden, err := s.d.Messages.Hidden(ctx, viewerID, chatID, messageID)
+	if err != nil {
+		return false, err
+	}
+	return !hidden, nil
+}
+
 // requireMember fails with ErrNotFound unless the user is in the chat.
 func (s *Service) requireMember(ctx context.Context, chatID, userID int64) error {
 	ok, err := s.d.Members.IsMember(ctx, chatID, userID, s.loadMembers)
@@ -282,6 +308,15 @@ func (s *Service) Send(ctx context.Context, r SendRequest) (Sent, error) {
 		ChatID: r.ChatID, ID: id, SenderID: &sender, Type: r.Type, Content: r.Content,
 		AttachmentID: attachment, ReplyTo: r.ReplyTo, CreatedAt: ids.Time(id),
 	}
+	if attachment != nil {
+		// Linked before the message is stored, so recipients can download the file as soon as they see it.
+		if err := s.d.Store.Attachments().Link(ctx, uuid.UUID(*attachment), r.ChatID, id); err != nil {
+			if rerr := s.d.Dedup.Release(context.WithoutCancel(ctx), r.SenderID, r.ChatID, r.ClientTempID, id); rerr != nil {
+				s.d.Log.WarnContext(ctx, "release client_temp_id", "error", rerr)
+			}
+			return Sent{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
+		}
+	}
 	if err := s.d.Messages.Insert(ctx, m); err != nil {
 		if rerr := s.d.Dedup.Release(context.WithoutCancel(ctx), r.SenderID, r.ChatID, r.ClientTempID, id); rerr != nil {
 			s.d.Log.WarnContext(ctx, "release client_temp_id", "error", rerr)
@@ -355,17 +390,18 @@ func (s *Service) checkNotBlocked(ctx context.Context, sender int64, members []i
 	return nil
 }
 
-// checkAttachment allows only a file the sender uploaded to this chat; a voice message needs audio.
+// checkAttachment allows only a message upload of the sender (a v1 attachment only in its own chat); a voice
+// message needs a voice or audio upload.
 func (s *Service) checkAttachment(ctx context.Context, r SendRequest) (gocql.UUID, error) {
 	a, err := s.d.Store.Attachments().Get(ctx, *r.AttachmentID)
 	if errors.Is(err, postgres.ErrNotFound) {
-		return gocql.UUID{}, invalid("attachment_id is not an attachment of this chat")
+		return gocql.UUID{}, invalid("attachment_id is not one of your uploads")
 	}
 	if err != nil {
 		return gocql.UUID{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
-	if a.ChatID != r.ChatID || a.UploaderID == nil || *a.UploaderID != r.SenderID {
-		return gocql.UUID{}, invalid("attachment_id is not an attachment of this chat")
+	if a.UploaderID == nil || *a.UploaderID != r.SenderID || a.Purpose != postgres.PurposeMessage || (a.ChatID != nil && *a.ChatID != r.ChatID) {
+		return gocql.UUID{}, invalid("attachment_id is not one of your uploads")
 	}
 	if r.Type == scylla.TypeVoice && !strings.HasPrefix(a.MimeType, "audio/") {
 		return gocql.UUID{}, invalid("a voice message needs an audio attachment")

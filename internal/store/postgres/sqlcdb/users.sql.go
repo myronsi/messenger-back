@@ -12,7 +12,7 @@ import (
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (username, display_name, password_hash)
 VALUES ($1, $2, $3)
-RETURNING id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at
+RETURNING id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id
 `
 
 type CreateUserParams struct {
@@ -34,6 +34,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.LastSeenAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AvatarAttachmentID,
 	)
 	return i, err
 }
@@ -60,7 +61,7 @@ func (q *Queries) EnsurePrivacySettings(ctx context.Context, userID int64) error
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at FROM users WHERE id = $1
+SELECT id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
@@ -76,12 +77,13 @@ func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
 		&i.LastSeenAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AvatarAttachmentID,
 	)
 	return i, err
 }
 
 const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at FROM users WHERE LOWER(username) = LOWER($1)
+SELECT id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id FROM users WHERE LOWER(username) = LOWER($1)
 `
 
 func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User, error) {
@@ -97,12 +99,13 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 		&i.LastSeenAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AvatarAttachmentID,
 	)
 	return i, err
 }
 
 const listUsersByIDs = `-- name: ListUsersByIDs :many
-SELECT id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at FROM users WHERE id = ANY($1::BIGINT[])
+SELECT id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id FROM users WHERE id = ANY($1::BIGINT[])
 `
 
 func (q *Queries) ListUsersByIDs(ctx context.Context, ids []int64) ([]User, error) {
@@ -124,6 +127,7 @@ func (q *Queries) ListUsersByIDs(ctx context.Context, ids []int64) ([]User, erro
 			&i.LastSeenAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.AvatarAttachmentID,
 		); err != nil {
 			return nil, err
 		}
@@ -136,7 +140,7 @@ func (q *Queries) ListUsersByIDs(ctx context.Context, ids []int64) ([]User, erro
 }
 
 const lockUser = `-- name: LockUser :one
-SELECT id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at FROM users WHERE id = $1 FOR UPDATE
+SELECT id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id FROM users WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) LockUser(ctx context.Context, id int64) (User, error) {
@@ -152,6 +156,7 @@ func (q *Queries) LockUser(ctx context.Context, id int64) (User, error) {
 		&i.LastSeenAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AvatarAttachmentID,
 	)
 	return i, err
 }
@@ -221,7 +226,7 @@ const updateUserProfile = `-- name: UpdateUserProfile :one
 UPDATE users
 SET display_name = $1, bio = $2, avatar_url = $3
 WHERE id = $4
-RETURNING id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at
+RETURNING id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id
 `
 
 type UpdateUserProfileParams struct {
@@ -249,6 +254,7 @@ func (q *Queries) UpdateUserProfile(ctx context.Context, arg UpdateUserProfilePa
 		&i.LastSeenAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AvatarAttachmentID,
 	)
 	return i, err
 }

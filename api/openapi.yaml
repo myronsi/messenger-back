@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.0.0-alpha.3
+  version: 2.0.0-alpha.4
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -727,7 +727,14 @@ paths:
       tags: [users]
       operationId: getUserAvatar
       summary: Current avatar image
-      description: Respects the avatar visibility of the user; falls back to the default avatar.
+      description: |
+        Respects the avatar visibility of the user; falls back to the default avatar. With `version`, an
+        earlier avatar of the history (`AvatarVersion.url`).
+      parameters:
+        - name: version
+          in: query
+          description: "`id` of an `AvatarVersion` of this user."
+          schema: { $ref: "#/components/schemas/Id" }
       responses:
         "426": { $ref: "#/components/responses/ClientOutdated" }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -843,7 +850,19 @@ paths:
       tags: [attachments]
       operationId: getAttachmentContent
       summary: Download an attachment
-      description: Only participants of the chat the attachment was sent to (and its uploader) can download it.
+      description: |
+        Only the uploader and members of a chat in which a message using the attachment is visible to them can
+        download it. The answer is the file, or a `302` redirect to a short-lived signed URL of the object
+        storage. Images, audio and video are sent `inline`; everything else as a download
+        (`Content-Disposition: attachment`, `application/octet-stream`), always with
+        `X-Content-Type-Options: nosniff`.
+      parameters:
+        - name: variant
+          in: query
+          description: "`thumbnail`: a JPEG of at most 320 px (images only; `thumbnail_url` of the attachment)."
+          schema:
+            type: string
+            enum: [thumbnail]
       responses:
         "426": { $ref: "#/components/responses/ClientOutdated" }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -1558,7 +1577,7 @@ components:
       name: attachment_id
       in: path
       required: true
-      schema: { $ref: "#/components/schemas/Id" }
+      schema: { $ref: "#/components/schemas/AttachmentRef" }
     SessionId:
       name: session_id
       in: path
@@ -1641,6 +1660,11 @@ components:
       pattern: "^[0-9]{1,19}$"
       description: Decimal ID as a string (Snowflake IDs exceed 2^53).
       examples: ["7217400317439950848"]
+    AttachmentRef:
+      type: string
+      format: uuid
+      description: ID of an uploaded attachment (a UUID, unlike the decimal IDs of messages, users and chats).
+      examples: ["5f0c8a64-2f2b-4c7e-9d0e-6b1f3a2c4d5e"]
     Cursor:
       type: [string, "null"]
       maxLength: 256
@@ -1824,7 +1848,7 @@ components:
       type: object
       required: [attachment_id]
       properties:
-        attachment_id: { $ref: "#/components/schemas/Id" }
+        attachment_id: { $ref: "#/components/schemas/AttachmentRef" }
     SecuritySettings:
       type: object
       required: [session_duration_days, two_factor_enabled]
@@ -2021,7 +2045,7 @@ components:
       type: object
       required: [id, kind, filename, content_type, size, url]
       properties:
-        id: { $ref: "#/components/schemas/Id" }
+        id: { $ref: "#/components/schemas/AttachmentRef" }
         kind: { $ref: "#/components/schemas/AttachmentKind" }
         filename: { type: string }
         content_type:
@@ -2176,7 +2200,7 @@ components:
         attachment_id:
           description: Required and not null for `file` and `voice`; never a URL.
           oneOf:
-            - $ref: "#/components/schemas/Id"
+            - $ref: "#/components/schemas/AttachmentRef"
             - type: "null"
         reply_to:
           oneOf:
@@ -2188,7 +2212,7 @@ components:
       then:
         required: [attachment_id]
         properties:
-          attachment_id: { $ref: "#/components/schemas/Id" }
+          attachment_id: { $ref: "#/components/schemas/AttachmentRef" }
       else:
         required: [content]
         properties:

@@ -23,6 +23,8 @@ func userFrom(u sqlcdb.User) User {
 		Bio:         u.Bio,
 		LastSeenAt:  u.LastSeenAt,
 		CreatedAt:   u.CreatedAt,
+
+		AvatarAttachmentID: u.AvatarAttachmentID,
 	}
 }
 

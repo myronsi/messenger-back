@@ -157,7 +157,7 @@ func TestAttachmentsMustBelongToTheSenderAndChat(t *testing.T) {
 	chat, _, _ := f.pg.Chats().CreateDirect(ctx, alice, bob)
 	other, _, _ := f.pg.Chats().CreateDirect(ctx, alice, f.user("carol"))
 	upload := func(chatID, uploader int64, mime string) uuid.UUID {
-		a, err := f.pg.Attachments().Create(ctx, postgres.NewAttachment{UploaderID: &uploader, ChatID: chatID, StorageKey: "attachments/" + uuid.NewString(), MimeType: mime, Size: 10})
+		a, err := f.pg.Attachments().Create(ctx, postgres.NewAttachment{UploaderID: &uploader, ChatID: &chatID, StorageKey: "attachments/" + uuid.NewString(), MimeType: mime, Size: 10})
 		if err != nil {
 			t.Fatal(err)
 		}
