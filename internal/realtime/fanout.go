@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/myronsi/messenger-back/internal/chats"
 	"github.com/myronsi/messenger-back/internal/httpapi"
 	"github.com/myronsi/messenger-back/internal/messages"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
@@ -318,4 +319,45 @@ func (f *Fanout) Presence(ctx context.Context, c redis.Change, lastSeen time.Tim
 		frames[w] = frame{Kind: kindPresence, Subject: c.UserID, Version: c.Version, Event: raw}
 	}
 	f.publish(ctx, frames)
+}
+
+var _ chats.Notifier = (*Fanout)(nil)
+
+func (f *Fanout) chatEvent(ctx context.Context, typ string, chatID int64, views map[int64]chats.View) {
+	frames := make(map[int64]frame, len(views))
+	for uid, v := range views {
+		raw, err := f.encode(typ, chatID, map[string]any{"chat": httpapi.PresentChat(v, f.basePath)}, "")
+		if err != nil {
+			f.log.ErrorContext(ctx, "encode event", "error", err, "type", typ)
+			return
+		}
+		frames[uid] = frame{Kind: kindEvent, ChatID: chatID, Event: raw}
+	}
+	f.publish(ctx, frames)
+}
+
+// ChatCreated implements chats.Notifier: the chat appears in the users' lists, and their gateways deliver
+// its events again if they had been removed from it before.
+func (f *Fanout) ChatCreated(ctx context.Context, chatID int64, views map[int64]chats.View) {
+	f.chatEvent(ctx, "chat_created", chatID, views)
+}
+
+// ChatUpdated implements chats.Notifier (chat_list_update).
+func (f *Fanout) ChatUpdated(ctx context.Context, chatID int64, views map[int64]chats.View) {
+	f.chatEvent(ctx, "chat_list_update", chatID, views)
+}
+
+// ChatRemoved implements chats.Notifier (chat_deleted).
+func (f *Fanout) ChatRemoved(ctx context.Context, chatID int64, userIDs []int64) {
+	f.Removed(ctx, chatID, userIDs)
+}
+
+// RequestCreated implements chats.Notifier: the request appears in the recipient's inbox.
+func (f *Fanout) RequestCreated(ctx context.Context, r chats.RequestView) {
+	raw, err := f.encode("approval_request_created", 0, map[string]any{"request": httpapi.PresentRequest(r)}, "")
+	if err != nil {
+		f.log.ErrorContext(ctx, "encode event", "error", err)
+		return
+	}
+	f.publish(ctx, map[int64]frame{r.Request.RecipientID: {Kind: kindEvent, Event: raw}})
 }

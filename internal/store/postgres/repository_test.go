@@ -755,3 +755,37 @@ func TestGarbageCollectionWaitsForALinkInFlight(t *testing.T) {
 		t.Fatalf("the linked upload is gone: %v", err)
 	}
 }
+
+func TestPinsAreLimited(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	me := mustUser(t, s, "pinner")
+	var chatIDs []int64
+	for i := range 3 {
+		other := mustUser(t, s, fmt.Sprintf("pinned_%d", i))
+		c, _, err := s.Chats().CreateDirect(ctx, me.ID, other.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		chatIDs = append(chatIDs, c.ID)
+	}
+	for _, id := range chatIDs[:2] {
+		if err := s.Chats().Pin(ctx, me.ID, id, 2); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.Chats().Pin(ctx, me.ID, chatIDs[0], 2); err != nil {
+		t.Fatalf("pinning a pinned chat again: %v", err)
+	}
+	if err := s.Chats().Pin(ctx, me.ID, chatIDs[2], 2); !errors.Is(err, ErrConflict) {
+		t.Fatalf("third pin: %v", err)
+	}
+	stranger := mustUser(t, s, "stranger")
+	if err := s.Chats().Pin(ctx, stranger.ID, chatIDs[0], 2); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("pin of a non-member: %v", err)
+	}
+	entries, err := s.Chats().Entries(ctx, me.ID, nil, 10)
+	if err != nil || len(entries) != 3 || entries[0].PinnedAt == nil || entries[1].PinnedAt == nil || entries[2].PinnedAt != nil {
+		t.Fatalf("entries: %+v %v", entries, err)
+	}
+}

@@ -324,6 +324,10 @@ func (s *Service) Send(ctx context.Context, r SendRequest) (Sent, error) {
 		return Sent{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
 	s.d.Accepted()
+	// The chat moves up in its members' lists; a failure only leaves the order stale until the next message.
+	if err := s.d.Store.Chats().TouchActivity(ctx, r.ChatID, id, m.CreatedAt); err != nil {
+		s.d.Log.WarnContext(ctx, "chat activity", "error", err, "chat_id", r.ChatID)
+	}
 
 	others := without(members, r.SenderID)
 	if err := s.d.Unread.Increment(ctx, r.ChatID, others...); err != nil {
@@ -572,27 +576,44 @@ func (s *Service) React(ctx context.Context, userID, chatID, messageID int64, em
 	return nil
 }
 
-// Read marks the chat as read up to and including the message. Read positions only move forward. The
-// reader's other devices always learn about it; the other members only when read receipts are on.
-func (s *Service) Read(ctx context.Context, userID, chatID, messageID int64) error {
+// Read marks the chat as read up to and including the message and returns how many messages are still
+// unread (at most 999). Read positions only move forward. The reader's other devices always learn about it;
+// the other members only when read receipts are on.
+func (s *Service) Read(ctx context.Context, userID, chatID, messageID int64) (int, error) {
 	if err := s.requireMember(ctx, chatID, userID); err != nil {
-		return err
+		return 0, err
 	}
 	if _, err := s.message(ctx, chatID, messageID); err != nil {
-		return err
+		return 0, err
 	}
 	advanced, err := s.d.Store.Chats().MarkRead(ctx, chatID, userID, messageID)
 	if errors.Is(err, postgres.ErrNotFound) {
-		return ErrNotFound // removed from the chat after the cached membership check
+		return 0, ErrNotFound // removed from the chat after the cached membership check
 	}
 	if err != nil {
-		return fmt.Errorf("%w: %w", ErrUnavailable, err)
+		return 0, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
 	if !advanced {
-		return nil // an older position (a lagging tab): nothing changes, nobody is told
+		// An older position (a lagging tab): nothing changes and nobody is told; the count is from the
+		// position the user already reached.
+		p, err := s.d.Store.Chats().Participant(ctx, chatID, userID)
+		if err != nil {
+			return 0, fmt.Errorf("%w: %w", ErrUnavailable, err)
+		}
+		from := messageID
+		if p.LastReadMessageID != nil {
+			from = *p.LastReadMessageID
+		}
+		n, err := s.d.Messages.CountAfter(ctx, chatID, userID, from, unreadCap)
+		if err != nil {
+			return 0, fmt.Errorf("%w: %w", ErrUnavailable, err)
+		}
+		return n, nil
 	}
-	if n, err := s.d.Messages.CountAfter(ctx, chatID, userID, messageID, unreadCap); err != nil {
+	n, err := s.d.Messages.CountAfter(ctx, chatID, userID, messageID, unreadCap)
+	if err != nil {
 		s.d.Log.WarnContext(ctx, "unread recount", "error", err, "chat_id", chatID)
+		n = 0
 	} else if err := s.d.Unread.Set(ctx, userID, chatID, int64(n)); err != nil {
 		s.d.Log.WarnContext(ctx, "unread set", "error", err, "chat_id", chatID)
 	}
@@ -604,7 +625,7 @@ func (s *Service) Read(ctx context.Context, userID, chatID, messageID int64) err
 		}
 	}
 	s.d.Notifier.Read(ctx, chatID, userID, messageID, s.now().UTC(), recipients)
-	return nil
+	return n, nil
 }
 
 // Resend delivers one of the user's stored messages again, to members it was not delivered to as well.

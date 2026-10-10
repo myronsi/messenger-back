@@ -79,6 +79,9 @@ func (s *Store) Chats() ChatRepository { return chatRepo{s} }
 // Social returns the repository of privacy settings, blocks and contact names.
 func (s *Store) Social() SocialRepository { return socialRepo{s} }
 
+// Approvals returns the approval request repository.
+func (s *Store) Approvals() ApprovalRepository { return approvalRepo{s} }
+
 // Attachments returns the attachment metadata repository.
 func (s *Store) Attachments() AttachmentRepository { return attachmentRepo{s} }
 

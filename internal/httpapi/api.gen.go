@@ -2216,7 +2216,7 @@ type ServerInterface interface {
 	// CreateChat Start a direct chat
 	// (POST /chats)
 	CreateChat(w http.ResponseWriter, r *http.Request, params CreateChatParams)
-	// DeleteChat Delete a direct chat for yourself
+	// DeleteChat Delete a direct chat
 	// (DELETE /chats/{chat_id})
 	DeleteChat(w http.ResponseWriter, r *http.Request, chatId ChatId, params DeleteChatParams)
 	// GetChat One chat
@@ -8223,6 +8223,22 @@ func (response CreateChat404ApplicationProblemPlusJSONResponse) VisitCreateChatR
 	return err
 }
 
+type CreateChat422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response CreateChat422ApplicationProblemPlusJSONResponse) VisitCreateChatResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type CreateChat426ApplicationProblemPlusJSONResponse struct {
 	ClientOutdatedApplicationProblemPlusJSONResponse
 }
@@ -8319,6 +8335,22 @@ func (response DeleteChat404ApplicationProblemPlusJSONResponse) VisitDeleteChatR
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteChat422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteChat422ApplicationProblemPlusJSONResponse) VisitDeleteChatResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -10357,6 +10389,25 @@ func (response DeleteMe426ApplicationProblemPlusJSONResponse) VisitDeleteMeRespo
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMe429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteMe429ApplicationProblemPlusJSONResponse) VisitDeleteMeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -13400,7 +13451,7 @@ type StrictServerInterface interface {
 	// CreateChat Start a direct chat
 	// (POST /chats)
 	CreateChat(ctx context.Context, request CreateChatRequestObject) (CreateChatResponseObject, error)
-	// DeleteChat Delete a direct chat for yourself
+	// DeleteChat Delete a direct chat
 	// (DELETE /chats/{chat_id})
 	DeleteChat(ctx context.Context, request DeleteChatRequestObject) (DeleteChatResponseObject, error)
 	// GetChat One chat

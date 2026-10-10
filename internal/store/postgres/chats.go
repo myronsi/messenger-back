@@ -27,6 +27,8 @@ func chatFrom(c sqlcdb.Chat) Chat {
 		CreatedBy:          c.CreatedBy,
 		CreatedAt:          c.CreatedAt,
 		UpdatedAt:          c.UpdatedAt,
+		LastMessageID:      c.LastMessageID,
+		LastActivityAt:     c.LastActivityAt,
 	}
 }
 
@@ -36,6 +38,7 @@ func participantFrom(p sqlcdb.Participant) Participant {
 		UserID:            p.UserID,
 		Role:              Role(p.Role),
 		LastReadMessageID: p.LastReadMessageID,
+		LastReadAt:        p.LastReadAt,
 		JoinedAt:          p.JoinedAt,
 	}
 }
@@ -44,34 +47,38 @@ func (r chatRepo) CreateDirect(ctx context.Context, creatorID, otherID int64) (C
 	if creatorID == otherID {
 		return Chat{}, false, fmt.Errorf("%w: a direct chat needs two different users", ErrInvalid)
 	}
-	low, high := min(creatorID, otherID), max(creatorID, otherID)
-	key := fmt.Sprintf("%d:%d", low, high)
-
 	var chat Chat
 	created := false
 	err := r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
-		row, err := q.InsertDirectChat(ctx, sqlcdb.InsertDirectChatParams{DirectKey: &key, CreatedBy: &creatorID})
-		if errors.Is(err, pgx.ErrNoRows) {
-			// The pair has a chat already (possibly committed a moment ago by a concurrent call).
-			row, err = q.GetDirectChat(ctx, &key)
-			chat, created = chatFrom(row), false
-			return err
-		}
-		if err != nil {
-			return err
-		}
-		for _, uid := range []int64{low, high} {
-			if _, err := q.AddParticipant(ctx, sqlcdb.AddParticipantParams{ChatID: row.ID, UserID: uid, Role: string(RoleMember)}); err != nil {
-				return err
-			}
-		}
-		chat, created = chatFrom(row), true
-		return nil
+		var err error
+		chat, created, err = createDirect(ctx, q, creatorID, otherID)
+		return err
 	})
 	if err != nil {
 		return Chat{}, false, err
 	}
 	return chat, created, nil
+}
+
+// createDirect returns the pair's chat, creating it with both participants inside the caller's transaction.
+func createDirect(ctx context.Context, q *sqlcdb.Queries, creatorID, otherID int64) (Chat, bool, error) {
+	low, high := min(creatorID, otherID), max(creatorID, otherID)
+	key := fmt.Sprintf("%d:%d", low, high)
+	row, err := q.InsertDirectChat(ctx, sqlcdb.InsertDirectChatParams{DirectKey: &key, CreatedBy: &creatorID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		// The pair has a chat already (possibly committed a moment ago by a concurrent call).
+		row, err = q.GetDirectChat(ctx, &key)
+		return chatFrom(row), false, err
+	}
+	if err != nil {
+		return Chat{}, false, err
+	}
+	for _, uid := range []int64{low, high} {
+		if _, err := q.AddParticipant(ctx, sqlcdb.AddParticipantParams{ChatID: row.ID, UserID: uid, Role: string(RoleMember)}); err != nil {
+			return Chat{}, false, err
+		}
+	}
+	return chatFrom(row), true, nil
 }
 
 func (r chatRepo) CreateGroup(ctx context.Context, g NewGroup) (Chat, error) {

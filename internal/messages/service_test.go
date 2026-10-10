@@ -203,8 +203,8 @@ func TestSendIsIdempotentAndCountsUnread(t *testing.T) {
 		t.Fatalf("%d deliveries, want 2", len(f.rec.created))
 	}
 	// Reading the first message leaves one unread.
-	if err := f.svc.Read(ctx, bob, chat.ID, first.ID); err != nil {
-		t.Fatal(err)
+	if n, err := f.svc.Read(ctx, bob, chat.ID, first.ID); err != nil || n != 1 {
+		t.Fatalf("read the first: %d %v", n, err)
 	}
 	if counts, _, _ := f.unread.Get(ctx, bob); counts[chat.ID] != 1 {
 		t.Fatalf("after reading the first: %d", counts[chat.ID])
@@ -220,7 +220,7 @@ func TestSendIsIdempotentAndCountsUnread(t *testing.T) {
 		t.Fatal(err)
 	}
 	last := f.send(chat.ID, alice, "third", "third")
-	if err := f.svc.Read(ctx, bob, chat.ID, last.ID); err != nil {
+	if _, err := f.svc.Read(ctx, bob, chat.ID, last.ID); err != nil {
 		t.Fatal(err)
 	}
 	if got := f.rec.reads[1]; len(got) != 1 || got[0] != bob {
@@ -337,11 +337,11 @@ func TestStaleReadChangesNothing(t *testing.T) {
 	}
 	first := f.send(chat.ID, alice, "r-1", "one")
 	last := f.send(chat.ID, alice, "r-2", "two")
-	if err := f.svc.Read(ctx, bob, chat.ID, last.ID); err != nil {
+	if _, err := f.svc.Read(ctx, bob, chat.ID, last.ID); err != nil {
 		t.Fatal(err)
 	}
 	// A lagging tab reports an older position: the counter stays at 0 and nobody is told.
-	if err := f.svc.Read(ctx, bob, chat.ID, first.ID); err != nil {
+	if n, err := f.svc.Read(ctx, bob, chat.ID, first.ID); err != nil || n != 0 {
 		t.Fatal(err)
 	}
 	if counts, _, _ := f.unread.Get(ctx, bob); counts[chat.ID] != 0 {
