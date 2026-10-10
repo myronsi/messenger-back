@@ -31,7 +31,7 @@ Every script fails when it measured nothing: a ticket that could not be had, a s
 ## What limits the numbers
 
 - **Per-user send limit:** 30 messages per 10 s, bursts of 20 (shared by WebSocket and HTTP sends). For `messages.js`, keep `RATE / VUS` below 3, for example 400 users for 500 messages/s.
-- **Per-user search limit:** 60 per minute, bursts of 20. `reads.js` picks a random user for every request; seed enough users that `RATE / 10` searches per second stay below one per user per second.
+- **Per-user search limit:** 60 per minute, bursts of 20. `reads.js` spreads its requests over all users; seed enough users that `RATE / 10` searches per second stay below one per user per second.
 - **Sockets per client machine:** the load generator needs enough ephemeral ports and file descriptors for 10 000 sockets (`ulimit -n`); spread larger runs over several k6 instances.
 - **Slow consumers:** a client that falls behind its send buffer (`WS_SEND_BUFFER`, 256 events) is closed with `1013`. That shows up as `ws_closed_early`.
 

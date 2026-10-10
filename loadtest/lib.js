@@ -29,9 +29,10 @@ export function userFor(vu) {
   return users[(vu - 1) % users.length];
 }
 
-// anyUser picks a seeded user at random (request scenarios, so no user hits its own rate limits).
+// anyUser spreads the requests of a scenario over all seeded users (each VU and iteration lands on another one),
+// so no user runs into its own rate limits.
 export function anyUser() {
-  return users[Math.floor(Math.random() * users.length)];
+  return users[(__VU * 7919 + __ITER) % users.length];
 }
 
 // socketURL redeems a fresh one-time ticket for the user's WebSocket; null (counted) when there is none.
