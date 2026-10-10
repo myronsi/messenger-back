@@ -14,7 +14,8 @@ import (
 // Store talks to Elasticsearch over HTTP.
 type Store struct {
 	baseURL string
-	client  *http.Client
+	client  *http.Client // health probes: short timeout
+	api     *http.Client // everything else: the caller's context decides
 }
 
 // New validates the base URL (credentials may be given as user:password@host) without connecting.
@@ -26,6 +27,7 @@ func New(baseURL string) (*Store, error) {
 	return &Store{
 		baseURL: strings.TrimRight(baseURL, "/"),
 		client:  &http.Client{Timeout: 5 * time.Second},
+		api:     &http.Client{},
 	}, nil
 }
 
@@ -51,4 +53,7 @@ func (s *Store) Ping(ctx context.Context) error {
 }
 
 // Close releases idle connections.
-func (s *Store) Close() { s.client.CloseIdleConnections() }
+func (s *Store) Close() {
+	s.client.CloseIdleConnections()
+	s.api.CloseIdleConnections()
+}

@@ -467,6 +467,27 @@ func (e DeleteMessageParamsScope) Valid() bool {
 	}
 }
 
+// Defines values for SearchAllMessagesParamsType.
+const (
+	SearchAllMessagesParamsTypeFile  SearchAllMessagesParamsType = "file"
+	SearchAllMessagesParamsTypeText  SearchAllMessagesParamsType = "text"
+	SearchAllMessagesParamsTypeVoice SearchAllMessagesParamsType = "voice"
+)
+
+// Valid indicates whether the value is a known member of the SearchAllMessagesParamsType enum.
+func (e SearchAllMessagesParamsType) Valid() bool {
+	switch e {
+	case SearchAllMessagesParamsTypeFile:
+		return true
+	case SearchAllMessagesParamsTypeText:
+		return true
+	case SearchAllMessagesParamsTypeVoice:
+		return true
+	default:
+		return false
+	}
+}
+
 // AddParticipantRequest defines model for AddParticipantRequest.
 type AddParticipantRequest struct {
 	// UserId Decimal ID as a string (Snowflake IDs exceed 2^53).
@@ -927,7 +948,10 @@ type ResetPasswordRequest struct {
 
 // SearchHit defines model for SearchHit.
 type SearchHit struct {
-	// Highlight Plain-text excerpt; never HTML.
+	// Highlight Plain-text excerpt of the matching text or file name; never HTML. The matched words are
+	// wrapped in U+E000 (start) and U+E001 (end), characters of the Unicode private use area,
+	// so a client can mark them without parsing markup. `null` when the message matched without
+	// an excerpt.
 	Highlight *string `json:"highlight,omitempty"`
 	Message   Message `json:"message"`
 }
@@ -1766,6 +1790,39 @@ type RejectRequestParams struct {
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
 }
 
+// SearchAllMessagesParams defines parameters for SearchAllMessages.
+type SearchAllMessagesParams struct {
+	Q string `form:"q" json:"q"`
+
+	// ChatId Only this chat
+	ChatId *Id `form:"chat_id,omitempty" json:"chat_id,omitempty"`
+
+	// SenderId Only messages of this user
+	SenderId *Id                          `form:"sender_id,omitempty" json:"sender_id,omitempty"`
+	Type     *SearchAllMessagesParamsType `form:"type,omitempty" json:"type,omitempty"`
+
+	// From Messages created at or after this time
+	From *Timestamp `form:"from,omitempty" json:"from,omitempty"`
+
+	// To Messages created before this time
+	To *Timestamp `form:"to,omitempty" json:"to,omitempty"`
+
+	// Limit Page size
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// After Opaque `next_cursor` of the previous page
+	After *After `form:"after,omitempty" json:"after,omitempty"`
+
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// SearchAllMessagesParamsType defines parameters for SearchAllMessages.
+type SearchAllMessagesParamsType string
+
 // GetUserByUsernameParams defines parameters for GetUserByUsername.
 type GetUserByUsernameParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
@@ -2354,6 +2411,9 @@ type ServerInterface interface {
 	// RejectRequest Reject a request
 	// (POST /requests/{request_id}/reject)
 	RejectRequest(w http.ResponseWriter, r *http.Request, requestId RequestId, params RejectRequestParams)
+	// SearchAllMessages Search messages in all my chats
+	// (GET /search/messages)
+	SearchAllMessages(w http.ResponseWriter, r *http.Request, params SearchAllMessagesParams)
 	// GetUserByUsername Profile by username
 	// (GET /usernames/{username})
 	GetUserByUsername(w http.ResponseWriter, r *http.Request, username Username, params GetUserByUsernameParams)
@@ -6302,6 +6362,170 @@ func (siw *ServerInterfaceWrapper) RejectRequest(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
+// SearchAllMessages operation middleware
+func (siw *ServerInterfaceWrapper) SearchAllMessages(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SearchAllMessagesParams
+
+	// ------------- Required query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "chat_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "chat_id", r.URL.Query(), &params.ChatId, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "chat_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "sender_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sender_id", r.URL.Query(), &params.SenderId, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sender_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sender_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "type" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "type", r.URL.Query(), &params.Type, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "type"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "type", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "after" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "after", r.URL.Query(), &params.After, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "after"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after", Err: err})
+		}
+		return
+	}
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SearchAllMessages(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetUserByUsername operation middleware
 func (siw *ServerInterfaceWrapper) GetUserByUsername(w http.ResponseWriter, r *http.Request) {
 
@@ -7085,6 +7309,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/messages/{message_id}", wrapper.DeleteMessage)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/messages/{message_id}", wrapper.EditMessage)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/messages/{message_id}/forward", wrapper.ForwardMessage)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/search/messages", wrapper.SearchAllMessages)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/requests", wrapper.ListApprovalRequests)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/requests/{request_id}/approve", wrapper.ApproveRequest)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/requests/{request_id}/reject", wrapper.RejectRequest)
@@ -12744,6 +12969,127 @@ func (response RejectRequest426ApplicationProblemPlusJSONResponse) VisitRejectRe
 	return err
 }
 
+type SearchAllMessagesRequestObject struct {
+	Params SearchAllMessagesParams
+}
+
+type SearchAllMessagesResponseObject interface {
+	VisitSearchAllMessagesResponse(w http.ResponseWriter) error
+}
+
+type SearchAllMessages200JSONResponse MessageSearchPage
+
+func (response SearchAllMessages200JSONResponse) VisitSearchAllMessagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SearchAllMessages400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response SearchAllMessages400ApplicationProblemPlusJSONResponse) VisitSearchAllMessagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SearchAllMessages401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response SearchAllMessages401ApplicationProblemPlusJSONResponse) VisitSearchAllMessagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SearchAllMessages404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response SearchAllMessages404ApplicationProblemPlusJSONResponse) VisitSearchAllMessagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SearchAllMessages422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response SearchAllMessages422ApplicationProblemPlusJSONResponse) VisitSearchAllMessagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SearchAllMessages426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response SearchAllMessages426ApplicationProblemPlusJSONResponse) VisitSearchAllMessagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SearchAllMessages429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response SearchAllMessages429ApplicationProblemPlusJSONResponse) VisitSearchAllMessagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetUserByUsernameRequestObject struct {
 	Username Username `json:"username"`
 	Params   GetUserByUsernameParams
@@ -13637,6 +13983,9 @@ type StrictServerInterface interface {
 	// RejectRequest Reject a request
 	// (POST /requests/{request_id}/reject)
 	RejectRequest(ctx context.Context, request RejectRequestRequestObject) (RejectRequestResponseObject, error)
+	// SearchAllMessages Search messages in all my chats
+	// (GET /search/messages)
+	SearchAllMessages(ctx context.Context, request SearchAllMessagesRequestObject) (SearchAllMessagesResponseObject, error)
 	// GetUserByUsername Profile by username
 	// (GET /usernames/{username})
 	GetUserByUsername(ctx context.Context, request GetUserByUsernameRequestObject) (GetUserByUsernameResponseObject, error)
@@ -15395,6 +15744,32 @@ func (sh *strictHandler) RejectRequest(w http.ResponseWriter, r *http.Request, r
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(RejectRequestResponseObject); ok {
 		if err := validResponse.VisitRejectRequestResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SearchAllMessages operation middleware
+func (sh *strictHandler) SearchAllMessages(w http.ResponseWriter, r *http.Request, params SearchAllMessagesParams) {
+	var request SearchAllMessagesRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SearchAllMessages(ctx, request.(SearchAllMessagesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SearchAllMessages")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SearchAllMessagesResponseObject); ok {
+		if err := validResponse.VisitSearchAllMessagesResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

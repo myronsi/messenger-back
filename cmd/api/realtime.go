@@ -233,3 +233,13 @@ func (st *realtimeStack) accountDeleted(storage media.Storage, log *slog.Logger)
 		}
 	}
 }
+
+// searchAccess tells the searcher which chats a user is in and which messages they can see.
+type searchAccess struct {
+	*messages.Service
+	pg *postgres.Store
+}
+
+func (a searchAccess) ChatIDs(ctx context.Context, userID int64) ([]int64, error) {
+	return a.pg.Social().ChatIDs(ctx, userID)
+}

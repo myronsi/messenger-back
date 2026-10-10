@@ -1,6 +1,6 @@
 #!/bin/sh
-# Idempotent Elasticsearch setup for the development stack: the index template for message search,
-# the first index behind the `messages` write alias, and the kibana_system password.
+# Idempotent Elasticsearch setup for the development stack: the kibana_system password. The message index
+# (template, versioned index, alias) belongs to the worker, which sets it up on start (internal/search).
 set -eu
 
 ES="${ES_URL}"
@@ -14,15 +14,9 @@ call() {
   curl -sS -f -u "$AUTH" -X "$method" -H 'Content-Type: application/json' "$ES$path" "$@" >/dev/null
 }
 
-echo "elasticsearch-init: index template messenger-messages"
-call PUT /_index_template/messenger-messages --data-binary @/init/messages-template.json
-
-if curl -s -o /dev/null -f -u "$AUTH" -I "$ES/_alias/messages"; then
-  echo "elasticsearch-init: alias messages already exists"
-else
-  echo "elasticsearch-init: creating messages-000001 behind the alias messages"
-  call PUT /messages-000001 --data '{"aliases":{"messages":{"is_write_index":true}}}'
-fi
+# Stacks created before the worker owned the index have this template and index; they go.
+curl -sS -o /dev/null -u "$AUTH" -X DELETE "$ES/_index_template/messenger-messages" || true
+curl -sS -o /dev/null -u "$AUTH" -X DELETE "$ES/messages-000001" || true
 
 if [ -n "${KIBANA_PASSWORD:-}" ]; then
   echo "elasticsearch-init: kibana_system password"

@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/myronsi/messenger-back/internal/messages"
+	"github.com/myronsi/messenger-back/internal/search"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/redis"
 	"github.com/myronsi/messenger-back/internal/store/scylla"
@@ -34,9 +35,11 @@ type MessageOptions struct {
 	Service   *messages.Service
 	Store     MessageStore
 	Directory *users.Directory
-	Limiter   RateAllower
-	BasePath  string
-	Log       *slog.Logger
+	// Searcher answers message searches. Optional (searches then answer 501).
+	Searcher *search.Searcher
+	Limiter  RateAllower
+	BasePath string
+	Log      *slog.Logger
 }
 
 // MessageServer implements history, sending, editing, deleting and forwarding over HTTP, and the media lists.
