@@ -232,3 +232,62 @@ func TestBusReportsResubscriptions(t *testing.T) {
 	}
 	waitSubscribed(t, b, a, 1)
 }
+
+func TestBusPublishEachAndBroadcast(t *testing.T) {
+	_, prefix := testStore(t)
+	a := newInstance(t, prefix, "a")
+	ctx := context.Background()
+	got := make(chan string, 4)
+	s, err := New(os.Getenv("TEST_REDIS_URL"), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	bc, err := NewBus(s.Client(), BusOptions{Prefix: prefix, Handler: func(int64, []byte) {}, OnBroadcast: func(p []byte) { got <- string(p) }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go bc.Run(rctx)
+
+	for _, uid := range []int64{1, 2} {
+		if err := a.bus.Subscribe(ctx, uid); err != nil {
+			t.Fatal(err)
+		}
+		waitSubscribed(t, a, a, uid)
+	}
+	if err := a.bus.PublishEach(ctx, map[int64][]byte{1: []byte("for one"), 2: []byte("for two")}); err != nil {
+		t.Fatal(err)
+	}
+	seen := map[int64]string{}
+	for range 2 {
+		select {
+		case d := <-a.got:
+			seen[d.user] = d.payload
+		case <-time.After(3 * time.Second):
+			t.Fatal("not delivered")
+		}
+	}
+	if seen[1] != "for one" || seen[2] != "for two" {
+		t.Fatalf("deliveries: %v", seen)
+	}
+
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		if err := a.bus.Broadcast(ctx, []byte("to everyone")); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case p := <-got:
+			if p != "to everyone" {
+				t.Fatalf("broadcast: %q", p)
+			}
+			return
+		case <-time.After(50 * time.Millisecond):
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("broadcast not received")
+		}
+	}
+}

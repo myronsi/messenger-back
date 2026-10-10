@@ -13,10 +13,14 @@ The Go backend replaces the Python one (`server/`). Its skeleton is in place; fe
 | `internal/config` | environment configuration, validated on startup |
 | `internal/observability` | JSON `slog` logger with redaction, Prometheus metrics, optional OpenTelemetry tracing |
 | `internal/httpapi` | router, middleware, health checks, generated server (`api.gen.go`) |
-| `internal/realtime` | WebSocket registry and graceful "reconnect" close (code 1012) |
+| `internal/realtime` | the WebSocket gateway ([realtime.md](realtime.md)): connections, delivery between instances, presence |
+| `internal/messages` | message use cases with their authorization checks |
+| `internal/users` | users as other users may see them (privacy) |
+| `internal/version` | the contract version and SemVer comparison |
+| `internal/testenv` | fresh stores for integration tests |
 | `internal/store/{postgres,redis,scylla,elastic}` | store clients with `Ping` for `/readyz`; PostgreSQL also has the repositories ([schema](postgres-schema.md)); Redis has presence, pub/sub, unread counters, the membership cache and rate limits ([redis.md](redis.md)); ScyllaDB has the message store ([messages.md](messages.md)) |
 | `internal/ids` | Snowflake IDs for messages |
-| `internal/{auth,users,chats,groups,messages,media,search}` | domain packages, empty for now |
+| `internal/{auth,chats,groups,media,search}` | domain packages; `auth` is done ([auth.md](auth.md)), the others follow |
 | `migrations/{postgres,scylla}` | schema migrations (`make migrate`, applied automatically by the dev stack) |
 | `compose.dev.yaml`, `deploy/dev` | development stack and its init steps, see [dev-environment.md](dev-environment.md); production notes are in [deployment.md](deployment.md) |
 

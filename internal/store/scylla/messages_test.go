@@ -272,7 +272,7 @@ func TestHiddenMessagesAreLeftOut(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, id := range all[38:] {
-		if err := r.Unhide(ctx, 4, chat, id); err != nil {
+		if _, err := r.Unhide(ctx, 4, chat, id); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -563,7 +563,7 @@ func TestDeletedForMeIsFinal(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, id := range ms {
-		if err := r.Unhide(ctx, viewer, chat, id); err != nil {
+		if _, err := r.Unhide(ctx, viewer, chat, id); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -679,5 +679,29 @@ func TestLocationTTL(t *testing.T) {
 	}
 	if ttl != nil {
 		t.Fatalf("location of a stored message expires in %ds", *ttl)
+	}
+}
+
+func TestUnhideAllAndHiddenAmong(t *testing.T) {
+	r := testRepo(t)
+	ctx := context.Background()
+	chat := newChat()
+	m := seed(t, r, chat, 1, 1, time.Now(), 0)[0]
+	if err := r.Hide(ctx, 2, chat, m, HiddenNotDelivered); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Hide(ctx, 3, chat, m, HiddenDeletedForMe); err != nil {
+		t.Fatal(err)
+	}
+	hidden, err := r.HiddenAmong(ctx, chat, m, []int64{1, 2, 3})
+	if err != nil || len(hidden) != 2 || !hidden[2] || !hidden[3] {
+		t.Fatalf("hidden among: %v %v", hidden, err)
+	}
+	got, err := r.UnhideAll(ctx, chat, m)
+	if err != nil || len(got) != 1 || got[0] != 2 {
+		t.Fatalf("unhidden: %v %v", got, err)
+	}
+	if hidden, _ := r.HiddenAmong(ctx, chat, m, []int64{2, 3}); hidden[2] || !hidden[3] {
+		t.Fatalf("after unhide: %v", hidden)
 	}
 }

@@ -34,7 +34,7 @@ func NewMembers(rdb Client, prefix string, ttl time.Duration) *Members {
 }
 
 // LoadMembers reads the members of a chat from the source of truth.
-type LoadMembers func(ctx context.Context, chatID int64) ([]int64, error)
+type LoadMembers = func(ctx context.Context, chatID int64) ([]int64, error)
 
 // loadedMarker is in every cached set, so an empty chat is a cache hit too (user ids are positive).
 const loadedMarker = "0"

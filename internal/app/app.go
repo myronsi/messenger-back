@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -29,6 +30,27 @@ type Process struct {
 
 	stop            context.CancelFunc
 	shutdownTracing func(context.Context) error
+
+	failMu  sync.Mutex
+	failure error
+}
+
+// Fail stops the process because of err: it shuts down like on SIGTERM, and Err returns err so the command
+// exits with a failure (for example after losing the lease of its ID node number).
+func (p *Process) Fail(err error) {
+	p.failMu.Lock()
+	if p.failure == nil {
+		p.failure = err
+	}
+	p.failMu.Unlock()
+	p.stop()
+}
+
+// Err returns the error passed to Fail, if any.
+func (p *Process) Err() error {
+	p.failMu.Lock()
+	defer p.failMu.Unlock()
+	return p.failure
 }
 
 // Start loads the configuration, installs the JSON logger, tracing and signal handling.

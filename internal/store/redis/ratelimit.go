@@ -2,8 +2,6 @@ package redis
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
@@ -67,8 +65,7 @@ return {1, math.floor((now - allow_at) / interval), 0}`)
 
 func (l *RateLimiter) key(r Rate, subject string) string {
 	// Subjects can be IPs or usernames, which are personal data; only a digest reaches Redis.
-	sum := sha256.Sum256([]byte(subject))
-	return l.prefix + "rl:" + r.Name + ":" + hex.EncodeToString(sum[:16])
+	return l.prefix + "rl:" + r.Name + ":" + digest(subject)
 }
 
 // Allow counts one event for the subject when it is within the rate.

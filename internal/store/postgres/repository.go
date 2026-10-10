@@ -138,8 +138,9 @@ type ChatRepository interface {
 	SetRole(ctx context.Context, chatID, userID int64, role Role) error
 	// TransferOwnership makes toID the owner; the previous owner becomes an admin.
 	TransferOwnership(ctx context.Context, chatID, fromID, toID int64) error
-	// MarkRead moves the read marker of a participant forward (never back).
-	MarkRead(ctx context.Context, chatID, userID, messageID int64) error
+	// MarkRead moves the read marker of a participant forward (never back) and reports whether it moved.
+	// ErrNotFound: the user is not in the chat.
+	MarkRead(ctx context.Context, chatID, userID, messageID int64) (advanced bool, err error)
 	// Delete removes the chat and returns the object-storage keys of its attachments.
 	Delete(ctx context.Context, chatID int64) (attachmentKeys []string, err error)
 }

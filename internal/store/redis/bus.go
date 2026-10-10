@@ -21,10 +21,11 @@ import (
 // and the gateway tells those clients to reconnect, which makes them load what they missed through REST
 // (the `after` cursor). Durable work goes through the event streams instead.
 type Bus struct {
-	rdb     goredis.UniversalClient
-	prefix  string
-	handler func(userID int64, payload []byte)
-	resub   func(userID int64)
+	rdb       goredis.UniversalClient
+	prefix    string
+	handler   func(userID int64, payload []byte)
+	resub     func(userID int64)
+	broadcast func(payload []byte)
 
 	ps *goredis.PubSub
 
@@ -45,6 +46,9 @@ type BusOptions struct {
 	// OnResubscribe is called when the connection to Redis was lost and the user's channel subscribed again:
 	// events for the user may have been lost in between. It must not block.
 	OnResubscribe func(userID int64)
+	// OnBroadcast receives what Broadcast sends to every instance (for example "close these sessions").
+	// When it is set, the bus subscribes to the broadcast channel in Run. It must not block.
+	OnBroadcast func(payload []byte)
 }
 
 // NewBus creates the bus of this instance. Call Run to start receiving.
@@ -56,7 +60,8 @@ func NewBus(rdb goredis.UniversalClient, o BusOptions) (*Bus, error) {
 		o.OnResubscribe = func(int64) {}
 	}
 	return &Bus{
-		rdb: rdb, prefix: o.Prefix, handler: o.Handler, resub: o.OnResubscribe, confirmed: make(map[string]bool),
+		rdb: rdb, prefix: o.Prefix, handler: o.Handler, resub: o.OnResubscribe, broadcast: o.OnBroadcast,
+		confirmed: make(map[string]bool),
 		// No channels yet: SUBSCRIBE is sent when the first user subscribes.
 		ps:   rdb.Subscribe(context.Background()),
 		subs: make(map[int64]int),
@@ -66,6 +71,8 @@ func NewBus(rdb goredis.UniversalClient, o BusOptions) (*Bus, error) {
 func (b *Bus) channel(userID int64) string {
 	return b.prefix + "user:" + strconv.FormatInt(userID, 10)
 }
+
+func (b *Bus) broadcastChannel() string { return b.prefix + "gateway:broadcast" }
 
 func (b *Bus) userOf(channel string) (int64, bool) {
 	s, ok := strings.CutPrefix(channel, b.prefix+"user:")
@@ -86,7 +93,9 @@ func (b *Bus) Subscribe(ctx context.Context, userID int64) error {
 		return nil
 	}
 	if err := b.ps.Subscribe(ctx, b.channel(userID)); err != nil {
-		// Keep the count: the subscription is in the PubSub's set and is sent again on its reconnect.
+		// Undo, so the caller can simply try again: the count and the PubSub's channel set stay in step.
+		delete(b.subs, userID)
+		_ = b.ps.Unsubscribe(context.WithoutCancel(ctx), b.channel(userID))
 		return fmt.Errorf("bus subscribe: %w", err)
 	}
 	return nil
@@ -139,11 +148,38 @@ func (b *Bus) Publish(ctx context.Context, payload []byte, userIDs ...int64) (in
 	return n, nil
 }
 
+// PublishEach sends every user their own payload, in one round trip (events rendered per recipient).
+func (b *Bus) PublishEach(ctx context.Context, payloads map[int64][]byte) error {
+	if len(payloads) == 0 {
+		return nil
+	}
+	pipe := b.rdb.Pipeline()
+	for uid, p := range payloads {
+		pipe.Publish(ctx, b.channel(uid), p)
+	}
+	if _, err := pipe.Exec(ctx); err != nil {
+		return fmt.Errorf("bus publish: %w", err)
+	}
+	return nil
+}
+
+// Broadcast sends the payload to every instance's OnBroadcast.
+func (b *Bus) Broadcast(ctx context.Context, payload []byte) error {
+	if err := b.rdb.Publish(ctx, b.broadcastChannel(), payload).Err(); err != nil {
+		return fmt.Errorf("bus broadcast: %w", err)
+	}
+	return nil
+}
+
 // Run receives events and hands them to the handler until ctx is done or Close is called. The PubSub
 // pings Redis while idle, reconnects after errors and subscribes to its channels again.
 func (b *Bus) Run(ctx context.Context) {
 	stop := context.AfterFunc(ctx, func() { _ = b.ps.Close() })
 	defer stop()
+	if b.broadcast != nil {
+		// Kept in the PubSub's channel set, so a failure here is repaired on its next reconnect.
+		_ = b.ps.Subscribe(ctx, b.broadcastChannel())
+	}
 	ch := b.ps.ChannelWithSubscriptions(
 		goredis.WithChannelSize(1024),
 		goredis.WithChannelHealthCheckInterval(15*time.Second),
@@ -154,6 +190,8 @@ func (b *Bus) Run(ctx context.Context) {
 		case *goredis.Message:
 			if uid, ok := b.userOf(m.Channel); ok {
 				b.handler(uid, []byte(m.Payload))
+			} else if m.Channel == b.broadcastChannel() && b.broadcast != nil {
+				b.broadcast([]byte(m.Payload))
 			}
 		case *goredis.Subscription:
 			b.confirm(m)

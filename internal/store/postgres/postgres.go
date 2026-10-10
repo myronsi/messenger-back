@@ -76,6 +76,9 @@ func (s *Store) Users() UserRepository { return userRepo{s} }
 // Chats returns the repository for chats, groups and participants.
 func (s *Store) Chats() ChatRepository { return chatRepo{s} }
 
+// Social returns the repository of privacy settings, blocks and contact names.
+func (s *Store) Social() SocialRepository { return socialRepo{s} }
+
 // Attachments returns the attachment metadata repository.
 func (s *Store) Attachments() AttachmentRepository { return attachmentRepo{s} }
 
