@@ -63,6 +63,18 @@ func TestUsers(t *testing.T) {
 	if err := users.TouchLastSeen(ctx, u.ID); err != nil {
 		t.Fatal(err)
 	}
+
+	bob, err := users.Create(ctx, "bob_1", "Bob", "hash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	many, err := users.GetMany(ctx, []int64{u.ID, bob.ID, 999999, u.ID})
+	if err != nil || len(many) != 2 || many[u.ID].Username != "Alice_1" || many[bob.ID].DisplayName != "Bob" {
+		t.Fatalf("get many: %+v, %v", many, err)
+	}
+	if none, err := users.GetMany(ctx, nil); err != nil || len(none) != 0 {
+		t.Fatalf("get none: %v, %v", none, err)
+	}
 }
 
 func TestDirectChatIsUniquePerPair(t *testing.T) {

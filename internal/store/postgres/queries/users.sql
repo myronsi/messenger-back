@@ -39,3 +39,6 @@ UPDATE users SET password_hash = @new_hash WHERE id = @id AND password_hash = @o
 -- name: EnsurePrivacySettings :exec
 INSERT INTO user_privacy_settings (user_id) VALUES (@user_id) ON CONFLICT (user_id) DO NOTHING;
 
+
+-- name: ListUsersByIDs :many
+SELECT * FROM users WHERE id = ANY(@ids::BIGINT[]);

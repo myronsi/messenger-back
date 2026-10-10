@@ -101,6 +101,40 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 	return i, err
 }
 
+const listUsersByIDs = `-- name: ListUsersByIDs :many
+SELECT id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at FROM users WHERE id = ANY($1::BIGINT[])
+`
+
+func (q *Queries) ListUsersByIDs(ctx context.Context, ids []int64) ([]User, error) {
+	rows, err := q.db.Query(ctx, listUsersByIDs, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []User{}
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.DisplayName,
+			&i.PasswordHash,
+			&i.AvatarUrl,
+			&i.Bio,
+			&i.LastSeenAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockUser = `-- name: LockUser :one
 SELECT id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at FROM users WHERE id = $1 FOR UPDATE
 `

@@ -8,7 +8,7 @@ import (
 
 func TestPingHonoursContextDeadline(t *testing.T) {
 	// 192.0.2.0/24 is reserved for documentation: nothing answers there.
-	s := New([]string{"192.0.2.1"}, "")
+	s := New([]string{"192.0.2.1"}, "", Options{})
 	t.Cleanup(func() { _ = s.Close() })
 
 	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
@@ -23,7 +23,7 @@ func TestPingHonoursContextDeadline(t *testing.T) {
 }
 
 func TestSessionAfterCloseFailsImmediately(t *testing.T) {
-	s := New([]string{"192.0.2.1"}, "")
+	s := New([]string{"192.0.2.1"}, "", Options{})
 	_ = s.Close()
 
 	start := time.Now()

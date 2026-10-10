@@ -57,6 +57,7 @@ type Config struct {
 	ScyllaHosts []string `env:"SCYLLA_HOSTS,required,notEmpty" envSeparator:","`
 	// ScyllaKeyspace is optional so the readiness check works before the keyspace is migrated.
 	ScyllaKeyspace   string `env:"SCYLLA_KEYSPACE"`
+	Scylla           Scylla
 	ElasticsearchURL Secret `env:"ELASTICSEARCH_URL,required,notEmpty"`
 
 	Auth    Auth
@@ -78,6 +79,15 @@ type Postgres struct {
 type Redis struct {
 	// Timeout bounds every command (blocking stream reads excepted).
 	Timeout time.Duration `env:"REDIS_TIMEOUT" envDefault:"2s"`
+}
+
+// Scylla tunes the ScyllaDB session; the hosts are SCYLLA_HOSTS.
+type Scylla struct {
+	// Consistency of reads and writes: local_quorum (production, replication factor 3), quorum, one or
+	// local_one. Lightweight transactions always use LOCAL_SERIAL.
+	Consistency string `env:"SCYLLA_CONSISTENCY" envDefault:"local_quorum"`
+	// Timeout bounds every repository call (a page that reads several partitions counts as one).
+	Timeout time.Duration `env:"SCYLLA_TIMEOUT" envDefault:"5s"`
 }
 
 // HTTP configures the API server.
@@ -272,6 +282,14 @@ func (c Config) Validate() error {
 	}
 	if c.Redis.Timeout <= 0 {
 		add("REDIS_TIMEOUT must be positive")
+	}
+	switch c.Scylla.Consistency {
+	case "local_quorum", "quorum", "one", "local_one":
+	default:
+		add("SCYLLA_CONSISTENCY must be local_quorum, quorum, one or local_one")
+	}
+	if c.Scylla.Timeout <= 0 {
+		add("SCYLLA_TIMEOUT must be positive")
 	}
 	problems = append(problems, c.HTTP.validate()...)
 	problems = append(problems, c.Auth.validate(c.Env == "production")...)

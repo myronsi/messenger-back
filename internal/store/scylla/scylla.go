@@ -1,4 +1,4 @@
-// Package scylla is the ScyllaDB store: message history.
+// Package scylla is the ScyllaDB store: messages, reactions and per-user hidden messages (docs/messages.md).
 package scylla
 
 import (
@@ -12,11 +12,18 @@ import (
 
 const connectTimeout = 2 * time.Second
 
+// Options tunes the session.
+type Options struct {
+	// Consistency of reads and writes; LOCAL_QUORUM when unset. Lightweight transactions use LOCAL_SERIAL.
+	Consistency gocql.Consistency
+}
+
 // Store connects to ScyllaDB lazily: the first successful Ping (or Session call) opens the session,
 // so the process starts while the cluster is still down and /readyz reports it as unavailable.
 type Store struct {
-	hosts    []string
-	keyspace string
+	hosts       []string
+	keyspace    string
+	consistency gocql.Consistency
 
 	mu         sync.Mutex
 	session    *gocql.Session
@@ -31,8 +38,11 @@ type attempt struct {
 }
 
 // New remembers the connection settings without connecting.
-func New(hosts []string, keyspace string) *Store {
-	return &Store{hosts: hosts, keyspace: keyspace}
+func New(hosts []string, keyspace string, o Options) *Store {
+	if o.Consistency == gocql.Any {
+		o.Consistency = gocql.LocalQuorum
+	}
+	return &Store{hosts: hosts, keyspace: keyspace, consistency: o.Consistency}
 }
 
 // Session returns the open session, connecting first when needed. gocql cannot cancel a connection
@@ -75,7 +85,8 @@ func (s *Store) Session(ctx context.Context) (*gocql.Session, error) {
 func (s *Store) connect(a *attempt) {
 	cluster := gocql.NewCluster(s.hosts...)
 	cluster.Keyspace = s.keyspace
-	cluster.Consistency = gocql.LocalQuorum
+	cluster.Consistency = s.consistency
+	cluster.SerialConsistency = gocql.LocalSerial
 	cluster.ConnectTimeout = connectTimeout
 	cluster.Timeout = connectTimeout
 	session, err := cluster.CreateSession()
