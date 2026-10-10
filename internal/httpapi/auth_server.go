@@ -556,5 +556,5 @@ func (a *AuthServer) CreateWebSocketTicket(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	noStore(w)
-	writeJSONStatus(w, http.StatusOK, WebSocketTicket{Ticket: ticket, ExpiresIn: int(ttl.Seconds())})
+	writeJSONStatus(w, http.StatusCreated, WebSocketTicket{Ticket: ticket, ExpiresIn: int(ttl.Seconds())})
 }

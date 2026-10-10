@@ -103,6 +103,7 @@ func (e *mediaEnv) upload(t *testing.T, token string, fields map[string]string, 
 	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
 	e.router.ServeHTTP(rec, req)
+	checkContract(t, http.MethodPost, apiBase+"/attachments", rec.Code, rec.Header().Get("Content-Type"), rec.Body.Bytes())
 	return reply{rec}
 }
 
@@ -205,6 +206,7 @@ func TestUploadAndDownloadOverHTTP(t *testing.T) {
 	cut.Header.Set("Authorization", "Bearer "+alice.access)
 	cutRec := httptest.NewRecorder()
 	e.router.ServeHTTP(cutRec, cut)
+	checkContract(t, http.MethodPost, apiBase+"/attachments", cutRec.Code, cutRec.Header().Get("Content-Type"), cutRec.Body.Bytes())
 	if cutRec.Code != http.StatusBadRequest {
 		t.Fatalf("truncated form: %d %s", cutRec.Code, cutRec.Body)
 	}
