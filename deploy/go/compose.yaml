@@ -54,7 +54,7 @@ services:
     profiles: ["backup"]
     restart: "no"
     environment:
-      DATABASE_URL: ${DATABASE_URL:-}
+      DATABASE_URL: ${BACKUP_DATABASE_URL:-${DATABASE_URL:-}}
     entrypoint: ["sh", "-c", "exec pg_dump --format=custom --no-owner \"$$DATABASE_URL\""]
 
   # --- Single-node stores (COMPOSE_PROFILES=stores): staging only, no ports on the host. ---

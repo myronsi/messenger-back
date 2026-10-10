@@ -6,7 +6,8 @@ services:
     profiles: ["migrate-v1"]
     restart: "no"
     entrypoint: ["/app/migrate-v1"]
-    env_file: [.env]
+    # .env for the stores, v1.env for the Python backend's credentials (only this container gets them).
+    env_file: [.env, v1.env]
     environment:
       V1_STATIC_DIR: /v1-static
     # The deploy user (set by migrate-v1.sh), so the report in reports/ belongs to it.

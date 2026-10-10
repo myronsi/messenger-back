@@ -31,6 +31,9 @@ mkdir -p backups
 value() { grep -E "^$1=" .env | tail -n1 | cut -d= -f2- || true; }
 
 API_PORT="$(value API_PORT)"; API_PORT="${API_PORT:-8080}"
+# Readiness is checked where the API listens: API_BIND, or loopback when it listens everywhere.
+API_HOST="$(value API_BIND)"
+case "$API_HOST" in ''|0.0.0.0) API_HOST=127.0.0.1 ;; esac
 WORKER_PORT="$(value WORKER_PORT)"; WORKER_PORT="${WORKER_PORT:-8081}"
 STORES=(postgres redis scylla elasticsearch object-storage)
 bundled_stores=false
@@ -47,7 +50,8 @@ if [ -z "$previous_image" ]; then
 fi
 
 set_image() {
-  grep -v '^BACKEND_IMAGE=' .env > .env.tmp || true
+  # grep exits 1 when nothing is left, which is fine; 2 (a read error) must not truncate .env.
+  grep -v '^BACKEND_IMAGE=' .env > .env.tmp || [ $? -eq 1 ]
   printf 'BACKEND_IMAGE=%s\n' "$1" >> .env.tmp
   mv .env.tmp .env
 }
@@ -55,7 +59,7 @@ set_image() {
 # The image has no shell, so readiness is checked from here: /readyz covers every store.
 wait_ready() {
   for _ in $(seq 1 60); do
-    if curl -fsS "http://127.0.0.1:${API_PORT}/readyz" > /dev/null 2>&1 &&
+    if curl -fsS "http://${API_HOST}:${API_PORT}/readyz" > /dev/null 2>&1 &&
       curl -fsS "http://127.0.0.1:${WORKER_PORT}/healthz" > /dev/null 2>&1; then
       return 0
     fi
@@ -102,7 +106,7 @@ echo "Database backup written to $backup"
 ls -1t backups/messenger-*.dump | tail -n +$((KEEP_BACKUPS + 1)) | xargs -r rm --
 
 if ! docker compose run --rm postgres-migrate || ! docker compose run --rm scylla-migrate; then
-  echo "A migration failed; $previous_image keeps running. Fix forward, or restore $backup (docs/deploy-go.md)." >&2
+  echo "A migration failed; ${previous_image:-nothing} keeps running. See docs/deploy-go.md (dirty migrations, $backup)." >&2
   exit 1
 fi
 

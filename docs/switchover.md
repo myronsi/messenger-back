@@ -33,7 +33,7 @@ Until then, `0.x` releases keep deploying Python to production, as they should. 
 
 - **Stores:** PostgreSQL, ScyllaDB, Redis, Elasticsearch and object storage as in [deployment.md](deployment.md), with backups set up and one restore tested.
 - **New secrets in the secret manager:** `JWT_SECRET`, `ENCRYPTION_KEY` and `RECOVERY_PEPPER`. Do not reuse a development value.
-- **The v1 key:** `V1_SECRET_KEY` is the Python backend's `SECRET_KEY` (in `/opt/messenger/.env` on the server). Pass it to the migration job from the secret manager. It is never pasted anywhere else, and it is dropped after the switch.
+- **The v1 key:** `V1_SECRET_KEY` is the Python backend's `SECRET_KEY` (in `/opt/messenger/.env` on the server). Put it, from the secret manager, in `/opt/messenger-go/v1.env`, which only the migration container reads ([deploy-go.md](deploy-go.md)). It is never pasted anywhere else, and it is deleted after the switch.
 - **The refresh cookie path:** set `REFRESH_COOKIE_PATH` to v1's cookie path (`<COOKIE_PATH_PREFIX>/auth`). Copied sessions only stay logged in if browsers keep sending the cookie.
 
 ### 4. The releases

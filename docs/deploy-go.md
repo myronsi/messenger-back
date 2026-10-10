@@ -24,11 +24,11 @@ Every merge to `master` also publishes snapshot images: `master` and `sha-<sha>`
 |---|---|
 | `compose.yaml` | `api` and `worker` from the release image, the migrations as one-shot steps, a `pg_dump` step, and, with `COMPOSE_PROFILES=stores`, single-node stores |
 | `deploy.sh` | the deployment (below) |
-| `migrate-v1.sh`, `compose.migrate-v1.yaml` | the data copy from the Python backend (the switch) |
+| `migrate-v1.sh`, `compose.migrate-v1.yaml`, `v1.env.example` | the data copy from the Python backend (the switch) |
 | `env.example` | every setting the stack needs, documented |
 | `migrations/`, `migrate.sh`, `object-storage/` | what the one-shot steps run |
 
-The `.env` on the server is the only state the bundle does not bring. Uploads never overwrite it.
+An upload replaces the bundle's files and `migrations/` as a whole: after a rollback, no later release's migrations are left on disk. It never touches what only the server has: `.env`, `v1.env`, `backups/` and `reports/`.
 
 **Stores.** Staging can run single-node stores on its host (`COMPOSE_PROFILES=stores`). Their ports are not published, and they hold data that is staging's alone. Production leaves the profile out and points `.env` at its own clusters ([deployment.md](deployment.md)).
 
@@ -41,7 +41,7 @@ The `.env` on the server is the only state the bundle does not bring. Uploads ne
 1. **Checks:** stops at once, changing nothing, if `.env` is missing or the disk is too full. Then it pulls the image; a failed pull also leaves the deployment as it was.
 2. **Stores:** with the bundled stores, it starts them and creates the ScyllaDB keyspace and the bucket.
 3. **Backup:** writes a `pg_dump` (custom format) of `DATABASE_URL` to `backups/` and keeps the last 10. If the dump fails, nothing is migrated or deployed.
-4. **Migrations:** runs the PostgreSQL and ScyllaDB migrations. If one fails, the running version stays.
+4. **Migrations:** runs the PostgreSQL and ScyllaDB migrations. If one fails, the running version stays. A database that is already newer than the release (a rollback) is left as it is.
 5. **Start:** starts `api` and `worker` on the new image, then waits for `/readyz` (every store) and the worker's `/healthz`.
 6. **Rollback:** if they do not get ready, starts the previous image again and fails. Migrations are not rolled back, so they must also work with the previous version: add first, remove a release later.
 
@@ -51,9 +51,16 @@ The `.env` on the server is the only state the bundle does not bring. Uploads ne
 
 1. Install Docker with the Compose plugin. Create a deploy user in the `docker` group and `/opt/messenger-go` owned by it.
 2. Create `/opt/messenger-go/.env` (mode 0600) from `deploy/go/env.example`:
-   - **Staging:** run `go run deploy/dev/genenv.go deploy/go/env.example .env`. It generates the secrets and the bundled stores' passwords. Then set `CORS_ORIGINS` and, if needed, `TRUSTED_PROXIES`.
-   - **Production:** take the secrets from the secret manager, never from a file in the repository. Leave out `COMPOSE_PROFILES`. Point `DATABASE_URL`, `REDIS_URL`, `SCYLLA_*`, `ELASTICSEARCH_URL` and `S3_*` at the clusters, with TLS. Set `SCYLLA_CONSISTENCY=local_quorum` and `SEARCH_REPLICAS=1`. Create the keyspace with replication factor 3 and the bucket beforehand.
-3. Point the reverse proxy at `127.0.0.1:${API_PORT}` for `/api/v2` and `/ws`, with WebSocket upgrades. Do not route `/metrics` or the worker's port publicly.
+   - **Staging:** in a checkout of the repository, run `go run deploy/dev/genenv.go deploy/go/env.example /opt/messenger-go/.env` (or copy the result there). It generates the secrets and the bundled stores' passwords. Then set `CORS_ORIGINS` and, if needed, `TRUSTED_PROXIES`.
+   - **Production:**
+     - Take the secrets from the secret manager, never from a file in the repository.
+     - Leave out `COMPOSE_PROFILES`.
+     - Point `DATABASE_URL`, `REDIS_URL`, `SCYLLA_*`, `ELASTICSEARCH_URL` and `S3_*` at the clusters, with TLS.
+     - Set `SCYLLA_CONSISTENCY=local_quorum` and `SEARCH_REPLICAS=1`.
+     - Create the keyspace with replication factor 3 and the bucket beforehand.
+     - With `sslmode=verify-full`, set `BACKUP_DATABASE_URL` to the same URL plus `sslrootcert=system`: `pg_dump` (libpq) does not look in the system's CAs by itself, and without it every deployment stops at the backup.
+3. Point the reverse proxy at `${API_BIND}:${API_PORT}` for `/api/v2` and `/ws`, with WebSocket upgrades. Do not route `/metrics` or the worker's port publicly. Readiness is checked at `API_BIND`, or at `127.0.0.1` when it is `0.0.0.0`.
+4. The bundled stores and the migration steps take their passwords as command-line arguments (`redis-server --requirepass`, `pg_dump` and `migrate` URLs), which other users of the host can see in `ps`. Keep the host to the deploy user and administrators.
 
 ### GitHub
 
@@ -69,7 +76,18 @@ The `.env` on the server is the only state the bundle does not bring. Uploads ne
 
 ## Rollback and restore
 
-- **To an earlier release:** Actions → Deploy (Go) → Run workflow, with the earlier tag and the environment. For production, run it from `edge`.
+- **To an earlier release:** Actions → Deploy (Go) → Run workflow, with the earlier tag and the environment. For production, run it from `edge`. The newer schema stays, which the earlier release works with.
+- **A migration failed halfway:** golang-migrate marks the database dirty, and every later deployment stops at it.
+  1. Look at what the migration did and finish or undo it by hand.
+  2. Mark the version, either the one it reached or the one before it:
+
+     ```sh
+     docker compose run --rm --entrypoint sh postgres-migrate -c 'migrate -path /migrations -database "$MIGRATE_DATABASE" force N'
+     ```
+
+     Use `scylla-migrate` instead for ScyllaDB.
+  3. Deploy again.
+- **A ScyllaDB migration:** only PostgreSQL is backed up by `deploy.sh`. Before a release with a ScyllaDB migration, take a snapshot (`nodetool snapshot`, or Scylla Manager on a cluster; see [deployment.md](deployment.md)).
 - **If a migration broke the data:** stop `api` and `worker`, then restore the backup taken before it. Restore into the database the backup came from. Then deploy the release that matches it:
 
   ```sh
@@ -84,7 +102,7 @@ The `.env` on the server is the only state the bundle does not bring. Uploads ne
 `migrate-v1.sh /opt/messenger-go [flags]` runs `cmd/migrate-v1` ([migration-v1.md](migration-v1.md)) with the deployed image:
 
 - **Access to v1:** it joins the Python stack's Docker network (`V1_NETWORK`, default `messenger_default`) and mounts its `static/` volume read-only (`V1_STATIC_VOLUME`, default `messenger_messenger_static`).
-- **Settings in `.env`:**
+- **Credentials in `v1.env`** (mode 0600, from `v1.env.example`). Only the `migrate-v1` container reads it, never `api` or `worker`:
   - `V1_DATABASE_URL`: a read-only user on the Python database; its host is the container name, for example `messenger-postgres-1`;
   - `V1_SECRET_KEY`: the Python backend's `SECRET_KEY`.
 - **Reports:** written to `reports/`, owned by the deploy user.
@@ -94,7 +112,7 @@ The `.env` on the server is the only state the bundle does not bring. Uploads ne
 ./migrate-v1.sh /opt/messenger-go -report run.json
 ```
 
-Remove the `V1_*` settings after the switch.
+Delete `v1.env` and the `V1_*` settings after the switch.
 
 ## Testing the stack
 

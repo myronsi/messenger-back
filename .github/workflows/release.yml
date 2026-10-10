@@ -115,6 +115,8 @@ jobs:
   # (the frontend's compatibility tests use them), the Go backend as go-master and go-sha-<short sha>.
   snapshot-image:
     strategy:
+      # One failing build must not cancel the other: the frontend's tests rely on the Python snapshots.
+      fail-fast: false
       matrix:
         include:
           - { file: Dockerfile, prefix: "", scope: python }

@@ -32,15 +32,22 @@ jobs:
     env:
       TAG: ${{ inputs.tag }}
       TARGET: ${{ inputs.environment }}
-      # Staging has secrets of its own, so it can never reach the production host through a fallback to
-      # the repository's (or production's) SSH secrets.
-      SSH_USER: ${{ inputs.environment == 'staging' && secrets.STAGING_SSH_USER || secrets.SSH_USER }}
-      SSH_HOST: ${{ inputs.environment == 'staging' && secrets.STAGING_SSH_HOST || secrets.SSH_HOST }}
       APP_DIR: ${{ vars.GO_DEPLOY_PATH || '/opt/messenger-go' }}
     steps:
-      - name: Check the request
+      # Staging has secrets of its own (STAGING_SSH_*), production the existing SSH_*. The set is picked
+      # here, without any fallback from one to the other: a missing staging secret fails the run instead
+      # of reaching the production host.
+      - name: Check the request and pick the SSH settings
         env:
           GO_PRODUCTION: ${{ vars.GO_PRODUCTION }}
+          STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          STAGING_SSH_USER: ${{ secrets.STAGING_SSH_USER }}
+          STAGING_SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+          STAGING_SSH_KNOWN_HOSTS: ${{ secrets.STAGING_SSH_KNOWN_HOSTS }}
+          PROD_SSH_HOST: ${{ secrets.SSH_HOST }}
+          PROD_SSH_USER: ${{ secrets.SSH_USER }}
+          PROD_SSH_KEY: ${{ secrets.SSH_KEY }}
+          PROD_SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
         run: |
           case "$TAG" in
             v0.*) echo "::error::$TAG is a Python release; deploy it with deploy.yml"; exit 1 ;;
@@ -51,27 +58,29 @@ jobs:
             echo "::error::Production runs the Python backend until the switch (docs/switchover.md); GO_PRODUCTION is not true"
             exit 1
           fi
-          if [ -z "$SSH_HOST" ] || [ -z "$SSH_USER" ]; then
-            echo "::error::The $TARGET environment has no SSH host or user (docs/deploy-go.md)"
+          case "$TARGET" in
+            staging) host=$STAGING_SSH_HOST user=$STAGING_SSH_USER key=$STAGING_SSH_KEY known=$STAGING_SSH_KNOWN_HOSTS ;;
+            production) host=$PROD_SSH_HOST user=$PROD_SSH_USER key=$PROD_SSH_KEY known=$PROD_SSH_KNOWN_HOSTS ;;
+            *) echo "::error::unknown environment $TARGET"; exit 1 ;;
+          esac
+          if [ -z "$host" ] || [ -z "$user" ] || [ -z "$key" ] || [ -z "$known" ]; then
+            echo "::error::The $TARGET environment lacks its SSH secrets (docs/deploy-go.md)"
             exit 1
           fi
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$key" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' "$known" > ~/.ssh/known_hosts
+          printf 'Host deploy\n  HostName %s\n  User %s\n  IdentityFile ~/.ssh/id_deploy\n  StrictHostKeyChecking yes\n' "$host" "$user" > ~/.ssh/config
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ inputs.tag }}
-      - name: Configure SSH
-        env:
-          SSH_KEY: ${{ inputs.environment == 'staging' && secrets.STAGING_SSH_KEY || secrets.SSH_KEY }}
-          SSH_KNOWN_HOSTS: ${{ inputs.environment == 'staging' && secrets.STAGING_SSH_KNOWN_HOSTS || secrets.SSH_KNOWN_HOSTS }}
-        run: |
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy
-          chmod 600 ~/.ssh/id_deploy
-          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          printf 'Host deploy\n  HostName %s\n  User %s\n  IdentityFile ~/.ssh/id_deploy\n  StrictHostKeyChecking yes\n' "$SSH_HOST" "$SSH_USER" > ~/.ssh/config
+      # migrations/ is replaced as a whole, so it always is this release's: a rollback must not find the
+      # migrations of a later release there. .env, v1.env, backups/ and reports/ are not in the bundle.
       - name: Upload the stack, its scripts and the migrations
         run: |
           bash deploy/go/bundle.sh "$RUNNER_TEMP/bundle"
-          tar -C "$RUNNER_TEMP/bundle" -czf - . | ssh deploy "mkdir -p '$APP_DIR' && tar -xzf - -C '$APP_DIR'"
+          tar -C "$RUNNER_TEMP/bundle" -czf - . | ssh deploy "mkdir -p '$APP_DIR' && rm -rf '$APP_DIR/migrations' && tar -xzf - -C '$APP_DIR'"
       - name: Log in to GHCR on the server
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
