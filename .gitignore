@@ -89,6 +89,7 @@
 !Makefile
 !sqlc.yaml
 !.golangci.yml
+!.sonarcloud.properties
 !go.Dockerfile
 !go.Dockerfile.dockerignore
 !compose.dev.yaml
