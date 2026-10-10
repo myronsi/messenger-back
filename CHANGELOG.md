@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.4](https://github.com/myronsi/messenger-back/compare/v0.5.3...v0.5.4) (2026-10-10)
+
+
+### Bug Fixes
+
+* **deploy:** free disk space and pull before switching the image ([#109](https://github.com/myronsi/messenger-back/issues/109)) ([eb69b59](https://github.com/myronsi/messenger-back/commit/eb69b593c486125ed49912b066fe88fccfe38959))
+
 ## [0.5.3](https://github.com/myronsi/messenger-back/compare/v0.5.2...v0.5.3) (2026-10-10)
 
 
