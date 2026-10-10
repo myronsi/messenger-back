@@ -128,12 +128,12 @@ func (r attachmentRepo) LinksForViewer(ctx context.Context, attachmentID uuid.UU
 	return out, nil
 }
 
-func (r attachmentRepo) ListLinked(ctx context.Context, chatID int64, kinds []string, before time.Time, limit int) ([]LinkedAttachment, error) {
+func (r attachmentRepo) ListLinked(ctx context.Context, chatID int64, kinds []string, beforeMessageID int64, limit int) ([]LinkedAttachment, error) {
 	ctx, cancel := r.s.call(ctx)
 	defer cancel()
-	var b *time.Time
-	if !before.IsZero() {
-		b = &before
+	var b *int64
+	if beforeMessageID > 0 {
+		b = &beforeMessageID
 	}
 	rows, err := r.s.q.ListLinkedAttachments(ctx, sqlcdb.ListLinkedAttachmentsParams{ChatID: chatID, Kinds: kinds, Before: b, MaxRows: clampLimit(limit)})
 	if err != nil {

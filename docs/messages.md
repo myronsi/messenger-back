@@ -114,9 +114,39 @@ TEST_SCYLLA_HOSTS=127.0.0.1:9042 go test ./internal/store/scylla/
 `--broadcast-rpc-address 127.0.0.1` matters: the driver connects to the address the node advertises, which is
 otherwise the container's internal one.
 
+## Over HTTP
+
+`internal/httpapi/message_server.go` serves the message use cases of `messages.Service` for clients without a
+WebSocket, with the same rules as the WebSocket events:
+
+- `GET /chats/{id}/messages` pages the history as the caller sees it (messages hidden for them are left out), oldest
+  to newest, with at most one of `before`, `after` and `around` (an `around` message that is not in the chat is
+  `404`). `next_cursor` continues in the direction of the request (older for the newest page, `before` and
+  `around`; newer for `after`), `prev_cursor` the other way. A cursor is `null` when the store knows nothing is left
+  in that direction; the way back (`prev_cursor` of a `before` or `after` page) is always set, and may lead to an
+  empty page. Each message carries its reactions; in a direct chat, `read_by` holds the other user once their read
+  marker reached it, if they share read receipts and did not block the caller. Groups carry no `read_by`: their
+  member lists can be long, and every page would read all of them.
+- `POST /chats/{id}/messages` is the `message` event: `201` for a new message, `200` with the stored message when the
+  `client_temp_id` was used before. It shares the rate limit of WebSocket sends.
+- `PATCH /messages/{id}` (the sender's own text messages, not forwarded copies, which show someone else's words) and
+  `DELETE /messages/{id}?scope=me|everyone` (everyone: the sender, and in groups owners, admins and moderators). A
+  message the caller cannot see (hidden for them, deleted, in a chat they are not in) is `404`; deleting for oneself
+  works on any message of one's chats.
+- `POST /messages/{id}/forward` copies a message the caller can see into up to 20 chats they are in: same type, text
+  and file (linked into the target chat, so its members can download it, also files from v1), with `forwarded_from`
+  naming the original (the first original of a forwarded message). Every target is checked before anything is
+  written. Each copy uses up one send of the sender's send budget. If a store fails midway, the answer is still `201`
+  with the copies written so far, so a client never repeats copies that were delivered.
+- `GET /chats/{id}/media?kind=image|audio` lists messages with photos, or with audio and voice files, newest first,
+  paged by message id (`attachment_links`, index from migration 000010, built concurrently). Messages deleted or
+  hidden for the caller are skipped. One page looks at most at five times its size of links, so a chat full of
+  hidden photos cannot make a request read the whole chat: the page then holds fewer items, and `next_cursor`
+  continues where the scan stopped.
+
 ## Migration from v1 (cutover prerequisite)
 
-Nothing reads this store yet. Before message reads switch to it, the v1 history must be copied: `cmd/migrate-v1`
+Before message reads switch to this store, the v1 history must be copied: `cmd/migrate-v1`
 (#54) writes every PostgreSQL message with its v1 ID and creation time (bucket from the creation time, plus a
 `message_locations` row), turns `deleted_for` into `hidden_messages` rows with `deleted_for_me` and
 `undelivered_to` into `not_delivered`, and copies the reactions. Switching reads without it would lose the

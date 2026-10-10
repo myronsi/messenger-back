@@ -138,6 +138,8 @@ func run() error {
 				Directory: rt.directory, Notifier: rt.fanout, Events: rt.events, DeleteFile: storage.Delete, Log: log,
 			}),
 			Limiter: rt.limiter, BasePath: cfg.HTTP.BasePath, Log: log,
+		})).WithMessages(httpapi.NewMessageServer(httpapi.MessageOptions{
+			Service: rt.messages, Store: pg, Directory: rt.directory, Limiter: rt.limiter, BasePath: cfg.HTTP.BasePath, Log: log,
 		})).WithMeta(httpapi.MetaInfo{
 			BackendVersion: version.Backend, Commit: os.Getenv("APP_COMMIT"), MinClientAPIVersion: cfg.Realtime.MinClientAPIVersion,
 		}),

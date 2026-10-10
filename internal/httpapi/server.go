@@ -7,11 +7,15 @@ import "net/http"
 // implemented yet answer 501 through the AuthServer's embedded Unimplemented.
 type Server struct {
 	*AuthServer
-	media   *MediaServer
-	account *AccountServer
-	chats   *ChatServer
-	meta    MetaInfo
+	media    *MediaServer
+	account  *AccountServer
+	chats    *ChatServer
+	messages *MessageServer
+	meta     MetaInfo
 }
+
+// WithMessages adds history, sending, editing, deleting and forwarding over HTTP, and the media lists.
+func (s *Server) WithMessages(m *MessageServer) *Server { s.messages = m; return s }
 
 // WithChats adds the chat list, direct chat, pin, read and request endpoints.
 func (s *Server) WithChats(c *ChatServer) *Server { s.chats = c; return s }
@@ -282,4 +286,58 @@ func (s *Server) RejectRequest(w http.ResponseWriter, r *http.Request, requestID
 		return
 	}
 	s.chats.RejectRequest(w, r, requestID, params)
+}
+
+// ListMessages delegates to the message endpoints (GET /chats/{id}/messages).
+func (s *Server) ListMessages(w http.ResponseWriter, r *http.Request, chatID ChatId, params ListMessagesParams) {
+	if s.messages == nil {
+		s.AuthServer.ListMessages(w, r, chatID, params)
+		return
+	}
+	s.messages.ListMessages(w, r, chatID, params)
+}
+
+// SendMessage delegates to the message endpoints (POST /chats/{id}/messages).
+func (s *Server) SendMessage(w http.ResponseWriter, r *http.Request, chatID ChatId, params SendMessageParams) {
+	if s.messages == nil {
+		s.AuthServer.SendMessage(w, r, chatID, params)
+		return
+	}
+	s.messages.SendMessage(w, r, chatID, params)
+}
+
+// ListChatMedia delegates to the message endpoints (GET /chats/{id}/media).
+func (s *Server) ListChatMedia(w http.ResponseWriter, r *http.Request, chatID ChatId, params ListChatMediaParams) {
+	if s.messages == nil {
+		s.AuthServer.ListChatMedia(w, r, chatID, params)
+		return
+	}
+	s.messages.ListChatMedia(w, r, chatID, params)
+}
+
+// EditMessage delegates to the message endpoints (PATCH /messages/{id}).
+func (s *Server) EditMessage(w http.ResponseWriter, r *http.Request, messageID MessageId, params EditMessageParams) {
+	if s.messages == nil {
+		s.AuthServer.EditMessage(w, r, messageID, params)
+		return
+	}
+	s.messages.EditMessage(w, r, messageID, params)
+}
+
+// DeleteMessage delegates to the message endpoints (DELETE /messages/{id}).
+func (s *Server) DeleteMessage(w http.ResponseWriter, r *http.Request, messageID MessageId, params DeleteMessageParams) {
+	if s.messages == nil {
+		s.AuthServer.DeleteMessage(w, r, messageID, params)
+		return
+	}
+	s.messages.DeleteMessage(w, r, messageID, params)
+}
+
+// ForwardMessage delegates to the message endpoints (POST /messages/{id}/forward).
+func (s *Server) ForwardMessage(w http.ResponseWriter, r *http.Request, messageID MessageId, params ForwardMessageParams) {
+	if s.messages == nil {
+		s.AuthServer.ForwardMessage(w, r, messageID, params)
+		return
+	}
+	s.messages.ForwardMessage(w, r, messageID, params)
 }

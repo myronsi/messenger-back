@@ -38,13 +38,14 @@ ORDER BY l.created_at DESC
 LIMIT 50;
 
 -- name: ListLinkedAttachments :many
--- Attachments of a chat by kind, newest first, for the media lists (photos, audio).
+-- Attachments of a chat by kind, newest message first, for the media lists (photos, audio); the cursor is
+-- the message id of the last one.
 SELECT a.*, l.message_id, l.created_at AS linked_at
 FROM attachment_links l
 JOIN attachments a ON a.id = l.attachment_id
 WHERE l.chat_id = @chat_id AND a.kind = ANY(@kinds::text[])
-  AND (sqlc.narg(before)::timestamptz IS NULL OR l.created_at < sqlc.narg(before)::timestamptz)
-ORDER BY l.created_at DESC
+  AND (sqlc.narg(before)::bigint IS NULL OR l.message_id < sqlc.narg(before)::bigint)
+ORDER BY l.message_id DESC
 LIMIT @max_rows;
 
 -- name: ListUnreferencedAttachments :many

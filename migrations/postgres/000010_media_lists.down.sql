@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS attachment_links_chat_message_idx;

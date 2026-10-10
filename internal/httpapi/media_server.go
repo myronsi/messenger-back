@@ -44,13 +44,28 @@ var RateUpload = redis.Rate{Name: "upload", Rate: 60, Period: time.Minute, Burst
 // RateSearch limits user searches per user.
 var RateSearch = redis.Rate{Name: "user_search", Rate: 60, Period: time.Minute, Burst: 20}
 
+// allowN is allow for n events at once, for limiters that can count several (allow once otherwise).
+func allowN(w http.ResponseWriter, r *http.Request, l RateAllower, rate redis.Rate, subject string, n int, log *slog.Logger) bool {
+	nl, ok := l.(interface {
+		AllowN(ctx context.Context, r redis.Rate, subject string, n int) (redis.Result, error)
+	})
+	if !ok || n <= 1 {
+		return allow(w, r, l, rate, subject, log)
+	}
+	return allowWith(w, r, func() (redis.Result, error) { return nl.AllowN(r.Context(), rate, subject, n) }, rate, log)
+}
+
 // allow applies a rate limit and answers the request when it is over: 429 with Retry-After, or 503 when the
 // limiter itself failed (Redis), which is no reason to blame the client. A nil limiter allows everything.
 func allow(w http.ResponseWriter, r *http.Request, l RateAllower, rate redis.Rate, subject string, log *slog.Logger) bool {
 	if l == nil {
 		return true
 	}
-	res, err := l.Allow(r.Context(), rate, subject)
+	return allowWith(w, r, func() (redis.Result, error) { return l.Allow(r.Context(), rate, subject) }, rate, log)
+}
+
+func allowWith(w http.ResponseWriter, r *http.Request, check func() (redis.Result, error), rate redis.Rate, log *slog.Logger) bool {
+	res, err := check()
 	if err != nil {
 		log.WarnContext(r.Context(), "rate limit", "rate", rate.Name, "error", err)
 		w.Header().Set("Retry-After", "5")

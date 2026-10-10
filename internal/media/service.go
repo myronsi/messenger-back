@@ -314,7 +314,10 @@ func (s *Service) CanSee(ctx context.Context, viewerID int64, a postgres.Attachm
 		return true, nil
 	}
 	if a.ChatID != nil {
-		return s.o.Membership.IsMember(ctx, *a.ChatID, viewerID)
+		// A v1 attachment belongs to its chat; forwarded copies link it into others, checked below.
+		if ok, err := s.o.Membership.IsMember(ctx, *a.ChatID, viewerID); err != nil || ok {
+			return ok, err
+		}
 	}
 	links, err := s.o.Attachments.LinksForViewer(ctx, a.ID, viewerID)
 	if err != nil {
