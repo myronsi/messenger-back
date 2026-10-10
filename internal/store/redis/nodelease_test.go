@@ -21,6 +21,9 @@ func TestNodeLease(t *testing.T) {
 	if a.Node() == b.Node() {
 		t.Fatalf("both got node %d", a.Node())
 	}
+	if _, err := AcquireNode(ctx, s.Client(), prefix, "x", -1, time.Minute); err == nil {
+		t.Fatal("accepted a negative bound")
+	}
 	if _, err := AcquireNode(ctx, s.Client(), prefix, "c", 1, time.Minute); !errors.Is(err, ErrNoFreeNode) {
 		t.Fatalf("third lease: %v", err)
 	}

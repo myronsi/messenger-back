@@ -37,6 +37,9 @@ func AcquireNode(ctx context.Context, rdb Client, prefix, instance string, maxNo
 	if ttl <= 0 {
 		ttl = NodeLeaseTTL
 	}
+	if maxNode < 0 {
+		return nil, errors.New("node lease: the largest node number must not be negative")
+	}
 	nonce, err := randomToken()
 	if err != nil {
 		return nil, err

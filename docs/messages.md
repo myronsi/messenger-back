@@ -34,7 +34,7 @@ looked up in `message_locations`.
 
 ## Operations
 
-- **Insert** writes the bucket (once per chat and bucket per process) and the location before the message, so
+- **Insert** writes the bucket and the location (in parallel) before the message, so
   every readable message is reachable; all writes are idempotent, so a failed insert is retried with the same
   ID. They carry the message's creation time as write timestamp (`USING TIMESTAMP`), so a delayed retry loses
   against every later edit, delete or chat deletion instead of bringing the message back. (This assumes the

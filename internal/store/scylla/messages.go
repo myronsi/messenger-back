@@ -125,17 +125,9 @@ func BucketOf(t time.Time) int {
 type Messages struct {
 	s       *Store
 	timeout time.Duration
-
-	// knownBuckets remembers (chat, bucket) pairs written to chat_buckets by this process, so a busy chat
-	// writes its bucket once per process and period instead of once per message.
-	mu           sync.Mutex
-	knownBuckets map[[2]int64]struct{}
 }
 
 var _ MessageRepository = (*Messages)(nil)
-
-// maxKnownBuckets bounds the memory of knownBuckets; the map starts over when it is full.
-const maxKnownBuckets = 100_000
 
 // NewMessages returns the repository. Every call runs under timeout (a page that reads several buckets
 // counts as one call).
@@ -143,7 +135,7 @@ func NewMessages(s *Store, timeout time.Duration) *Messages {
 	if timeout <= 0 {
 		timeout = 5 * time.Second
 	}
-	return &Messages{s: s, timeout: timeout, knownBuckets: make(map[[2]int64]struct{})}
+	return &Messages{s: s, timeout: timeout}
 }
 
 func (r *Messages) session(ctx context.Context) (context.Context, context.CancelFunc, *gocql.Session, error) {
@@ -233,14 +225,10 @@ func (r *Messages) Insert(ctx context.Context, m Message) error {
 	}
 	defer cancel()
 	bucket := insertBucket(m)
-	key := [2]int64{m.ChatID, int64(bucket)}
 
-	r.mu.Lock()
-	_, known := r.knownBuckets[key]
-	r.mu.Unlock()
-
-	// The bucket and the location are written before the message, so a message that can be read is always
-	// reachable by paging and by id. A failure leaves at most a bucket or location without a message, which
+	// The bucket and the location are written before the message (in parallel, every time: a cache of
+	// written buckets would go stale when another instance deletes the chat), so a message that can be read
+	// is always reachable by paging and by id. A failure leaves at most a bucket or location without a message, which
 	// readers skip; retrying the insert completes it.
 	//
 	// Every creation write carries the creation time as its write timestamp. Later changes (edits, deletes,
@@ -249,12 +237,10 @@ func (r *Messages) Insert(ctx context.Context, m Message) error {
 	ts := m.CreatedAt.UnixMicro()
 	var wg sync.WaitGroup
 	errs := make([]error, 2)
-	if !known {
-		wg.Go(func() {
-			errs[0] = sess.Query(`INSERT INTO chat_buckets (chat_id, bucket) VALUES (?, ?) USING TIMESTAMP ?`, m.ChatID, bucket, ts).
-				WithContext(ctx).Idempotent(true).Exec()
-		})
-	}
+	wg.Go(func() {
+		errs[0] = sess.Query(`INSERT INTO chat_buckets (chat_id, bucket) VALUES (?, ?) USING TIMESTAMP ?`, m.ChatID, bucket, ts).
+			WithContext(ctx).Idempotent(true).Exec()
+	})
 	wg.Go(func() {
 		errs[1] = sess.Query(`INSERT INTO message_locations (message_id, chat_id, bucket) VALUES (?, ?, ?) USING TIMESTAMP ?`, m.ID, m.ChatID, bucket, ts).
 			WithContext(ctx).Idempotent(true).Exec()
@@ -262,14 +248,6 @@ func (r *Messages) Insert(ctx context.Context, m Message) error {
 	wg.Wait()
 	if err := errors.Join(errs...); err != nil {
 		return fmt.Errorf("insert message: %w", err)
-	}
-	if !known {
-		r.mu.Lock()
-		if len(r.knownBuckets) >= maxKnownBuckets {
-			clear(r.knownBuckets)
-		}
-		r.knownBuckets[key] = struct{}{}
-		r.mu.Unlock()
 	}
 
 	var fwdID, fwdSender *int64
@@ -513,9 +491,6 @@ func (r *Messages) DeleteChat(ctx context.Context, chatID int64) error {
 		if err := r.deleteBucket(ctx, sess, chatID, b); err != nil {
 			return err
 		}
-		r.mu.Lock()
-		delete(r.knownBuckets, [2]int64{chatID, int64(b)})
-		r.mu.Unlock()
 	}
 	return nil
 }
