@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.5.5](https://github.com/myronsi/messenger-back/compare/v0.5.4...v0.5.5) (2026-10-10)
+
+
+### Features
+
+* **chats:** chat list, direct chats, pins, read markers and approval requests ([#118](https://github.com/myronsi/messenger-back/issues/118)) ([89dcef4](https://github.com/myronsi/messenger-back/commit/89dcef4b17dfbd03408372975eb1851e669ade39))
+* **deploy:** release and deploy the Go backend ([#127](https://github.com/myronsi/messenger-back/issues/127)) ([97460c8](https://github.com/myronsi/messenger-back/commit/97460c864b3fdd6f483cd0f80289f7cf1fba18a0))
+* **events:** domain events on Redis streams and a worker that consumes them ([#115](https://github.com/myronsi/messenger-back/issues/115)) ([66decd8](https://github.com/myronsi/messenger-back/commit/66decd88545a1f47728cf4f93f8ac02ff853168f))
+* **groups:** groups, members, roles, ownership, avatars and invitations ([#120](https://github.com/myronsi/messenger-back/issues/120)) ([ca8591b](https://github.com/myronsi/messenger-back/commit/ca8591bf4455da576191d5cf6c89ba41a3003b77))
+* **media:** uploads checked by content, authenticated downloads and avatars ([#116](https://github.com/myronsi/messenger-back/issues/116)) ([10ab92c](https://github.com/myronsi/messenger-back/commit/10ab92c768eb1d961fe0983f7620745b861ab14f))
+* **messages:** history, sending, editing, deleting, forwarding and media lists over HTTP ([#119](https://github.com/myronsi/messenger-back/issues/119)) ([91240d0](https://github.com/myronsi/messenger-back/commit/91240d00bcd9b46736fd2e977595d5f1d6470b3a))
+* **messages:** ScyllaDB message store with Snowflake IDs ([#113](https://github.com/myronsi/messenger-back/issues/113)) ([611491b](https://github.com/myronsi/messenger-back/commit/611491b4c1d90e91c30b703a556f741ed0af6787))
+* **migrate:** copy the Python backend's data into the Go backend ([#123](https://github.com/myronsi/messenger-back/issues/123)) ([18a183a](https://github.com/myronsi/messenger-back/commit/18a183af3dd7f994bfee1543811f2b1ebea7f62f))
+* **realtime:** WebSocket gateway with delivery across instances ([#114](https://github.com/myronsi/messenger-back/issues/114)) ([842b1c6](https://github.com/myronsi/messenger-back/commit/842b1c6540cad9542d4d8e73fb37ac0620ffe43a))
+* **redis:** presence, pub/sub, unread counters, membership cache and rate limits ([#111](https://github.com/myronsi/messenger-back/issues/111)) ([cbaf893](https://github.com/myronsi/messenger-back/commit/cbaf8935bee778e0f95e9f5525b310ae3da5519f))
+* **search:** Elasticsearch message search fed by the event streams ([#121](https://github.com/myronsi/messenger-back/issues/121)) ([7275a18](https://github.com/myronsi/messenger-back/commit/7275a182f05a3e4ef14a4404dc0b506592a31173))
+* **users:** profile, privacy, blocking, contact names, user search and /meta ([#117](https://github.com/myronsi/messenger-back/issues/117)) ([1459903](https://github.com/myronsi/messenger-back/commit/145990384eeb18aeda6829ee26761e8f0f1cfba6))
+
+
+### Bug Fixes
+
+* **api:** not ready until message ids can be issued ([#128](https://github.com/myronsi/messenger-back/issues/128)) ([6dbb8db](https://github.com/myronsi/messenger-back/commit/6dbb8db2250d50e12b681ce59395fc7f41e401ce))
+* **migrate:** messages of skipped chats no longer stop the run ([#126](https://github.com/myronsi/messenger-back/issues/126)) ([6e5ef2e](https://github.com/myronsi/messenger-back/commit/6e5ef2e44c37943c1b07eab7a297e56552a7e9d0))
+
 ## [0.5.4](https://github.com/myronsi/messenger-back/compare/v0.5.3...v0.5.4) (2026-10-10)
 
 
