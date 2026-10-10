@@ -9,6 +9,9 @@ IMAGE="$2"
 KEEP_BACKUPS=10
 # Free space needed before pulling a new image (the backend image is about 170 MB compressed).
 MIN_FREE_MB="${MIN_FREE_MB:-1024}"
+case "$MIN_FREE_MB" in
+  ''|*[!0-9]*) echo "MIN_FREE_MB must be a whole number of megabytes, got '$MIN_FREE_MB'" >&2; exit 1 ;;
+esac
 
 cd "$APP_DIR"
 touch .env
@@ -56,7 +59,7 @@ free_mb() {
 docker image prune -af > /dev/null
 available="$(free_mb)"
 if [ -n "$available" ] && [ "$available" -lt "$MIN_FREE_MB" ]; then
-  echo "Only ${available} MB free on the Docker disk (need ${MIN_FREE_MB} MB); nothing was changed." >&2
+  echo "Only ${available} MB free on the Docker disk after pruning unused images (need ${MIN_FREE_MB} MB); the deployment and its configuration were not changed." >&2
   exit 1
 fi
 
