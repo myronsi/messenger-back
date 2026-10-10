@@ -131,16 +131,36 @@ func requestFrom(r sqlcdb.ApprovalRequest) ApprovalRequest {
 }
 
 func (r approvalRepo) RequestDirect(ctx context.Context, requesterID, recipientID int64, message *string) (ApprovalRequest, bool, error) {
-	ctx, cancel := r.s.call(ctx)
-	defer cancel()
-	row, err := r.s.q.CreateDirectRequest(ctx, sqlcdb.CreateDirectRequestParams{RequesterID: requesterID, RecipientID: recipientID, MessageText: message})
+	var (
+		req     ApprovalRequest
+		created bool
+	)
+	err := r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
+		key := directKey(requesterID, recipientID)
+		if err := q.LockDirectPair(ctx, key); err != nil {
+			return err
+		}
+		// Under the pair's lock: a chat opened a moment ago (an approval) makes the request pointless.
+		if _, err := q.GetDirectChat(ctx, &key); err == nil {
+			return ErrConflict
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		row, err := q.CreateDirectRequest(ctx, sqlcdb.CreateDirectRequestParams{RequesterID: requesterID, RecipientID: recipientID, MessageText: message})
+		if err != nil {
+			return err
+		}
+		req = requestFrom(sqlcdb.ApprovalRequest{
+			ID: row.ID, Type: row.Type, RequesterID: row.RequesterID, RecipientID: row.RecipientID, Status: row.Status,
+			MessageText: row.MessageText, ChatID: row.ChatID, CreatedAt: row.CreatedAt, RespondedAt: row.RespondedAt,
+		})
+		created = row.Created
+		return nil
+	})
 	if err != nil {
-		return ApprovalRequest{}, false, mapError(err)
+		return ApprovalRequest{}, false, err
 	}
-	return requestFrom(sqlcdb.ApprovalRequest{
-		ID: row.ID, Type: row.Type, RequesterID: row.RequesterID, RecipientID: row.RecipientID, Status: row.Status,
-		MessageText: row.MessageText, ChatID: row.ChatID, CreatedAt: row.CreatedAt, RespondedAt: row.RespondedAt,
-	}), row.Created, nil
+	return req, created, nil
 }
 
 func (r approvalRepo) Get(ctx context.Context, id int64) (ApprovalRequest, error) {
@@ -171,12 +191,20 @@ func (r approvalRepo) Pending(ctx context.Context, recipientID, beforeID int64, 
 	return out, nil
 }
 
-// respond locks a pending request of the recipient and records the answer.
+// respond locks a pending direct-message request of the recipient and records the answer. The pair's lock is
+// taken first, in the order every path that opens a chat or asks for one takes its locks.
 func respond(ctx context.Context, q *sqlcdb.Queries, id, recipientID int64, status string) (ApprovalRequest, error) {
-	row, err := q.LockApprovalRequest(ctx, id)
-	if errors.Is(err, pgx.ErrNoRows) || (err == nil && row.RecipientID != recipientID) {
+	peek, err := q.GetApprovalRequest(ctx, id)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && (peek.RecipientID != recipientID || peek.Type != RequestDirectMessage)) {
 		return ApprovalRequest{}, ErrNotFound
 	}
+	if err != nil {
+		return ApprovalRequest{}, err
+	}
+	if err := q.LockDirectPair(ctx, directKey(peek.RequesterID, peek.RecipientID)); err != nil {
+		return ApprovalRequest{}, err
+	}
+	row, err := q.LockApprovalRequest(ctx, id)
 	if err != nil {
 		return ApprovalRequest{}, err
 	}
@@ -192,27 +220,25 @@ func respond(ctx context.Context, q *sqlcdb.Queries, id, recipientID int64, stat
 	return req, nil
 }
 
-func (r approvalRepo) ApproveDirect(ctx context.Context, id, recipientID int64) (ApprovalRequest, Chat, bool, error) {
+func (r approvalRepo) ApproveDirect(ctx context.Context, id, recipientID int64) (ApprovalRequest, Chat, bool, []ApprovalRequest, error) {
 	var (
 		req     ApprovalRequest
 		chat    Chat
 		created bool
+		closed  []ApprovalRequest
 	)
 	err := r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
 		var err error
 		if req, err = respond(ctx, q, id, recipientID, RequestApproved); err != nil {
 			return err
 		}
-		if req.Type != RequestDirectMessage {
-			return ErrInvalid
-		}
-		chat, created, err = createDirect(ctx, q, req.RequesterID, req.RecipientID)
+		chat, created, closed, err = createDirect(ctx, q, req.RequesterID, req.RecipientID)
 		return err
 	})
 	if err != nil {
-		return ApprovalRequest{}, Chat{}, false, err
+		return ApprovalRequest{}, Chat{}, false, nil, err
 	}
-	return req, chat, created, nil
+	return req, chat, created, closed, nil
 }
 
 func (r approvalRepo) Reject(ctx context.Context, id, recipientID int64) (ApprovalRequest, error) {

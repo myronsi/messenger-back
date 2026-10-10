@@ -226,6 +226,8 @@ type ChatRepository interface {
 	// Delete removes the chat and returns the object-storage keys of its attachments.
 	Delete(ctx context.Context, chatID int64) (attachmentKeys []string, err error)
 
+	// OpenDirect is CreateDirect that also closes the pair's pending direct-message requests and returns them.
+	OpenDirect(ctx context.Context, creatorID, otherID int64) (chat Chat, created bool, closed []ApprovalRequest, err error)
 	// DirectBetween returns the direct chat of two users (ErrNotFound when they have none).
 	DirectBetween(ctx context.Context, a, b int64) (Chat, error)
 	// TouchActivity records a new message: the chat moves up in its members' lists.
@@ -246,16 +248,16 @@ type ChatRepository interface {
 // ApprovalRepository keeps the approval requests.
 type ApprovalRepository interface {
 	// RequestDirect asks the recipient for a direct chat; a pending request of the pair is returned as it is
-	// (created false).
+	// (created false). ErrConflict: the pair has a chat (opened meanwhile).
 	RequestDirect(ctx context.Context, requesterID, recipientID int64, message *string) (req ApprovalRequest, created bool, err error)
 	Get(ctx context.Context, id int64) (ApprovalRequest, error)
 	// Pending is the recipient's inbox, newest first, before the request id (0: from the start).
 	Pending(ctx context.Context, recipientID, beforeID int64, limit int) ([]ApprovalRequest, error)
 	// ApproveDirect accepts a pending direct-message request of the recipient and returns the chat it opens
-	// (created false when the pair had one). ErrNotFound: no such request for this recipient; ErrConflict:
-	// it was answered already.
-	ApproveDirect(ctx context.Context, id, recipientID int64) (ApprovalRequest, Chat, bool, error)
-	// Reject turns down a pending request of the recipient (ErrNotFound, ErrConflict as above).
+	// (created false when the pair had one) and the other requests of the pair it closed. ErrNotFound: no
+	// such direct-message request for this recipient; ErrConflict: it was answered already.
+	ApproveDirect(ctx context.Context, id, recipientID int64) (req ApprovalRequest, chat Chat, created bool, closed []ApprovalRequest, err error)
+	// Reject turns down a pending direct-message request of the recipient (ErrNotFound, ErrConflict as above).
 	Reject(ctx context.Context, id, recipientID int64) (ApprovalRequest, error)
 }
 

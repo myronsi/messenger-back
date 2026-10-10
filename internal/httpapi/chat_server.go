@@ -100,11 +100,17 @@ func PresentRequest(r chats.RequestView) ApprovalRequest {
 
 // serviceError answers a failure of the chat or message service.
 func serviceError(w http.ResponseWriter, r *http.Request, log *slog.Logger, what string, err error) {
-	detail := func() string {
-		_, msg, _ := strings.Cut(err.Error(), ": ")
-		return msg
+	// The text after the sentinel ("invalid request: initial_message is too long") is safe to show.
+	details := func() []ProblemError {
+		_, msg, ok := strings.Cut(err.Error(), ": ")
+		if !ok || msg == "" {
+			return nil
+		}
+		return []ProblemError{{Message: msg}}
 	}
 	switch {
+	case errors.Is(err, chats.ErrBadCursor):
+		WriteProblem(w, http.StatusBadRequest, ErrorCodeInvalidRequest, ProblemError{Field: "after", Message: "unknown cursor"})
 	case errors.Is(err, messages.ErrNotFound):
 		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
 	case errors.Is(err, messages.ErrBlocked):
@@ -112,9 +118,9 @@ func serviceError(w http.ResponseWriter, r *http.Request, log *slog.Logger, what
 	case errors.Is(err, messages.ErrForbidden):
 		WriteProblem(w, http.StatusForbidden, ErrorCodeForbidden)
 	case errors.Is(err, chats.ErrConflict):
-		WriteProblem(w, http.StatusConflict, ErrorCodeConflict, ProblemError{Message: detail()})
+		WriteProblem(w, http.StatusConflict, ErrorCodeConflict, details()...)
 	case errors.Is(err, messages.ErrInvalid):
-		WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Message: detail()})
+		WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, details()...)
 	case errors.Is(err, messages.ErrUnavailable):
 		log.WarnContext(r.Context(), what, "error", err)
 		w.Header().Set("Retry-After", "2")

@@ -611,9 +611,11 @@ func (s *Service) Read(ctx context.Context, userID, chatID, messageID int64) (in
 		return n, nil
 	}
 	n, err := s.d.Messages.CountAfter(ctx, chatID, userID, messageID, unreadCap)
+	countErr := err
 	if err != nil {
+		// The marker moved but the count is unknown: the caller is told to retry (which only recounts), and the
+		// other members still learn about the read below.
 		s.d.Log.WarnContext(ctx, "unread recount", "error", err, "chat_id", chatID)
-		n = 0
 	} else if err := s.d.Unread.Set(ctx, userID, chatID, int64(n)); err != nil {
 		s.d.Log.WarnContext(ctx, "unread set", "error", err, "chat_id", chatID)
 	}
@@ -625,6 +627,9 @@ func (s *Service) Read(ctx context.Context, userID, chatID, messageID int64) (in
 		}
 	}
 	s.d.Notifier.Read(ctx, chatID, userID, messageID, s.now().UTC(), recipients)
+	if countErr != nil {
+		return 0, fmt.Errorf("%w: %w", ErrUnavailable, countErr)
+	}
 	return n, nil
 }
 

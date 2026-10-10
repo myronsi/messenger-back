@@ -3,6 +3,7 @@ package httpapi
 import (
 	"bytes"
 	"context"
+	"math/rand/v2"
 	"net/http"
 	"strconv"
 	"sync"
@@ -77,6 +78,12 @@ func newChatEnv(t *testing.T) *chatEnv {
 		RecoveryPepper: bytes.Repeat([]byte("p"), 32), Namespace: "t" + uuid.NewString(),
 	}, log)
 	if err != nil {
+		t.Fatal(err)
+	}
+	// Every test has its own database but the ScyllaDB keyspace is shared: chat ids must not repeat across tests,
+	// or one test reads another one's messages.
+	start := 1 + rand.Int64N(1<<40)
+	if _, err := store.Pool().Exec(context.Background(), "ALTER TABLE chats ALTER COLUMN id RESTART WITH "+strconv.FormatInt(start, 10)); err != nil {
 		t.Fatal(err)
 	}
 	prefix := "t" + uuid.NewString() + ":"
@@ -244,9 +251,14 @@ func TestDirectMessagePrivacyAndRequests(t *testing.T) {
 		t.Fatalf("shared_chats without a shared chat: %d %s", r.Code, r.Body)
 	}
 
+	// Dave's contact name for alice must not reach alice in the answer to her own request.
+	e.do(t, request{method: http.MethodPut, path: "/users/" + e.uid(t, alice) + "/contact-name", token: dave.access, body: map[string]any{"contact_name": "Not her"}})
 	r := e.create(t, alice, e.uid(t, dave), "May I?")
 	if r.Code != http.StatusAccepted || r.json()["status"] != "pending" || r.json()["preview"] != "May I?" {
 		t.Fatalf("request: %d %s", r.Code, r.Body)
+	}
+	if cn := r.json()["requester"].(map[string]any)["contact_name"]; cn != nil {
+		t.Fatalf("the recipient's contact name leaked to the requester: %v", cn)
 	}
 	if again := e.create(t, alice, e.uid(t, dave), "twice"); again.Code != http.StatusAccepted || again.json()["id"] != r.json()["id"] {
 		t.Fatalf("second request: %d %s", again.Code, again.Body)
@@ -286,5 +298,44 @@ func TestDirectMessagePrivacyAndRequests(t *testing.T) {
 	}
 	if list := items(t, e.do(t, request{method: http.MethodGet, path: "/chats", token: erin.access})); len(list) != 0 {
 		t.Fatalf("a rejected request made a chat: %v", list)
+	}
+}
+
+func TestCrossingRequestsAndBadCursors(t *testing.T) {
+	e := newChatEnv(t)
+	ann, ben := e.register(t, "ann"), e.register(t, "ben")
+	for _, s := range []session{ann, ben} {
+		e.do(t, request{method: http.MethodPatch, path: "/me/privacy", token: s.access, body: map[string]any{"direct_messages": "wait_approval"}})
+	}
+	// Both ask each other; approving one opens the chat and settles the other, with both messages in it.
+	if r := e.create(t, ann, e.uid(t, ben), "from ann"); r.Code != http.StatusAccepted {
+		t.Fatalf("ann asks: %d %s", r.Code, r.Body)
+	}
+	if r := e.create(t, ben, e.uid(t, ann), "from ben"); r.Code != http.StatusAccepted {
+		t.Fatalf("ben asks: %d %s", r.Code, r.Body)
+	}
+	req := items(t, e.do(t, request{method: http.MethodGet, path: "/requests", token: ann.access}))[0]["id"].(string)
+	chat := e.do(t, request{method: http.MethodPost, path: "/requests/" + req + "/approve", token: ann.access})
+	if chat.Code != http.StatusOK {
+		t.Fatalf("approve: %d %s", chat.Code, chat.Body)
+	}
+	if left := items(t, e.do(t, request{method: http.MethodGet, path: "/requests", token: ben.access})); len(left) != 0 {
+		t.Fatalf("the crossing request is still pending: %v", left)
+	}
+	// Each got the other's message: one unread on both sides.
+	for _, s := range []session{ann, ben} {
+		v := e.do(t, request{method: http.MethodGet, path: "/chats/" + chat.json()["id"].(string), token: s.access}).json()
+		if v["unread_count"].(float64) != 1 {
+			t.Fatalf("first messages: %v", v)
+		}
+	}
+	// Asking again once the chat exists returns the chat.
+	if r := e.create(t, ann, e.uid(t, ben), "again"); r.Code != http.StatusOK || r.json()["id"] != chat.json()["id"] {
+		t.Fatalf("after the approval: %d %s", r.Code, r.Body)
+	}
+	for _, path := range []string{"/chats?after=nonsense", "/requests?after=x"} {
+		if r := e.do(t, request{method: http.MethodGet, path: path, token: ann.access}); r.Code != http.StatusBadRequest {
+			t.Fatalf("%s: %d", path, r.Code)
+		}
 	}
 }

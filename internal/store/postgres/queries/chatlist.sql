@@ -39,7 +39,10 @@ WHERE chat_id = ANY(@chat_ids::bigint[]) AND user_id <> @user_id
 ORDER BY chat_id, user_id;
 
 -- name: CountPins :one
-SELECT count(*) FROM user_chat_pins WHERE user_id = @user_id;
+-- Pins of chats the user is still in (pins of chats they left do not use up the limit).
+SELECT count(*) FROM user_chat_pins pin
+JOIN participants p ON p.chat_id = pin.chat_id AND p.user_id = pin.user_id
+WHERE pin.user_id = @user_id;
 
 -- name: PinChat :execrows
 INSERT INTO user_chat_pins (user_id, chat_id) VALUES (@user_id, @chat_id) ON CONFLICT DO NOTHING;
@@ -62,12 +65,26 @@ SELECT * FROM approval_requests WHERE id = @id;
 SELECT * FROM approval_requests WHERE id = @id FOR UPDATE;
 
 -- name: ListPendingRequests :many
--- The recipient's inbox, newest first; the cursor is the last request id.
+-- The recipient's inbox of direct-message requests, newest first; the cursor is the last request id. (Group
+-- invitations are answered with the group endpoints.)
 SELECT * FROM approval_requests
-WHERE recipient_id = @recipient_id AND status = 'pending'
+WHERE recipient_id = @recipient_id AND status = 'pending' AND type = 'direct_message'
   AND (sqlc.narg(before_id)::bigint IS NULL OR id < sqlc.narg(before_id)::bigint)
 ORDER BY id DESC
 LIMIT @max_rows;
 
 -- name: RespondToRequest :execrows
 UPDATE approval_requests SET status = @status, responded_at = now() WHERE id = @id AND status = 'pending';
+
+-- name: LockDirectPair :exec
+-- Serializes everything that opens a direct chat of a pair or asks for one (key: the direct_key), so a
+-- request cannot be made while the chat is being opened.
+SELECT pg_advisory_xact_lock(hashtextextended(@direct_key::text, 0));
+
+-- name: CloseDirectRequests :many
+-- The pair has a chat now: pending direct-message requests between them, in either direction, are done.
+UPDATE approval_requests
+SET status = 'approved', responded_at = now()
+WHERE type = 'direct_message' AND status = 'pending'
+  AND ((requester_id = @a AND recipient_id = @b) OR (requester_id = @b AND recipient_id = @a))
+RETURNING *;

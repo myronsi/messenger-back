@@ -12,10 +12,57 @@ import (
 	"github.com/google/uuid"
 )
 
-const countPins = `-- name: CountPins :one
-SELECT count(*) FROM user_chat_pins WHERE user_id = $1
+const closeDirectRequests = `-- name: CloseDirectRequests :many
+UPDATE approval_requests
+SET status = 'approved', responded_at = now()
+WHERE type = 'direct_message' AND status = 'pending'
+  AND ((requester_id = $1 AND recipient_id = $2) OR (requester_id = $2 AND recipient_id = $1))
+RETURNING id, type, requester_id, recipient_id, status, message_text, chat_id, created_at, responded_at
 `
 
+type CloseDirectRequestsParams struct {
+	A int64
+	B int64
+}
+
+// The pair has a chat now: pending direct-message requests between them, in either direction, are done.
+func (q *Queries) CloseDirectRequests(ctx context.Context, arg CloseDirectRequestsParams) ([]ApprovalRequest, error) {
+	rows, err := q.db.Query(ctx, closeDirectRequests, arg.A, arg.B)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ApprovalRequest{}
+	for rows.Next() {
+		var i ApprovalRequest
+		if err := rows.Scan(
+			&i.ID,
+			&i.Type,
+			&i.RequesterID,
+			&i.RecipientID,
+			&i.Status,
+			&i.MessageText,
+			&i.ChatID,
+			&i.CreatedAt,
+			&i.RespondedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const countPins = `-- name: CountPins :one
+SELECT count(*) FROM user_chat_pins pin
+JOIN participants p ON p.chat_id = pin.chat_id AND p.user_id = pin.user_id
+WHERE pin.user_id = $1
+`
+
+// Pins of chats the user is still in (pins of chats they left do not use up the limit).
 func (q *Queries) CountPins(ctx context.Context, userID int64) (int64, error) {
 	row := q.db.QueryRow(ctx, countPins, userID)
 	var count int64
@@ -284,7 +331,7 @@ func (q *Queries) ListOtherParticipants(ctx context.Context, arg ListOtherPartic
 
 const listPendingRequests = `-- name: ListPendingRequests :many
 SELECT id, type, requester_id, recipient_id, status, message_text, chat_id, created_at, responded_at FROM approval_requests
-WHERE recipient_id = $1 AND status = 'pending'
+WHERE recipient_id = $1 AND status = 'pending' AND type = 'direct_message'
   AND ($2::bigint IS NULL OR id < $2::bigint)
 ORDER BY id DESC
 LIMIT $3
@@ -296,7 +343,8 @@ type ListPendingRequestsParams struct {
 	MaxRows     int32
 }
 
-// The recipient's inbox, newest first; the cursor is the last request id.
+// The recipient's inbox of direct-message requests, newest first; the cursor is the last request id. (Group
+// invitations are answered with the group endpoints.)
 func (q *Queries) ListPendingRequests(ctx context.Context, arg ListPendingRequestsParams) ([]ApprovalRequest, error) {
 	rows, err := q.db.Query(ctx, listPendingRequests, arg.RecipientID, arg.BeforeID, arg.MaxRows)
 	if err != nil {
@@ -346,6 +394,17 @@ func (q *Queries) LockApprovalRequest(ctx context.Context, id int64) (ApprovalRe
 		&i.RespondedAt,
 	)
 	return i, err
+}
+
+const lockDirectPair = `-- name: LockDirectPair :exec
+SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))
+`
+
+// Serializes everything that opens a direct chat of a pair or asks for one (key: the direct_key), so a
+// request cannot be made while the chat is being opened.
+func (q *Queries) LockDirectPair(ctx context.Context, directKey string) error {
+	_, err := q.db.Exec(ctx, lockDirectPair, directKey)
+	return err
 }
 
 const pinChat = `-- name: PinChat :execrows
