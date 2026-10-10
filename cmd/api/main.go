@@ -49,7 +49,8 @@ func run() error {
 	}
 	defer func() { _ = rd.Close() }()
 	sc := scylla.New(cfg.ScyllaHosts, cfg.ScyllaKeyspace, scylla.Options{
-		Consistency: gocql.ParseConsistency(cfg.Scylla.Consistency),
+		Consistency:    gocql.ParseConsistency(cfg.Scylla.Consistency),
+		RequestTimeout: cfg.Scylla.Timeout,
 	})
 	defer func() { _ = sc.Close() }()
 	es, err := elastic.New(cfg.ElasticsearchURL.Reveal())

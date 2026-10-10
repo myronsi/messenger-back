@@ -16,7 +16,14 @@ const connectTimeout = 2 * time.Second
 type Options struct {
 	// Consistency of reads and writes; LOCAL_QUORUM when unset. Lightweight transactions use LOCAL_SERIAL.
 	Consistency gocql.Consistency
+	// RequestTimeout bounds one request to a node (DefaultRequestTimeout when 0). Calls are bounded by their
+	// context as well; this keeps the driver from giving up earlier, which a lightweight transaction under
+	// load can need.
+	RequestTimeout time.Duration
 }
+
+// DefaultRequestTimeout is the driver's per-request timeout unless Options says otherwise.
+const DefaultRequestTimeout = 5 * time.Second
 
 // Store connects to ScyllaDB lazily: the first successful Ping (or Session call) opens the session,
 // so the process starts while the cluster is still down and /readyz reports it as unavailable.
@@ -24,6 +31,7 @@ type Store struct {
 	hosts       []string
 	keyspace    string
 	consistency gocql.Consistency
+	timeout     time.Duration
 
 	mu         sync.Mutex
 	session    *gocql.Session
@@ -42,7 +50,10 @@ func New(hosts []string, keyspace string, o Options) *Store {
 	if o.Consistency == gocql.Any {
 		o.Consistency = gocql.LocalQuorum
 	}
-	return &Store{hosts: hosts, keyspace: keyspace, consistency: o.Consistency}
+	if o.RequestTimeout <= 0 {
+		o.RequestTimeout = DefaultRequestTimeout
+	}
+	return &Store{hosts: hosts, keyspace: keyspace, consistency: o.Consistency, timeout: o.RequestTimeout}
 }
 
 // Session returns the open session, connecting first when needed. gocql cannot cancel a connection
@@ -88,7 +99,7 @@ func (s *Store) connect(a *attempt) {
 	cluster.Consistency = s.consistency
 	cluster.SerialConsistency = gocql.LocalSerial
 	cluster.ConnectTimeout = connectTimeout
-	cluster.Timeout = connectTimeout
+	cluster.Timeout = s.timeout
 	session, err := cluster.CreateSession()
 
 	s.mu.Lock()
