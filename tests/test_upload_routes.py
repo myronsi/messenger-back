@@ -87,6 +87,25 @@ class UploadRouteTests(PostgresFixture, unittest.TestCase):
         finally:
             conn.close()
 
+    def test_image_decoding_runs_off_the_event_loop(self):
+        import asyncio
+
+        from server import image_metadata
+
+        on_loop = []
+
+        def recording_describe_image(*args):
+            try:
+                asyncio.get_running_loop()
+                on_loop.append(True)
+            except RuntimeError:
+                on_loop.append(False)
+            return image_metadata.describe_image(*args)
+
+        with patch("server.routes.messages.describe_image", recording_describe_image):
+            self.send("big.jpg", make_image("JPEG", size=(2000, 1000)))
+        self.assertEqual(on_loop, [False])
+
     def test_small_image_upload_has_dimensions_but_no_thumbnail(self):
         import json
 

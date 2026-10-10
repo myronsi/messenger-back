@@ -238,6 +238,68 @@ class AuthEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         return response.json()["login_challenge"]
 
+    def access_headers(self):
+        response = self.client.post("/auth/login/2fa", json={"login_challenge": self.start_login(), "code": self.current_code()})
+        self.assertEqual(response.status_code, 200)
+        return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+    def change_stored_password(self, stored_hash):
+        conn = self.database.get_connection()
+        conn.cursor().execute("UPDATE users SET password = ? WHERE id = ?", (stored_hash, self.user_id))
+        conn.commit()
+        conn.close()
+
+    def stored_password_matches(self, password):
+        conn = self.database.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT password FROM users WHERE id = ?", (self.user_id,))
+        stored = cursor.fetchone()["password"]
+        conn.close()
+        return self.auth.verify_password(stored, password)
+
+    def test_password_change_does_not_overwrite_a_concurrent_change(self):
+        from unittest.mock import patch
+
+        headers = self.access_headers()
+        hash_password = self.auth.hash_password_with_salt
+        concurrent_hash = hash_password("Concurrent0!x")
+
+        def hash_while_another_request_changes_it(password):
+            self.change_stored_password(concurrent_hash)
+            return hash_password(password)
+
+        with patch.object(self.auth, "hash_password_with_salt", hash_while_another_request_changes_it):
+            response = self.client.post(
+                "/auth/me/password",
+                json={"current_password": self.PASSWORD, "new_password": "NewPassw0rd!y"},
+                headers=headers,
+            )
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertTrue(self.stored_password_matches("Concurrent0!x"))
+
+    def test_two_factor_disable_rejects_a_password_changed_during_verification(self):
+        from unittest.mock import patch
+
+        headers = self.access_headers()
+        verify_password = self.auth.verify_password
+        concurrent_hash = self.auth.hash_password_with_salt("Concurrent0!x")
+
+        def verify_while_another_request_changes_it(stored, provided):
+            result = verify_password(stored, provided)
+            self.change_stored_password(concurrent_hash)
+            return result
+
+        with patch.object(self.auth, "verify_password", verify_while_another_request_changes_it):
+            response = self.client.post(
+                "/auth/me/2fa/disable", json={"password": self.PASSWORD, "code": self.current_code()}, headers=headers
+            )
+        self.assertEqual(response.status_code, 409, response.text)
+        conn = self.database.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT two_factor_enabled FROM user_security_settings WHERE user_id = ?", (self.user_id,))
+        self.assertTrue(cursor.fetchone()["two_factor_enabled"])
+        conn.close()
+
     def test_challenge_is_locked_after_too_many_wrong_codes(self):
         from server.tokens import TWO_FACTOR_MAX_ATTEMPTS
 

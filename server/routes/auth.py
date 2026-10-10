@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, status, File, UploadFile, Request, Response, Cookie
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 from jose import JWTError
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -32,6 +33,7 @@ from server.usernames import normalize_username
 from server import rate_limit
 from server.ws_tickets import tickets as ws_tickets
 from server.recovery_shares import decrypt_cloud_part, encrypt_cloud_part
+from server.image_metadata import run_image_work
 from server.upload_security import AVATAR_MAX_BYTES, process_avatar
 from server.privacy import (
     AVATAR_PROFILE_VISIBILITY_SCOPES,
@@ -872,9 +874,17 @@ async def change_password(payload: PasswordChangeRequest, current_user: dict = D
     try:
         cursor.execute("SELECT password FROM users WHERE id = ?", (current_user["id"],))
         row = cursor.fetchone()
-        if not row or not verify_password(row["password"], payload.current_password):
+        if not row or not await run_in_threadpool(verify_password, row["password"], payload.current_password):
             raise HTTPException(status_code=400, detail="Current password is incorrect")
-        cursor.execute("UPDATE users SET password = ? WHERE id = ?", (hash_password_with_salt(payload.new_password), current_user["id"]))
+        new_password = await run_in_threadpool(hash_password_with_salt, payload.new_password)
+        # Hashing yields to other requests; only replace the hash that was just verified.
+        cursor.execute(
+            "UPDATE users SET password = ? WHERE id = ? AND password = ?",
+            (new_password, current_user["id"], row["password"]),
+        )
+        if cursor.rowcount == 0:
+            conn.rollback()
+            raise HTTPException(status_code=409, detail="Password was changed by another request")
         cursor.execute("""
             UPDATE user_sessions
             SET revoked_at = ?
@@ -948,8 +958,14 @@ async def disable_two_factor(payload: TwoFactorDisableRequest, current_user: dic
     try:
         cursor.execute("SELECT password FROM users WHERE id = ?", (current_user["id"],))
         row = cursor.fetchone()
-        if not row or not verify_password(row["password"], payload.password):
+        if not row or not await run_in_threadpool(verify_password, row["password"], payload.password):
             raise HTTPException(status_code=400, detail="Password is incorrect")
+        # Verification yields to other requests; lock the row and make sure the password is still the one checked.
+        cursor.execute("SELECT password FROM users WHERE id = ? FOR UPDATE", (current_user["id"],))
+        current = cursor.fetchone()
+        if not current or current["password"] != row["password"]:
+            conn.rollback()
+            raise HTTPException(status_code=409, detail="Password was changed by another request")
         if not verify_two_factor_or_recovery(cursor, current_user["id"], payload.code):
             raise HTTPException(status_code=400, detail="Invalid verification code")
         cursor.execute("""
@@ -1209,7 +1225,7 @@ async def update_user_profile(update: UserUpdate = None, current_user: dict = De
 @router.post("/me/avatar")
 async def upload_avatar(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
     content = await file.read(AVATAR_MAX_BYTES + 1)
-    image_bytes, extension = process_avatar(content)
+    image_bytes, extension = await run_image_work(process_avatar, content)
 
     avatar_url = store_user_avatar(current_user["id"], image_bytes, extension)
     record_user_avatar(current_user["id"], avatar_url)
@@ -1329,6 +1345,9 @@ async def reset_password(request: ResetPasswordRequest, http_request: Request):
     ip_key = rate_limit.client_ip(http_request)
     rate_limit.enforce(rate_limit.RESET_IP, ip_key)
     validate_password(request.new_password)
+    # Argon2 is deliberately slow; keep it off the event loop, and hash before the transaction so no
+    # row lock (the consumed recovery token) is held across the await.
+    password_field = await run_in_threadpool(hash_password_with_salt, request.new_password)
     conn = get_connection()
     cursor = conn.cursor()
     try:
@@ -1337,7 +1356,6 @@ async def reset_password(request: ResetPasswordRequest, http_request: Request):
             conn.rollback()
             rate_limit.RESET_IP.hit(ip_key)
             raise HTTPException(status_code=401, detail="Invalid or expired recovery token")
-        password_field = hash_password_with_salt(request.new_password)
         cursor.execute("UPDATE users SET password = ? WHERE id = ?", (password_field, user_id))
         cursor.execute(
             "UPDATE user_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL",

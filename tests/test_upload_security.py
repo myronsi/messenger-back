@@ -81,6 +81,15 @@ class AvatarTests(unittest.TestCase):
         data, _ = process_avatar(output.getvalue())
         self.assertNotIn(b"<script>", data)
 
+    def test_rejects_images_over_the_pixel_cap(self):
+        from PIL import Image
+
+        output = io.BytesIO()
+        Image.new("1", (5000, 4001)).save(output, format="PNG")
+        with self.assertRaises(HTTPException) as raised:
+            process_avatar(output.getvalue())
+        self.assertEqual(raised.exception.detail, "Avatar dimensions are too large")
+
     def test_rejects_non_images_and_oversized_files(self):
         for body in (b"<svg xmlns='http://www.w3.org/2000/svg'><script>1</script></svg>", b"<html></html>", b"", b"\x89PNG\r\n\x1a\nnot really"):
             with self.assertRaises(HTTPException) as raised:

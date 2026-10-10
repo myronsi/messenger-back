@@ -10,7 +10,7 @@ from pathlib import Path
 from fastapi import HTTPException
 
 AVATAR_MAX_BYTES = 5 * 1024 * 1024
-AVATAR_MAX_PIXELS = 40_000_000
+AVATAR_MAX_PIXELS = 20_000_000
 AVATAR_MAX_SIDE = 1024
 
 MIME_BY_EXTENSION = {
