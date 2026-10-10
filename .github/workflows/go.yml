@@ -167,8 +167,9 @@ jobs:
         run: docker compose -f compose.dev.yaml up --build --detach --wait
       - name: The API reports every store ready
         run: |
-          # The distroless images have no Compose healthcheck, so --wait does not cover the listeners.
-          curl --fail --silent --show-error --retry 15 --retry-delay 2 --retry-all-errors --retry-connrefused http://127.0.0.1:8080/readyz
+          # The distroless images have no Compose healthcheck, so --wait does not cover the listeners. On a fresh
+          # Redis the API is ready only after the id lease quarantine (about 40 s).
+          curl --fail --silent --show-error --retry 45 --retry-delay 2 --retry-all-errors --retry-connrefused http://127.0.0.1:8080/readyz
           curl --fail --silent --show-error --retry 15 --retry-delay 2 --retry-all-errors --retry-connrefused http://127.0.0.1:8081/healthz
       - name: Start again (the init steps are idempotent)
         run: docker compose -f compose.dev.yaml up --detach --wait
