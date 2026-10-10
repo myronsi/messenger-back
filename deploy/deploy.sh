@@ -7,12 +7,25 @@ set -euo pipefail
 APP_DIR="$1"
 IMAGE="$2"
 KEEP_BACKUPS=10
+# Free space needed before pulling a new image (the backend image is about 170 MB compressed).
+MIN_FREE_MB="${MIN_FREE_MB:-1024}"
+case "$MIN_FREE_MB" in
+  ''|*[!0-9]*) echo "MIN_FREE_MB must be a whole number of megabytes, got '$MIN_FREE_MB'" >&2; exit 1 ;;
+esac
 
 cd "$APP_DIR"
 touch .env
 mkdir -p backups
 
-previous_image="$(grep -E '^BACKEND_IMAGE=' .env | tail -n1 | cut -d= -f2- || true)"
+# Roll back to what is actually running; .env may name an image that was never pulled.
+running_container="$(docker compose ps -q backend 2>/dev/null || true)"
+previous_image=""
+if [ -n "$running_container" ]; then
+  previous_image="$(docker inspect --format '{{.Config.Image}}' "$running_container" 2>/dev/null || true)"
+fi
+if [ -z "$previous_image" ]; then
+  previous_image="$(grep -E '^BACKEND_IMAGE=' .env | tail -n1 | cut -d= -f2- || true)"
+fi
 
 set_image() {
   grep -v '^BACKEND_IMAGE=' .env > .env.tmp || true
@@ -30,6 +43,29 @@ wait_healthy() {
   return 1
 }
 
+# Smallest free space (MB) of the disks images are stored on: Docker's root and, with the containerd
+# image store, /var/lib/containerd.
+free_mb() {
+  local dirs=() dir
+  dir="$(docker info --format '{{.DockerRootDir}}' 2>/dev/null || true)"
+  [ -n "$dir" ] && [ -d "$dir" ] && dirs+=("$dir")
+  [ -d /var/lib/containerd ] && dirs+=(/var/lib/containerd)
+  [ "${#dirs[@]}" -gt 0 ] || dirs=(.)
+  df -Pm "${dirs[@]}" | awk 'NR > 1 && (min == "" || $4 < min) { min = $4 } END { print min }'
+}
+
+# Old release images are tagged, so the prune after a deploy never removed them. Images used by a
+# container (including the one running now, the rollback target) are kept.
+docker image prune -af > /dev/null
+available="$(free_mb)"
+if [ -n "$available" ] && [ "$available" -lt "$MIN_FREE_MB" ]; then
+  echo "Only ${available} MB free on the Docker disk after pruning unused images (need ${MIN_FREE_MB} MB); the deployment and its configuration were not changed." >&2
+  exit 1
+fi
+
+# Pull before touching .env, so a failed pull leaves the running deployment and its config as they were.
+BACKEND_IMAGE="$IMAGE" docker compose pull backend
+
 if docker compose ps --status running --services | grep -qx postgres; then
   backup="backups/messenger-$(date +%Y%m%d-%H%M%S).sql.gz"
   docker compose exec -T postgres pg_dump -U messenger messenger | gzip > "$backup"
@@ -38,12 +74,11 @@ if docker compose ps --status running --services | grep -qx postgres; then
 fi
 
 set_image "$IMAGE"
-docker compose pull backend
 docker compose up -d
 
 if wait_healthy; then
   echo "Deployed $IMAGE"
-  docker image prune -f > /dev/null
+  docker image prune -af > /dev/null
   exit 0
 fi
 
