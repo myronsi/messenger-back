@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.5.3](https://github.com/myronsi/messenger-back/compare/v0.5.2...v0.5.3) (2026-10-10)
+
+
+### Features
+
+* authentication, sessions and 2FA ([#106](https://github.com/myronsi/messenger-back/issues/106)) ([8b65329](https://github.com/myronsi/messenger-back/commit/8b65329ffae2960aaa0906028426910495b76a52))
+* development stack with PostgreSQL, Redis, ScyllaDB, Elasticsearch and S3 ([#104](https://github.com/myronsi/messenger-back/issues/104)) ([7986499](https://github.com/myronsi/messenger-back/commit/7986499d0d6ef7074af649f538df0cb06a6f44e1))
+* Go project skeleton, tooling, CI and observability ([#102](https://github.com/myronsi/messenger-back/issues/102)) ([3dcb044](https://github.com/myronsi/messenger-back/commit/3dcb044dc80b0983e4339e6d034559e0e8b3e0f7))
+* PostgreSQL schema v2, migrations and typed data access ([#105](https://github.com/myronsi/messenger-back/issues/105)) ([6713383](https://github.com/myronsi/messenger-back/commit/671338356df9ade9b1e3e746de73fc4daf8a1107))
+
+
+### Bug Fixes
+
+* **deps:** build with Go 1.27.2 and x/net v0.60.0 ([#108](https://github.com/myronsi/messenger-back/issues/108)) ([8d79bb6](https://github.com/myronsi/messenger-back/commit/8d79bb6b83ab386acb8112316ac46c9b274f5a48))
+* keep image decoding and Argon2 off the event loop ([#107](https://github.com/myronsi/messenger-back/issues/107)) ([7a432b4](https://github.com/myronsi/messenger-back/commit/7a432b409c7ad77e720eb13b1778c6f0a136639c))
+
 ## [0.5.2](https://github.com/myronsi/messenger-back/compare/v0.5.1...v0.5.2) (2026-10-04)
 
 
