@@ -242,8 +242,10 @@ func (r *Messages) Insert(ctx context.Context, m Message) error {
 			WithContext(ctx).Idempotent(true).Exec()
 	})
 	wg.Go(func() {
-		errs[1] = sess.Query(`INSERT INTO message_locations (message_id, chat_id, bucket) VALUES (?, ?, ?) USING TIMESTAMP ?`, m.ID, m.ChatID, bucket, ts).
-			WithContext(ctx).Idempotent(true).Exec()
+		// Provisional until the message is stored: an insert that never completes leaves no location behind
+		// for longer than the TTL. A completed insert rewrites it without TTL (and a newer timestamp).
+		errs[1] = sess.Query(`INSERT INTO message_locations (message_id, chat_id, bucket) VALUES (?, ?, ?) USING TTL ? AND TIMESTAMP ?`,
+			m.ID, m.ChatID, bucket, int(provisionalLocationTTL.Seconds()), ts).WithContext(ctx).Idempotent(true).Exec()
 	})
 	wg.Wait()
 	if err := errors.Join(errs...); err != nil {
@@ -262,8 +264,16 @@ func (r *Messages) Insert(ctx context.Context, m Message) error {
 	if err != nil {
 		return fmt.Errorf("insert message: %w", err)
 	}
+	err = sess.Query(`INSERT INTO message_locations (message_id, chat_id, bucket) VALUES (?, ?, ?) USING TIMESTAMP ?`, m.ID, m.ChatID, bucket, ts+1).
+		WithContext(ctx).Idempotent(true).Exec()
+	if err != nil {
+		return fmt.Errorf("insert message: %w", err)
+	}
 	return nil
 }
+
+// provisionalLocationTTL is how long the location of an insert that did not complete survives.
+const provisionalLocationTTL = 7 * 24 * time.Hour
 
 func (r *Messages) get(ctx context.Context, sess *gocql.Session, chatID, messageID int64) (Message, int, error) {
 	bucket, err := r.bucketFor(ctx, sess, chatID, messageID)

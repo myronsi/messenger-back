@@ -665,3 +665,19 @@ func TestDeleteChatShadowsInsertInFlight(t *testing.T) {
 		t.Fatalf("message resurrected: %d %v", n, err)
 	}
 }
+
+// The location of a completed insert is permanent; one whose message never arrived expires.
+func TestLocationTTL(t *testing.T) {
+	r := testRepo(t)
+	ctx := context.Background()
+	chat := newChat()
+	id := seed(t, r, chat, 1, 1, time.Now(), 0)[0]
+	sess, _ := r.s.Session(ctx)
+	var ttl *int
+	if err := sess.Query(`SELECT TTL(chat_id) FROM message_locations WHERE message_id = ?`, id).Scan(&ttl); err != nil {
+		t.Fatal(err)
+	}
+	if ttl != nil {
+		t.Fatalf("location of a stored message expires in %ds", *ttl)
+	}
+}

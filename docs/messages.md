@@ -72,7 +72,8 @@ looked up in `message_locations`.
   reactions and locations of the chunk (32 statements in parallel), then a range delete of exactly the chunk's
   rows. An empty bucket's row in `chat_buckets` goes last. Each chunk has its own timeout and finished work is
   gone, so calling it again after a failure repeats at most one chunk. It is meant for the background worker.
-- **Locate** only reports messages whose row exists (an interrupted insert can leave a location behind).
+- **Locate** only reports messages whose row exists. A new location is written with a 7-day TTL and rewritten
+  without one once the message is stored, so an insert that never completes leaves nothing behind for long.
 
 ## Consistency
 
