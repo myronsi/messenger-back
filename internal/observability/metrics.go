@@ -22,6 +22,7 @@ type Metrics struct {
 	messages       prometheus.Counter
 	storeErrors    *prometheus.CounterVec
 	storeCheckTime *prometheus.HistogramVec
+	events         *prometheus.CounterVec
 }
 
 // NewMetrics registers the collectors together with the Go runtime and process collectors.
@@ -53,6 +54,10 @@ func NewMetrics() *Metrics {
 			Name: "messenger_store_errors_total",
 			Help: "Failed operations per data store.",
 		}, []string{"store"}),
+		events: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "messenger_events_handled_total",
+			Help: "Stream events handled by the worker, by consumer group and outcome (ok, failed, dead_letter). Alert on dead_letter.",
+		}, []string{"group", "outcome"}),
 		storeCheckTime: prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Name:    "messenger_store_check_duration_seconds",
 			Help:    "Duration of the readiness check per data store.",
@@ -62,7 +67,7 @@ func NewMetrics() *Metrics {
 	m.Registry.MustRegister(
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
-		m.requests, m.duration, m.inFlight, m.webSockets, m.messages, m.storeErrors, m.storeCheckTime,
+		m.requests, m.duration, m.inFlight, m.webSockets, m.messages, m.storeErrors, m.storeCheckTime, m.events,
 	)
 	return m
 }
@@ -97,6 +102,18 @@ func (m *Metrics) MessageAccepted() { m.messages.Inc() }
 // StoreError counts a failed operation of the named store ("postgres", "redis", "scylla",
 // "elasticsearch").
 func (m *Metrics) StoreError(store string) { m.storeErrors.WithLabelValues(store).Inc() }
+
+// EventHandled counts one event handled by a consumer group.
+func (m *Metrics) EventHandled(group string, ok, deadLettered bool) {
+	outcome := "failed"
+	switch {
+	case ok:
+		outcome = "ok"
+	case deadLettered:
+		outcome = "dead_letter"
+	}
+	m.events.WithLabelValues(group, outcome).Inc()
+}
 
 // ObserveStoreCheck records the duration of a readiness check.
 func (m *Metrics) ObserveStoreCheck(store string, d time.Duration) {

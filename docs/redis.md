@@ -26,7 +26,7 @@ Production keys have no prefix; tests put a random namespace in front of every k
 | WebSocket ticket | `auth:wsticket:{digest}` → user and session id | string | 30 s, single use (`GETDEL`) | `auth.Tickets` |
 | 2FA login challenge | `auth:2fa:{digest}` | hash | 5 min, 5 attempts | `auth.Challenges` |
 | Session cache | `auth:sess:{session_id}` | string | `SESSION_CACHE_TTL` (30 s) | `auth.SessionCache` |
-| Durable events | `events:messages`, `events:users` | stream | trimmed with `MAXLEN ~` | #49 |
+| Durable events | `events:messages`, `events:chats`, `events:users`; `<stream>:dead`, `<stream>:retry:<group>` | stream, hash | trimmed with `MAXLEN ~` | `Streams`, `Consumer` ([events.md](events.md)) |
 
 Personal data (IP addresses, usernames) only reaches Redis as a digest.
 

@@ -14,6 +14,7 @@
 !docs/redis.md
 !docs/messages.md
 !docs/realtime.md
+!docs/events.md
 !CHANGELOG.md
 !server/
 !server/version.py

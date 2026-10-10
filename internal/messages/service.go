@@ -17,6 +17,7 @@ import (
 	"github.com/gocql/gocql"
 	"github.com/google/uuid"
 
+	"github.com/myronsi/messenger-back/internal/events"
 	"github.com/myronsi/messenger-back/internal/ids"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/scylla"
@@ -87,9 +88,16 @@ type Deps struct {
 	Dedup    Dedup
 	IDs      IDSource
 	Notifier Notifier
+	// Events records the changes for the worker (search indexing, cleanup). Optional.
+	Events EventLog
 	// Accepted is called for every new message (the messages-per-second metric). Optional.
 	Accepted func()
 	Log      *slog.Logger
+}
+
+// EventLog appends domain events (events.Log).
+type EventLog interface {
+	Emit(ctx context.Context, e events.Event) error
 }
 
 // Service implements the message use cases.
@@ -110,6 +118,17 @@ func New(d Deps) *Service {
 		d.Accepted = func() {}
 	}
 	return &Service{d: d, now: time.Now}
+}
+
+// emit records an event after the change is stored. A failure does not undo the change; the worker's
+// reconciliation repairs what the event would have triggered.
+func (s *Service) emit(ctx context.Context, e events.Event) {
+	if s.d.Events == nil {
+		return
+	}
+	if err := s.d.Events.Emit(context.WithoutCancel(ctx), e); err != nil {
+		s.d.Log.WarnContext(ctx, "emit event", "type", e.Type, "error", err)
+	}
 }
 
 // loadMembers reads the members of a chat from PostgreSQL, for the cache.
@@ -276,6 +295,7 @@ func (s *Service) Send(ctx context.Context, r SendRequest) (Sent, error) {
 		s.d.Log.WarnContext(ctx, "unread increment", "error", err, "chat_id", r.ChatID)
 	}
 	s.d.Notifier.MessageCreated(ctx, m, members, r.ClientTempID)
+	s.emit(ctx, events.Event{Type: events.MessageCreated, ChatID: r.ChatID, MessageID: id, ActorID: r.SenderID, At: m.CreatedAt})
 	return Sent{Message: m}, nil
 }
 
@@ -385,6 +405,7 @@ func (s *Service) Edit(ctx context.Context, userID, chatID, messageID int64, con
 		// Members who deleted the message for themselves do not get its new text.
 		s.d.Notifier.MessageEdited(ctx, m, s.withoutHidden(ctx, chatID, messageID, members))
 	}
+	s.emit(ctx, events.Event{Type: events.MessageEdited, ChatID: chatID, MessageID: messageID, ActorID: userID, At: at})
 	return m, nil
 }
 
@@ -428,6 +449,7 @@ func (s *Service) Delete(ctx context.Context, userID, chatID, messageID int64, s
 			return fmt.Errorf("%w: %w", ErrUnavailable, err)
 		}
 		s.d.Notifier.MessageDeleted(ctx, chatID, messageID, ScopeMe, []int64{userID})
+		s.emit(ctx, events.Event{Type: events.MessageHidden, ChatID: chatID, MessageID: messageID, UserID: userID, ActorID: userID})
 		return nil
 	}
 	if m.SenderID == nil || *m.SenderID != userID {
@@ -443,6 +465,7 @@ func (s *Service) Delete(ctx context.Context, userID, chatID, messageID int64, s
 	if members, err := s.Members(ctx, chatID); err == nil {
 		s.d.Notifier.MessageDeleted(ctx, chatID, messageID, ScopeEveryone, members)
 	}
+	s.emit(ctx, events.Event{Type: events.MessageDeleted, ChatID: chatID, MessageID: messageID, ActorID: userID})
 	return nil
 }
 
@@ -509,6 +532,7 @@ func (s *Service) React(ctx context.Context, userID, chatID, messageID int64, em
 	if members, err := s.Members(ctx, chatID); err == nil {
 		s.d.Notifier.ReactionChanged(ctx, chatID, messageID, scylla.Reaction{Emoji: emoji, UserID: userID, CreatedAt: at}, add, members)
 	}
+	s.emit(ctx, events.Event{Type: events.ReactionChanged, ChatID: chatID, MessageID: messageID, ActorID: userID, At: at})
 	return nil
 }
 
