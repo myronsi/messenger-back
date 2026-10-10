@@ -64,7 +64,7 @@
               "description": "Optional caption"
             },
             "attachment_id": {
-              "$ref": "../../openapi.yaml#/components/schemas/Id"
+              "$ref": "../../openapi.yaml#/components/schemas/AttachmentRef"
             },
             "reply_to": {
               "oneOf": [

@@ -18,6 +18,7 @@ The Go backend replaces the Python one (`server/`). Its skeleton is in place; fe
 | `internal/users` | users as other users may see them (privacy) |
 | `internal/version` | the contract version and SemVer comparison |
 | `internal/events`, `internal/jobs` | domain events on Redis streams and the worker's handlers |
+| `internal/media` | uploads, downloads, avatars: storage (disk, S3), content checks, image processing ([media.md](media.md)) |
 | `internal/testenv` | fresh stores for integration tests |
 | `internal/store/{postgres,redis,scylla,elastic}` | store clients with `Ping` for `/readyz`; PostgreSQL also has the repositories ([schema](postgres-schema.md)); Redis has presence, pub/sub, unread counters, the membership cache and rate limits ([redis.md](redis.md)); ScyllaDB has the message store ([messages.md](messages.md)) |
 | `internal/ids` | Snowflake IDs for messages |

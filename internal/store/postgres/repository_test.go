@@ -289,7 +289,7 @@ func TestAttachments(t *testing.T) {
 
 	w, h, dur := int32(640), int32(480), 3.5
 	att, err := s.Attachments().Create(ctx, NewAttachment{
-		UploaderID: &a.ID, ChatID: c.ID, StorageKey: "chats/1/a.png", MimeType: "image/png", Size: 1234,
+		UploaderID: &a.ID, ChatID: &c.ID, StorageKey: "chats/1/a.png", MimeType: "image/png", Size: 1234,
 		Width: &w, Height: &h, Duration: &dur, Waveform: []int16{1, 5, 9},
 	})
 	if err != nil {
@@ -299,19 +299,19 @@ func TestAttachments(t *testing.T) {
 	if err != nil || got.StorageKey != "chats/1/a.png" || len(got.Waveform) != 3 || *got.Width != 640 {
 		t.Fatalf("get: %+v, %v", got, err)
 	}
-	if _, err := s.Attachments().Create(ctx, NewAttachment{ChatID: c.ID, StorageKey: "chats/1/a.png", MimeType: "image/png", Size: 1}); !errors.Is(err, ErrConflict) {
+	if _, err := s.Attachments().Create(ctx, NewAttachment{ChatID: &c.ID, StorageKey: "chats/1/a.png", MimeType: "image/png", Size: 1}); !errors.Is(err, ErrConflict) {
 		t.Fatalf("duplicate storage key: got %v", err)
 	}
-	if _, err := s.Attachments().Create(ctx, NewAttachment{ChatID: c.ID, StorageKey: "k", MimeType: "image/png", Size: -1}); !errors.Is(err, ErrInvalid) {
+	if _, err := s.Attachments().Create(ctx, NewAttachment{ChatID: &c.ID, StorageKey: "k", MimeType: "image/png", Size: -1}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("negative size: got %v", err)
 	}
 	list, err := s.Attachments().ListByChat(ctx, c.ID, 0)
 	if err != nil || len(list) != 1 {
 		t.Fatalf("list: %+v, %v", list, err)
 	}
-	key, err := s.Attachments().Delete(ctx, att.ID)
-	if err != nil || key != "chats/1/a.png" {
-		t.Fatalf("delete: %q, %v", key, err)
+	keys, err := s.Attachments().Delete(ctx, att.ID)
+	if err != nil || len(keys) != 1 || keys[0] != "chats/1/a.png" {
+		t.Fatalf("delete: %q, %v", keys, err)
 	}
 	if _, err := s.Attachments().Delete(ctx, uuid.New()); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("delete missing: got %v", err)
@@ -377,15 +377,15 @@ func TestDeleteAccount(t *testing.T) {
 	}
 
 	atts := s.Attachments()
-	inDirect, err := atts.Create(ctx, NewAttachment{UploaderID: &victim.ID, ChatID: direct.ID, StorageKey: "k/direct", MimeType: "image/png", Size: 1})
+	inDirect, err := atts.Create(ctx, NewAttachment{UploaderID: &victim.ID, ChatID: &direct.ID, StorageKey: "k/direct", MimeType: "image/png", Size: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	inAlone, err := atts.Create(ctx, NewAttachment{UploaderID: &victim.ID, ChatID: alone.ID, StorageKey: "k/alone", MimeType: "image/png", Size: 1})
+	inAlone, err := atts.Create(ctx, NewAttachment{UploaderID: &victim.ID, ChatID: &alone.ID, StorageKey: "k/alone", MimeType: "image/png", Size: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	inMember, err := atts.Create(ctx, NewAttachment{UploaderID: &victim.ID, ChatID: member.ID, StorageKey: "k/member", MimeType: "image/png", Size: 1})
+	inMember, err := atts.Create(ctx, NewAttachment{UploaderID: &victim.ID, ChatID: &member.ID, StorageKey: "k/member", MimeType: "image/png", Size: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -590,7 +590,7 @@ func TestConcurrentDeletionOfCrossUploaders(t *testing.T) {
 				t.Fatal(err)
 			}
 			if _, err := s.Attachments().Create(ctx, NewAttachment{
-				UploaderID: &uploader.ID, ChatID: g.ID, StorageKey: fmt.Sprintf("k/%d/%d", i, j), MimeType: "image/png", Size: 1,
+				UploaderID: &uploader.ID, ChatID: &g.ID, StorageKey: fmt.Sprintf("k/%d/%d", i, j), MimeType: "image/png", Size: 1,
 			}); err != nil {
 				t.Fatal(err)
 			}
@@ -687,7 +687,7 @@ func TestDeleteChatReturnsAttachmentKeys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Attachments().Create(ctx, NewAttachment{ChatID: c.ID, StorageKey: "k/1", MimeType: "image/png", Size: 1}); err != nil {
+	if _, err := s.Attachments().Create(ctx, NewAttachment{ChatID: &c.ID, StorageKey: "k/1", MimeType: "image/png", Size: 1}); err != nil {
 		t.Fatal(err)
 	}
 	keys, err := s.Chats().Delete(ctx, c.ID)

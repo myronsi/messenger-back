@@ -12,6 +12,7 @@ import (
 
 	"github.com/myronsi/messenger-back/internal/app"
 	"github.com/myronsi/messenger-back/internal/jobs"
+	"github.com/myronsi/messenger-back/internal/media"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/redis"
 	"github.com/myronsi/messenger-back/internal/store/scylla"
@@ -57,6 +58,12 @@ func run() error {
 		wg.Wait()
 	}()
 	wg.Go(func() { maintain(bg, log, pg, maintenanceEvery) })
+	storage, _, err := media.StorageFrom(cfg.Media)
+	if err != nil {
+		return err
+	}
+	mediaSvc := media.NewService(media.Options{Storage: storage, Attachments: pg.Attachments(), Log: log})
+	wg.Go(func() { collectUploads(bg, log, mediaSvc, maintenanceEvery) })
 
 	instance := app.InstanceID(cfg.Realtime.InstanceID)
 	consumers := []redis.ConsumerOptions{{

@@ -28,6 +28,8 @@ type Options struct {
 	// WebSocket serves <base path>/ws (the realtime gateway). It authenticates with a ticket, not a bearer
 	// token, so it is mounted outside the contract's routes. Optional.
 	WebSocket http.Handler
+	// UploadMaxBytes is the body limit of POST /attachments (0: HTTP_MAX_BODY_BYTES like everything else).
+	UploadMaxBytes int64
 }
 
 // Router is the HTTP handler of the API server.
@@ -66,7 +68,7 @@ func NewRouter(o Options) *Router {
 		recoverPanic(o.Log),
 		securityHeaders(o.Production),
 		cors(o.HTTP.CORSOrigins),
-		bodyLimit(o.HTTP.MaxBodyBytes),
+		bodyLimit(o.HTTP.MaxBodyBytes, UploadPath(o.HTTP.BasePath), o.UploadMaxBytes),
 		timeout(o.HTTP.RequestTimeout),
 	)
 	if o.Tracing {

@@ -434,6 +434,21 @@ func (e Visibility) Valid() bool {
 	}
 }
 
+// Defines values for GetAttachmentContentParamsVariant.
+const (
+	Thumbnail GetAttachmentContentParamsVariant = "thumbnail"
+)
+
+// Valid indicates whether the value is a known member of the GetAttachmentContentParamsVariant enum.
+func (e GetAttachmentContentParamsVariant) Valid() bool {
+	switch e {
+	case Thumbnail:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for DeleteMessageParamsScope.
 const (
 	DeleteMessageParamsScopeEveryone DeleteMessageParamsScope = "everyone"
@@ -495,10 +510,10 @@ type Attachment struct {
 	Filename    string `json:"filename"`
 	Height      *int   `json:"height,omitempty"`
 
-	// Id Decimal ID as a string (Snowflake IDs exceed 2^53).
+	// Id ID of an uploaded attachment (a UUID, unlike the decimal IDs of messages, users and chats).
 	//
-	// Examples: 7217400317439950848
-	Id   Id             `json:"id"`
+	// Examples: 5f0c8a64-2f2b-4c7e-9d0e-6b1f3a2c4d5e
+	Id   AttachmentRef  `json:"id"`
 	Kind AttachmentKind `json:"kind"`
 
 	// Size Bytes
@@ -513,6 +528,11 @@ type Attachment struct {
 
 // AttachmentKind defines model for AttachmentKind.
 type AttachmentKind string
+
+// AttachmentRef ID of an uploaded attachment (a UUID, unlike the decimal IDs of messages, users and chats).
+//
+// Examples: 5f0c8a64-2f2b-4c7e-9d0e-6b1f3a2c4d5e
+type AttachmentRef = openapi_types.UUID
 
 // AvatarVersion defines model for AvatarVersion.
 type AvatarVersion struct {
@@ -924,7 +944,7 @@ type SecuritySettings struct {
 // SendMessageRequest defines model for SendMessageRequest.
 type SendMessageRequest struct {
 	// AttachmentId Required and not null for `file` and `voice`; never a URL.
-	AttachmentId *Id `json:"attachment_id,omitempty"`
+	AttachmentId *AttachmentRef `json:"attachment_id,omitempty"`
 
 	// ClientTempId Client-generated ID that makes sending idempotent and ties acks and errors to the send.
 	ClientTempId ClientTempId           `json:"client_temp_id"`
@@ -950,10 +970,10 @@ type Session struct {
 
 // SetAvatarRequest defines model for SetAvatarRequest.
 type SetAvatarRequest struct {
-	// AttachmentId Decimal ID as a string (Snowflake IDs exceed 2^53).
+	// AttachmentId ID of an uploaded attachment (a UUID, unlike the decimal IDs of messages, users and chats).
 	//
-	// Examples: 7217400317439950848
-	AttachmentId Id `json:"attachment_id"`
+	// Examples: 5f0c8a64-2f2b-4c7e-9d0e-6b1f3a2c4d5e
+	AttachmentId AttachmentRef `json:"attachment_id"`
 }
 
 // Timestamp defines model for Timestamp.
@@ -1112,10 +1132,10 @@ type WebSocketTicket struct {
 // After Opaque cursor; `null` when there are no more results.
 type After = Cursor
 
-// AttachmentId Decimal ID as a string (Snowflake IDs exceed 2^53).
+// AttachmentId ID of an uploaded attachment (a UUID, unlike the decimal IDs of messages, users and chats).
 //
-// Examples: 7217400317439950848
-type AttachmentId = Id
+// Examples: 5f0c8a64-2f2b-4c7e-9d0e-6b1f3a2c4d5e
+type AttachmentId = AttachmentRef
 
 // ChatId Decimal ID as a string (Snowflake IDs exceed 2^53).
 //
@@ -1190,12 +1210,18 @@ type UploadAttachmentParams struct {
 
 // GetAttachmentContentParams defines parameters for GetAttachmentContent.
 type GetAttachmentContentParams struct {
+	// Variant `thumbnail`: a JPEG of at most 320 px (images only; `thumbnail_url` of the attachment).
+	Variant *GetAttachmentContentParamsVariant `form:"variant,omitempty" json:"variant,omitempty"`
+
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
 	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
 }
+
+// GetAttachmentContentParamsVariant defines parameters for GetAttachmentContent.
+type GetAttachmentContentParamsVariant string
 
 // LoginParams defines parameters for Login.
 type LoginParams struct {
@@ -1777,6 +1803,9 @@ type GetUserParams struct {
 
 // GetUserAvatarParams defines parameters for GetUserAvatar.
 type GetUserAvatarParams struct {
+	// Version `id` of an `AvatarVersion` of this user.
+	Version *Id `form:"version,omitempty" json:"version,omitempty"`
+
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
@@ -2429,7 +2458,7 @@ func (siw *ServerInterfaceWrapper) GetAttachmentContent(w http.ResponseWriter, r
 	// ------------- Path parameter "attachment_id" -------------
 	var attachmentId AttachmentId
 
-	err = runtime.BindStyledParameterWithOptions("simple", "attachment_id", r.PathValue("attachment_id"), &attachmentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "attachment_id", r.PathValue("attachment_id"), &attachmentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "attachment_id", Err: err})
 		return
@@ -2437,6 +2466,19 @@ func (siw *ServerInterfaceWrapper) GetAttachmentContent(w http.ResponseWriter, r
 
 	// Parameter object where we will unmarshal all parameters from the context
 	var params GetAttachmentContentParams
+
+	// ------------- Optional query parameter "variant" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "variant", r.URL.Query(), &params.Variant, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "variant"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "variant", Err: err})
+		}
+		return
+	}
 
 	headers := r.Header
 
@@ -6514,6 +6556,19 @@ func (siw *ServerInterfaceWrapper) GetUserAvatar(w http.ResponseWriter, r *http.
 
 	// Parameter object where we will unmarshal all parameters from the context
 	var params GetUserAvatarParams
+
+	// ------------- Optional query parameter "version" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "version", r.URL.Query(), &params.Version, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "version"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "version", Err: err})
+		}
+		return
+	}
 
 	headers := r.Header
 

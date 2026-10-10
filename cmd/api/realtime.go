@@ -22,11 +22,13 @@ import (
 
 // realtimeStack is the gateway with everything it runs on.
 type realtimeStack struct {
-	hub      *realtime.Hub
-	gateway  *realtime.Gateway
-	fanout   *realtime.Fanout
-	messages *messages.Service
-	bus      *redis.Bus
+	hub       *realtime.Hub
+	gateway   *realtime.Gateway
+	fanout    *realtime.Fanout
+	messages  *messages.Service
+	directory *users.Directory
+	limiter   *redis.RateLimiter
+	bus       *redis.Bus
 	// ctx runs the background loops; it ends in stop, after the sockets are closed, so their last
 	// presence changes still go out.
 	ctx    context.Context
@@ -164,7 +166,8 @@ func startRealtime(p *app.Process, pg *postgres.Store, rd *redis.Store, sc *scyl
 	if err != nil {
 		return nil, fmt.Errorf("realtime: %w", err)
 	}
-	st.gateway, st.fanout, st.messages, st.bus = gw, fan, svc, bus
+	st.gateway, st.fanout, st.messages, st.bus, st.directory = gw, fan, svc, bus, dir
+	st.limiter = redis.NewRateLimiter(rdb, "")
 	st.done.Go(func() { bus.Run(st.ctx) })
 	st.done.Go(func() { presence.Run(st.ctx) })
 	return st, nil

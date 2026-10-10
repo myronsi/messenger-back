@@ -266,9 +266,14 @@ func isPreflight(r *http.Request) bool {
 
 // bodyLimit rejects bodies above limit bytes: early by Content-Length, and while reading for chunked
 // bodies (the generated code then reports *http.MaxBytesError, answered as 413).
-func bodyLimit(limit int64) middleware {
+// Uploads (POST uploadPath) get uploadLimit instead, plus room for the multipart framing.
+func bodyLimit(defaultLimit int64, uploadPath string, uploadLimit int64) middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			limit := defaultLimit
+			if uploadLimit > 0 && r.Method == http.MethodPost && r.URL.Path == uploadPath {
+				limit = uploadLimit + 64<<10
+			}
 			if r.ContentLength > limit {
 				WriteProblem(w, http.StatusRequestEntityTooLarge, ErrorCodePayloadTooLarge)
 				return

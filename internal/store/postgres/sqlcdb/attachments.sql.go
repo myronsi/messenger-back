@@ -7,26 +7,118 @@ package sqlcdb
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
 
+const addAvatarHistory = `-- name: AddAvatarHistory :exec
+INSERT INTO user_avatar_history (user_id, attachment_id, is_current) VALUES ($1, $2, TRUE)
+`
+
+type AddAvatarHistoryParams struct {
+	UserID       int64
+	AttachmentID *uuid.UUID
+}
+
+func (q *Queries) AddAvatarHistory(ctx context.Context, arg AddAvatarHistoryParams) error {
+	_, err := q.db.Exec(ctx, addAvatarHistory, arg.UserID, arg.AttachmentID)
+	return err
+}
+
+const attachmentLinksForViewer = `-- name: AttachmentLinksForViewer :many
+SELECT l.chat_id, l.message_id
+FROM attachment_links l
+JOIN participants p ON p.chat_id = l.chat_id AND p.user_id = $1
+WHERE l.attachment_id = $2
+ORDER BY l.created_at DESC
+LIMIT 50
+`
+
+type AttachmentLinksForViewerParams struct {
+	ViewerID     int64
+	AttachmentID uuid.UUID
+}
+
+type AttachmentLinksForViewerRow struct {
+	ChatID    int64
+	MessageID int64
+}
+
+// The messages through which the viewer could reach the attachment: links into chats the viewer is in.
+func (q *Queries) AttachmentLinksForViewer(ctx context.Context, arg AttachmentLinksForViewerParams) ([]AttachmentLinksForViewerRow, error) {
+	rows, err := q.db.Query(ctx, attachmentLinksForViewer, arg.ViewerID, arg.AttachmentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AttachmentLinksForViewerRow{}
+	for rows.Next() {
+		var i AttachmentLinksForViewerRow
+		if err := rows.Scan(&i.ChatID, &i.MessageID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const chatsWithAvatar = `-- name: ChatsWithAvatar :many
+SELECT id FROM chats WHERE avatar_attachment_id = $1
+`
+
+func (q *Queries) ChatsWithAvatar(ctx context.Context, attachmentID *uuid.UUID) ([]int64, error) {
+	rows, err := q.db.Query(ctx, chatsWithAvatar, attachmentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int64{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const clearCurrentAvatar = `-- name: ClearCurrentAvatar :exec
+UPDATE user_avatar_history SET is_current = FALSE WHERE user_id = $1 AND is_current
+`
+
+func (q *Queries) ClearCurrentAvatar(ctx context.Context, userID int64) error {
+	_, err := q.db.Exec(ctx, clearCurrentAvatar, userID)
+	return err
+}
+
 const createAttachment = `-- name: CreateAttachment :one
-INSERT INTO attachments (uploader_id, chat_id, storage_key, mime_type, size, width, height, duration, waveform)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-RETURNING id, uploader_id, chat_id, storage_key, mime_type, size, width, height, duration, waveform, created_at
+INSERT INTO attachments (uploader_id, chat_id, storage_key, thumbnail_key, mime_type, size, width, height, duration, waveform, purpose, kind, filename)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+RETURNING id, uploader_id, chat_id, storage_key, mime_type, size, width, height, duration, waveform, created_at, purpose, kind, filename, thumbnail_key
 `
 
 type CreateAttachmentParams struct {
-	UploaderID *int64
-	ChatID     int64
-	StorageKey string
-	MimeType   string
-	Size       int64
-	Width      *int32
-	Height     *int32
-	Duration   *float64
-	Waveform   []int16
+	UploaderID   *int64
+	ChatID       *int64
+	StorageKey   string
+	ThumbnailKey *string
+	MimeType     string
+	Size         int64
+	Width        *int32
+	Height       *int32
+	Duration     *float64
+	Waveform     []int16
+	Purpose      string
+	Kind         string
+	Filename     string
 }
 
 func (q *Queries) CreateAttachment(ctx context.Context, arg CreateAttachmentParams) (Attachment, error) {
@@ -34,12 +126,16 @@ func (q *Queries) CreateAttachment(ctx context.Context, arg CreateAttachmentPara
 		arg.UploaderID,
 		arg.ChatID,
 		arg.StorageKey,
+		arg.ThumbnailKey,
 		arg.MimeType,
 		arg.Size,
 		arg.Width,
 		arg.Height,
 		arg.Duration,
 		arg.Waveform,
+		arg.Purpose,
+		arg.Kind,
+		arg.Filename,
 	)
 	var i Attachment
 	err := row.Scan(
@@ -54,23 +150,55 @@ func (q *Queries) CreateAttachment(ctx context.Context, arg CreateAttachmentPara
 		&i.Duration,
 		&i.Waveform,
 		&i.CreatedAt,
+		&i.Purpose,
+		&i.Kind,
+		&i.Filename,
+		&i.ThumbnailKey,
 	)
 	return i, err
 }
 
 const deleteAttachment = `-- name: DeleteAttachment :one
-DELETE FROM attachments WHERE id = $1 RETURNING storage_key
+DELETE FROM attachments WHERE id = $1 RETURNING storage_key, thumbnail_key
 `
 
-func (q *Queries) DeleteAttachment(ctx context.Context, id uuid.UUID) (string, error) {
+type DeleteAttachmentRow struct {
+	StorageKey   string
+	ThumbnailKey *string
+}
+
+func (q *Queries) DeleteAttachment(ctx context.Context, id uuid.UUID) (DeleteAttachmentRow, error) {
 	row := q.db.QueryRow(ctx, deleteAttachment, id)
-	var storage_key string
-	err := row.Scan(&storage_key)
-	return storage_key, err
+	var i DeleteAttachmentRow
+	err := row.Scan(&i.StorageKey, &i.ThumbnailKey)
+	return i, err
+}
+
+const deleteAttachmentIfUnreferenced = `-- name: DeleteAttachmentIfUnreferenced :one
+DELETE FROM attachments a
+WHERE a.id = $1
+  AND NOT EXISTS (SELECT 1 FROM attachment_links l WHERE l.attachment_id = a.id)
+  AND NOT EXISTS (SELECT 1 FROM users u WHERE u.avatar_attachment_id = a.id)
+  AND NOT EXISTS (SELECT 1 FROM chats c WHERE c.avatar_attachment_id = a.id)
+  AND NOT EXISTS (SELECT 1 FROM user_avatar_history h WHERE h.attachment_id = a.id)
+RETURNING a.storage_key, a.thumbnail_key
+`
+
+type DeleteAttachmentIfUnreferencedRow struct {
+	StorageKey   string
+	ThumbnailKey *string
+}
+
+// Deletes the row only if it is still unreferenced (a send may have linked it since it was listed).
+func (q *Queries) DeleteAttachmentIfUnreferenced(ctx context.Context, id uuid.UUID) (DeleteAttachmentIfUnreferencedRow, error) {
+	row := q.db.QueryRow(ctx, deleteAttachmentIfUnreferenced, id)
+	var i DeleteAttachmentIfUnreferencedRow
+	err := row.Scan(&i.StorageKey, &i.ThumbnailKey)
+	return i, err
 }
 
 const getAttachment = `-- name: GetAttachment :one
-SELECT id, uploader_id, chat_id, storage_key, mime_type, size, width, height, duration, waveform, created_at FROM attachments WHERE id = $1
+SELECT id, uploader_id, chat_id, storage_key, mime_type, size, width, height, duration, waveform, created_at, purpose, kind, filename, thumbnail_key FROM attachments WHERE id = $1
 `
 
 func (q *Queries) GetAttachment(ctx context.Context, id uuid.UUID) (Attachment, error) {
@@ -88,8 +216,56 @@ func (q *Queries) GetAttachment(ctx context.Context, id uuid.UUID) (Attachment, 
 		&i.Duration,
 		&i.Waveform,
 		&i.CreatedAt,
+		&i.Purpose,
+		&i.Kind,
+		&i.Filename,
+		&i.ThumbnailKey,
 	)
 	return i, err
+}
+
+const getAvatarHistoryEntry = `-- name: GetAvatarHistoryEntry :one
+SELECT h.id, h.attachment_id, h.created_at, h.is_current FROM user_avatar_history h WHERE h.user_id = $1 AND h.id = $2
+`
+
+type GetAvatarHistoryEntryParams struct {
+	UserID int64
+	ID     int64
+}
+
+type GetAvatarHistoryEntryRow struct {
+	ID           int64
+	AttachmentID *uuid.UUID
+	CreatedAt    time.Time
+	IsCurrent    bool
+}
+
+func (q *Queries) GetAvatarHistoryEntry(ctx context.Context, arg GetAvatarHistoryEntryParams) (GetAvatarHistoryEntryRow, error) {
+	row := q.db.QueryRow(ctx, getAvatarHistoryEntry, arg.UserID, arg.ID)
+	var i GetAvatarHistoryEntryRow
+	err := row.Scan(
+		&i.ID,
+		&i.AttachmentID,
+		&i.CreatedAt,
+		&i.IsCurrent,
+	)
+	return i, err
+}
+
+const linkAttachment = `-- name: LinkAttachment :exec
+INSERT INTO attachment_links (attachment_id, chat_id, message_id) VALUES ($1, $2, $3)
+ON CONFLICT DO NOTHING
+`
+
+type LinkAttachmentParams struct {
+	AttachmentID uuid.UUID
+	ChatID       int64
+	MessageID    int64
+}
+
+func (q *Queries) LinkAttachment(ctx context.Context, arg LinkAttachmentParams) error {
+	_, err := q.db.Exec(ctx, linkAttachment, arg.AttachmentID, arg.ChatID, arg.MessageID)
+	return err
 }
 
 const listAttachmentKeysOfChats = `-- name: ListAttachmentKeysOfChats :many
@@ -116,15 +292,62 @@ func (q *Queries) ListAttachmentKeysOfChats(ctx context.Context, chatIds []int64
 	return items, nil
 }
 
+const listAvatarHistory = `-- name: ListAvatarHistory :many
+SELECT h.id, h.attachment_id, h.created_at, h.is_current
+FROM user_avatar_history h
+WHERE h.user_id = $1 AND h.attachment_id IS NOT NULL
+  AND ($2::bigint IS NULL OR h.id < $2::bigint)
+ORDER BY h.id DESC
+LIMIT $3
+`
+
+type ListAvatarHistoryParams struct {
+	UserID   int64
+	BeforeID *int64
+	MaxRows  int32
+}
+
+type ListAvatarHistoryRow struct {
+	ID           int64
+	AttachmentID *uuid.UUID
+	CreatedAt    time.Time
+	IsCurrent    bool
+}
+
+func (q *Queries) ListAvatarHistory(ctx context.Context, arg ListAvatarHistoryParams) ([]ListAvatarHistoryRow, error) {
+	rows, err := q.db.Query(ctx, listAvatarHistory, arg.UserID, arg.BeforeID, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAvatarHistoryRow{}
+	for rows.Next() {
+		var i ListAvatarHistoryRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AttachmentID,
+			&i.CreatedAt,
+			&i.IsCurrent,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChatAttachments = `-- name: ListChatAttachments :many
-SELECT id, uploader_id, chat_id, storage_key, mime_type, size, width, height, duration, waveform, created_at FROM attachments
+SELECT id, uploader_id, chat_id, storage_key, mime_type, size, width, height, duration, waveform, created_at, purpose, kind, filename, thumbnail_key FROM attachments
 WHERE chat_id = $1
 ORDER BY created_at DESC, id DESC
 LIMIT $2
 `
 
 type ListChatAttachmentsParams struct {
-	ChatID  int64
+	ChatID  *int64
 	MaxRows int32
 }
 
@@ -149,6 +372,10 @@ func (q *Queries) ListChatAttachments(ctx context.Context, arg ListChatAttachmen
 			&i.Duration,
 			&i.Waveform,
 			&i.CreatedAt,
+			&i.Purpose,
+			&i.Kind,
+			&i.Filename,
+			&i.ThumbnailKey,
 		); err != nil {
 			return nil, err
 		}
@@ -158,4 +385,164 @@ func (q *Queries) ListChatAttachments(ctx context.Context, arg ListChatAttachmen
 		return nil, err
 	}
 	return items, nil
+}
+
+const listLinkedAttachments = `-- name: ListLinkedAttachments :many
+SELECT a.id, a.uploader_id, a.chat_id, a.storage_key, a.mime_type, a.size, a.width, a.height, a.duration, a.waveform, a.created_at, a.purpose, a.kind, a.filename, a.thumbnail_key, l.message_id, l.created_at AS linked_at
+FROM attachment_links l
+JOIN attachments a ON a.id = l.attachment_id
+WHERE l.chat_id = $1 AND a.kind = ANY($2::text[])
+  AND ($3::timestamptz IS NULL OR l.created_at < $3::timestamptz)
+ORDER BY l.created_at DESC
+LIMIT $4
+`
+
+type ListLinkedAttachmentsParams struct {
+	ChatID  int64
+	Kinds   []string
+	Before  *time.Time
+	MaxRows int32
+}
+
+type ListLinkedAttachmentsRow struct {
+	ID           uuid.UUID
+	UploaderID   *int64
+	ChatID       *int64
+	StorageKey   string
+	MimeType     string
+	Size         int64
+	Width        *int32
+	Height       *int32
+	Duration     *float64
+	Waveform     []int16
+	CreatedAt    time.Time
+	Purpose      string
+	Kind         string
+	Filename     string
+	ThumbnailKey *string
+	MessageID    int64
+	LinkedAt     time.Time
+}
+
+// Attachments of a chat by kind, newest first, for the media lists (photos, audio).
+func (q *Queries) ListLinkedAttachments(ctx context.Context, arg ListLinkedAttachmentsParams) ([]ListLinkedAttachmentsRow, error) {
+	rows, err := q.db.Query(ctx, listLinkedAttachments,
+		arg.ChatID,
+		arg.Kinds,
+		arg.Before,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListLinkedAttachmentsRow{}
+	for rows.Next() {
+		var i ListLinkedAttachmentsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UploaderID,
+			&i.ChatID,
+			&i.StorageKey,
+			&i.MimeType,
+			&i.Size,
+			&i.Width,
+			&i.Height,
+			&i.Duration,
+			&i.Waveform,
+			&i.CreatedAt,
+			&i.Purpose,
+			&i.Kind,
+			&i.Filename,
+			&i.ThumbnailKey,
+			&i.MessageID,
+			&i.LinkedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUnreferencedAttachments = `-- name: ListUnreferencedAttachments :many
+SELECT a.id, a.storage_key, a.thumbnail_key
+FROM attachments a
+WHERE a.created_at < $1
+  AND a.chat_id IS NULL
+  AND NOT EXISTS (SELECT 1 FROM attachment_links l WHERE l.attachment_id = a.id)
+  AND NOT EXISTS (SELECT 1 FROM users u WHERE u.avatar_attachment_id = a.id)
+  AND NOT EXISTS (SELECT 1 FROM chats c WHERE c.avatar_attachment_id = a.id)
+  AND NOT EXISTS (SELECT 1 FROM user_avatar_history h WHERE h.attachment_id = a.id)
+ORDER BY a.created_at
+LIMIT $2
+`
+
+type ListUnreferencedAttachmentsParams struct {
+	OlderThan time.Time
+	MaxRows   int32
+}
+
+type ListUnreferencedAttachmentsRow struct {
+	ID           uuid.UUID
+	StorageKey   string
+	ThumbnailKey *string
+}
+
+// Uploads older than the cut-off that no message, avatar or avatar history uses (v1 rows are bound by chat_id).
+func (q *Queries) ListUnreferencedAttachments(ctx context.Context, arg ListUnreferencedAttachmentsParams) ([]ListUnreferencedAttachmentsRow, error) {
+	rows, err := q.db.Query(ctx, listUnreferencedAttachments, arg.OlderThan, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUnreferencedAttachmentsRow{}
+	for rows.Next() {
+		var i ListUnreferencedAttachmentsRow
+		if err := rows.Scan(&i.ID, &i.StorageKey, &i.ThumbnailKey); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setChatAvatar = `-- name: SetChatAvatar :execrows
+UPDATE chats SET avatar_attachment_id = $1 WHERE id = $2
+`
+
+type SetChatAvatarParams struct {
+	AttachmentID *uuid.UUID
+	ChatID       int64
+}
+
+func (q *Queries) SetChatAvatar(ctx context.Context, arg SetChatAvatarParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setChatAvatar, arg.AttachmentID, arg.ChatID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setUserAvatar = `-- name: SetUserAvatar :execrows
+UPDATE users SET avatar_attachment_id = $1 WHERE id = $2
+`
+
+type SetUserAvatarParams struct {
+	AttachmentID *uuid.UUID
+	UserID       int64
+}
+
+func (q *Queries) SetUserAvatar(ctx context.Context, arg SetUserAvatarParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setUserAvatar, arg.AttachmentID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

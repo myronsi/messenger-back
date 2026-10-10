@@ -24,29 +24,41 @@ type ApprovalRequest struct {
 }
 
 type Attachment struct {
-	ID         uuid.UUID
-	UploaderID *int64
-	ChatID     int64
-	StorageKey string
-	MimeType   string
-	Size       int64
-	Width      *int32
-	Height     *int32
-	Duration   *float64
-	Waveform   []int16
-	CreatedAt  time.Time
+	ID           uuid.UUID
+	UploaderID   *int64
+	ChatID       *int64
+	StorageKey   string
+	MimeType     string
+	Size         int64
+	Width        *int32
+	Height       *int32
+	Duration     *float64
+	Waveform     []int16
+	CreatedAt    time.Time
+	Purpose      string
+	Kind         string
+	Filename     string
+	ThumbnailKey *string
+}
+
+type AttachmentLink struct {
+	AttachmentID uuid.UUID
+	ChatID       int64
+	MessageID    int64
+	CreatedAt    time.Time
 }
 
 type Chat struct {
-	ID          int64
-	Type        string
-	Name        *string
-	Description string
-	AvatarUrl   *string
-	DirectKey   *string
-	CreatedBy   *int64
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID                 int64
+	Type               string
+	Name               *string
+	Description        string
+	AvatarUrl          *string
+	DirectKey          *string
+	CreatedBy          *int64
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+	AvatarAttachmentID *uuid.UUID
 }
 
 type Participant struct {
@@ -65,15 +77,16 @@ type RecoveryToken struct {
 }
 
 type User struct {
-	ID           int64
-	Username     string
-	DisplayName  string
-	PasswordHash string
-	AvatarUrl    *string
-	Bio          *string
-	LastSeenAt   time.Time
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	ID                 int64
+	Username           string
+	DisplayName        string
+	PasswordHash       string
+	AvatarUrl          *string
+	Bio                *string
+	LastSeenAt         time.Time
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+	AvatarAttachmentID *uuid.UUID
 }
 
 type User2faRecoveryCode struct {
@@ -85,11 +98,12 @@ type User2faRecoveryCode struct {
 }
 
 type UserAvatarHistory struct {
-	ID        int64
-	UserID    int64
-	AvatarUrl string
-	IsCurrent bool
-	CreatedAt time.Time
+	ID           int64
+	UserID       int64
+	AvatarUrl    *string
+	IsCurrent    bool
+	CreatedAt    time.Time
+	AttachmentID *uuid.UUID
 }
 
 type UserBlock struct {

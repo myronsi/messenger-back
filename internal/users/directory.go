@@ -91,7 +91,7 @@ func (d *Directory) render(u postgres.User, viewer int64, f facts) View {
 	v := View{ID: u.ID, Username: u.Username, DisplayName: u.DisplayName, ContactName: f.contact}
 	self := u.ID == viewer
 	allowed := func(setting, key string) bool { return self || Visible(setting, f.exceptions[key], f.shares) }
-	if u.AvatarURL != nil && allowed(f.settings.AvatarVisibility, postgres.SettingAvatar) {
+	if u.HasAvatar() && allowed(f.settings.AvatarVisibility, postgres.SettingAvatar) {
 		url := d.AvatarURL(u.ID)
 		v.AvatarURL = &url
 	}

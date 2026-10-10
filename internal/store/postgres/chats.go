@@ -22,9 +22,11 @@ func chatFrom(c sqlcdb.Chat) Chat {
 		Name:        c.Name,
 		Description: c.Description,
 		AvatarURL:   c.AvatarUrl,
-		CreatedBy:   c.CreatedBy,
-		CreatedAt:   c.CreatedAt,
-		UpdatedAt:   c.UpdatedAt,
+
+		AvatarAttachmentID: c.AvatarAttachmentID,
+		CreatedBy:          c.CreatedBy,
+		CreatedAt:          c.CreatedAt,
+		UpdatedAt:          c.UpdatedAt,
 	}
 }
 

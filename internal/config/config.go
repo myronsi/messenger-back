@@ -64,6 +64,7 @@ type Config struct {
 
 	Auth     Auth
 	Realtime Realtime
+	Media    Media
 	Tracing  Tracing
 
 	// WorkerAddr is where the worker serves /healthz and /metrics.
@@ -84,6 +85,28 @@ type Redis struct {
 	Timeout time.Duration `env:"REDIS_TIMEOUT" envDefault:"2s"`
 	// MembersCacheTTL is how long the members of a chat are cached (changes invalidate at once).
 	MembersCacheTTL time.Duration `env:"MEMBERS_CACHE_TTL" envDefault:"10m"`
+}
+
+// Media configures where uploads are stored and how they are checked.
+type Media struct {
+	// Backend is "disk" (development) or "s3" (any S3-compatible service).
+	Backend string `env:"STORAGE_BACKEND" envDefault:"disk"`
+	// Dir is where the disk backend keeps the files.
+	Dir string `env:"STORAGE_DIR" envDefault:"data/media"`
+	// S3 settings: the endpoint URL, credentials and bucket.
+	S3Endpoint  string `env:"S3_ENDPOINT"`
+	S3AccessKey Secret `env:"S3_ACCESS_KEY"`
+	S3SecretKey Secret `env:"S3_SECRET_KEY"`
+	S3Bucket    string `env:"S3_BUCKET" envDefault:"messenger-media"`
+	S3Region    string `env:"S3_REGION" envDefault:"us-east-1"`
+	// SignedURLs answers downloads with a short-lived redirect to the bucket instead of streaming them through
+	// the API. The bucket then needs CORS for the app's origin; S3PublicEndpoint is the address clients reach.
+	SignedURLs       bool   `env:"MEDIA_SIGNED_URLS" envDefault:"false"`
+	S3PublicEndpoint string `env:"S3_PUBLIC_ENDPOINT"`
+	// FFprobe and FFmpeg measure voice messages; empty looks them up on PATH (the image ships both). Without
+	// them the client's duration and waveform are used.
+	FFprobe string `env:"FFPROBE_PATH"`
+	FFmpeg  string `env:"FFMPEG_PATH"`
 }
 
 // Realtime configures the WebSocket gateway.
@@ -312,6 +335,7 @@ func (c Config) Validate() error {
 		add("MEMBERS_CACHE_TTL must be positive")
 	}
 	problems = append(problems, c.Realtime.validate()...)
+	problems = append(problems, c.Media.validate()...)
 	switch c.Scylla.Consistency {
 	case "local_quorum", "quorum", "one", "local_one":
 	default:
@@ -327,6 +351,29 @@ func (c Config) Validate() error {
 		return fmt.Errorf("invalid configuration: %s", strings.Join(problems, "; "))
 	}
 	return nil
+}
+
+func (m Media) validate() []string {
+	var problems []string
+	switch m.Backend {
+	case "disk":
+		if strings.TrimSpace(m.Dir) == "" {
+			problems = append(problems, "STORAGE_DIR must not be empty")
+		}
+	case "s3":
+		if !validURL(m.S3Endpoint, "http", "https") {
+			problems = append(problems, "S3_ENDPOINT must be an http:// or https:// URL")
+		}
+		if m.S3AccessKey == "" || m.S3SecretKey == "" || m.S3Bucket == "" {
+			problems = append(problems, "S3_ACCESS_KEY, S3_SECRET_KEY and S3_BUCKET are required for STORAGE_BACKEND=s3")
+		}
+		if m.S3PublicEndpoint != "" && !validURL(m.S3PublicEndpoint, "http", "https") {
+			problems = append(problems, "S3_PUBLIC_ENDPOINT must be an http:// or https:// URL")
+		}
+	default:
+		problems = append(problems, "STORAGE_BACKEND must be disk or s3")
+	}
+	return problems
 }
 
 func (r Realtime) validate() []string {
