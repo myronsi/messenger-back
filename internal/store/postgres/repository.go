@@ -243,6 +243,29 @@ type ChatRepository interface {
 	Pin(ctx context.Context, userID, chatID int64, maxPins int) error
 	// Unpin unpins the chat (unpinned already is fine).
 	Unpin(ctx context.Context, userID, chatID int64) error
+
+	// EntriesOfType is Entries of one chat type ("" for all).
+	EntriesOfType(ctx context.Context, userID int64, t ChatType, after *ChatCursor, limit int) ([]ChatEntry, error)
+
+	// Group operations of an actor: the actor's role is checked under the group's lock, in the transaction
+	// of the change. ErrNotFound: no such group or the actor is not in it; ErrForbidden: the actor's role does
+	// not allow it (managing a group needs owner or admin; deleting it the owner).
+	UpdateGroup(ctx context.Context, chatID, actorID int64, name *string, setDescription bool, description *string) (Chat, error)
+	// AddMemberAs adds a member (ErrAlreadyParticipant).
+	AddMemberAs(ctx context.Context, chatID, actorID, userID int64) error
+	// RemoveMemberAs removes a member; actorID == userID is leaving, which needs no role. The owner cannot be
+	// removed and cannot leave (ErrOwnerMustTransfer). The member's pin of the group goes too.
+	RemoveMemberAs(ctx context.Context, chatID, actorID, userID int64) error
+	// SetRoleAs makes a member an admin, moderator or member; the owner's role moves with TransferOwnership.
+	SetRoleAs(ctx context.Context, chatID, actorID, userID int64, role Role) error
+	// DeleteGroupAs deletes the group (the owner only) and returns its files' keys and its members.
+	DeleteGroupAs(ctx context.Context, chatID, actorID int64) (keys []string, members []int64, err error)
+	// SetGroupAvatarAs sets (or with nil clears) the group's avatar.
+	SetGroupAvatarAs(ctx context.Context, chatID, actorID int64, attachmentID *uuid.UUID) error
+	// InviteAs makes a group invitation for a user who approves invitations (a pending one is reused).
+	InviteAs(ctx context.Context, chatID, actorID, userID int64) (req ApprovalRequest, created bool, err error)
+	// PendingInvitees are the users invited to the group who did not answer yet.
+	PendingInvitees(ctx context.Context, chatID int64) ([]int64, error)
 }
 
 // ApprovalRepository keeps the approval requests.
@@ -257,7 +280,9 @@ type ApprovalRepository interface {
 	// (created false when the pair had one) and the other requests of the pair it closed. ErrNotFound: no
 	// such direct-message request for this recipient; ErrConflict: it was answered already.
 	ApproveDirect(ctx context.Context, id, recipientID int64) (req ApprovalRequest, chat Chat, created bool, closed []ApprovalRequest, err error)
-	// Reject turns down a pending direct-message request of the recipient (ErrNotFound, ErrConflict as above).
+	// ApproveInvite accepts a pending group invitation of the recipient: they join the group.
+	ApproveInvite(ctx context.Context, id, recipientID int64) (ApprovalRequest, error)
+	// Reject turns down a pending request of the recipient (ErrNotFound, ErrConflict as above).
 	Reject(ctx context.Context, id, recipientID int64) (ApprovalRequest, error)
 }
 

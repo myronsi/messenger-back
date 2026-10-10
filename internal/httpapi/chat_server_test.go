@@ -32,6 +32,9 @@ type chatEvents struct {
 	updated  map[int64][]int64
 	removed  map[int64][]int64
 	requests []int64 // recipients
+
+	groupCreated map[int64][]int64
+	groupUpdates map[int64]int
 }
 
 func (c *chatEvents) add(m map[int64][]int64, chatID int64, views map[int64]chats.View) {
@@ -95,7 +98,8 @@ func newChatEnv(t *testing.T) *chatEnv {
 		Messages: repo, Store: store, Members: members, Unread: unread, Dedup: redis.NewDedup(rdb, prefix, 0), IDs: gen,
 	})
 	dir := users.NewDirectory(store, nil, apiBase)
-	ev := &chatEvents{created: map[int64][]int64{}, updated: map[int64][]int64{}, removed: map[int64][]int64{}}
+	ev := &chatEvents{created: map[int64][]int64{}, updated: map[int64][]int64{}, removed: map[int64][]int64{},
+		groupCreated: map[int64][]int64{}, groupUpdates: map[int64]int{}}
 	svc := chats.New(chats.Deps{Store: store, Messages: repo, Unread: unread, Members: members, Sender: msgs, Directory: dir, Notifier: ev})
 	api := NewServer(NewAuthServer(AuthOptions{Service: authSvc, Log: log, BasePath: apiBase, CookieSecure: true}), nil).
 		WithAccount(NewAccountServer(AccountOptions{Store: store, Directory: dir, Deleter: authSvc, BasePath: apiBase, Log: log})).

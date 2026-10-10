@@ -22,6 +22,8 @@ var (
 	ErrInvalid = errors.New("invalid value")
 	// ErrNotGroup: the operation only applies to group chats.
 	ErrNotGroup = errors.New("not a group chat")
+	// ErrForbidden: the actor's role in the group does not allow the operation.
+	ErrForbidden = errors.New("forbidden")
 	// ErrNotOwner: the operation needs the owner of the group.
 	ErrNotOwner = errors.New("not the group owner")
 	// ErrOwnerMustTransfer: the owner cannot be removed or demoted; transfer ownership first.

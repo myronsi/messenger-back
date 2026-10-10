@@ -341,3 +341,102 @@ func (s *Server) ForwardMessage(w http.ResponseWriter, r *http.Request, messageI
 	}
 	s.messages.ForwardMessage(w, r, messageID, params)
 }
+
+// ListGroups delegates to the group endpoints.
+func (s *Server) ListGroups(w http.ResponseWriter, r *http.Request, params ListGroupsParams) {
+	if s.chats == nil {
+		s.AuthServer.ListGroups(w, r, params)
+		return
+	}
+	s.chats.ListGroups(w, r, params)
+}
+
+// CreateGroup delegates to the group endpoints.
+func (s *Server) CreateGroup(w http.ResponseWriter, r *http.Request, params CreateGroupParams) {
+	if s.chats == nil {
+		s.AuthServer.CreateGroup(w, r, params)
+		return
+	}
+	s.chats.CreateGroup(w, r, params)
+}
+
+// GetGroup delegates to the group endpoints.
+func (s *Server) GetGroup(w http.ResponseWriter, r *http.Request, chatID ChatId, params GetGroupParams) {
+	if s.chats == nil {
+		s.AuthServer.GetGroup(w, r, chatID, params)
+		return
+	}
+	s.chats.GetGroup(w, r, chatID, params)
+}
+
+// UpdateGroup delegates to the group endpoints.
+func (s *Server) UpdateGroup(w http.ResponseWriter, r *http.Request, chatID ChatId, params UpdateGroupParams) {
+	if s.chats == nil {
+		s.AuthServer.UpdateGroup(w, r, chatID, params)
+		return
+	}
+	s.chats.UpdateGroup(w, r, chatID, params)
+}
+
+// DeleteGroup delegates to the group endpoints.
+func (s *Server) DeleteGroup(w http.ResponseWriter, r *http.Request, chatID ChatId, params DeleteGroupParams) {
+	if s.chats == nil {
+		s.AuthServer.DeleteGroup(w, r, chatID, params)
+		return
+	}
+	s.chats.DeleteGroup(w, r, chatID, params)
+}
+
+// SetGroupAvatar delegates to the group endpoints.
+func (s *Server) SetGroupAvatar(w http.ResponseWriter, r *http.Request, chatID ChatId, params SetGroupAvatarParams) {
+	if s.chats == nil {
+		s.AuthServer.SetGroupAvatar(w, r, chatID, params)
+		return
+	}
+	s.chats.SetGroupAvatar(w, r, chatID, params)
+}
+
+// LeaveGroup delegates to the group endpoints.
+func (s *Server) LeaveGroup(w http.ResponseWriter, r *http.Request, chatID ChatId, params LeaveGroupParams) {
+	if s.chats == nil {
+		s.AuthServer.LeaveGroup(w, r, chatID, params)
+		return
+	}
+	s.chats.LeaveGroup(w, r, chatID, params)
+}
+
+// AddGroupParticipant delegates to the group endpoints.
+func (s *Server) AddGroupParticipant(w http.ResponseWriter, r *http.Request, chatID ChatId, params AddGroupParticipantParams) {
+	if s.chats == nil {
+		s.AuthServer.AddGroupParticipant(w, r, chatID, params)
+		return
+	}
+	s.chats.AddGroupParticipant(w, r, chatID, params)
+}
+
+// RemoveGroupParticipant delegates to the group endpoints.
+func (s *Server) RemoveGroupParticipant(w http.ResponseWriter, r *http.Request, chatID ChatId, userID UserId, params RemoveGroupParticipantParams) {
+	if s.chats == nil {
+		s.AuthServer.RemoveGroupParticipant(w, r, chatID, userID, params)
+		return
+	}
+	s.chats.RemoveGroupParticipant(w, r, chatID, userID, params)
+}
+
+// UpdateGroupParticipantRole delegates to the group endpoints.
+func (s *Server) UpdateGroupParticipantRole(w http.ResponseWriter, r *http.Request, chatID ChatId, userID UserId, params UpdateGroupParticipantRoleParams) {
+	if s.chats == nil {
+		s.AuthServer.UpdateGroupParticipantRole(w, r, chatID, userID, params)
+		return
+	}
+	s.chats.UpdateGroupParticipantRole(w, r, chatID, userID, params)
+}
+
+// TransferGroupOwnership delegates to the group endpoints.
+func (s *Server) TransferGroupOwnership(w http.ResponseWriter, r *http.Request, chatID ChatId, params TransferGroupOwnershipParams) {
+	if s.chats == nil {
+		s.AuthServer.TransferGroupOwnership(w, r, chatID, params)
+		return
+	}
+	s.chats.TransferGroupOwnership(w, r, chatID, params)
+}

@@ -13,6 +13,7 @@ FROM participants p
 JOIN chats c ON c.id = p.chat_id
 LEFT JOIN user_chat_pins pin ON pin.user_id = p.user_id AND pin.chat_id = p.chat_id
 WHERE p.user_id = @user_id
+  AND (sqlc.narg(chat_type)::text IS NULL OR c.type = sqlc.narg(chat_type)::text)
   AND (
     sqlc.narg(after_chat_id)::bigint IS NULL
     OR (pin.pinned_at IS NULL)::int > sqlc.narg(after_unpinned)::int
@@ -65,10 +66,9 @@ SELECT * FROM approval_requests WHERE id = @id;
 SELECT * FROM approval_requests WHERE id = @id FOR UPDATE;
 
 -- name: ListPendingRequests :many
--- The recipient's inbox of direct-message requests, newest first; the cursor is the last request id. (Group
--- invitations are answered with the group endpoints.)
+-- The recipient's inbox, newest first; the cursor is the last request id.
 SELECT * FROM approval_requests
-WHERE recipient_id = @recipient_id AND status = 'pending' AND type = 'direct_message'
+WHERE recipient_id = @recipient_id AND status = 'pending'
   AND (sqlc.narg(before_id)::bigint IS NULL OR id < sqlc.narg(before_id)::bigint)
 ORDER BY id DESC
 LIMIT @max_rows;

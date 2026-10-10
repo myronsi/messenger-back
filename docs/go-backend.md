@@ -22,8 +22,8 @@ The Go backend replaces the Python one (`server/`). Its skeleton is in place; fe
 | `internal/testenv` | fresh stores for integration tests |
 | `internal/store/{postgres,redis,scylla,elastic}` | store clients with `Ping` for `/readyz`; PostgreSQL also has the repositories ([schema](postgres-schema.md)); Redis has presence, pub/sub, unread counters, the membership cache and rate limits ([redis.md](redis.md)); ScyllaDB has the message store ([messages.md](messages.md)) |
 | `internal/ids` | Snowflake IDs for messages |
-| `internal/chats` | the chat list, direct chats, pins, read markers and approval requests ([chats.md](chats.md)) |
-| `internal/{auth,groups,media,search}` | domain packages; `auth` is done ([auth.md](auth.md)), the others follow |
+| `internal/chats` | the chat list, direct chats, groups, pins, read markers and approval requests ([chats.md](chats.md)) |
+| `internal/{auth,search}` | domain packages; `auth` is done ([auth.md](auth.md)), search follows |
 | `migrations/{postgres,scylla}` | schema migrations (`make migrate`, applied automatically by the dev stack) |
 | `compose.dev.yaml`, `deploy/dev` | development stack and its init steps, see [dev-environment.md](dev-environment.md); production notes are in [deployment.md](deployment.md) |
 

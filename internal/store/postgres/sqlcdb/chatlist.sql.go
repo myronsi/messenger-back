@@ -201,19 +201,21 @@ FROM participants p
 JOIN chats c ON c.id = p.chat_id
 LEFT JOIN user_chat_pins pin ON pin.user_id = p.user_id AND pin.chat_id = p.chat_id
 WHERE p.user_id = $1
+  AND ($2::text IS NULL OR c.type = $2::text)
   AND (
-    $2::bigint IS NULL
-    OR (pin.pinned_at IS NULL)::int > $3::int
-    OR ((pin.pinned_at IS NULL)::int = $3::int AND (
-          COALESCE(pin.pinned_at, c.last_activity_at) < $4::timestamptz
-          OR (COALESCE(pin.pinned_at, c.last_activity_at) = $4::timestamptz AND c.id < $2::bigint)))
+    $3::bigint IS NULL
+    OR (pin.pinned_at IS NULL)::int > $4::int
+    OR ((pin.pinned_at IS NULL)::int = $4::int AND (
+          COALESCE(pin.pinned_at, c.last_activity_at) < $5::timestamptz
+          OR (COALESCE(pin.pinned_at, c.last_activity_at) = $5::timestamptz AND c.id < $3::bigint)))
   )
 ORDER BY (pin.pinned_at IS NULL), COALESCE(pin.pinned_at, c.last_activity_at) DESC, c.id DESC
-LIMIT $5
+LIMIT $6
 `
 
 type ListChatEntriesParams struct {
 	UserID        int64
+	ChatType      *string
 	AfterChatID   *int64
 	AfterUnpinned *int32
 	AfterSortAt   *time.Time
@@ -244,6 +246,7 @@ type ListChatEntriesRow struct {
 func (q *Queries) ListChatEntries(ctx context.Context, arg ListChatEntriesParams) ([]ListChatEntriesRow, error) {
 	rows, err := q.db.Query(ctx, listChatEntries,
 		arg.UserID,
+		arg.ChatType,
 		arg.AfterChatID,
 		arg.AfterUnpinned,
 		arg.AfterSortAt,
@@ -331,7 +334,7 @@ func (q *Queries) ListOtherParticipants(ctx context.Context, arg ListOtherPartic
 
 const listPendingRequests = `-- name: ListPendingRequests :many
 SELECT id, type, requester_id, recipient_id, status, message_text, chat_id, created_at, responded_at FROM approval_requests
-WHERE recipient_id = $1 AND status = 'pending' AND type = 'direct_message'
+WHERE recipient_id = $1 AND status = 'pending'
   AND ($2::bigint IS NULL OR id < $2::bigint)
 ORDER BY id DESC
 LIMIT $3
@@ -343,8 +346,7 @@ type ListPendingRequestsParams struct {
 	MaxRows     int32
 }
 
-// The recipient's inbox of direct-message requests, newest first; the cursor is the last request id. (Group
-// invitations are answered with the group endpoints.)
+// The recipient's inbox, newest first; the cursor is the last request id.
 func (q *Queries) ListPendingRequests(ctx context.Context, arg ListPendingRequestsParams) ([]ApprovalRequest, error) {
 	rows, err := q.db.Query(ctx, listPendingRequests, arg.RecipientID, arg.BeforeID, arg.MaxRows)
 	if err != nil {
