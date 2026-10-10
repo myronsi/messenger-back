@@ -41,4 +41,4 @@ The helpers are `internal/testenv`. CI starts ScyllaDB, RustFS and Elasticsearch
 | rate limiting | `TestLoginRateLimit`, `TestLoginRateLimitSendsRetryAfter`, `TestLimiter*`, `TestTwoFactorChallengeAttemptsAreLimited` |
 
 - **Load:** k6 scripts and how to run them in [load-testing.md](load-testing.md).
-- **Migration from v1:** with `cmd/migrate-v1` (#54), on a fixture database built from the v1 schema.
+- **Migration from v1** (`cmd/migrate-v1/migrate_test.go`): a fixture database with the v1 schema (`testdata/v1_schema.sql`, from `server/database.py`) and files, migrated twice (the second run must change nothing). The TOTP decryption is checked against a token made by Python's `cryptography`.

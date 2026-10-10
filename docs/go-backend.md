@@ -8,7 +8,7 @@ The Go backend replaces the Python one (`server/`). Its skeleton is in place; fe
 |---|---|
 | `cmd/api` | REST API and realtime gateway |
 | `cmd/worker` | event consumers ([events.md](events.md)) and maintenance jobs; serves `/healthz` and `/metrics` on `WORKER_ADDR` |
-| `cmd/migrate-v1` | one-time data migration from the Python backend (MSGC-77), a stub for now |
+| `cmd/migrate-v1` | the data migration from the Python backend ([migration-v1.md](migration-v1.md)) |
 | `internal/app` | process plumbing shared by the commands: config, logger, tracing, signals, HTTP server lifecycle |
 | `internal/config` | environment configuration, validated on startup |
 | `internal/observability` | JSON `slog` logger with redaction, Prometheus metrics, optional OpenTelemetry tracing |

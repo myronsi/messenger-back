@@ -22,6 +22,7 @@
 !docs/search.md
 !docs/load-testing.md
 !docs/testing.md
+!docs/migration-v1.md
 !CHANGELOG.md
 !server/
 !server/version.py
