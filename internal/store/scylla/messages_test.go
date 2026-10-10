@@ -638,3 +638,30 @@ func TestDeleteChatInChunks(t *testing.T) {
 		t.Fatalf("%d messages left", len(p.Messages))
 	}
 }
+
+// An insert that wrote its bucket marker but not yet its message when the chat is deleted cannot bring the
+// message back afterwards.
+func TestDeleteChatShadowsInsertInFlight(t *testing.T) {
+	r := testRepo(t)
+	ctx := context.Background()
+	chat := newChat()
+	sender := int64(1)
+	g, _ := ids.NewGenerator(4)
+	id, _ := g.Next()
+	m := Message{ChatID: chat, ID: id, SenderID: &sender, Type: TypeText, Content: text("late"), CreatedAt: ids.Time(id)}
+	sess, _ := r.s.Session(ctx)
+	b := BucketOf(m.CreatedAt)
+	if err := sess.Query(`INSERT INTO chat_buckets (chat_id, bucket) VALUES (?, ?) USING TIMESTAMP ?`, chat, b, m.CreatedAt.UnixMicro()).Exec(); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.DeleteChat(ctx, chat); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Insert(ctx, m); err != nil { // the rest of the insert arrives
+		t.Fatal(err)
+	}
+	var n int
+	if err := sess.Query(`SELECT COUNT(*) FROM messages WHERE chat_id = ? AND bucket = ?`, chat, b).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("message resurrected: %d %v", n, err)
+	}
+}

@@ -377,18 +377,31 @@ func (r *Messages) Hide(ctx context.Context, userID, chatID, messageID int64, re
 	}
 	// All writes of a hidden row are lightweight transactions, so they are serialized: "deleted for me" is
 	// final, and neither a late "not delivered" nor Unhide can replace or remove it.
-	applied, err := sess.Query(`INSERT INTO hidden_messages (user_id, chat_id, message_id, reason) VALUES (?, ?, ?, ?) IF NOT EXISTS`,
-		userID, chatID, messageID, reason).WithContext(ctx).SerialConsistency(gocql.LocalSerial).MapScanCAS(map[string]any{})
-	if err == nil && !applied && reason == HiddenDeletedForMe {
-		// Hidden as not delivered so far: upgrade to deleted.
-		_, err = sess.Query(`UPDATE hidden_messages SET reason = ? WHERE user_id = ? AND chat_id = ? AND message_id = ? IF EXISTS`,
+	for range hideAttempts {
+		applied, err := sess.Query(`INSERT INTO hidden_messages (user_id, chat_id, message_id, reason) VALUES (?, ?, ?, ?) IF NOT EXISTS`,
+			userID, chatID, messageID, reason).WithContext(ctx).SerialConsistency(gocql.LocalSerial).MapScanCAS(map[string]any{})
+		if err != nil {
+			return fmt.Errorf("hide message: %w", err)
+		}
+		if applied || reason == HiddenNotDelivered {
+			return nil // a row exists either way; not_delivered never replaces anything
+		}
+		// Hidden as not delivered so far: upgrade to deleted. When Unhide removed the row in between, the
+		// update does not apply and the insert is tried again.
+		applied, err = sess.Query(`UPDATE hidden_messages SET reason = ? WHERE user_id = ? AND chat_id = ? AND message_id = ? IF EXISTS`,
 			HiddenDeletedForMe, userID, chatID, messageID).WithContext(ctx).SerialConsistency(gocql.LocalSerial).MapScanCAS(map[string]any{})
+		if err != nil {
+			return fmt.Errorf("hide message: %w", err)
+		}
+		if applied {
+			return nil
+		}
 	}
-	if err != nil {
-		return fmt.Errorf("hide message: %w", err)
-	}
-	return nil
+	return errors.New("hide message: the row kept changing")
 }
+
+// hideAttempts bounds the insert/upgrade rounds of Hide against concurrent Unhide calls.
+const hideAttempts = 5
 
 func (r *Messages) Unhide(ctx context.Context, userID, chatID, messageID int64) error {
 	ctx, cancel, sess, err := r.session(ctx)
@@ -560,8 +573,12 @@ func (r *Messages) deleteChunkOf(ctx context.Context, sess *gocql.Session, chatI
 		return false, err
 	}
 	if len(ids) == 0 {
-		// The checkpoint: this bucket is done.
-		err := sess.Query(`DELETE FROM chat_buckets WHERE chat_id = ? AND bucket = ?`, chatID, b).WithContext(ctx).Idempotent(true).Exec()
+		// A partition tombstone first: an insert that wrote the bucket marker and is still on its way writes
+		// the message with its older creation time, which the tombstone shadows. Then the checkpoint.
+		err := sess.Query(`DELETE FROM messages WHERE chat_id = ? AND bucket = ?`, chatID, b).WithContext(ctx).Idempotent(true).Exec()
+		if err == nil {
+			err = sess.Query(`DELETE FROM chat_buckets WHERE chat_id = ? AND bucket = ?`, chatID, b).WithContext(ctx).Idempotent(true).Exec()
+		}
 		return err == nil, err
 	}
 	err := each(ctx, ids, func(ctx context.Context, id int64) error {
