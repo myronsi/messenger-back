@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -42,23 +43,18 @@ type Hit struct {
 	Highlight *string
 }
 
-// Access tells the searcher which chats a user is in and which messages they can see (messages.Service and
-// the social repository).
+// Access tells the searcher which chats a user is in (messages.Service and the social repository).
 type Access interface {
 	// ChatIDs are the chats the user is in.
 	ChatIDs(ctx context.Context, userID int64) ([]int64, error)
 	IsMember(ctx context.Context, chatID, userID int64) (bool, error)
-	// Visible: the message exists, is not deleted and not hidden for the user.
-	Visible(ctx context.Context, userID, chatID, messageID int64) (bool, error)
 }
 
 // Searcher answers searches.
 type Searcher struct {
 	ix     *Index
 	access Access
-	msgs   interface {
-		Get(ctx context.Context, chatID, messageID int64) (scylla.Message, error)
-	}
+	msgs   Messages
 }
 
 // NewSearcher returns the searcher.
@@ -70,8 +66,12 @@ func NewSearcher(ix *Index, access Access, msgs Messages) *Searcher {
 const (
 	MinQuery     = 2
 	MaxQuery     = 128
-	MaxLimit     = 50
-	DefaultLimit = 20
+	MaxLimit     = 100
+	DefaultLimit = 50
+	// maxChats bounds the chats one search covers (Elasticsearch's terms limit is 65 536).
+	maxChats = 60_000
+	// checkWorkers read the hits from the message store in parallel.
+	checkWorkers = 8
 )
 
 func invalid(msg string) error { return fmt.Errorf("%w: %s", ErrInvalid, msg) }
@@ -128,6 +128,9 @@ func (s *Searcher) Search(ctx context.Context, userID int64, q Query) ([]Hit, st
 		ids, err := s.access.ChatIDs(ctx, userID)
 		if err != nil {
 			return nil, "", fmt.Errorf("%w: %w", ErrUnavailable, err)
+		}
+		if len(ids) > maxChats {
+			ids = ids[len(ids)-maxChats:] // the most recently joined chats
 		}
 		for _, c := range ids {
 			chats = append(chats, id(c))
@@ -189,6 +192,10 @@ func (s *Searcher) Search(ctx context.Context, userID int64, q Query) ([]Hit, st
 		if errors.Is(err, elastic.ErrNotFound) {
 			return nil, "", nil // no index yet: nothing indexed
 		}
+		var se *elastic.StatusError
+		if errors.As(err, &se) && se.Status/100 == 4 {
+			return nil, "", err // our request was wrong: retrying cannot help (answered as 500)
+		}
 		return nil, "", fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
 	raw := res.Hits.Hits
@@ -197,27 +204,70 @@ func (s *Searcher) Search(ctx context.Context, userID int64, q Query) ([]Hit, st
 		raw = raw[:q.Limit]
 		next = cursor(raw[len(raw)-1].Sort)
 	}
-	out := make([]Hit, 0, len(raw))
-	for _, h := range raw {
+	// Every hit is read from the message store again (in parallel): only a message that exists, is not
+	// deleted and not hidden for the user is shown, with its current text.
+	found := make([]*Hit, len(raw))
+	var (
+		wg       sync.WaitGroup
+		mu       sync.Mutex
+		firstErr error
+	)
+	slots := make(chan struct{}, checkWorkers)
+	for i, h := range raw {
 		chatID, err1 := strconv.ParseInt(h.Source.ChatID, 10, 64)
 		msgID, err2 := strconv.ParseInt(h.ID, 10, 64)
 		if err1 != nil || err2 != nil {
 			continue
 		}
-		ok, err := s.access.Visible(ctx, userID, chatID, msgID)
-		if err != nil {
-			return nil, "", fmt.Errorf("%w: %w", ErrUnavailable, err)
+		wg.Go(func() {
+			slots <- struct{}{}
+			defer func() { <-slots }()
+			m, err := s.msgs.Get(ctx, chatID, msgID)
+			if errors.Is(err, scylla.ErrNotFound) || (err == nil && m.Deleted) {
+				return
+			}
+			var hidden bool
+			if err == nil {
+				hidden, err = s.msgs.Hidden(ctx, userID, chatID, msgID)
+			}
+			if err != nil {
+				mu.Lock()
+				firstErr = err
+				mu.Unlock()
+				return
+			}
+			if !hidden {
+				found[i] = &Hit{Message: m, Highlight: current(excerpt(h.Highlight), m)}
+			}
+		})
+	}
+	wg.Wait()
+	if firstErr != nil {
+		return nil, "", fmt.Errorf("%w: %w", ErrUnavailable, firstErr)
+	}
+	out := make([]Hit, 0, len(raw))
+	for _, h := range found {
+		if h != nil {
+			out = append(out, *h)
 		}
-		if !ok {
-			continue
-		}
-		m, err := s.msgs.Get(ctx, chatID, msgID)
-		if err != nil {
-			continue // deleted between the check and now
-		}
-		out = append(out, Hit{Message: m, Highlight: excerpt(h.Highlight)})
 	}
 	return out, next, nil
+}
+
+// current keeps an excerpt only if it still matches the message: an index that lags behind an edit must not
+// show the text the edit removed.
+func current(excerpt *string, m scylla.Message) *string {
+	if excerpt == nil {
+		return nil
+	}
+	plain := strings.NewReplacer(MarkStart, "", MarkEnd, "").Replace(*excerpt)
+	if m.Content != nil && strings.Contains(*m.Content, plain) {
+		return excerpt
+	}
+	if m.AttachmentID != nil {
+		return excerpt // a file name (not in the text); file messages cannot be edited
+	}
+	return nil
 }
 
 // errNotMember answers a search in a chat the user is not in like one in a chat that does not exist.

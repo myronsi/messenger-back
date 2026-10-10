@@ -44,6 +44,9 @@ func NewIndex(es ES, alias string, replicas int) *Index {
 // Alias is the name searches use.
 func (ix *Index) Alias() string { return ix.alias }
 
+// rebuildAlias stands for the index a rebuild is filling (and only while it runs).
+func (ix *Index) rebuildAlias() string { return ix.alias + "-rebuild" }
+
 // Markers wrap the highlighted words of a search hit: private-use characters, never HTML.
 const (
 	MarkStart = ""
@@ -147,10 +150,42 @@ func (ix *Index) Refresh(ctx context.Context) error {
 	return ix.es.Do(ctx, "POST", "/"+ix.alias+"/_refresh", nil, nil)
 }
 
-// Drop deletes the alias, its indices and the template (tests).
+// Lock puts the rebuild alias on the index, as a running rebuild does (tests).
+func (ix *Index) Lock(ctx context.Context, index string) error {
+	return ix.es.Do(ctx, "POST", "/_aliases", map[string]any{"actions": []map[string]any{
+		{"add": map[string]any{"index": index, "alias": ix.rebuildAlias()}},
+	}}, nil)
+}
+
+// Indices returns the indices of this alias's naming (<alias>-v*), whether behind the alias or not.
+func (ix *Index) Indices(ctx context.Context) ([]string, error) {
+	var rows []struct {
+		Index string `json:"index"`
+	}
+	err := ix.es.Do(ctx, "GET", "/_cat/indices/"+ix.alias+"-v*?format=json&h=index", nil, &rows)
+	if errors.Is(err, elastic.ErrNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, len(rows))
+	for i, r := range rows {
+		out[i] = r.Index
+	}
+	return out, nil
+}
+
+// Drop deletes the alias's indices (by name: Elasticsearch refuses wildcard deletes) and the template (tests).
 func (ix *Index) Drop(ctx context.Context) error {
-	if err := ix.es.Do(ctx, "DELETE", "/"+ix.alias+"-v*", nil, nil); err != nil && !errors.Is(err, elastic.ErrNotFound) {
+	names, err := ix.Indices(ctx)
+	if err != nil {
 		return err
+	}
+	if len(names) > 0 {
+		if err := ix.es.Do(ctx, "DELETE", "/"+strings.Join(names, ","), nil, nil); err != nil && !errors.Is(err, elastic.ErrNotFound) {
+			return err
+		}
 	}
 	if err := ix.es.Do(ctx, "DELETE", "/_index_template/"+ix.alias, nil, nil); err != nil && !errors.Is(err, elastic.ErrNotFound) {
 		return err

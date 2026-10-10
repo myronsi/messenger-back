@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -34,11 +35,12 @@ type Doc struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// Messages is what the indexer reads from the message store.
+// Messages is what the indexer and the searcher read from the message store.
 type Messages interface {
 	Get(ctx context.Context, chatID, messageID int64) (scylla.Message, error)
 	Page(ctx context.Context, q scylla.PageQuery) (scylla.Page, error)
 	DeletedForMe(ctx context.Context, chatID int64) (map[int64][]int64, error)
+	Hidden(ctx context.Context, userID, chatID, messageID int64) (bool, error)
 }
 
 // Attachments names the files of messages.
@@ -46,12 +48,28 @@ type Attachments interface {
 	Get(ctx context.Context, id uuid.UUID) (postgres.Attachment, error)
 }
 
+// eventTimeout bounds the Elasticsearch work of one event, so a hung connection cannot stall the consumer.
+const eventTimeout = 30 * time.Second
+
+// rebuildCheck is how long an indexer trusts its knowledge of whether a rebuild runs; a rebuild waits
+// rebuildSettle (longer) before it copies, so every indexer writes to the new index too by then.
+const (
+	rebuildCheck  = 10 * time.Second
+	rebuildSettle = 15 * time.Second
+)
+
 // Indexer keeps the index in step with the messages.
 type Indexer struct {
 	ix    *Index
 	msgs  Messages
 	files Attachments
 	log   *slog.Logger
+
+	mu        sync.Mutex
+	rebuild   bool // the rebuild alias exists: writes go there too
+	checkedAt time.Time
+	// settle is rebuildSettle, shorter in tests.
+	settle time.Duration
 }
 
 // NewIndexer returns the indexer.
@@ -59,7 +77,13 @@ func NewIndexer(ix *Index, msgs Messages, files Attachments, log *slog.Logger) *
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
-	return &Indexer{ix: ix, msgs: msgs, files: files, log: log}
+	return &Indexer{ix: ix, msgs: msgs, files: files, log: log, settle: rebuildSettle}
+}
+
+// WithSettle changes how long a rebuild waits for the other indexers to notice it (tests, or a single worker).
+func (in *Indexer) WithSettle(d time.Duration) *Indexer {
+	in.settle = d
+	return in
 }
 
 func id(n int64) string { return strconv.FormatInt(n, 10) }
@@ -86,6 +110,28 @@ func (in *Indexer) doc(ctx context.Context, m scylla.Message) Doc {
 	return d
 }
 
+// targets are the aliases an event is written through: the live one and, while a rebuild runs, the new index.
+func (in *Indexer) targets(ctx context.Context) []string {
+	in.mu.Lock()
+	fresh := time.Since(in.checkedAt) < rebuildCheck
+	rebuilding := in.rebuild
+	in.mu.Unlock()
+	if !fresh {
+		var out map[string]json.RawMessage
+		err := in.ix.es.Do(ctx, "GET", "/_alias/"+in.ix.rebuildAlias(), nil, &out)
+		rebuilding = err == nil && len(out) > 0
+		if err == nil || errors.Is(err, elastic.ErrNotFound) {
+			in.mu.Lock()
+			in.rebuild, in.checkedAt = rebuilding, time.Now()
+			in.mu.Unlock()
+		}
+	}
+	if rebuilding {
+		return []string{in.ix.alias, in.ix.rebuildAlias()}
+	}
+	return []string{in.ix.alias}
+}
+
 // Handle is the consumer's handler for events:messages and events:chats.
 func (in *Indexer) Handle(ctx context.Context, entry redis.Entry) error {
 	e, err := events.Parse(entry.Fields)
@@ -93,77 +139,112 @@ func (in *Indexer) Handle(ctx context.Context, entry redis.Entry) error {
 		in.log.WarnContext(ctx, "skipping malformed event", "entry", entry.ID)
 		return nil
 	}
-	switch e.Type {
-	case events.MessageCreated, events.MessageEdited:
-		return in.refresh(ctx, e.ChatID, e.MessageID)
-	case events.MessageDeleted:
-		return in.delete(ctx, e.MessageID)
-	case events.MessageHidden:
-		return in.hide(ctx, e.MessageID, e.UserID)
-	case events.ChatDeleted:
-		return in.dropChat(ctx, e.ChatID)
+	ctx, cancel := context.WithTimeout(ctx, eventTimeout)
+	defer cancel()
+	for _, target := range in.targets(ctx) {
+		var err error
+		switch e.Type {
+		case events.MessageCreated, events.MessageEdited:
+			err = in.refresh(ctx, target, e.ChatID, e.MessageID)
+		case events.MessageDeleted:
+			err = in.delete(ctx, target, e.MessageID)
+		case events.MessageHidden:
+			err = in.hide(ctx, target, e.MessageID, e.UserID)
+		case events.ChatDeleted:
+			err = in.dropChat(ctx, target, e.ChatID)
+		}
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
+// Writes go through aliases with require_alias, so a missing alias is an error instead of an index that
+// Elasticsearch creates on its own with a guessed mapping.
+
 // refresh writes the message's current state. The text and file are replaced; hidden_for is kept, so an
 // edit does not bring a message back for users who deleted it for themselves.
-func (in *Indexer) refresh(ctx context.Context, chatID, messageID int64) error {
+func (in *Indexer) refresh(ctx context.Context, target string, chatID, messageID int64) error {
 	m, err := in.msgs.Get(ctx, chatID, messageID)
 	if errors.Is(err, scylla.ErrNotFound) {
-		return in.delete(ctx, messageID) // gone (the chat was deleted meanwhile)
+		return in.delete(ctx, target, messageID) // gone (the chat was deleted meanwhile)
 	}
 	if err != nil {
 		return err
 	}
 	if !indexable(m) {
-		return in.delete(ctx, messageID)
+		return in.delete(ctx, target, messageID)
 	}
 	d := in.doc(ctx, m)
-	return in.ix.es.Do(ctx, "POST", "/"+in.ix.alias+"/_update/"+d.MessageID+"?retry_on_conflict=3",
+	return in.ix.es.Do(ctx, "POST", "/"+target+"/_update/"+d.MessageID+"?retry_on_conflict=3&require_alias=true",
 		map[string]any{"doc": d, "doc_as_upsert": true}, nil)
 }
 
-func (in *Indexer) delete(ctx context.Context, messageID int64) error {
-	err := in.ix.es.Do(ctx, "DELETE", "/"+in.ix.alias+"/_doc/"+id(messageID), nil, nil)
+func (in *Indexer) delete(ctx context.Context, target string, messageID int64) error {
+	err := in.ix.es.Do(ctx, "DELETE", "/"+target+"/_doc/"+id(messageID), nil, nil)
 	if errors.Is(err, elastic.ErrNotFound) {
 		return nil
 	}
 	return err
 }
 
+// hideScript adds params.u to hidden_for.
+const hideScript = "if (ctx._source.hidden_for == null) { ctx._source.hidden_for = [params.u] } else if (!ctx._source.hidden_for.contains(params.u)) { ctx._source.hidden_for.add(params.u) }"
+
 // hide adds the user to the message's hidden_for. When the document does not exist yet (its created event is
-// still to come), a stub with only hidden_for is written, which the created event then fills.
-func (in *Indexer) hide(ctx context.Context, messageID, userID int64) error {
+// still to come), a stub with only hidden_for is written, which the created event then fills; a stub has no
+// chat_id, so no search ever matches it.
+func (in *Indexer) hide(ctx context.Context, target string, messageID, userID int64) error {
 	if userID == 0 {
 		return nil
 	}
 	u := id(userID)
-	return in.ix.es.Do(ctx, "POST", "/"+in.ix.alias+"/_update/"+id(messageID)+"?retry_on_conflict=3", map[string]any{
-		"script": map[string]any{
-			"lang":   "painless",
-			"source": "if (ctx._source.hidden_for == null) { ctx._source.hidden_for = [params.u] } else if (!ctx._source.hidden_for.contains(params.u)) { ctx._source.hidden_for.add(params.u) }",
-			"params": map[string]any{"u": u},
-		},
+	return in.ix.es.Do(ctx, "POST", "/"+target+"/_update/"+id(messageID)+"?retry_on_conflict=3&require_alias=true", map[string]any{
+		"script": map[string]any{"lang": "painless", "source": hideScript, "params": map[string]any{"u": u}},
 		"upsert": map[string]any{"message_id": id(messageID), "hidden_for": []string{u}},
 	}, nil)
 }
 
-func (in *Indexer) dropChat(ctx context.Context, chatID int64) error {
-	return in.ix.es.Do(ctx, "POST", "/"+in.ix.alias+"/_delete_by_query?conflicts=proceed&refresh=false",
+func (in *Indexer) dropChat(ctx context.Context, target string, chatID int64) error {
+	err := in.ix.es.Do(ctx, "POST", "/"+target+"/_delete_by_query?conflicts=proceed&refresh=false",
 		map[string]any{"query": map[string]any{"term": map[string]any{"chat_id": id(chatID)}}}, nil)
+	if errors.Is(err, elastic.ErrNotFound) {
+		return nil
+	}
+	return err
 }
 
-// bulk writes documents (index) and removes ids (delete) into the named index in one request.
+// mergeScript writes a document from the message store but keeps the users already in hidden_for: a hide
+// that the stream applied a moment before the copy must not be undone by the copy's older snapshot.
+const mergeScript = "def h = ctx._source.hidden_for; ctx._source.putAll(params.d); if (h != null) { for (def u : h) { if (!ctx._source.hidden_for.contains(u)) { ctx._source.hidden_for.add(u) } } }"
+
+// bulk merges documents and removes ids in the named index (or alias) in one request.
 func (in *Indexer) bulk(ctx context.Context, index string, docs []Doc, deletes []string) error {
 	if len(docs) == 0 && len(deletes) == 0 {
 		return nil
 	}
+	viaAlias := index == in.ix.alias || index == in.ix.rebuildAlias()
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	for _, d := range docs {
-		_ = enc.Encode(map[string]any{"index": map[string]any{"_index": index, "_id": d.MessageID}})
-		_ = enc.Encode(d)
+		meta := map[string]any{"_index": index, "_id": d.MessageID, "retry_on_conflict": 3}
+		if viaAlias {
+			meta["require_alias"] = true
+		}
+		hidden := d.HiddenFor
+		if hidden == nil {
+			hidden = []string{}
+		}
+		params := map[string]any{
+			"message_id": d.MessageID, "chat_id": d.ChatID, "sender_id": d.SenderID, "type": d.Type,
+			"content": d.Content, "file_name": d.FileName, "hidden_for": hidden, "created_at": d.CreatedAt,
+		}
+		_ = enc.Encode(map[string]any{"update": meta})
+		_ = enc.Encode(map[string]any{
+			"script": map[string]any{"lang": "painless", "source": mergeScript, "params": map[string]any{"d": params}},
+			"upsert": params,
+		})
 	}
 	for _, del := range deletes {
 		_ = enc.Encode(map[string]any{"delete": map[string]any{"_index": index, "_id": del}})

@@ -1127,6 +1127,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
   /chats/{chat_id}/media:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"

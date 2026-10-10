@@ -2,6 +2,7 @@ package search_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strconv"
 	"strings"
@@ -76,7 +77,7 @@ func newEnv(t *testing.T) *env {
 	if err := ix.Ensure(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	in := search.NewIndexer(ix, repo, pg.Attachments(), nil)
+	in := search.NewIndexer(ix, repo, pg.Attachments(), nil).WithSettle(0)
 	gen, _ := ids.NewGenerator(3)
 	svc := messages.New(messages.Deps{
 		Messages: repo, Store: pg, Members: redis.NewMembers(rd.Client(), prefix, time.Minute), Unread: redis.NewUnread(rd.Client(), prefix),
@@ -237,5 +238,22 @@ func TestSearchPagesAndRebuild(t *testing.T) {
 	}
 	if _, _, err := e.searcher.Search(ctx, alice, search.Query{Text: "x"}); err == nil {
 		t.Fatal("one-character query accepted")
+	}
+	// Writes after the switch land in the new index.
+	if _, err := e.svc.Edit(ctx, alice, ab, sent[1].ID, "summary two"); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.find(alice, search.Query{Text: "summary"}); len(got) != 1 {
+		t.Fatalf("edit after the rebuild: %v", contents(got))
+	}
+	// One rebuild at a time: the rebuild alias is the lock, and a failed start leaves no index behind.
+	if err := e.ix.Lock(ctx, name); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.in.Rebuild(ctx, e.pg.Chats()); !errors.Is(err, search.ErrRebuilding) {
+		t.Fatalf("second rebuild: %v", err)
+	}
+	if names, _ := e.ix.Indices(ctx); len(names) != 1 {
+		t.Fatalf("indices: %v", names)
 	}
 }

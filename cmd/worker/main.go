@@ -90,7 +90,6 @@ func run() error {
 	wg.Go(func() { collectUploads(bg, log, mediaSvc, maintenanceEvery) })
 	// Elasticsearch being away must not stop the other consumers: the template and first index are set up as
 	// soon as it answers, and index writes fail (and are retried) until then.
-	wg.Go(func() { ensureIndex(bg, log, index) })
 	if cfg.Search.ReconcileEvery > 0 {
 		wg.Go(func() {
 			reconcileSearch(bg, log, indexer, pg.Chats(), cfg.Search.ReconcileEvery, cfg.Search.ReconcileWindow)
@@ -98,15 +97,7 @@ func run() error {
 	}
 
 	instance := app.InstanceID(cfg.Realtime.InstanceID)
-	consumers := []redis.ConsumerOptions{{
-		Stream: redis.StreamChats, Group: jobs.GroupChatCleanup,
-		Handler: jobs.ChatCleanup(msgs, redis.NewUnread(rd.Client(), ""), pg.Chats(), scylla.DeleteGracePeriod, log),
-	}, {
-		Stream: redis.StreamMessages, Group: search.Group, Handler: indexer.Handle,
-	}, {
-		Stream: redis.StreamChats, Group: search.Group, Handler: indexer.Handle,
-	}}
-	for _, o := range consumers {
+	start := func(o redis.ConsumerOptions) error {
 		group := o.Group
 		o.Name, o.Log = instance, log
 		o.OnResult = func(ok, dead bool) { p.Metrics.EventHandled(group, ok, dead) }
@@ -116,7 +107,26 @@ func run() error {
 		}
 		wg.Go(func() { c.Run(bg) })
 		log.Info("consumer started", "stream", o.Stream, "group", group)
+		return nil
 	}
+	if err := start(redis.ConsumerOptions{
+		Stream: redis.StreamChats, Group: jobs.GroupChatCleanup,
+		Handler: jobs.ChatCleanup(msgs, redis.NewUnread(rd.Client(), ""), pg.Chats(), scylla.DeleteGracePeriod, log),
+	}); err != nil {
+		return err
+	}
+	// The search consumers start once the index exists: writes before that would fail (they require the alias)
+	// and burn their retries. While Elasticsearch is away the entries wait in the streams.
+	wg.Go(func() {
+		if !ensureIndex(bg, log, index) {
+			return
+		}
+		for _, stream := range []string{redis.StreamMessages, redis.StreamChats} {
+			if err := start(redis.ConsumerOptions{Stream: stream, Group: search.Group, Handler: indexer.Handle}); err != nil {
+				log.Error("search consumer", "error", err)
+			}
+		}
+	})
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {

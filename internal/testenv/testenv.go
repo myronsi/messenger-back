@@ -121,7 +121,15 @@ func Elastic(t testing.TB) (*elastic.Store, string) {
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		_ = s.Do(ctx, "DELETE", "/"+alias+"-v*", nil, nil)
+		// By name: Elasticsearch refuses wildcard deletes.
+		var rows []struct {
+			Index string `json:"index"`
+		}
+		if s.Do(ctx, "GET", "/_cat/indices/"+alias+"-v*?format=json&h=index", nil, &rows) == nil {
+			for _, r := range rows {
+				_ = s.Do(ctx, "DELETE", "/"+r.Index, nil, nil)
+			}
+		}
 		_ = s.Do(ctx, "DELETE", "/_index_template/"+alias, nil, nil)
 		s.Close()
 	})

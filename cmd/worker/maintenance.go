@@ -95,12 +95,12 @@ func reconcileSearch(ctx context.Context, log *slog.Logger, in *search.Indexer, 
 	}
 }
 
-// ensureIndex sets up the search index, retrying until Elasticsearch answers.
-func ensureIndex(ctx context.Context, log *slog.Logger, ix *search.Index) {
+// ensureIndex sets up the search index, retrying until Elasticsearch answers; false when ctx ended first.
+func ensureIndex(ctx context.Context, log *slog.Logger, ix *search.Index) bool {
 	for wait := time.Second; ctx.Err() == nil; wait = min(2*wait, time.Minute) {
 		err := ix.Ensure(ctx)
 		if err == nil {
-			return
+			return true
 		}
 		log.WarnContext(ctx, "search index not ready", "err", err)
 		select {
@@ -108,4 +108,5 @@ func ensureIndex(ctx context.Context, log *slog.Logger, ix *search.Index) {
 		case <-time.After(wait):
 		}
 	}
+	return false
 }

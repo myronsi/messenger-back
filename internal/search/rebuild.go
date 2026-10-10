@@ -2,10 +2,13 @@ package search
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
 
+	"github.com/myronsi/messenger-back/internal/store/elastic"
 	"github.com/myronsi/messenger-back/internal/store/scylla"
 )
 
@@ -81,8 +84,10 @@ func walk(ctx context.Context, chats Chats, since *time.Time, fn func(chatID int
 	}
 }
 
-// Reconcile rewrites the messages of every chat with activity in the window, so what the stream missed
-// (Redis was briefly away, entries trimmed before they were indexed) is repaired.
+// Reconcile writes the messages created in the window again, for every chat with activity in it, so messages
+// whose created event the stream lost (Redis away for a moment, entries trimmed before they were indexed) are
+// found. Edits, deletions and hides of older messages that the stream lost are not repaired here: the store is
+// checked for every hit anyway, so they can only make a result page shorter, and a rebuild repairs them.
 func (in *Indexer) Reconcile(ctx context.Context, chats Chats, window time.Duration) error {
 	since := time.Now().Add(-window)
 	return walk(ctx, chats, &since, func(chatID int64) error {
@@ -90,35 +95,64 @@ func (in *Indexer) Reconcile(ctx context.Context, chats Chats, window time.Durat
 	})
 }
 
-// Rebuild builds a new index from the message store and switches the alias to it without downtime: searches
-// use the old index until the new one is complete. Writes that went to the old index meanwhile are caught up
-// from the message store before the switch, the rest by the next reconciliation.
+// ErrRebuilding: another rebuild runs (its alias exists).
+var ErrRebuilding = errors.New("search: a rebuild is running")
+
+// Rebuild builds a new index from the message store and switches the alias to it without downtime: searches use
+// the old index until the new one is complete.
+//
+// While it runs, the new index also stands behind the rebuild alias, which every indexer writes to as well (they
+// notice within rebuildCheck; the copy starts after rebuildSettle), so edits, deletions and hides during the
+// rebuild reach the new index too. The copy merges hidden_for instead of replacing it. The rebuild alias is also
+// the lock: a second rebuild refuses to start while it exists.
 func (in *Indexer) Rebuild(ctx context.Context, chats Chats) (string, error) {
 	ix := in.ix
+	var existing map[string]json.RawMessage
+	if err := ix.es.Do(ctx, "GET", "/_alias/"+ix.rebuildAlias(), nil, &existing); err == nil && len(existing) > 0 {
+		return "", ErrRebuilding
+	} else if err != nil && !errors.Is(err, elastic.ErrNotFound) {
+		return "", err
+	}
 	old, err := ix.Current(ctx)
 	if err != nil {
 		return "", err
 	}
 	name := ix.next(old)
-	if err := ix.es.Do(ctx, "PUT", "/"+name, map[string]any{}, nil); err != nil {
+	err = ix.es.Do(ctx, "PUT", "/"+name, map[string]any{"aliases": map[string]any{ix.rebuildAlias(): map[string]any{}}}, nil)
+	if err != nil {
 		return "", fmt.Errorf("new search index: %w", err)
 	}
-	started := time.Now()
+	ok := false
+	defer func() {
+		if !ok { // leave nothing behind: the next rebuild starts over
+			_ = ix.es.Do(context.WithoutCancel(ctx), "DELETE", "/"+name, nil, nil)
+		}
+	}()
+	in.mu.Lock()
+	in.rebuild, in.checkedAt = true, time.Now()
+	in.mu.Unlock()
+	select {
+	case <-ctx.Done():
+		return "", ctx.Err()
+	case <-time.After(in.settle):
+	}
 	if err := walk(ctx, chats, nil, func(chatID int64) error { return in.indexChat(ctx, name, chatID, time.Time{}) }); err != nil {
 		return "", err
 	}
-	// Catch up with the messages of the rebuild's own run, then switch.
-	since := started.Add(-time.Minute)
-	if err := walk(ctx, chats, &since, func(chatID int64) error { return in.indexChat(ctx, name, chatID, since) }); err != nil {
-		return "", err
+	actions := []map[string]any{
+		{"add": map[string]any{"index": name, "alias": ix.alias, "is_write_index": true}},
+		{"remove": map[string]any{"index": name, "alias": ix.rebuildAlias()}},
 	}
-	actions := []map[string]any{{"add": map[string]any{"index": name, "alias": ix.alias, "is_write_index": true}}}
 	if old != "" {
 		actions = append([]map[string]any{{"remove": map[string]any{"index": old, "alias": ix.alias}}}, actions...)
 	}
 	if err := ix.es.Do(ctx, "POST", "/_aliases", map[string]any{"actions": actions}, nil); err != nil {
 		return "", fmt.Errorf("switch search alias: %w", err)
 	}
+	ok = true
+	in.mu.Lock()
+	in.rebuild, in.checkedAt = false, time.Now()
+	in.mu.Unlock()
 	if old != "" {
 		if err := ix.es.Do(ctx, "DELETE", "/"+old, nil, nil); err != nil {
 			in.log.WarnContext(ctx, "delete the previous search index", "index", old, "error", err)
