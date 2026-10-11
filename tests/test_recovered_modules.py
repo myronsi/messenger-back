@@ -388,4 +388,5 @@ class VersionTests(unittest.TestCase):
     def test_version_is_semver_baseline(self):
         from server.version import __version__
 
-        self.assertRegex(__version__, r"^\d+\.\d+\.\d+$")
+        # SemVer, pre-releases included (1.0.0-alpha.1 is the first Go backend release).
+        self.assertRegex(__version__, r"^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$")
