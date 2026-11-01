@@ -2,6 +2,7 @@ package auth
 
 import (
 	"bytes"
+	"encoding/base64"
 	"strings"
 	"testing"
 )
@@ -33,7 +34,13 @@ func TestSealer(t *testing.T) {
 	if again == sealed {
 		t.Fatal("the nonce is reused")
 	}
-	for _, bad := range []string{"", "v1:", "v1:!!!", "v2:abcd", sealed[:len(sealed)-2] + "AA", "plain"} {
+	raw, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(sealed, sealedPrefix))
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw[len(raw)-1] ^= 1
+	corrupted := sealedPrefix + base64.RawURLEncoding.EncodeToString(raw)
+	for _, bad := range []string{"", "v1:", "v1:!!!", "v2:abcd", corrupted, "plain"} {
 		if _, err := s.Open(bad, "totp:1"); err == nil {
 			t.Errorf("%q opened", bad)
 		}
