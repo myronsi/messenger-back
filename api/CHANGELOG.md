@@ -2,6 +2,13 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.1
+
+- Registration returns a one-time recovery_key. GET /me adds recovery_setup_required.
+- Adds GET/POST /me/recovery-key, POST /auth/recover/key and GET /me/security-events.
+- Adds the security_notice WebSocket event for a recovery password reset.
+- Recovery requires 2FA when enabled, rotates its key and sessions, and delays recovery-method changes for 24 hours. Legacy Shamir recovery remains unavailable.
+
 ## 2.0.0-alpha.8
 
 Found by validating every response of the backend's HTTP tests against this contract:
