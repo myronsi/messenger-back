@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.1.0-alpha.1...v1.2.0-alpha.1) (2026-11-01)
+
+
+### Features
+
+* **notifications:** add durable message alerts and web push ([#136](https://github.com/myronsi/messenger-back/issues/136)) ([d543f41](https://github.com/myronsi/messenger-back/commit/d543f4179ef384a25e1e83d1874cd2a040f4f35d))
+
+
+### Performance Improvements
+
+* **ci:** parallelize backend setup and reuse release images ([#134](https://github.com/myronsi/messenger-back/issues/134)) ([4349dab](https://github.com/myronsi/messenger-back/commit/4349dab7fde1672a7eec8461c2a9d151b5d502cf))
+
 ## [1.1.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.0.0-alpha.1...v1.1.0-alpha.1) (2026-11-01)
 
 
