@@ -40,7 +40,7 @@ func normalizeRecoveryKey(key string) (string, bool) {
 		return "", false
 	}
 	for _, c := range key {
-		if !(c >= 'A' && c <= 'Z' || c >= '2' && c <= '7') {
+		if (c < 'A' || c > 'Z') && (c < '2' || c > '7') {
 			return "", false
 		}
 	}

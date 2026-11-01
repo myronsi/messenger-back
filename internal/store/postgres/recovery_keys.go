@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
 	"github.com/myronsi/messenger-back/internal/store/postgres/sqlcdb"
 )
 
