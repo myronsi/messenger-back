@@ -8,7 +8,10 @@ name: messenger-go
 x-app: &app
   image: ${BACKEND_IMAGE:-unset}
   # The whole .env: the backend's settings are documented in .env.example and docs/go-backend.md.
-  env_file: [.env]
+  env_file:
+    - .env
+    - path: .env.notifications
+      required: false
   restart: unless-stopped
   # The image has no shell for a healthcheck; deploy.sh checks /readyz and /healthz from the host.
 

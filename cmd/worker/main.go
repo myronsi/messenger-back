@@ -15,6 +15,7 @@ import (
 	"github.com/myronsi/messenger-back/internal/app"
 	"github.com/myronsi/messenger-back/internal/jobs"
 	"github.com/myronsi/messenger-back/internal/media"
+	"github.com/myronsi/messenger-back/internal/notifications"
 	"github.com/myronsi/messenger-back/internal/search"
 	"github.com/myronsi/messenger-back/internal/store/elastic"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
@@ -82,6 +83,13 @@ func run() error {
 		wg.Wait()
 	}()
 	wg.Go(func() { maintain(bg, log, pg, maintenanceEvery) })
+	pushSender, err := notifications.NewSender(cfg.Notifications)
+	if err != nil {
+		return err
+	}
+	pushWorker := &notifications.Worker{Queue: pg.Notifications(), Chats: pg.Chats(), Social: pg.Social(), Users: pg.Users(), Messages: msgs, Sender: pushSender, Log: log}
+	pushWorker.OnResult = p.Metrics.Notification
+	wg.Go(func() { pushWorker.Run(bg) })
 	storage, _, err := media.StorageFrom(cfg.Media)
 	if err != nil {
 		return err

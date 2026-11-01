@@ -63,10 +63,11 @@ type Config struct {
 	Search           Search
 	ElasticsearchURL Secret `env:"ELASTICSEARCH_URL,required,notEmpty"`
 
-	Auth     Auth
-	Realtime Realtime
-	Media    Media
-	Tracing  Tracing
+	Auth          Auth
+	Realtime      Realtime
+	Media         Media
+	Tracing       Tracing
+	Notifications Notifications
 
 	// WorkerAddr is where the worker serves /healthz and /metrics.
 	WorkerAddr string `env:"WORKER_ADDR" envDefault:":8081"`
@@ -353,6 +354,7 @@ func (c Config) Validate() error {
 		add("MEMBERS_CACHE_TTL must be positive")
 	}
 	problems = append(problems, c.Realtime.validate()...)
+	problems = append(problems, c.Notifications.validate()...)
 	problems = append(problems, c.Media.validate()...)
 	switch c.Scylla.Consistency {
 	case "local_quorum", "quorum", "one", "local_one":

@@ -16,6 +16,9 @@ x-go-app: &go-app
       COMMIT: ${COMMIT:-dev}
   image: messenger-go:dev
   restart: unless-stopped
+  env_file:
+    - path: .env.notifications
+      required: false
   environment:
     APP_ENV: development
     COOKIE_SECURE: "false"

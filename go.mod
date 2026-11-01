@@ -3,6 +3,7 @@ module github.com/myronsi/messenger-back
 go 1.27.3
 
 require (
+	github.com/SherClockHolmes/webpush-go v1.4.0
 	github.com/caarlos0/env/v11 v11.4.1
 	github.com/coder/websocket v1.8.15
 	github.com/gocql/gocql v1.7.0

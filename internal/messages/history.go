@@ -210,6 +210,9 @@ func (s *Service) Forward(ctx context.Context, userID, messageID int64, chatIDs 
 				return out, fmt.Errorf("%w: %w", ErrUnavailable, err)
 			}
 		}
+		if err := s.queueNotification(ctx, m, t.members); err != nil {
+			return out, fmt.Errorf("%w: %w", ErrUnavailable, err)
+		}
 		if err := s.d.Messages.Insert(ctx, m); err != nil {
 			return out, fmt.Errorf("%w: %w", ErrUnavailable, err)
 		}

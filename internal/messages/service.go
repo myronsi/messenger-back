@@ -91,6 +91,8 @@ type Deps struct {
 	Notifier Notifier
 	// Events records the changes for the worker (search indexing, cleanup). Optional.
 	Events EventLog
+	// QueueNotification commits intent before the message write; nil disables background delivery.
+	QueueNotification func(context.Context, int64, int64, []int64) error
 	// Accepted is called for every new message (the messages-per-second metric). Optional.
 	Accepted func()
 	Log      *slog.Logger
@@ -317,6 +319,10 @@ func (s *Service) Send(ctx context.Context, r SendRequest) (Sent, error) {
 			}
 			return Sent{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 		}
+	}
+	if err := s.queueNotification(ctx, m, members); err != nil {
+		_ = s.d.Dedup.Release(context.WithoutCancel(ctx), r.SenderID, r.ChatID, r.ClientTempID, id)
+		return Sent{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
 	if err := s.d.Messages.Insert(ctx, m); err != nil {
 		if rerr := s.d.Dedup.Release(context.WithoutCancel(ctx), r.SenderID, r.ChatID, r.ClientTempID, id); rerr != nil {

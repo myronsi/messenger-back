@@ -100,6 +100,7 @@ func newFixture(t *testing.T) *fixture {
 	svc := messages.New(messages.Deps{
 		Messages: repo, Store: pg, Members: redis.NewMembers(rd.Client(), prefix, time.Minute), Unread: unread,
 		Dedup: redis.NewDedup(rd.Client(), prefix, 0), IDs: gen, Notifier: rec, Events: log,
+		QueueNotification: pg.Notifications().Enqueue,
 	})
 	return &fixture{t: t, pg: pg, svc: svc, unread: unread, rec: rec, events: log}
 }

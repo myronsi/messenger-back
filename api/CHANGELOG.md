@@ -2,6 +2,11 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.2
+
+- Adds notification preferences, session-bound push device registration and per-tab activity leases.
+- Adds chat notification mutes for one hour, eight hours, indefinitely, or until unmuted.
+
 ## 2.1.0-alpha.1
 
 - Registration returns a one-time recovery_key. GET /me adds recovery_setup_required.
