@@ -268,3 +268,16 @@ func (Unimplemented) SetContactName(w http.ResponseWriter, r *http.Request, user
 func (Unimplemented) CreateWebSocketTicket(w http.ResponseWriter, r *http.Request, params CreateWebSocketTicketParams) {
 	notImplemented(w, r)
 }
+
+func (Unimplemented) GetRecoveryKey(w http.ResponseWriter, r *http.Request, _ GetRecoveryKeyParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) ReplaceRecoveryKey(w http.ResponseWriter, r *http.Request, _ ReplaceRecoveryKeyParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) RecoverWithKey(w http.ResponseWriter, r *http.Request, _ RecoverWithKeyParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) ListSecurityEvents(w http.ResponseWriter, r *http.Request, _ ListSecurityEventsParams) {
+	notImplemented(w, r)
+}

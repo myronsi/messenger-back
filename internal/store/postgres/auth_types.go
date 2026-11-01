@@ -30,11 +30,12 @@ func (s Session) Active(now time.Time) bool {
 
 // NewSession describes a session to create. RefreshTokenHash is the SHA-256 (hex) of the refresh token.
 type NewSession struct {
-	UserID           int64
-	RefreshTokenHash string
-	UserAgent        *string
-	IP               *netip.Addr
-	ExpiresAt        time.Time
+	PasswordFingerprint string
+	UserID              int64
+	RefreshTokenHash    string
+	UserAgent           *string
+	IP                  *netip.Addr
+	ExpiresAt           time.Time
 }
 
 // RotateOutcome is the result of presenting a refresh token.

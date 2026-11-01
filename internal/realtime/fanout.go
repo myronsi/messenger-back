@@ -68,6 +68,11 @@ type Fanout struct {
 
 var _ messages.Notifier = (*Fanout)(nil)
 
+// SecurityNotice alerts connected devices before the reset closes their sessions.
+func (f *Fanout) SecurityNotice(ctx context.Context, userID int64) {
+	f.same(ctx, "security_notice", 0, map[string]string{"type": "password_reset"}, []int64{userID})
+}
+
 // FanoutDeps are the collaborators of the fan-out.
 type FanoutDeps struct {
 	Bus       Publisher

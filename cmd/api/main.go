@@ -82,6 +82,11 @@ func run() error {
 		HashConcurrency:   cfg.Auth.PasswordHashConcurrency,
 		// Revoked sessions lose their WebSockets on every instance.
 		OnRevoked: func(ctx context.Context, sessions []uuid.UUID) { rt.closeSessions(ctx, sessions) },
+		OnRecovery: func(ctx context.Context, userID int64) {
+			if rt.fanout != nil {
+				rt.fanout.SecurityNotice(ctx, userID)
+			}
+		},
 	}, log)
 	if err != nil {
 		return err

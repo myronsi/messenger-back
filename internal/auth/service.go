@@ -28,6 +28,7 @@ type Store interface {
 	Sessions() postgres.SessionRepository
 	SecuritySettings() postgres.SecuritySettingsRepository
 	RecoveryTokens() postgres.RecoveryTokenRepository
+	RecoveryKeys() postgres.RecoveryKeyRepository
 	SecurityEvents() postgres.SecurityEventRepository
 }
 
@@ -49,7 +50,8 @@ type Config struct {
 	Namespace string
 	// OnRevoked is told about every revoked session, so open WebSockets of those sessions can be closed.
 	// Optional; it must not block.
-	OnRevoked func(ctx context.Context, sessionIDs []uuid.UUID)
+	OnRevoked  func(ctx context.Context, sessionIDs []uuid.UUID)
+	OnRecovery func(ctx context.Context, userID int64)
 }
 
 // Client describes who is calling, for rate limits and the security log.
@@ -139,6 +141,7 @@ type Principal struct {
 
 // Tokens is what a successful sign-in hands to the client.
 type TokenSet struct {
+	RecoveryKey      string
 	AccessToken      string
 	AccessExpiresAt  time.Time
 	RefreshToken     string
@@ -197,8 +200,9 @@ type Service struct {
 	grace   time.Duration
 	now     func() time.Time
 	// onRevoked is Config.OnRevoked.
-	onRevoked func(ctx context.Context, sessionIDs []uuid.UUID)
-	dummy     func() (string, error)
+	onRevoked  func(ctx context.Context, sessionIDs []uuid.UUID)
+	onRecovery func(ctx context.Context, userID int64)
+	dummy      func() (string, error)
 }
 
 // NewService wires the service.
@@ -244,7 +248,8 @@ func NewService(store Store, rdb Redis, cfg Config, log *slog.Logger) (*Service,
 		grace:   cfg.RefreshReuseGrace,
 		now:     time.Now,
 
-		onRevoked: cfg.OnRevoked,
+		onRevoked:  cfg.OnRevoked,
+		onRecovery: cfg.OnRecovery,
 	}
 	s.dummy = sync.OnceValues(func() (string, error) { return s.hasher.dummyHash(context.Background()) })
 	return s, nil
@@ -409,7 +414,7 @@ func (s *Service) accessToken(sessionID uuid.UUID, userID int64) (string, time.T
 }
 
 // startSession creates a session and the first token pair.
-func (s *Service) startSession(ctx context.Context, u postgres.User, c Client) (*TokenSet, error) {
+func (s *Service) startSession(ctx context.Context, u postgres.User, c Client, fingerprint ...string) (*TokenSet, error) {
 	settings, err := s.store.SecuritySettings().Get(ctx, u.ID)
 	if err != nil {
 		return nil, err
@@ -418,10 +423,17 @@ func (s *Service) startSession(ctx context.Context, u postgres.User, c Client) (
 	if err != nil {
 		return nil, err
 	}
+	proof := ""
+	if len(fingerprint) > 0 {
+		proof = fingerprint[0]
+	}
 	sess, err := s.store.Sessions().Create(ctx, postgres.NewSession{
-		UserID: u.ID, RefreshTokenHash: hash, UserAgent: c.agentPtr(), IP: c.ipPtr(),
+		PasswordFingerprint: proof, UserID: u.ID, RefreshTokenHash: hash, UserAgent: c.agentPtr(), IP: c.ipPtr(),
 		ExpiresAt: s.now().Add(time.Duration(settings.SessionDurationDays) * 24 * time.Hour),
 	})
+	if errors.Is(err, postgres.ErrConflict) {
+		return nil, ErrInvalidCredentials
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -468,7 +480,8 @@ func (s *Service) Register(ctx context.Context, c Client, username, displayName,
 	if err != nil {
 		return nil, err
 	}
-	u, err := s.store.Users().Register(ctx, strings.ToLower(username), displayName, hash)
+	recoveryKey, recoveryHash := s.newRecoveryKey()
+	u, err := s.store.RecoveryKeys().Register(ctx, strings.ToLower(username), displayName, hash, recoveryHash)
 	if errors.Is(err, postgres.ErrUsernameTaken) {
 		return nil, ErrUsernameTaken
 	}
@@ -483,10 +496,11 @@ func (s *Service) Register(ctx context.Context, c Client, username, displayName,
 			u = updated
 		}
 	}
-	ts, err := s.startSession(ctx, u, c)
+	ts, err := s.startSession(ctx, u, c, digest(hash))
 	if err != nil {
 		return nil, err
 	}
+	ts.RecoveryKey = recoveryKey
 	s.event(ctx, u.ID, "register", c, nil)
 	return ts, nil
 }
@@ -532,7 +546,7 @@ func (s *Service) Login(ctx context.Context, c Client, username, password string
 	s.clear(ctx, RuleLoginUser, username)
 
 	if rehash {
-		s.upgradeHash(ctx, creds.UserID, stored, password)
+		stored = s.upgradeHash(ctx, creds.UserID, stored, password)
 	}
 
 	settings, err := s.store.SecuritySettings().Get(ctx, creds.UserID)
@@ -540,7 +554,7 @@ func (s *Service) Login(ctx context.Context, c Client, username, password string
 		return nil, err
 	}
 	if settings.TwoFactorEnabled {
-		challenge, err := s.chal.Create(ctx, creds.UserID)
+		challenge, err := s.chal.Create(ctx, creds.UserID, digest(stored))
 		if err != nil {
 			return nil, err
 		}
@@ -550,7 +564,7 @@ func (s *Service) Login(ctx context.Context, c Client, username, password string
 	if err != nil {
 		return nil, err
 	}
-	ts, err := s.startSession(ctx, u, c)
+	ts, err := s.startSession(ctx, u, c, digest(stored))
 	if err != nil {
 		return nil, err
 	}
@@ -560,14 +574,19 @@ func (s *Service) Login(ctx context.Context, c Client, username, password string
 
 // upgradeHash stores the password in the current format. It never fails the login, and it only replaces
 // the hash that was just verified, so a concurrent password change wins.
-func (s *Service) upgradeHash(ctx context.Context, uid int64, old, password string) {
+func (s *Service) upgradeHash(ctx context.Context, uid int64, old, password string) string {
 	hash, err := s.hasher.Hash(ctx, password)
 	if err == nil {
-		_, err = s.store.Users().RehashPassword(ctx, uid, old, hash)
+		var changed bool
+		changed, err = s.store.Users().RehashPassword(ctx, uid, old, hash)
+		if err == nil && changed {
+			return hash
+		}
 	}
 	if err != nil {
 		s.log.WarnContext(ctx, "password hash not upgraded", "user_id", uid, "err", err)
 	}
+	return old
 }
 
 // checkSecondFactor verifies a TOTP or recovery code of the user.
@@ -636,6 +655,13 @@ func (s *Service) LoginTwoFactor(ctx context.Context, c Client, challenge, code 
 		s.event(ctx, uid, "login_2fa_failed", c, nil)
 		return nil, ErrInvalidTwoFactorCode
 	}
+	fingerprint, err := s.chal.Credential(ctx, challenge)
+	if errors.Is(err, ErrChallengeInvalid) {
+		return nil, ErrInvalidChallenge
+	}
+	if err != nil {
+		return nil, err
+	}
 	// Only the request that ends the challenge gets a session.
 	if err := s.chal.Consume(ctx, challenge); err != nil {
 		if errors.Is(err, ErrChallengeInvalid) {
@@ -650,7 +676,7 @@ func (s *Service) LoginTwoFactor(ctx context.Context, c Client, challenge, code 
 	if err != nil {
 		return nil, err
 	}
-	ts, err := s.startSession(ctx, u, c)
+	ts, err := s.startSession(ctx, u, c, fingerprint)
 	if err != nil {
 		return nil, err
 	}
@@ -942,6 +968,9 @@ func (s *Service) SetSessionDuration(ctx context.Context, c Client, p Principal,
 
 // SetupTwoFactor creates a new secret. Two-factor stays off until ConfirmTwoFactor.
 func (s *Service) SetupTwoFactor(ctx context.Context, p Principal, password string) (*TwoFactorSetup, error) {
+	if err := s.recoveryChangesAllowed(ctx, p.UserID); err != nil {
+		return nil, err
+	}
 	if _, err := s.verifyPassword(ctx, p.UserID, password); err != nil {
 		return nil, err
 	}
@@ -976,6 +1005,9 @@ func (s *Service) SetupTwoFactor(ctx context.Context, p Principal, password stri
 // ConfirmTwoFactor turns two-factor on after the user proved the app works, and returns the one-time
 // recovery codes. They are shown once; only their hashes are stored.
 func (s *Service) ConfirmTwoFactor(ctx context.Context, c Client, p Principal, code string) ([]string, error) {
+	if err := s.recoveryChangesAllowed(ctx, p.UserID); err != nil {
+		return nil, err
+	}
 	rule := limitCheck{RuleTwoFAUser, fmt.Sprint(p.UserID)}
 	attempt, err := s.allow(ctx, rule)
 	if err != nil {
@@ -1029,6 +1061,9 @@ func (s *Service) ConfirmTwoFactor(ctx context.Context, c Client, p Principal, c
 
 // DisableTwoFactor turns two-factor off; it needs the password and a code.
 func (s *Service) DisableTwoFactor(ctx context.Context, c Client, p Principal, password, code string) error {
+	if err := s.recoveryChangesAllowed(ctx, p.UserID); err != nil {
+		return err
+	}
 	if _, err := s.verifyPassword(ctx, p.UserID, password); err != nil {
 		return err
 	}

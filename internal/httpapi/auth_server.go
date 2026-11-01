@@ -114,6 +114,10 @@ func (a *AuthServer) fail(w http.ResponseWriter, r *http.Request, err error, wit
 		credStatus = http.StatusForbidden
 	}
 	switch {
+	case errors.Is(err, auth.ErrRecoveryKey):
+		WriteProblem(w, http.StatusBadRequest, ErrorCodeInvalidCredentials)
+	case errors.Is(err, auth.ErrRecoveryLocked):
+		WriteProblem(w, http.StatusConflict, ErrorCodeConflict)
 	case errors.As(err, &limited):
 		secs := int(limited.RetryAfter/time.Second) + 1
 		w.Header().Set("Retry-After", strconv.Itoa(secs))
@@ -180,7 +184,7 @@ func (a *AuthServer) writeTokens(w http.ResponseWriter, status int, ts *auth.Tok
 	a.setRefreshCookie(w, ts)
 	noStore(w)
 	if status == http.StatusCreated {
-		writeJSONStatus(w, status, RegisterResponse{AccessToken: ts.AccessToken, ExpiresIn: expiresIn(ts), TokenType: RegisterResponseTokenTypeBearer})
+		writeJSONStatus(w, status, RegisterResponse{RecoveryKey: &ts.RecoveryKey, AccessToken: ts.AccessToken, ExpiresIn: expiresIn(ts), TokenType: RegisterResponseTokenTypeBearer})
 		return
 	}
 	writeJSONStatus(w, status, TokenResponse{AccessToken: ts.AccessToken, ExpiresIn: expiresIn(ts), TokenType: TokenResponseTokenTypeBearer})
@@ -347,6 +351,13 @@ func (a *AuthServer) GetMe(w http.ResponseWriter, r *http.Request, _ GetMeParams
 		return
 	}
 	me := PresentMe(u, a.basePath)
+	status, err := a.svc.RecoveryKeyStatus(r.Context(), p)
+	if err != nil {
+		a.fail(w, r, err, true)
+		return
+	}
+	required := !status.Exists
+	me.RecoverySetupRequired = &required
 	noStore(w)
 	writeJSONStatus(w, http.StatusOK, me)
 }
