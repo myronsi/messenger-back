@@ -1,5 +1,11 @@
 # Tests
 
+The Go test job starts ScyllaDB, S3 and Elasticsearch concurrently with
+`deploy/ci/setup-test.sh`. It extracts ffmpeg and ffprobe from the versioned
+`mwader/static-ffmpeg:8.0.1` image used by production instead of installing
+distribution packages on every run. Keep that image version in sync with
+`go.Dockerfile`. Every setup process must succeed before race tests start.
+
 `go test ./...` runs everything. Tests that need a store skip without its address. CI sets all of them (`.github/workflows/go.yml`) and runs with `-race`.
 
 | Variable | Store | Isolation |

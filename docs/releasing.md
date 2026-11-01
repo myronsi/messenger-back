@@ -27,6 +27,12 @@ Never deploy a frontend that needs a contract version the deployed backend does 
 
 ## Docker images
 
+On release commits, the release image also receives the implementation's
+snapshot tags (`master`/`sha-*` for Python or `go-master`/`go-sha-*` for Go).
+Those tags therefore report the release version instead of `master` on that
+commit. Only the other implementation needs a separate snapshot build.
+On ordinary commits, both snapshot images continue to report `master`.
+
 Images are published to `ghcr.io/myronsi/messenger-back` by `release.yml`:
 
 | Event | Tags |

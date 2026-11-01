@@ -39,6 +39,22 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Python or Go
+        id: kind
+        env:
+          PYTHON: ${{ needs.release-please.outputs.python }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          if [ "$PYTHON" = true ]; then
+            echo "file=Dockerfile" >> "$GITHUB_OUTPUT"
+            echo "prefix=" >> "$GITHUB_OUTPUT"
+            echo "scope=python" >> "$GITHUB_OUTPUT"
+          else
+            echo "file=go.Dockerfile" >> "$GITHUB_OUTPUT"
+            echo "prefix=go-" >> "$GITHUB_OUTPUT"
+            echo "scope=go" >> "$GITHUB_OUTPUT"
+          fi
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
       # v0.5.0 -> 0.5.0, 0.5 and latest (pre-releases get neither 0.5 nor latest). The v0.5.0 tag is
       # kept because deploy.yml and rollbacks address images by the release tag.
       - id: meta
@@ -51,20 +67,8 @@ jobs:
             type=semver,pattern={{major}}.{{minor}},value=${{ needs.release-please.outputs.tag_name }}
             type=raw,value=${{ needs.release-please.outputs.tag_name }}
             type=raw,value=latest,enable=${{ !contains(needs.release-please.outputs.tag_name, '-') }}
-      - name: Python or Go
-        id: kind
-        env:
-          PYTHON: ${{ needs.release-please.outputs.python }}
-          TAG: ${{ needs.release-please.outputs.tag_name }}
-        run: |
-          if [ "$PYTHON" = true ]; then
-            echo "file=Dockerfile" >> "$GITHUB_OUTPUT"
-            echo "scope=python" >> "$GITHUB_OUTPUT"
-          else
-            echo "file=go.Dockerfile" >> "$GITHUB_OUTPUT"
-            echo "scope=go" >> "$GITHUB_OUTPUT"
-          fi
-          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+            type=ref,event=branch,prefix=${{ steps.kind.outputs.prefix }}
+            type=sha,prefix=${{ steps.kind.outputs.prefix }}sha-
       - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
@@ -114,13 +118,13 @@ jobs:
   # Every merge to master also publishes snapshot images: the Python backend as master and sha-<short sha>
   # (the frontend's compatibility tests use them), the Go backend as go-master and go-sha-<short sha>.
   snapshot-image:
+    needs: release-please
     strategy:
-      # One failing build must not cancel the other: the frontend's tests rely on the Python snapshots.
       fail-fast: false
       matrix:
-        include:
-          - { file: Dockerfile, prefix: "", scope: python }
-          - { file: go.Dockerfile, prefix: go-, scope: go }
+        # The release image already carries snapshot tags for its implementation.
+        # Build only the other implementation on release commits.
+        include: ${{ fromJSON(needs.release-please.outputs.release_created != 'true' && '[{"file":"Dockerfile","prefix":"","scope":"python"},{"file":"go.Dockerfile","prefix":"go-","scope":"go"}]' || needs.release-please.outputs.python == 'true' && '[{"file":"go.Dockerfile","prefix":"go-","scope":"go"}]' || '[{"file":"Dockerfile","prefix":"","scope":"python"}]') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
