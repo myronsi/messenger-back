@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.0.0-alpha.1...v1.1.0-alpha.1) (2026-11-01)
+
+
+### Features
+
+* add single-use recovery keys with 2FA and session revocation ([#131](https://github.com/myronsi/messenger-back/issues/131)) ([472ba06](https://github.com/myronsi/messenger-back/commit/472ba06bdcd3cf7216e62f57cd2568f5716bc803))
+
 ## [1.0.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v0.5.4...v1.0.0-alpha.1) (2026-10-11)
 
 
