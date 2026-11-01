@@ -24,12 +24,14 @@ type Metrics struct {
 	storeCheckTime *prometheus.HistogramVec
 	events         *prometheus.CounterVec
 	clientAPI      *prometheus.CounterVec
+	notifications  *prometheus.CounterVec
 }
 
 // NewMetrics registers the collectors together with the Go runtime and process collectors.
 func NewMetrics() *Metrics {
 	m := &Metrics{
-		Registry: prometheus.NewRegistry(),
+		Registry:      prometheus.NewRegistry(),
+		notifications: prometheus.NewCounterVec(prometheus.CounterOpts{Name: "messenger_notifications_total", Help: "Notification outcomes: delivered, retry, expired, unregistered."}, []string{"outcome"}),
 		requests: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "messenger_http_requests_total",
 			Help: "HTTP requests by method, route pattern and status code.",
@@ -72,10 +74,12 @@ func NewMetrics() *Metrics {
 	m.Registry.MustRegister(
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
-		m.requests, m.duration, m.inFlight, m.webSockets, m.messages, m.storeErrors, m.storeCheckTime, m.events, m.clientAPI,
+		m.requests, m.duration, m.inFlight, m.webSockets, m.messages, m.storeErrors, m.storeCheckTime, m.events, m.clientAPI, m.notifications,
 	)
 	return m
 }
+
+func (m *Metrics) Notification(outcome string) { m.notifications.WithLabelValues(outcome).Inc() }
 
 // Handler serves the metrics in the Prometheus text format.
 func (m *Metrics) Handler() http.Handler {

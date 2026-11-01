@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.1
+  version: 2.1.0-alpha.2
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -1715,6 +1715,160 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
+  /me/notifications:
+    get:
+      tags:
+        - me
+      operationId: getNotificationSettings
+      summary: Notification preferences and supported push platforms
+      responses:
+        "200":
+          description: Notification settings or registered device
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationSettings"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    put:
+      tags:
+        - me
+      operationId: updateNotificationSettings
+      summary: Replace notification preferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationPreferences"
+      responses:
+        "204":
+          description: Saved
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /me/notification-devices:
+    post:
+      tags:
+        - me
+      operationId: registerNotificationDevice
+      summary: Register a push destination for the current session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationDeviceRequest"
+      responses:
+        "200":
+          description: Notification settings or registered device
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationDeviceRegistered"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /me/notification-devices/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    delete:
+      tags:
+        - me
+      operationId: deleteNotificationDevice
+      summary: Unregister a push destination for the current session
+      responses:
+        "204":
+          description: Saved
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /chats/{chatId}/notification-mute:
+    parameters:
+      - name: chatId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/Id"
+    put:
+      tags:
+        - me
+      operationId: setNotificationMute
+      summary: Mute or unmute a chat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationMuteRequest"
+      responses:
+        "204":
+          description: Saved
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /me/notification-devices/{id}/activity:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      tags:
+        - me
+      operationId: updateNotificationActivity
+      summary: Report a visible client with a healthy live connection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationActivity"
+      responses:
+        "204":
+          description: Saved
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1845,6 +1999,106 @@ components:
           schema: { $ref: "#/components/schemas/Problem" }
 
   schemas:
+    NotificationPreferences:
+      type: object
+      required:
+        - enabled
+        - sound
+        - previews
+      properties:
+        enabled:
+          type: boolean
+        sound:
+          type: boolean
+        previews:
+          type: boolean
+    NotificationSettings:
+      type: object
+      required:
+        - preferences
+        - mutes
+        - web_push
+        - android_push
+        - ios_push
+        - vapid_public_key
+      properties:
+        preferences:
+          $ref: "#/components/schemas/NotificationPreferences"
+        mutes:
+          type: array
+          items:
+            type: object
+            required:
+              - chat_id
+              - until
+            properties:
+              chat_id:
+                $ref: "#/components/schemas/Id"
+              until:
+                type: string
+                format: date-time
+        web_push:
+          type: boolean
+        android_push:
+          type: boolean
+        ios_push:
+          type: boolean
+        vapid_public_key:
+          type: string
+    NotificationDeviceRequest:
+      type: object
+      required:
+        - platform
+        - destination
+      properties:
+        platform:
+          type: string
+          enum:
+            - web
+            - android
+            - ios
+        destination:
+          type: string
+          minLength: 1
+          maxLength: 4096
+        p256dh:
+          type: string
+          maxLength: 128
+        auth:
+          type: string
+          maxLength: 64
+    NotificationDeviceRegistered:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          format: uuid
+    NotificationMuteRequest:
+      type: object
+      required:
+        - duration
+      properties:
+        duration:
+          type: string
+          enum:
+            - off
+            - 1h
+            - 8h
+            - forever
+    NotificationActivity:
+      type: object
+      required:
+        - active
+        - client_id
+      properties:
+        active:
+          type: boolean
+        client_id:
+          type: string
+          format: uuid
+
     # ---------------------------------------------------------- basics
     Id:
       type: string

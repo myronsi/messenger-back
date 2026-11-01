@@ -63,6 +63,51 @@ type Chat struct {
 	LastActivityAt     time.Time
 }
 
+type NotificationActivity struct {
+	DeviceID    uuid.UUID
+	SessionID   uuid.UUID
+	ClientID    uuid.UUID
+	ActiveUntil time.Time
+}
+
+type NotificationDelivery struct {
+	MessageID int64
+	DeviceID  uuid.UUID
+}
+
+type NotificationDevice struct {
+	ID          uuid.UUID
+	UserID      int64
+	SessionID   uuid.UUID
+	Platform    string
+	Destination string
+	P256dh      string
+	Auth        string
+	UpdatedAt   time.Time
+}
+
+type NotificationJob struct {
+	MessageID  int64
+	ChatID     int64
+	Recipients []int64
+	CreatedAt  time.Time
+	NextAt     time.Time
+	Attempts   int32
+}
+
+type NotificationMute struct {
+	UserID  int64
+	ChatID  int64
+	UntilAt time.Time
+}
+
+type NotificationPreference struct {
+	UserID   int64
+	Enabled  bool
+	Sound    bool
+	Previews bool
+}
+
 type Participant struct {
 	ChatID            int64
 	UserID            int64

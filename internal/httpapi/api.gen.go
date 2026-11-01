@@ -287,6 +287,51 @@ func (e MessageType) Valid() bool {
 	}
 }
 
+// Defines values for NotificationDeviceRequestPlatform.
+const (
+	Android NotificationDeviceRequestPlatform = "android"
+	Ios     NotificationDeviceRequestPlatform = "ios"
+	Web     NotificationDeviceRequestPlatform = "web"
+)
+
+// Valid indicates whether the value is a known member of the NotificationDeviceRequestPlatform enum.
+func (e NotificationDeviceRequestPlatform) Valid() bool {
+	switch e {
+	case Android:
+		return true
+	case Ios:
+		return true
+	case Web:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for NotificationMuteRequestDuration.
+const (
+	Forever NotificationMuteRequestDuration = "forever"
+	N1h     NotificationMuteRequestDuration = "1h"
+	N8h     NotificationMuteRequestDuration = "8h"
+	Off     NotificationMuteRequestDuration = "off"
+)
+
+// Valid indicates whether the value is a known member of the NotificationMuteRequestDuration enum.
+func (e NotificationMuteRequestDuration) Valid() bool {
+	switch e {
+	case Forever:
+		return true
+	case N1h:
+		return true
+	case N8h:
+		return true
+	case Off:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RegisterResponseTokenType.
 const (
 	RegisterResponseTokenTypeBearer RegisterResponseTokenType = "Bearer"
@@ -822,6 +867,59 @@ type Meta struct {
 
 	// MinClientApiVersion Examples: 2.0.0
 	MinClientApiVersion string `json:"min_client_api_version"`
+}
+
+// NotificationActivity defines model for NotificationActivity.
+type NotificationActivity struct {
+	Active   bool               `json:"active"`
+	ClientId openapi_types.UUID `json:"client_id"`
+}
+
+// NotificationDeviceRegistered defines model for NotificationDeviceRegistered.
+type NotificationDeviceRegistered struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+// NotificationDeviceRequest defines model for NotificationDeviceRequest.
+type NotificationDeviceRequest struct {
+	Auth        *string                           `json:"auth,omitempty"`
+	Destination string                            `json:"destination"`
+	P256dh      *string                           `json:"p256dh,omitempty"`
+	Platform    NotificationDeviceRequestPlatform `json:"platform"`
+}
+
+// NotificationDeviceRequestPlatform defines model for NotificationDeviceRequest.Platform.
+type NotificationDeviceRequestPlatform string
+
+// NotificationMuteRequest defines model for NotificationMuteRequest.
+type NotificationMuteRequest struct {
+	Duration NotificationMuteRequestDuration `json:"duration"`
+}
+
+// NotificationMuteRequestDuration defines model for NotificationMuteRequest.Duration.
+type NotificationMuteRequestDuration string
+
+// NotificationPreferences defines model for NotificationPreferences.
+type NotificationPreferences struct {
+	Enabled  bool `json:"enabled"`
+	Previews bool `json:"previews"`
+	Sound    bool `json:"sound"`
+}
+
+// NotificationSettings defines model for NotificationSettings.
+type NotificationSettings struct {
+	AndroidPush bool `json:"android_push"`
+	IosPush     bool `json:"ios_push"`
+	Mutes       []struct {
+		// ChatId Decimal ID as a string (Snowflake IDs exceed 2^53).
+		//
+		// Examples: 7217400317439950848
+		ChatId Id        `json:"chat_id"`
+		Until  time.Time `json:"until"`
+	} `json:"mutes"`
+	Preferences    NotificationPreferences `json:"preferences"`
+	VapidPublicKey string                  `json:"vapid_public_key"`
+	WebPush        bool                    `json:"web_push"`
 }
 
 // PasswordConfirmation defines model for PasswordConfirmation.
@@ -2015,6 +2113,9 @@ type ResetPasswordJSONRequestBody = ResetPasswordRequest
 // CreateChatJSONRequestBody defines body for CreateChat for application/json ContentType.
 type CreateChatJSONRequestBody = CreateChatRequest
 
+// SetNotificationMuteJSONRequestBody defines body for SetNotificationMute for application/json ContentType.
+type SetNotificationMuteJSONRequestBody = NotificationMuteRequest
+
 // SendMessageJSONRequestBody defines body for SendMessage for application/json ContentType.
 type SendMessageJSONRequestBody = SendMessageRequest
 
@@ -2056,6 +2157,15 @@ type SetupTwoFactorJSONRequestBody = PasswordConfirmation
 
 // SetMyAvatarJSONRequestBody defines body for SetMyAvatar for application/json ContentType.
 type SetMyAvatarJSONRequestBody = SetAvatarRequest
+
+// RegisterNotificationDeviceJSONRequestBody defines body for RegisterNotificationDevice for application/json ContentType.
+type RegisterNotificationDeviceJSONRequestBody = NotificationDeviceRequest
+
+// UpdateNotificationActivityJSONRequestBody defines body for UpdateNotificationActivity for application/json ContentType.
+type UpdateNotificationActivityJSONRequestBody = NotificationActivity
+
+// UpdateNotificationSettingsJSONRequestBody defines body for UpdateNotificationSettings for application/json ContentType.
+type UpdateNotificationSettingsJSONRequestBody = NotificationPreferences
 
 // ChangePasswordJSONRequestBody defines body for ChangePassword for application/json ContentType.
 type ChangePasswordJSONRequestBody = ChangePasswordRequest
@@ -2361,6 +2471,9 @@ type ServerInterface interface {
 	// CreateChat Start a direct chat
 	// (POST /chats)
 	CreateChat(w http.ResponseWriter, r *http.Request, params CreateChatParams)
+	// SetNotificationMute Mute or unmute a chat
+	// (PUT /chats/{chatId}/notification-mute)
+	SetNotificationMute(w http.ResponseWriter, r *http.Request, chatId Id)
 	// DeleteChat Delete a direct chat
 	// (DELETE /chats/{chat_id})
 	DeleteChat(w http.ResponseWriter, r *http.Request, chatId ChatId, params DeleteChatParams)
@@ -2451,6 +2564,21 @@ type ServerInterface interface {
 	// BlockUser Block a user
 	// (PUT /me/blocked-users/{user_id})
 	BlockUser(w http.ResponseWriter, r *http.Request, userId UserId, params BlockUserParams)
+	// RegisterNotificationDevice Register a push destination for the current session
+	// (POST /me/notification-devices)
+	RegisterNotificationDevice(w http.ResponseWriter, r *http.Request)
+	// DeleteNotificationDevice Unregister a push destination for the current session
+	// (DELETE /me/notification-devices/{id})
+	DeleteNotificationDevice(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// UpdateNotificationActivity Report a visible client with a healthy live connection
+	// (PUT /me/notification-devices/{id}/activity)
+	UpdateNotificationActivity(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// GetNotificationSettings Notification preferences and supported push platforms
+	// (GET /me/notifications)
+	GetNotificationSettings(w http.ResponseWriter, r *http.Request)
+	// UpdateNotificationSettings Replace notification preferences
+	// (PUT /me/notifications)
+	UpdateNotificationSettings(w http.ResponseWriter, r *http.Request)
 	// ChangePassword Change the password
 	// (PUT /me/password)
 	ChangePassword(w http.ResponseWriter, r *http.Request, params ChangePasswordParams)
@@ -3305,6 +3433,32 @@ func (siw *ServerInterfaceWrapper) CreateChat(w http.ResponseWriter, r *http.Req
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CreateChat(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetNotificationMute operation middleware
+func (siw *ServerInterfaceWrapper) SetNotificationMute(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chatId" -------------
+	var chatId Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chatId", r.PathValue("chatId"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chatId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetNotificationMute(w, r, chatId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -5494,6 +5648,100 @@ func (siw *ServerInterfaceWrapper) BlockUser(w http.ResponseWriter, r *http.Requ
 	handler.ServeHTTP(w, r)
 }
 
+// RegisterNotificationDevice operation middleware
+func (siw *ServerInterfaceWrapper) RegisterNotificationDevice(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RegisterNotificationDevice(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteNotificationDevice operation middleware
+func (siw *ServerInterfaceWrapper) DeleteNotificationDevice(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteNotificationDevice(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateNotificationActivity operation middleware
+func (siw *ServerInterfaceWrapper) UpdateNotificationActivity(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateNotificationActivity(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetNotificationSettings operation middleware
+func (siw *ServerInterfaceWrapper) GetNotificationSettings(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetNotificationSettings(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateNotificationSettings operation middleware
+func (siw *ServerInterfaceWrapper) UpdateNotificationSettings(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateNotificationSettings(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ChangePassword operation middleware
 func (siw *ServerInterfaceWrapper) ChangePassword(w http.ResponseWriter, r *http.Request) {
 
@@ -7665,6 +7913,12 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/groups/{chat_id}/participants/{user_id}", wrapper.UpdateGroupParticipantRole)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/groups/{chat_id}/transfer-owner", wrapper.TransferGroupOwnership)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/groups/{chat_id}/leave", wrapper.LeaveGroup)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/notifications", wrapper.GetNotificationSettings)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/me/notifications", wrapper.UpdateNotificationSettings)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/me/notification-devices", wrapper.RegisterNotificationDevice)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/me/notification-devices/{id}", wrapper.DeleteNotificationDevice)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/chats/{chatId}/notification-mute", wrapper.SetNotificationMute)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/me/notification-devices/{id}/activity", wrapper.UpdateNotificationActivity)
 
 	return m
 }
@@ -9018,6 +9272,87 @@ func (response CreateChat429ApplicationProblemPlusJSONResponse) VisitCreateChatR
 		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
 	}
 	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetNotificationMuteRequestObject struct {
+	ChatId Id `json:"chatId"`
+	Body   *SetNotificationMuteJSONRequestBody
+}
+
+type SetNotificationMuteResponseObject interface {
+	VisitSetNotificationMuteResponse(w http.ResponseWriter) error
+}
+
+type SetNotificationMute204Response struct {
+}
+
+func (response SetNotificationMute204Response) VisitSetNotificationMuteResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type SetNotificationMute400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response SetNotificationMute400ApplicationProblemPlusJSONResponse) VisitSetNotificationMuteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetNotificationMute401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response SetNotificationMute401ApplicationProblemPlusJSONResponse) VisitSetNotificationMuteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetNotificationMute404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response SetNotificationMute404ApplicationProblemPlusJSONResponse) VisitSetNotificationMuteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetNotificationMute409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response SetNotificationMute409ApplicationProblemPlusJSONResponse) VisitSetNotificationMuteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -12028,6 +12363,418 @@ func (response BlockUser426ApplicationProblemPlusJSONResponse) VisitBlockUserRes
 	return err
 }
 
+type RegisterNotificationDeviceRequestObject struct {
+	Body *RegisterNotificationDeviceJSONRequestBody
+}
+
+type RegisterNotificationDeviceResponseObject interface {
+	VisitRegisterNotificationDeviceResponse(w http.ResponseWriter) error
+}
+
+type RegisterNotificationDevice200JSONResponse NotificationDeviceRegistered
+
+func (response RegisterNotificationDevice200JSONResponse) VisitRegisterNotificationDeviceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RegisterNotificationDevice400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response RegisterNotificationDevice400ApplicationProblemPlusJSONResponse) VisitRegisterNotificationDeviceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RegisterNotificationDevice401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response RegisterNotificationDevice401ApplicationProblemPlusJSONResponse) VisitRegisterNotificationDeviceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RegisterNotificationDevice404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response RegisterNotificationDevice404ApplicationProblemPlusJSONResponse) VisitRegisterNotificationDeviceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RegisterNotificationDevice409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response RegisterNotificationDevice409ApplicationProblemPlusJSONResponse) VisitRegisterNotificationDeviceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteNotificationDeviceRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type DeleteNotificationDeviceResponseObject interface {
+	VisitDeleteNotificationDeviceResponse(w http.ResponseWriter) error
+}
+
+type DeleteNotificationDevice204Response struct {
+}
+
+func (response DeleteNotificationDevice204Response) VisitDeleteNotificationDeviceResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteNotificationDevice400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteNotificationDevice400ApplicationProblemPlusJSONResponse) VisitDeleteNotificationDeviceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteNotificationDevice401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteNotificationDevice401ApplicationProblemPlusJSONResponse) VisitDeleteNotificationDeviceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteNotificationDevice404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteNotificationDevice404ApplicationProblemPlusJSONResponse) VisitDeleteNotificationDeviceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteNotificationDevice409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteNotificationDevice409ApplicationProblemPlusJSONResponse) VisitDeleteNotificationDeviceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateNotificationActivityRequestObject struct {
+	Id   openapi_types.UUID `json:"id"`
+	Body *UpdateNotificationActivityJSONRequestBody
+}
+
+type UpdateNotificationActivityResponseObject interface {
+	VisitUpdateNotificationActivityResponse(w http.ResponseWriter) error
+}
+
+type UpdateNotificationActivity204Response struct {
+}
+
+func (response UpdateNotificationActivity204Response) VisitUpdateNotificationActivityResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type UpdateNotificationActivity400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateNotificationActivity400ApplicationProblemPlusJSONResponse) VisitUpdateNotificationActivityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateNotificationActivity401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateNotificationActivity401ApplicationProblemPlusJSONResponse) VisitUpdateNotificationActivityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateNotificationActivity404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateNotificationActivity404ApplicationProblemPlusJSONResponse) VisitUpdateNotificationActivityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateNotificationActivity409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateNotificationActivity409ApplicationProblemPlusJSONResponse) VisitUpdateNotificationActivityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNotificationSettingsRequestObject struct {
+}
+
+type GetNotificationSettingsResponseObject interface {
+	VisitGetNotificationSettingsResponse(w http.ResponseWriter) error
+}
+
+type GetNotificationSettings200JSONResponse NotificationSettings
+
+func (response GetNotificationSettings200JSONResponse) VisitGetNotificationSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNotificationSettings400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response GetNotificationSettings400ApplicationProblemPlusJSONResponse) VisitGetNotificationSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNotificationSettings401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response GetNotificationSettings401ApplicationProblemPlusJSONResponse) VisitGetNotificationSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNotificationSettings404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetNotificationSettings404ApplicationProblemPlusJSONResponse) VisitGetNotificationSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNotificationSettings409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response GetNotificationSettings409ApplicationProblemPlusJSONResponse) VisitGetNotificationSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateNotificationSettingsRequestObject struct {
+	Body *UpdateNotificationSettingsJSONRequestBody
+}
+
+type UpdateNotificationSettingsResponseObject interface {
+	VisitUpdateNotificationSettingsResponse(w http.ResponseWriter) error
+}
+
+type UpdateNotificationSettings204Response struct {
+}
+
+func (response UpdateNotificationSettings204Response) VisitUpdateNotificationSettingsResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type UpdateNotificationSettings400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateNotificationSettings400ApplicationProblemPlusJSONResponse) VisitUpdateNotificationSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateNotificationSettings401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateNotificationSettings401ApplicationProblemPlusJSONResponse) VisitUpdateNotificationSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateNotificationSettings404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateNotificationSettings404ApplicationProblemPlusJSONResponse) VisitUpdateNotificationSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateNotificationSettings409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateNotificationSettings409ApplicationProblemPlusJSONResponse) VisitUpdateNotificationSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ChangePasswordRequestObject struct {
 	Params ChangePasswordParams
 	Body   *ChangePasswordJSONRequestBody
@@ -14839,6 +15586,9 @@ type StrictServerInterface interface {
 	// CreateChat Start a direct chat
 	// (POST /chats)
 	CreateChat(ctx context.Context, request CreateChatRequestObject) (CreateChatResponseObject, error)
+	// SetNotificationMute Mute or unmute a chat
+	// (PUT /chats/{chatId}/notification-mute)
+	SetNotificationMute(ctx context.Context, request SetNotificationMuteRequestObject) (SetNotificationMuteResponseObject, error)
 	// DeleteChat Delete a direct chat
 	// (DELETE /chats/{chat_id})
 	DeleteChat(ctx context.Context, request DeleteChatRequestObject) (DeleteChatResponseObject, error)
@@ -14929,6 +15679,21 @@ type StrictServerInterface interface {
 	// BlockUser Block a user
 	// (PUT /me/blocked-users/{user_id})
 	BlockUser(ctx context.Context, request BlockUserRequestObject) (BlockUserResponseObject, error)
+	// RegisterNotificationDevice Register a push destination for the current session
+	// (POST /me/notification-devices)
+	RegisterNotificationDevice(ctx context.Context, request RegisterNotificationDeviceRequestObject) (RegisterNotificationDeviceResponseObject, error)
+	// DeleteNotificationDevice Unregister a push destination for the current session
+	// (DELETE /me/notification-devices/{id})
+	DeleteNotificationDevice(ctx context.Context, request DeleteNotificationDeviceRequestObject) (DeleteNotificationDeviceResponseObject, error)
+	// UpdateNotificationActivity Report a visible client with a healthy live connection
+	// (PUT /me/notification-devices/{id}/activity)
+	UpdateNotificationActivity(ctx context.Context, request UpdateNotificationActivityRequestObject) (UpdateNotificationActivityResponseObject, error)
+	// GetNotificationSettings Notification preferences and supported push platforms
+	// (GET /me/notifications)
+	GetNotificationSettings(ctx context.Context, request GetNotificationSettingsRequestObject) (GetNotificationSettingsResponseObject, error)
+	// UpdateNotificationSettings Replace notification preferences
+	// (PUT /me/notifications)
+	UpdateNotificationSettings(ctx context.Context, request UpdateNotificationSettingsRequestObject) (UpdateNotificationSettingsResponseObject, error)
 	// ChangePassword Change the password
 	// (PUT /me/password)
 	ChangePassword(ctx context.Context, request ChangePasswordRequestObject) (ChangePasswordResponseObject, error)
@@ -15416,6 +16181,39 @@ func (sh *strictHandler) CreateChat(w http.ResponseWriter, r *http.Request, para
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(CreateChatResponseObject); ok {
 		if err := validResponse.VisitCreateChatResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SetNotificationMute operation middleware
+func (sh *strictHandler) SetNotificationMute(w http.ResponseWriter, r *http.Request, chatId Id) {
+	var request SetNotificationMuteRequestObject
+
+	request.ChatId = chatId
+
+	var body SetNotificationMuteJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SetNotificationMute(ctx, request.(SetNotificationMuteRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SetNotificationMute")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SetNotificationMuteResponseObject); ok {
+		if err := validResponse.VisitSetNotificationMuteResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -16316,6 +17114,151 @@ func (sh *strictHandler) BlockUser(w http.ResponseWriter, r *http.Request, userI
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(BlockUserResponseObject); ok {
 		if err := validResponse.VisitBlockUserResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RegisterNotificationDevice operation middleware
+func (sh *strictHandler) RegisterNotificationDevice(w http.ResponseWriter, r *http.Request) {
+	var request RegisterNotificationDeviceRequestObject
+
+	var body RegisterNotificationDeviceJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RegisterNotificationDevice(ctx, request.(RegisterNotificationDeviceRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RegisterNotificationDevice")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RegisterNotificationDeviceResponseObject); ok {
+		if err := validResponse.VisitRegisterNotificationDeviceResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteNotificationDevice operation middleware
+func (sh *strictHandler) DeleteNotificationDevice(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request DeleteNotificationDeviceRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteNotificationDevice(ctx, request.(DeleteNotificationDeviceRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteNotificationDevice")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteNotificationDeviceResponseObject); ok {
+		if err := validResponse.VisitDeleteNotificationDeviceResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateNotificationActivity operation middleware
+func (sh *strictHandler) UpdateNotificationActivity(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request UpdateNotificationActivityRequestObject
+
+	request.Id = id
+
+	var body UpdateNotificationActivityJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateNotificationActivity(ctx, request.(UpdateNotificationActivityRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateNotificationActivity")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateNotificationActivityResponseObject); ok {
+		if err := validResponse.VisitUpdateNotificationActivityResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetNotificationSettings operation middleware
+func (sh *strictHandler) GetNotificationSettings(w http.ResponseWriter, r *http.Request) {
+	var request GetNotificationSettingsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetNotificationSettings(ctx, request.(GetNotificationSettingsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetNotificationSettings")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetNotificationSettingsResponseObject); ok {
+		if err := validResponse.VisitGetNotificationSettingsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateNotificationSettings operation middleware
+func (sh *strictHandler) UpdateNotificationSettings(w http.ResponseWriter, r *http.Request) {
+	var request UpdateNotificationSettingsRequestObject
+
+	var body UpdateNotificationSettingsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateNotificationSettings(ctx, request.(UpdateNotificationSettingsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateNotificationSettings")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateNotificationSettingsResponseObject); ok {
+		if err := validResponse.VisitUpdateNotificationSettingsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

@@ -7,11 +7,12 @@ import "net/http"
 // implemented yet answer 501 through the AuthServer's embedded Unimplemented.
 type Server struct {
 	*AuthServer
-	media    *MediaServer
-	account  *AccountServer
-	chats    *ChatServer
-	messages *MessageServer
-	meta     MetaInfo
+	media         *MediaServer
+	account       *AccountServer
+	chats         *ChatServer
+	messages      *MessageServer
+	meta          MetaInfo
+	notifications *NotificationOptions
 }
 
 // WithMessages adds history, sending, editing, deleting and forwarding over HTTP, and the media lists.
