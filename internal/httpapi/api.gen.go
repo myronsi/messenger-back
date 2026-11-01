@@ -742,11 +742,12 @@ type Me struct {
 	// Id Decimal ID as a string (Snowflake IDs exceed 2^53).
 	//
 	// Examples: 7217400317439950848
-	Id        Id         `json:"id"`
-	IsDeleted bool       `json:"is_deleted"`
-	IsOnline  bool       `json:"is_online"`
-	LastSeen  *Timestamp `json:"last_seen"`
-	Username  Username   `json:"username"`
+	Id                    Id         `json:"id"`
+	IsDeleted             bool       `json:"is_deleted"`
+	IsOnline              bool       `json:"is_online"`
+	LastSeen              *Timestamp `json:"last_seen"`
+	RecoverySetupRequired *bool      `json:"recovery_setup_required,omitempty"`
+	Username              Username   `json:"username"`
 }
 
 // MediaKind defines model for MediaKind.
@@ -906,6 +907,26 @@ type ReadReceipt struct {
 	UserId Id `json:"user_id"`
 }
 
+// RecoverWithKeyRequest defines model for RecoverWithKeyRequest.
+type RecoverWithKeyRequest struct {
+	Code        *string `json:"code,omitempty"`
+	NewPassword string  `json:"new_password"`
+	RecoveryKey string  `json:"recovery_key"`
+	Username    string  `json:"username"`
+}
+
+// RecoveryKeyResult defines model for RecoveryKeyResult.
+type RecoveryKeyResult struct {
+	RecoveryKey string `json:"recovery_key"`
+}
+
+// RecoveryKeyStatus defines model for RecoveryKeyStatus.
+type RecoveryKeyStatus struct {
+	CreatedAt   *time.Time `json:"created_at"`
+	Exists      bool       `json:"exists"`
+	LockedUntil *time.Time `json:"locked_until"`
+}
+
 // RecoveryRequest defines model for RecoveryRequest.
 type RecoveryRequest struct {
 	DevicePart *string  `json:"device_part,omitempty"`
@@ -932,13 +953,22 @@ type RegisterResponse struct {
 	DevicePart  *string `json:"device_part,omitempty"`
 
 	// ExpiresIn Seconds until the access token expires
-	ExpiresIn int                       `json:"expires_in"`
-	QrPart    *string                   `json:"qr_part,omitempty"`
-	TokenType RegisterResponseTokenType `json:"token_type"`
+	ExpiresIn int     `json:"expires_in"`
+	QrPart    *string `json:"qr_part,omitempty"`
+
+	// RecoveryKey Shown once; only a keyed hash is stored
+	RecoveryKey *string                   `json:"recovery_key,omitempty"`
+	TokenType   RegisterResponseTokenType `json:"token_type"`
 }
 
 // RegisterResponseTokenType defines model for RegisterResponse.TokenType.
 type RegisterResponseTokenType string
+
+// ReplaceRecoveryKeyRequest defines model for ReplaceRecoveryKeyRequest.
+type ReplaceRecoveryKeyRequest struct {
+	Code     *string `json:"code,omitempty"`
+	Password string  `json:"password"`
+}
 
 // ResetPasswordRequest defines model for ResetPasswordRequest.
 type ResetPasswordRequest struct {
@@ -958,6 +988,19 @@ type SearchHit struct {
 
 // SearchVisibility defines model for SearchVisibility.
 type SearchVisibility string
+
+// SecurityEventPage defines model for SecurityEventPage.
+type SecurityEventPage struct {
+	Items []struct {
+		CreatedAt time.Time `json:"created_at"`
+
+		// Id Decimal ID as a string (Snowflake IDs exceed 2^53).
+		//
+		// Examples: 7217400317439950848
+		Id   Id     `json:"id"`
+		Type string `json:"type"`
+	} `json:"items"`
+}
 
 // SecuritySettings defines model for SecuritySettings.
 type SecuritySettings struct {
@@ -1276,6 +1319,15 @@ type LogoutParams struct {
 
 // StartRecoveryParams defines parameters for StartRecovery.
 type StartRecoveryParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// RecoverWithKeyParams defines parameters for RecoverWithKey.
+type RecoverWithKeyParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
@@ -1680,6 +1732,24 @@ type ReplacePrivacyExceptionsParams struct {
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
 }
 
+// GetRecoveryKeyParams defines parameters for GetRecoveryKey.
+type GetRecoveryKeyParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// ReplaceRecoveryKeyParams defines parameters for ReplaceRecoveryKey.
+type ReplaceRecoveryKeyParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
 // GetSecuritySettingsParams defines parameters for GetSecuritySettings.
 type GetSecuritySettingsParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
@@ -1691,6 +1761,15 @@ type GetSecuritySettingsParams struct {
 
 // UpdateSecuritySettingsParams defines parameters for UpdateSecuritySettings.
 type UpdateSecuritySettingsParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// ListSecurityEventsParams defines parameters for ListSecurityEvents.
+type ListSecurityEventsParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
@@ -1924,6 +2003,9 @@ type LoginTwoFactorJSONRequestBody = TwoFactorLoginRequest
 // StartRecoveryJSONRequestBody defines body for StartRecovery for application/json ContentType.
 type StartRecoveryJSONRequestBody = RecoveryRequest
 
+// RecoverWithKeyJSONRequestBody defines body for RecoverWithKey for application/json ContentType.
+type RecoverWithKeyJSONRequestBody = RecoverWithKeyRequest
+
 // RegisterJSONRequestBody defines body for Register for application/json ContentType.
 type RegisterJSONRequestBody = RegisterRequest
 
@@ -1983,6 +2065,9 @@ type UpdatePrivacySettingsJSONRequestBody = UpdatePrivacySettingsRequest
 
 // ReplacePrivacyExceptionsJSONRequestBody defines body for ReplacePrivacyExceptions for application/json ContentType.
 type ReplacePrivacyExceptionsJSONRequestBody = PrivacyExceptionsRequest
+
+// ReplaceRecoveryKeyJSONRequestBody defines body for ReplaceRecoveryKey for application/json ContentType.
+type ReplaceRecoveryKeyJSONRequestBody = ReplaceRecoveryKeyRequest
 
 // UpdateSecuritySettingsJSONRequestBody defines body for UpdateSecuritySettings for application/json ContentType.
 type UpdateSecuritySettingsJSONRequestBody = UpdateSecuritySettingsRequest
@@ -2258,6 +2343,9 @@ type ServerInterface interface {
 	// StartRecovery Start account recovery (temporary)
 	// (POST /auth/recover)
 	StartRecovery(w http.ResponseWriter, r *http.Request, params StartRecoveryParams)
+	// RecoverWithKey Reset password with a single-use recovery key
+	// (POST /auth/recover/key)
+	RecoverWithKey(w http.ResponseWriter, r *http.Request, params RecoverWithKeyParams)
 	// RefreshToken Get a new access token
 	// (POST /auth/refresh)
 	RefreshToken(w http.ResponseWriter, r *http.Request, params RefreshTokenParams)
@@ -2375,12 +2463,21 @@ type ServerInterface interface {
 	// ReplacePrivacyExceptions Replace the exception list of one setting
 	// (PUT /me/privacy/exceptions/{setting_key}/{effect})
 	ReplacePrivacyExceptions(w http.ResponseWriter, r *http.Request, settingKey string, effect string, params ReplacePrivacyExceptionsParams)
+	// GetRecoveryKey Get recovery-key status without revealing its hash
+	// (GET /me/recovery-key)
+	GetRecoveryKey(w http.ResponseWriter, r *http.Request, params GetRecoveryKeyParams)
+	// ReplaceRecoveryKey Create or regenerate a recovery key after password and second-factor confirmation
+	// (POST /me/recovery-key)
+	ReplaceRecoveryKey(w http.ResponseWriter, r *http.Request, params ReplaceRecoveryKeyParams)
 	// GetSecuritySettings Security settings
 	// (GET /me/security)
 	GetSecuritySettings(w http.ResponseWriter, r *http.Request, params GetSecuritySettingsParams)
 	// UpdateSecuritySettings Change the session duration
 	// (PATCH /me/security)
 	UpdateSecuritySettings(w http.ResponseWriter, r *http.Request, params UpdateSecuritySettingsParams)
+	// ListSecurityEvents List the last 50 security events of this account
+	// (GET /me/security-events)
+	ListSecurityEvents(w http.ResponseWriter, r *http.Request, params ListSecurityEventsParams)
 	// RevokeOtherSessions Sign out everywhere except this device
 	// (DELETE /me/sessions)
 	RevokeOtherSessions(w http.ResponseWriter, r *http.Request, params RevokeOtherSessionsParams)
@@ -2822,6 +2919,66 @@ func (siw *ServerInterfaceWrapper) StartRecovery(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.StartRecovery(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RecoverWithKey operation middleware
+func (siw *ServerInterfaceWrapper) RecoverWithKey(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RecoverWithKeyParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RecoverWithKey(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -5595,6 +5752,126 @@ func (siw *ServerInterfaceWrapper) ReplacePrivacyExceptions(w http.ResponseWrite
 	handler.ServeHTTP(w, r)
 }
 
+// GetRecoveryKey operation middleware
+func (siw *ServerInterfaceWrapper) GetRecoveryKey(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetRecoveryKeyParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetRecoveryKey(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReplaceRecoveryKey operation middleware
+func (siw *ServerInterfaceWrapper) ReplaceRecoveryKey(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ReplaceRecoveryKeyParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReplaceRecoveryKey(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetSecuritySettings operation middleware
 func (siw *ServerInterfaceWrapper) GetSecuritySettings(w http.ResponseWriter, r *http.Request) {
 
@@ -5706,6 +5983,66 @@ func (siw *ServerInterfaceWrapper) UpdateSecuritySettings(w http.ResponseWriter,
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateSecuritySettings(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListSecurityEvents operation middleware
+func (siw *ServerInterfaceWrapper) ListSecurityEvents(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListSecurityEventsParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListSecurityEvents(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -7264,6 +7601,10 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/login/2fa", wrapper.LoginTwoFactor)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/refresh", wrapper.RefreshToken)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/logout", wrapper.Logout)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/recover/key", wrapper.RecoverWithKey)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/recovery-key", wrapper.GetRecoveryKey)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/me/recovery-key", wrapper.ReplaceRecoveryKey)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/security-events", wrapper.ListSecurityEvents)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/recover", wrapper.StartRecovery)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/reset-password", wrapper.ResetPassword)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/ws/ticket", wrapper.CreateWebSocketTicket)
@@ -7978,6 +8319,144 @@ type StartRecovery429ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response StartRecovery429ApplicationProblemPlusJSONResponse) VisitStartRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RecoverWithKeyRequestObject struct {
+	Params RecoverWithKeyParams
+	Body   *RecoverWithKeyJSONRequestBody
+}
+
+type RecoverWithKeyResponseObject interface {
+	VisitRecoverWithKeyResponse(w http.ResponseWriter) error
+}
+
+type RecoverWithKey200JSONResponse RegisterResponse
+
+func (response RecoverWithKey200JSONResponse) VisitRecoverWithKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RecoverWithKey400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response RecoverWithKey400ApplicationProblemPlusJSONResponse) VisitRecoverWithKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RecoverWithKey401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response RecoverWithKey401ApplicationProblemPlusJSONResponse) VisitRecoverWithKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RecoverWithKey403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response RecoverWithKey403ApplicationProblemPlusJSONResponse) VisitRecoverWithKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RecoverWithKey409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response RecoverWithKey409ApplicationProblemPlusJSONResponse) VisitRecoverWithKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RecoverWithKey422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response RecoverWithKey422ApplicationProblemPlusJSONResponse) VisitRecoverWithKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RecoverWithKey426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response RecoverWithKey426ApplicationProblemPlusJSONResponse) VisitRecoverWithKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RecoverWithKey429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response RecoverWithKey429ApplicationProblemPlusJSONResponse) VisitRecoverWithKeyResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -11927,6 +12406,281 @@ func (response ReplacePrivacyExceptions426ApplicationProblemPlusJSONResponse) Vi
 	return err
 }
 
+type GetRecoveryKeyRequestObject struct {
+	Params GetRecoveryKeyParams
+}
+
+type GetRecoveryKeyResponseObject interface {
+	VisitGetRecoveryKeyResponse(w http.ResponseWriter) error
+}
+
+type GetRecoveryKey200JSONResponse RecoveryKeyStatus
+
+func (response GetRecoveryKey200JSONResponse) VisitGetRecoveryKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRecoveryKey400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response GetRecoveryKey400ApplicationProblemPlusJSONResponse) VisitGetRecoveryKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRecoveryKey401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response GetRecoveryKey401ApplicationProblemPlusJSONResponse) VisitGetRecoveryKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRecoveryKey403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response GetRecoveryKey403ApplicationProblemPlusJSONResponse) VisitGetRecoveryKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRecoveryKey409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response GetRecoveryKey409ApplicationProblemPlusJSONResponse) VisitGetRecoveryKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRecoveryKey422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response GetRecoveryKey422ApplicationProblemPlusJSONResponse) VisitGetRecoveryKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRecoveryKey426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetRecoveryKey426ApplicationProblemPlusJSONResponse) VisitGetRecoveryKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRecoveryKey429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response GetRecoveryKey429ApplicationProblemPlusJSONResponse) VisitGetRecoveryKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplaceRecoveryKeyRequestObject struct {
+	Params ReplaceRecoveryKeyParams
+	Body   *ReplaceRecoveryKeyJSONRequestBody
+}
+
+type ReplaceRecoveryKeyResponseObject interface {
+	VisitReplaceRecoveryKeyResponse(w http.ResponseWriter) error
+}
+
+type ReplaceRecoveryKey200JSONResponse RecoveryKeyResult
+
+func (response ReplaceRecoveryKey200JSONResponse) VisitReplaceRecoveryKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplaceRecoveryKey400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response ReplaceRecoveryKey400ApplicationProblemPlusJSONResponse) VisitReplaceRecoveryKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplaceRecoveryKey401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ReplaceRecoveryKey401ApplicationProblemPlusJSONResponse) VisitReplaceRecoveryKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplaceRecoveryKey403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response ReplaceRecoveryKey403ApplicationProblemPlusJSONResponse) VisitReplaceRecoveryKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplaceRecoveryKey409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response ReplaceRecoveryKey409ApplicationProblemPlusJSONResponse) VisitReplaceRecoveryKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplaceRecoveryKey422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response ReplaceRecoveryKey422ApplicationProblemPlusJSONResponse) VisitReplaceRecoveryKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplaceRecoveryKey426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response ReplaceRecoveryKey426ApplicationProblemPlusJSONResponse) VisitReplaceRecoveryKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplaceRecoveryKey429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response ReplaceRecoveryKey429ApplicationProblemPlusJSONResponse) VisitReplaceRecoveryKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetSecuritySettingsRequestObject struct {
 	Params GetSecuritySettingsParams
 }
@@ -12080,6 +12834,143 @@ func (response UpdateSecuritySettings426ApplicationProblemPlusJSONResponse) Visi
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSecurityEventsRequestObject struct {
+	Params ListSecurityEventsParams
+}
+
+type ListSecurityEventsResponseObject interface {
+	VisitListSecurityEventsResponse(w http.ResponseWriter) error
+}
+
+type ListSecurityEvents200JSONResponse SecurityEventPage
+
+func (response ListSecurityEvents200JSONResponse) VisitListSecurityEventsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSecurityEvents400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response ListSecurityEvents400ApplicationProblemPlusJSONResponse) VisitListSecurityEventsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSecurityEvents401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ListSecurityEvents401ApplicationProblemPlusJSONResponse) VisitListSecurityEventsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSecurityEvents403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response ListSecurityEvents403ApplicationProblemPlusJSONResponse) VisitListSecurityEventsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSecurityEvents409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response ListSecurityEvents409ApplicationProblemPlusJSONResponse) VisitListSecurityEventsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSecurityEvents422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response ListSecurityEvents422ApplicationProblemPlusJSONResponse) VisitListSecurityEventsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSecurityEvents426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response ListSecurityEvents426ApplicationProblemPlusJSONResponse) VisitListSecurityEventsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSecurityEvents429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response ListSecurityEvents429ApplicationProblemPlusJSONResponse) VisitListSecurityEventsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -13930,6 +14821,9 @@ type StrictServerInterface interface {
 	// StartRecovery Start account recovery (temporary)
 	// (POST /auth/recover)
 	StartRecovery(ctx context.Context, request StartRecoveryRequestObject) (StartRecoveryResponseObject, error)
+	// RecoverWithKey Reset password with a single-use recovery key
+	// (POST /auth/recover/key)
+	RecoverWithKey(ctx context.Context, request RecoverWithKeyRequestObject) (RecoverWithKeyResponseObject, error)
 	// RefreshToken Get a new access token
 	// (POST /auth/refresh)
 	RefreshToken(ctx context.Context, request RefreshTokenRequestObject) (RefreshTokenResponseObject, error)
@@ -14047,12 +14941,21 @@ type StrictServerInterface interface {
 	// ReplacePrivacyExceptions Replace the exception list of one setting
 	// (PUT /me/privacy/exceptions/{setting_key}/{effect})
 	ReplacePrivacyExceptions(ctx context.Context, request ReplacePrivacyExceptionsRequestObject) (ReplacePrivacyExceptionsResponseObject, error)
+	// GetRecoveryKey Get recovery-key status without revealing its hash
+	// (GET /me/recovery-key)
+	GetRecoveryKey(ctx context.Context, request GetRecoveryKeyRequestObject) (GetRecoveryKeyResponseObject, error)
+	// ReplaceRecoveryKey Create or regenerate a recovery key after password and second-factor confirmation
+	// (POST /me/recovery-key)
+	ReplaceRecoveryKey(ctx context.Context, request ReplaceRecoveryKeyRequestObject) (ReplaceRecoveryKeyResponseObject, error)
 	// GetSecuritySettings Security settings
 	// (GET /me/security)
 	GetSecuritySettings(ctx context.Context, request GetSecuritySettingsRequestObject) (GetSecuritySettingsResponseObject, error)
 	// UpdateSecuritySettings Change the session duration
 	// (PATCH /me/security)
 	UpdateSecuritySettings(ctx context.Context, request UpdateSecuritySettingsRequestObject) (UpdateSecuritySettingsResponseObject, error)
+	// ListSecurityEvents List the last 50 security events of this account
+	// (GET /me/security-events)
+	ListSecurityEvents(ctx context.Context, request ListSecurityEventsRequestObject) (ListSecurityEventsResponseObject, error)
 	// RevokeOtherSessions Sign out everywhere except this device
 	// (DELETE /me/sessions)
 	RevokeOtherSessions(ctx context.Context, request RevokeOtherSessionsRequestObject) (RevokeOtherSessionsResponseObject, error)
@@ -14329,6 +15232,39 @@ func (sh *strictHandler) StartRecovery(w http.ResponseWriter, r *http.Request, p
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(StartRecoveryResponseObject); ok {
 		if err := validResponse.VisitStartRecoveryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RecoverWithKey operation middleware
+func (sh *strictHandler) RecoverWithKey(w http.ResponseWriter, r *http.Request, params RecoverWithKeyParams) {
+	var request RecoverWithKeyRequestObject
+
+	request.Params = params
+
+	var body RecoverWithKeyJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RecoverWithKey(ctx, request.(RecoverWithKeyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RecoverWithKey")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RecoverWithKeyResponseObject); ok {
+		if err := validResponse.VisitRecoverWithKeyResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -15514,6 +16450,65 @@ func (sh *strictHandler) ReplacePrivacyExceptions(w http.ResponseWriter, r *http
 	}
 }
 
+// GetRecoveryKey operation middleware
+func (sh *strictHandler) GetRecoveryKey(w http.ResponseWriter, r *http.Request, params GetRecoveryKeyParams) {
+	var request GetRecoveryKeyRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetRecoveryKey(ctx, request.(GetRecoveryKeyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetRecoveryKey")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetRecoveryKeyResponseObject); ok {
+		if err := validResponse.VisitGetRecoveryKeyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ReplaceRecoveryKey operation middleware
+func (sh *strictHandler) ReplaceRecoveryKey(w http.ResponseWriter, r *http.Request, params ReplaceRecoveryKeyParams) {
+	var request ReplaceRecoveryKeyRequestObject
+
+	request.Params = params
+
+	var body ReplaceRecoveryKeyJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ReplaceRecoveryKey(ctx, request.(ReplaceRecoveryKeyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ReplaceRecoveryKey")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ReplaceRecoveryKeyResponseObject); ok {
+		if err := validResponse.VisitReplaceRecoveryKeyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetSecuritySettings operation middleware
 func (sh *strictHandler) GetSecuritySettings(w http.ResponseWriter, r *http.Request, params GetSecuritySettingsParams) {
 	var request GetSecuritySettingsRequestObject
@@ -15566,6 +16561,32 @@ func (sh *strictHandler) UpdateSecuritySettings(w http.ResponseWriter, r *http.R
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateSecuritySettingsResponseObject); ok {
 		if err := validResponse.VisitUpdateSecuritySettingsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListSecurityEvents operation middleware
+func (sh *strictHandler) ListSecurityEvents(w http.ResponseWriter, r *http.Request, params ListSecurityEventsParams) {
+	var request ListSecurityEventsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListSecurityEvents(ctx, request.(ListSecurityEventsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListSecurityEvents")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListSecurityEventsResponseObject); ok {
+		if err := validResponse.VisitListSecurityEventsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

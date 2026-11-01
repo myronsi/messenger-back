@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.0.0-alpha.8
+  version: 2.1.0-alpha.1
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -202,6 +202,97 @@ paths:
           headers:
             Set-Cookie: { $ref: "#/components/headers/RefreshCookie" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+  /auth/recover/key:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    post:
+      tags: [auth]
+      operationId: recoverWithKey
+      summary: Reset password with a single-use recovery key
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RecoverWithKeyRequest" }
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RegisterResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /me/recovery-key:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    get:
+      tags: [auth]
+      operationId: getRecoveryKey
+      summary: Get recovery-key status without revealing its hash
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecoveryKeyStatus" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+    post:
+      tags: [auth]
+      operationId: replaceRecoveryKey
+      summary: Create or regenerate a recovery key after password and second-factor confirmation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReplaceRecoveryKeyRequest" }
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecoveryKeyResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /me/security-events:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    get:
+      tags: [auth]
+      operationId: listSecurityEvents
+      summary: List the last 50 security events of this account
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SecurityEventPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
   /auth/recover:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
@@ -1880,12 +1971,52 @@ components:
           type: integer
           minimum: 1
           description: Seconds until the access token expires
+    RecoverWithKeyRequest:
+      type: object
+      required: [username, recovery_key, new_password]
+      properties:
+        username: { type: string, maxLength: 64 }
+        recovery_key: { type: string, maxLength: 128 }
+        new_password: { type: string, minLength: 8, maxLength: 128 }
+        code: { type: string, maxLength: 128 }
+    ReplaceRecoveryKeyRequest:
+      type: object
+      required: [password]
+      properties:
+        password: { type: string, maxLength: 128 }
+        code: { type: string, maxLength: 128 }
+    RecoveryKeyResult:
+      type: object
+      required: [recovery_key]
+      properties:
+        recovery_key: { type: string }
+    RecoveryKeyStatus:
+      type: object
+      required: [exists, created_at, locked_until]
+      properties:
+        exists: { type: boolean }
+        created_at: { type: [string, 'null'], format: date-time }
+        locked_until: { type: [string, 'null'], format: date-time }
+    SecurityEventPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [id, type, created_at]
+            properties:
+              id: { $ref: "#/components/schemas/Id" }
+              type: { type: string }
+              created_at: { type: string, format: date-time }
     RegisterResponse:
       allOf:
         - $ref: "#/components/schemas/TokenResponse"
         - type: object
           description: Recovery parts of the temporary recovery flow (redesigned in release 1.1).
           properties:
+            recovery_key: { type: string, description: Shown once; only a keyed hash is stored }
             device_part: { type: string }
             qr_part: { type: string }
     TwoFactorChallenge:
@@ -2095,6 +2226,7 @@ components:
           required: [created_at]
           properties:
             created_at: { $ref: "#/components/schemas/Timestamp" }
+            recovery_setup_required: { type: boolean }
     UserPage:
       type: object
       required: [items, next_cursor]

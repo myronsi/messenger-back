@@ -75,7 +75,7 @@ func (q *Queries) EnsureSecuritySettings(ctx context.Context, userID int64) erro
 }
 
 const getSecuritySettings = `-- name: GetSecuritySettings :one
-SELECT user_id, session_duration_days, two_factor_enabled, two_factor_secret, pending_two_factor_secret, updated_at FROM user_security_settings WHERE user_id = $1
+SELECT user_id, session_duration_days, two_factor_enabled, two_factor_secret, pending_two_factor_secret, updated_at, recovery_locked_until FROM user_security_settings WHERE user_id = $1
 `
 
 func (q *Queries) GetSecuritySettings(ctx context.Context, userID int64) (UserSecuritySetting, error) {
@@ -88,6 +88,7 @@ func (q *Queries) GetSecuritySettings(ctx context.Context, userID int64) (UserSe
 		&i.TwoFactorSecret,
 		&i.PendingTwoFactorSecret,
 		&i.UpdatedAt,
+		&i.RecoveryLockedUntil,
 	)
 	return i, err
 }

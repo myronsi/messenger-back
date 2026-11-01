@@ -1,0 +1,8 @@
+{
+  "type": "security_notice",
+  "event_id": "7217400317439950009",
+  "chat_id": null,
+  "data": {
+    "type": "password_reset"
+  }
+}

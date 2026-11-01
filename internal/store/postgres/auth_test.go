@@ -307,6 +307,28 @@ func TestRecoveryCodeUsedOnceUnderConcurrency(t *testing.T) {
 	}
 }
 
+func TestSessionCreationDoesNotSpendCodeForStalePassword(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	u := mustUser(t, s, "stale_code")
+	if err := s.SecuritySettings().BeginTwoFactor(ctx, u.ID, "sealed"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SecuritySettings().ConfirmTwoFactor(ctx, u.ID, "sealed", []string{"backup-hash"}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := s.Sessions().Create(ctx, NewSession{
+		UserID: u.ID, PasswordFingerprint: "stale", RecoveryCodeHash: "backup-hash",
+		RefreshTokenHash: "unused-token", ExpiresAt: time.Now().Add(time.Hour),
+	})
+	if !errors.Is(err, ErrConflict) {
+		t.Fatalf("stale password: %v", err)
+	}
+	if available, err := s.SecuritySettings().HasRecoveryCode(ctx, u.ID, "backup-hash"); err != nil || !available {
+		t.Fatalf("code spent on failed session: %v, %v", available, err)
+	}
+}
+
 func TestRecoveryTokens(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()

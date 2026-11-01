@@ -37,7 +37,8 @@ type frame struct {
 
 // control is what travels on the broadcast channel.
 type control struct {
-	CloseSessions []uuid.UUID `json:"close_sessions,omitempty"`
+	CloseSessions []uuid.UUID     `json:"close_sessions,omitempty"`
+	Notice        json.RawMessage `json:"notice,omitempty"`
 }
 
 // Publisher is the bus as the fan-out uses it.
@@ -253,10 +254,24 @@ func (f *Fanout) Removed(ctx context.Context, chatID int64, userIDs []int64) {
 
 // CloseSessions makes every instance close the sockets of the sessions (they were revoked).
 func (f *Fanout) CloseSessions(ctx context.Context, sessions []uuid.UUID) {
+	f.closeSessions(ctx, sessions, nil)
+}
+
+// CloseSessionsWithNotice sends the reset notice and revocation in one ordered
+// control message, so a gateway can flush the notice before closing each socket.
+func (f *Fanout) CloseSessionsWithNotice(ctx context.Context, sessions []uuid.UUID) {
+	notice, err := f.encode("security_notice", 0, map[string]string{"type": "password_reset"}, "")
+	if err != nil {
+		return
+	}
+	f.closeSessions(ctx, sessions, notice)
+}
+
+func (f *Fanout) closeSessions(ctx context.Context, sessions []uuid.UUID, notice json.RawMessage) {
 	if len(sessions) == 0 {
 		return
 	}
-	b, err := json.Marshal(control{CloseSessions: sessions})
+	b, err := json.Marshal(control{CloseSessions: sessions, Notice: notice})
 	if err != nil {
 		return
 	}

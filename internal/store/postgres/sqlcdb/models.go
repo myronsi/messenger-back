@@ -147,6 +147,12 @@ type UserPrivacySetting struct {
 	SearchVisibility    string
 }
 
+type UserRecoveryKey struct {
+	UserID    int64
+	KeyHash   string
+	CreatedAt time.Time
+}
+
 type UserRecoveryShare struct {
 	UserID                 int64
 	EncryptedCloudPart     *string
@@ -171,6 +177,7 @@ type UserSecuritySetting struct {
 	TwoFactorSecret        *string
 	PendingTwoFactorSecret *string
 	UpdatedAt              time.Time
+	RecoveryLockedUntil    *time.Time
 }
 
 type UserSession struct {

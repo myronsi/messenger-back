@@ -44,6 +44,7 @@ var routeAccess = map[string]access{
 	"POST /auth/login":          accessPublic,
 	"POST /auth/login/2fa":      accessPublic,
 	"POST /auth/refresh":        accessPublic,
+	"POST /auth/recover/key":    accessPublic,
 	"POST /auth/recover":        accessPublic,
 	"POST /auth/reset-password": accessPublic,
 	"POST /auth/logout":         accessOptional,

@@ -67,7 +67,19 @@ The client IP is the TCP peer. `X-Forwarded-For` / `X-Real-IP` are honoured only
 
 ## Recovery
 
-`POST /auth/recover` stays unavailable (`501`) until the recovery redesign (MSGC-80 to MSGC-86) and the Shamir port (MSGC-69), so no recovery token is issued yet. The single-use token storage (`recovery_tokens`, 15 minutes) and `POST /auth/reset-password` are in place.
+New accounts receive a 160-bit base32 `recovery_key` once in the registration response. Only HMAC-SHA256(RECOVERY_PEPPER, normalized key) is stored. Keys accept case, spaces and hyphens. Treat RECOVERY_PEPPER as durable key material: losing or changing it invalidates existing recovery keys.
+
+- `GET /me/recovery-key`: existence, creation time and any security lock deadline; never returns the key or hash.
+- `POST /me/recovery-key`: current password and `code` if 2FA is enabled. Returns a new key once and immediately invalidates the previous key.
+- `POST /auth/recover/key`: username, recovery_key, new_password and code when 2FA is enabled. Unknown users, wrong/consumed keys and missing/wrong second factors all return the same 400 invalid_credentials. Recovery is rate limited by IP and username. A TOTP or unused 2FA backup code is mandatory when enabled.
+
+A reset atomically replaces the password and recovery key, consumes a supplied 2FA backup code, revokes all existing sessions, deletes old recovery tokens and records a password_reset security event. It preserves 2FA. The response sets a new session cookie and returns access_token plus the replacement recovery_key once. Existing WebSocket clients receive a best-effort security_notice and their old sessions close. Pending password/2FA logins are bound to their verified password and cannot create a session after it changes.
+
+For 24 hours after recovery, creating/replacing recovery keys and setting up, confirming or removing 2FA return 409 conflict. The replacement key issued inside the reset transaction is the exception, so the account retains recovery protection. GET /me/security-events returns the owner's newest 50 events.
+
+Existing users without a key receive recovery_setup_required=true from GET /me and must enroll using their current password and 2FA. The frontend prompts enrollment and also offers it in Security & devices. Keep the legacy Shamir data during transition; it is not converted into new keys. POST /auth/recover remains 501 and does not accept old shares. Existing-user enrollment and a communicated recovery transition are required before production cutover.
+
+Migration 000012 is additive. Apply it before deploying the updated API. Keep recovery keys out of logs, browser storage, screenshots and analytics. A failed response after a committed reset may require signing in with the new password; the rotated key cannot be retrieved from the server.
 
 ## Configuration
 

@@ -2,6 +2,8 @@ package postgres
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"time"
 
@@ -23,15 +25,30 @@ type sessionRepo struct{ s *Store }
 var _ SessionRepository = sessionRepo{}
 
 func (r sessionRepo) Create(ctx context.Context, n NewSession) (Session, error) {
-	ctx, cancel := r.s.call(ctx)
-	defer cancel()
-	row, err := r.s.q.CreateSession(ctx, sqlcdb.CreateSessionParams{
-		UserID: n.UserID, RefreshTokenHash: n.RefreshTokenHash, UserAgent: n.UserAgent, IpAddress: n.IP, ExpiresAt: n.ExpiresAt,
+	var out Session
+	err := r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
+		user, err := q.LockUser(ctx, n.UserID)
+		if err != nil {
+			return err
+		}
+		sum := sha256.Sum256([]byte(user.PasswordHash))
+		if n.PasswordFingerprint != "" && hex.EncodeToString(sum[:]) != n.PasswordFingerprint {
+			return ErrConflict
+		}
+		if n.RecoveryCodeHash != "" {
+			used, err := q.UseRecoveryCode(ctx, sqlcdb.UseRecoveryCodeParams{UserID: n.UserID, CodeHash: n.RecoveryCodeHash})
+			if err != nil {
+				return err
+			}
+			if used != 1 {
+				return ErrNotFound
+			}
+		}
+		row, err := q.CreateSession(ctx, sqlcdb.CreateSessionParams{UserID: n.UserID, RefreshTokenHash: n.RefreshTokenHash, UserAgent: n.UserAgent, IpAddress: n.IP, ExpiresAt: n.ExpiresAt})
+		out = sessionFrom(row)
+		return err
 	})
-	if err != nil {
-		return Session{}, mapError(err)
-	}
-	return sessionFrom(row), nil
+	return out, err
 }
 
 func (r sessionRepo) Rotate(ctx context.Context, req RotateRequest) (RotateResult, error) {
@@ -255,6 +272,10 @@ func (r settingsRepo) SetSessionDuration(ctx context.Context, userID int64, days
 
 func (r settingsRepo) BeginTwoFactor(ctx context.Context, userID int64, sealedSecret string) error {
 	return r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
+		if err := recoveryChangesAllowed(ctx, q, userID); err != nil {
+			return err
+		}
+
 		if err := q.EnsureSecuritySettings(ctx, userID); err != nil {
 			return err
 		}
@@ -271,6 +292,10 @@ func (r settingsRepo) BeginTwoFactor(ctx context.Context, userID int64, sealedSe
 
 func (r settingsRepo) ConfirmTwoFactor(ctx context.Context, userID int64, sealedPending string, hashes []string) error {
 	return r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
+		if err := recoveryChangesAllowed(ctx, q, userID); err != nil {
+			return err
+		}
+
 		n, err := q.EnableTwoFactor(ctx, sqlcdb.EnableTwoFactorParams{UserID: userID, PendingSecret: &sealedPending})
 		if err != nil {
 			return err
@@ -287,6 +312,10 @@ func (r settingsRepo) ConfirmTwoFactor(ctx context.Context, userID int64, sealed
 
 func (r settingsRepo) DisableTwoFactor(ctx context.Context, userID int64) error {
 	return r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
+		if err := recoveryChangesAllowed(ctx, q, userID); err != nil {
+			return err
+		}
+
 		if _, err := q.DisableTwoFactor(ctx, userID); err != nil {
 			return err
 		}
@@ -299,6 +328,14 @@ func (r settingsRepo) UseRecoveryCode(ctx context.Context, userID int64, codeHas
 	defer cancel()
 	n, err := r.s.q.UseRecoveryCode(ctx, sqlcdb.UseRecoveryCodeParams{UserID: userID, CodeHash: codeHash})
 	return n == 1, mapError(err)
+}
+
+func (r settingsRepo) HasRecoveryCode(ctx context.Context, userID int64, codeHash string) (bool, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	var exists bool
+	err := r.s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM user_2fa_recovery_codes WHERE user_id=$1 AND code_hash=$2 AND used_at IS NULL)`, userID, codeHash).Scan(&exists)
+	return exists, mapError(err)
 }
 
 func (r settingsRepo) CountRecoveryCodes(ctx context.Context, userID int64) (int, error) {

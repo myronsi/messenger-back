@@ -53,6 +53,9 @@
     },
     {
       "$ref": "server/presence.schema.json"
+    },
+    {
+      "$ref": "server/security_notice.schema.json"
     }
   ]
 }

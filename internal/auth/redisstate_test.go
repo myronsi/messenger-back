@@ -224,6 +224,15 @@ func TestChallenges(t *testing.T) {
 	}
 }
 
+func TestChallengeCredentialPropagatesRedisFailure(t *testing.T) {
+	rdb := goredis.NewClient(&goredis.Options{Addr: "127.0.0.1:1", DialTimeout: 50 * time.Millisecond, MaxRetries: -1})
+	defer rdb.Close()
+	_, err := NewChallenges(rdb, "unavailable").Credential(context.Background(), "any")
+	if err == nil || errors.Is(err, ErrChallengeInvalid) {
+		t.Fatalf("Redis failure was treated as invalid challenge: %v", err)
+	}
+}
+
 func TestTOTPReplay(t *testing.T) {
 	rdb, ns := testRedis(t)
 	r := NewTOTPReplay(rdb, ns)

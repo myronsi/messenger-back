@@ -60,14 +60,18 @@ func NewChallenges(rdb Redis, ns string) *Challenges { return &Challenges{rdb: r
 func (c *Challenges) key(token string) string { return c.ns + ":2fa:" + digest(token) }
 
 // Create stores a challenge for the user and returns the opaque value the client sends back.
-func (c *Challenges) Create(ctx context.Context, userID int64) (string, error) {
+func (c *Challenges) Create(ctx context.Context, userID int64, fingerprint ...string) (string, error) {
 	token, err := randomToken(32)
 	if err != nil {
 		return "", err
 	}
 	k := c.key(token)
 	pipe := c.rdb.TxPipeline()
-	pipe.HSet(ctx, k, "uid", userID, "attempts", 0)
+	proof := ""
+	if len(fingerprint) > 0 {
+		proof = fingerprint[0]
+	}
+	pipe.HSet(ctx, k, "uid", userID, "attempts", 0, "credential", proof)
 	pipe.Expire(ctx, k, ChallengeTTL)
 	if _, err := pipe.Exec(ctx); err != nil {
 		return "", fmt.Errorf("store login challenge: %w", err)
@@ -264,4 +268,19 @@ func (t *Tickets) Redeem(ctx context.Context, ticket string) (Ticket, error) {
 		return Ticket{}, ErrTicketInvalid
 	}
 	return Ticket{UserID: u, SessionID: s}, nil
+}
+
+// Credential binds a pending 2FA login to the password which started it.
+func (c *Challenges) Credential(ctx context.Context, token string) (string, error) {
+	value, err := c.rdb.HGet(ctx, c.key(token), "credential").Result()
+	if errors.Is(err, goredis.Nil) {
+		return "", ErrChallengeInvalid
+	}
+	if err != nil {
+		return "", fmt.Errorf("read challenge credential: %w", err)
+	}
+	if value == "" {
+		return "", ErrChallengeInvalid
+	}
+	return value, nil
 }
