@@ -39,9 +39,7 @@ type recoveryKeyRepo struct{ s *Store }
 func (s *Store) RecoveryKeys() RecoveryKeyRepository { return recoveryKeyRepo{s} }
 
 func (r recoveryKeyRepo) transaction(ctx context.Context, fn func(context.Context, pgx.Tx) error) error {
-	ctx, cancel := r.s.call(ctx)
-	defer cancel()
-	return mapError(pgx.BeginFunc(ctx, r.s.pool, func(tx pgx.Tx) error { return fn(ctx, tx) }))
+	return r.s.inRawTx(ctx, fn)
 }
 
 func (r recoveryKeyRepo) Register(ctx context.Context, username, name, passwordHash, keyHash string) (User, error) {

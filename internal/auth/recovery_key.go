@@ -178,10 +178,11 @@ func (s *Service) RecoverWithKey(ctx context.Context, c Client, username, key, n
 	if err != nil {
 		return nil, err
 	}
+	notify := s.onRevoked
 	if s.onRecovery != nil {
-		s.onRecovery(ctx, u.ID)
+		notify = s.onRecovery
 	}
-	if err = s.revokeInCache(ctx, reset.RevokedSessions...); err != nil {
+	if err = s.revokeInCacheWithNotifier(ctx, notify, reset.RevokedSessions...); err != nil {
 		return nil, err
 	}
 	tokens, err := s.startSession(ctx, u, c, digest(passwordHash))

@@ -109,13 +109,19 @@ const maxTxAttempts = 4
 // A transaction aborted by a deadlock or serialization failure is run again from the start (within the same
 // timeout), so fn must not keep state between attempts: it has to set every result it hands out.
 func (s *Store) inTx(ctx context.Context, fn func(ctx context.Context, q *sqlcdb.Queries) error) error {
+	return s.inRawTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		return fn(ctx, s.q.WithTx(tx))
+	})
+}
+
+// inRawTx shares the bounded deadlock and serialization retry policy with inTx.
+// The callback must reset any result values it exposes on every attempt.
+func (s *Store) inRawTx(ctx context.Context, fn func(ctx context.Context, tx pgx.Tx) error) error {
 	ctx, cancel := s.call(ctx)
 	defer cancel()
 	var err error
 	for attempt := 1; ; attempt++ {
-		err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-			return fn(ctx, s.q.WithTx(tx))
-		})
+		err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error { return fn(ctx, tx) })
 		if err == nil || !isRetryable(err) || attempt == maxTxAttempts {
 			break
 		}

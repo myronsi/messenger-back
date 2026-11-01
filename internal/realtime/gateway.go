@@ -375,7 +375,11 @@ func (g *Gateway) Control(payload []byte) {
 			revoked[id] = true
 		}
 		for _, c := range g.connsOf(func(c *conn) bool { return revoked[c.sessionID] }) {
-			go c.Close(CloseInvalidTicket, "session ended") //nolint:errcheck // best effort
+			if len(ctl.Notice) > 0 {
+				go c.sendThenClose(ctl.Notice, CloseInvalidTicket, "session ended")
+			} else {
+				go c.Close(CloseInvalidTicket, "session ended") //nolint:errcheck // best effort
+			}
 		}
 	}
 }

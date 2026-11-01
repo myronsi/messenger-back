@@ -11,9 +11,26 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/myronsi/messenger-back/internal/store/postgres/sqlcdb"
 )
+
+func TestRawTransactionRetriesSerializationFailure(t *testing.T) {
+	s := newTestStore(t)
+	attempts := 0
+	err := s.inRawTx(context.Background(), func(_ context.Context, _ pgx.Tx) error {
+		attempts++
+		if attempts == 1 {
+			return &pgconn.PgError{Code: codeSerializationFailure}
+		}
+		return nil
+	})
+	if err != nil || attempts != 2 {
+		t.Fatalf("attempts=%d err=%v", attempts, err)
+	}
+}
 
 func TestUsers(t *testing.T) {
 	s := newTestStore(t)

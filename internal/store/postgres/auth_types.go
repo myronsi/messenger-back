@@ -31,6 +31,7 @@ func (s Session) Active(now time.Time) bool {
 // NewSession describes a session to create. RefreshTokenHash is the SHA-256 (hex) of the refresh token.
 type NewSession struct {
 	PasswordFingerprint string
+	RecoveryCodeHash    string
 	UserID              int64
 	RefreshTokenHash    string
 	UserAgent           *string
@@ -122,6 +123,8 @@ type SecuritySettingsRepository interface {
 	DisableTwoFactor(ctx context.Context, userID int64) error
 	// UseRecoveryCode consumes one unused code; false when there is no such code.
 	UseRecoveryCode(ctx context.Context, userID int64, codeHash string) (bool, error)
+	// HasRecoveryCode checks a code without consuming it, for login retries.
+	HasRecoveryCode(ctx context.Context, userID int64, codeHash string) (bool, error)
 	CountRecoveryCodes(ctx context.Context, userID int64) (int, error)
 }
 

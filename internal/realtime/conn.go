@@ -68,6 +68,30 @@ func (c *conn) closeAfterFlush(code int, reason string) {
 	c.enqueue(nil) // wakes the writer
 }
 
+// sendThenClose gives a security notice a bounded chance to reach the writer
+// before revoking the socket, even when its outgoing buffer is temporarily full.
+func (c *conn) sendThenClose(notice []byte, code int, reason string) {
+	timer := time.NewTimer(5 * time.Second)
+	defer timer.Stop()
+	select {
+	case <-c.done:
+		return
+	case <-timer.C:
+		_ = c.Close(code, reason)
+		return
+	case c.send <- notice:
+	}
+	c.flushMu.Lock()
+	c.flushThenClose = &closeReason{websocket.StatusCode(code), reason}
+	c.flushMu.Unlock()
+	select {
+	case <-c.done:
+	case <-timer.C:
+		_ = c.Close(code, reason)
+	case c.send <- nil:
+	}
+}
+
 // Close implements Conn: it sends a close frame and ends the connection.
 func (c *conn) Close(code int, reason string) error {
 	var err error
@@ -96,11 +120,7 @@ func (c *conn) writeLoop() {
 			return
 		case b := <-c.send:
 			if b == nil {
-				c.flushMu.Lock()
-				fc := c.flushThenClose
-				c.flushMu.Unlock()
-				if fc != nil && len(c.send) == 0 {
-					_ = c.Close(int(fc.code), fc.reason)
+				if c.closeIfFlushed() {
 					return
 				}
 				continue
@@ -112,8 +132,22 @@ func (c *conn) writeLoop() {
 				_ = c.Close(int(websocket.StatusGoingAway), "")
 				return
 			}
+			if c.closeIfFlushed() {
+				return
+			}
 		}
 	}
+}
+
+func (c *conn) closeIfFlushed() bool {
+	c.flushMu.Lock()
+	fc := c.flushThenClose
+	c.flushMu.Unlock()
+	if fc == nil || len(c.send) != 0 {
+		return false
+	}
+	_ = c.Close(int(fc.code), fc.reason)
+	return true
 }
 
 // pingLoop pings the client and, every other ping, re-checks the session: a revocation whose broadcast was

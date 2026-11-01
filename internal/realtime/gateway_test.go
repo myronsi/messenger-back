@@ -585,6 +585,27 @@ func TestRevokedSessionLosesItsSocket(t *testing.T) {
 	}
 }
 
+func TestRecoveryNoticeArrivesBeforeSocketCloses(t *testing.T) {
+	e := newEnv(t)
+	a, b := e.instance("a"), e.instance("b")
+	alice := e.user("alice")
+	tk, sid := e.tickets.issue(alice)
+	c := e.dial(a, alice, "ticket="+tk)
+	c.next("hello")
+	b.fanout.CloseSessionsWithNotice(context.Background(), []uuid.UUID{sid})
+	if got := data(c.next("security_notice"))["type"]; got != "password_reset" {
+		t.Fatalf("notice: %v", got)
+	}
+	select {
+	case ce := <-c.closed:
+		if ce.Code != CloseInvalidTicket {
+			t.Fatalf("close code %d", ce.Code)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("revoked socket stayed open after notice")
+	}
+}
+
 func TestPresenceVersionsAreForwardedInOrder(t *testing.T) {
 	e := newEnv(t)
 	a := e.instance("a")

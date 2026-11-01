@@ -35,6 +35,15 @@ func (r sessionRepo) Create(ctx context.Context, n NewSession) (Session, error) 
 		if n.PasswordFingerprint != "" && hex.EncodeToString(sum[:]) != n.PasswordFingerprint {
 			return ErrConflict
 		}
+		if n.RecoveryCodeHash != "" {
+			used, err := q.UseRecoveryCode(ctx, sqlcdb.UseRecoveryCodeParams{UserID: n.UserID, CodeHash: n.RecoveryCodeHash})
+			if err != nil {
+				return err
+			}
+			if used != 1 {
+				return ErrNotFound
+			}
+		}
 		row, err := q.CreateSession(ctx, sqlcdb.CreateSessionParams{UserID: n.UserID, RefreshTokenHash: n.RefreshTokenHash, UserAgent: n.UserAgent, IpAddress: n.IP, ExpiresAt: n.ExpiresAt})
 		out = sessionFrom(row)
 		return err
@@ -319,6 +328,14 @@ func (r settingsRepo) UseRecoveryCode(ctx context.Context, userID int64, codeHas
 	defer cancel()
 	n, err := r.s.q.UseRecoveryCode(ctx, sqlcdb.UseRecoveryCodeParams{UserID: userID, CodeHash: codeHash})
 	return n == 1, mapError(err)
+}
+
+func (r settingsRepo) HasRecoveryCode(ctx context.Context, userID int64, codeHash string) (bool, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	var exists bool
+	err := r.s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM user_2fa_recovery_codes WHERE user_id=$1 AND code_hash=$2 AND used_at IS NULL)`, userID, codeHash).Scan(&exists)
+	return exists, mapError(err)
 }
 
 func (r settingsRepo) CountRecoveryCodes(ctx context.Context, userID int64) (int, error) {

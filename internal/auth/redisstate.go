@@ -273,8 +273,14 @@ func (t *Tickets) Redeem(ctx context.Context, ticket string) (Ticket, error) {
 // Credential binds a pending 2FA login to the password which started it.
 func (c *Challenges) Credential(ctx context.Context, token string) (string, error) {
 	value, err := c.rdb.HGet(ctx, c.key(token), "credential").Result()
-	if errors.Is(err, goredis.Nil) || value == "" {
+	if errors.Is(err, goredis.Nil) {
 		return "", ErrChallengeInvalid
 	}
-	return value, err
+	if err != nil {
+		return "", fmt.Errorf("read challenge credential: %w", err)
+	}
+	if value == "" {
+		return "", ErrChallengeInvalid
+	}
+	return value, nil
 }

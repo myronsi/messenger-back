@@ -225,6 +225,59 @@ func TestLoginUpgradesV1Hash(t *testing.T) {
 	}
 }
 
+func TestConcurrentLegacyRehashUsesWinningPasswordHash(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	u, err := e.store.Users().Create(ctx, "parallel_legacy", "Legacy", v1Argon2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	winner, err := e.svc.upgradeHash(ctx, u.ID, v1Argon2, "correct horse battery")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := e.svc.upgradeHash(ctx, u.ID, v1Argon2, "correct horse battery")
+	if err != nil || got != winner {
+		t.Fatalf("losing rehash: %v, same hash: %v", err, got == winner)
+	}
+	changed, err := e.svc.hasher.Hash(ctx, "new password for account")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.store.Users().SetPasswordHash(ctx, u.ID, changed); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.upgradeHash(ctx, u.ID, v1Argon2, "correct horse battery"); !errors.Is(err, ErrInvalidCredentials) {
+		t.Fatalf("password changed: %v", err)
+	}
+}
+
+func TestStaleChallengeDoesNotConsumeBackupCode(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	c := e.client("10.0.0.27")
+	ts := e.register(t, "stale_challenge", "correct horse")
+	_, codes := e.enableTwoFactor(t, ts, "correct horse")
+	res, err := e.svc.Login(ctx, c, "stale_challenge", "correct horse")
+	if err != nil {
+		t.Fatal(err)
+	}
+	newHash, err := e.svc.hasher.Hash(ctx, "replacement password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.store.Users().SetPasswordHash(ctx, ts.User.ID, newHash); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.LoginTwoFactor(ctx, c, res.Challenge, codes[0]); !errors.Is(err, ErrInvalidCredentials) {
+		t.Fatalf("stale challenge: %v", err)
+	}
+	available, err := e.store.SecuritySettings().HasRecoveryCode(ctx, ts.User.ID, HashRecoveryCode(codes[0]))
+	if err != nil || !available {
+		t.Fatalf("backup code spent on rejected login: %v, %v", available, err)
+	}
+}
+
 func TestLoginRateLimit(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
