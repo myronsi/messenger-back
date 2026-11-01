@@ -86,9 +86,18 @@ func (c *conn) sendThenClose(notice []byte, code int, reason string) {
 	c.flushMu.Unlock()
 	select {
 	case <-c.done:
+		return
 	case <-timer.C:
 		_ = c.Close(code, reason)
+		return
 	case c.send <- nil:
+	}
+	// The marker only wakes the writer. Keep the deadline active until the
+	// socket actually closes, since a slow write or new queued events can delay it.
+	select {
+	case <-c.done:
+	case <-timer.C:
+		_ = c.Close(code, reason)
 	}
 }
 
