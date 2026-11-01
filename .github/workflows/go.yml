@@ -74,16 +74,8 @@ jobs:
       TEST_ELASTIC_URL: http://127.0.0.1:9200
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      # A service container cannot take the command-line flags ScyllaDB needs on a small runner.
-      - name: Start ScyllaDB
-        run: ./deploy/ci/start-scylla.sh
-      - name: Start S3 (RustFS)
-        run: ./deploy/ci/start-s3.sh
-      - name: Start Elasticsearch
-        run: ./deploy/ci/start-elastic.sh
-      # Voice messages are measured with ffprobe and ffmpeg (the image ships static builds).
-      - name: Install ffmpeg
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg
+      - name: Start stores and install versioned media tools
+        run: bash deploy/ci/setup-test.sh
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
