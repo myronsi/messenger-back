@@ -21,6 +21,7 @@ import (
 	"github.com/myronsi/messenger-back/internal/auth"
 	"github.com/myronsi/messenger-back/internal/config"
 	"github.com/myronsi/messenger-back/internal/media"
+	"github.com/myronsi/messenger-back/internal/notifications"
 	"github.com/myronsi/messenger-back/internal/observability"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/redis"
@@ -44,7 +45,8 @@ func (m memberRules) Visible(ctx context.Context, viewer, chatID, _ int64) (bool
 
 type mediaEnv struct {
 	*authEnv
-	store *postgres.Store
+	store  *postgres.Store
+	tokens *notifications.ActionTokens
 }
 
 func newMediaEnv(t *testing.T) *mediaEnv {
@@ -65,17 +67,19 @@ func newMediaEnv(t *testing.T) *mediaEnv {
 	rules := memberRules{store}
 	msvc := media.NewService(media.Options{Storage: disk, Attachments: store.Attachments(), Visibility: rules, Membership: rules,
 		Prober: media.NewProber("/none", "/none"), Limits: media.Limits{Image: 1 << 20, Audio: 1 << 20, Video: 1 << 20, File: 1 << 20, Avatar: 1 << 20}})
+	tokens := notifications.NewActionTokens("test-secret")
 	r := NewRouter(Options{
 		HTTP:    config.HTTP{BasePath: apiBase, RequestTimeout: 10 * time.Second, ReadinessTimeout: time.Second, MaxBodyBytes: 4096},
 		Log:     log,
 		Metrics: observability.NewMetrics(),
 		API: NewServer(NewAuthServer(AuthOptions{Service: svc, Log: log, BasePath: apiBase, CookieSecure: true}),
 			NewMediaServer(MediaOptions{Service: msvc, Store: store, Directory: users.NewDirectory(store, nil, apiBase),
-				Limiter: redis.NewRateLimiter(rdb, "t"+uuid.NewString()+":"), BasePath: apiBase, Log: log})),
+				Limiter: redis.NewRateLimiter(rdb, "t"+uuid.NewString()+":"), BasePath: apiBase, Log: log})).
+			WithNotifications(NotificationOptions{Tokens: tokens}),
 		Authenticator:  svc,
 		UploadMaxBytes: msvc.Limits().Max(),
 	})
-	return &mediaEnv{authEnv: &authEnv{router: r}, store: store}
+	return &mediaEnv{authEnv: &authEnv{router: r}, store: store, tokens: tokens}
 }
 
 func (e *mediaEnv) userID(t *testing.T, s session) int64 {
@@ -233,6 +237,43 @@ func TestTransferRoutes(t *testing.T) {
 		if got := long(httptest.NewRequest(method, p, nil)); got != want {
 			t.Errorf("%s: %v, want %v", path, got, want)
 		}
+	}
+}
+
+func TestNotificationAvatarSeesWhatItsRecipientSees(t *testing.T) {
+	e := newMediaEnv(t)
+	alice, bob, carol := e.register(t, "alice"), e.register(t, "bob"), e.register(t, "carol")
+	aliceID, bobID, carolID := e.userID(t, alice), e.userID(t, bob), e.userID(t, carol)
+	avatar := func(token string) reply {
+		return e.do(t, request{method: http.MethodGet, path: "/notifications/avatar/" + token})
+	}
+	defaultBytes := avatar(e.tokens.Avatar(bobID, aliceID)).Body.Bytes()
+	id := e.upload(t, alice.access, map[string]string{"purpose": "avatar"}, "me.png", smallPNG(t)).json()["id"].(string)
+	if r := e.do(t, request{method: http.MethodPut, path: "/me/avatar", token: alice.access, body: map[string]string{"attachment_id": id}}); r.Code != http.StatusOK {
+		t.Fatalf("set avatar: %d %s", r.Code, r.Body)
+	}
+	if got := avatar(e.tokens.Avatar(bobID, aliceID)); got.Code != http.StatusOK || bytes.Equal(got.Body.Bytes(), defaultBytes) {
+		t.Fatalf("signed avatar without a session: %d", got.Code)
+	}
+	for _, bad := range []string{"nope", e.tokens.Read(bobID, 1, 1), notifications.NewActionTokens("other").Avatar(bobID, aliceID)} {
+		if r := avatar(bad); r.Code != http.StatusNotFound {
+			t.Fatalf("token %q: %d", bad, r.Code)
+		}
+	}
+	p, _ := e.store.Social().Privacy(context.Background(), []int64{aliceID})
+	s := p[aliceID]
+	s.AvatarVisibility = postgres.VisibleSharedChats
+	if _, err := e.store.Social().UpdatePrivacy(context.Background(), s); err != nil {
+		t.Fatal(err)
+	}
+	if got := avatar(e.tokens.Avatar(carolID, aliceID)); !bytes.Equal(got.Body.Bytes(), defaultBytes) {
+		t.Fatal("the avatar ignored the recipient's visibility")
+	}
+	if err := e.store.Social().Block(context.Background(), aliceID, bobID); err != nil {
+		t.Fatal(err)
+	}
+	if got := avatar(e.tokens.Avatar(bobID, aliceID)); !bytes.Equal(got.Body.Bytes(), defaultBytes) {
+		t.Fatal("a blocked recipient got the avatar")
 	}
 }
 
