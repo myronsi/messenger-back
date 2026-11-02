@@ -197,33 +197,60 @@ func (s *Server) UpdateNotificationActivity(w http.ResponseWriter, r *http.Reque
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) GetNotificationAvatar(w http.ResponseWriter, r *http.Request, token string) {
-	if s.notifications == nil || s.media == nil {
+func (s *Server) actionToken(w http.ResponseWriter, r *http.Request, parse func(string) (notifications.ActionToken, error), token string) (notifications.ActionToken, bool) {
+	if s.notifications == nil || s.notifications.Store == nil {
 		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
-		return
+		return notifications.ActionToken{}, false
 	}
-	recipient, sender, err := s.notifications.Tokens.ParseAvatar(token)
+	t, err := parse(token)
 	if err != nil {
 		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
+		return notifications.ActionToken{}, false
+	}
+	active, err := s.notifications.Store.DeviceActive(r.Context(), t.Recipient, t.Device)
+	if err != nil {
+		WriteProblem(w, http.StatusServiceUnavailable, ErrorCodeInternalError)
+		return notifications.ActionToken{}, false
+	}
+	if !active {
+		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
+		return notifications.ActionToken{}, false
+	}
+	return t, true
+}
+
+func (s *Server) GetNotificationAvatar(w http.ResponseWriter, r *http.Request, token string) {
+	if s.media == nil {
+		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
 		return
 	}
-	ctx := context.WithValue(r.Context(), principalKey{}, auth.Principal{UserID: recipient})
-	s.media.GetUserAvatar(w, r.WithContext(ctx), strconv.FormatInt(sender, 10), GetUserAvatarParams{})
+	t, ok := s.actionToken(w, r, s.notifications.tokens().ParseAvatar, token)
+	if !ok {
+		return
+	}
+	ctx := context.WithValue(r.Context(), principalKey{}, auth.Principal{UserID: t.Recipient})
+	s.media.GetUserAvatar(w, r.WithContext(ctx), strconv.FormatInt(t.IDs[0], 10), GetUserAvatarParams{})
 }
 
 func (s *Server) MarkNotificationRead(w http.ResponseWriter, r *http.Request, token string) {
-	if s.notifications == nil || s.chats == nil {
+	if s.chats == nil {
 		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
 		return
 	}
-	recipient, chat, message, err := s.notifications.Tokens.ParseRead(token)
-	if err != nil {
-		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
+	t, ok := s.actionToken(w, r, s.notifications.tokens().ParseRead, token)
+	if !ok {
 		return
 	}
-	if _, err := s.chats.o.Service.MarkRead(r.Context(), recipient, chat, message); err != nil {
+	if _, err := s.chats.o.Service.MarkRead(r.Context(), t.Recipient, t.IDs[0], t.IDs[1]); err != nil {
 		serviceError(w, r, s.chats.o.Log, "mark read from notification", err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (o *NotificationOptions) tokens() *notifications.ActionTokens {
+	if o == nil {
+		return nil
+	}
+	return o.Tokens
 }

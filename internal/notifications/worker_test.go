@@ -152,7 +152,7 @@ func TestMessageNotificationPrivacyAndEligibility(t *testing.T) {
 				if scenario == "preview" && p.Body != "private message" {
 					t.Fatal("preview missing")
 				}
-				if _, chat, message, err := w.Tokens.ParseRead(p.ReadToken); err != nil || chat != 3 || message != 9 {
+				if got, err := w.Tokens.ParseRead(p.ReadToken); err != nil || got.IDs[0] != 3 || got.IDs[1] != 9 || got.Device != q.devices[0].ID {
 					t.Fatalf("read action missing: %v", err)
 				}
 				if p.Preview != (scenario == "preview") {
@@ -161,7 +161,7 @@ func TestMessageNotificationPrivacyAndEligibility(t *testing.T) {
 				if scenario == "private" && p.AvatarToken != "" {
 					t.Fatal("the sender's avatar leaked without previews")
 				}
-				if _, sender, err := w.Tokens.ParseAvatar(p.AvatarToken); scenario == "preview" && (err != nil || sender != 1) {
+				if got, err := w.Tokens.ParseAvatar(p.AvatarToken); scenario == "preview" && (err != nil || got.IDs[0] != 1) {
 					t.Fatalf("preview avatar missing: %v", err)
 				}
 			}

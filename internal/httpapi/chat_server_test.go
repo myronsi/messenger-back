@@ -151,7 +151,7 @@ func newChatEnvWith(t *testing.T, withSearch bool) *chatEnv {
 		WithAccount(NewAccountServer(AccountOptions{Store: store, Directory: dir, Deleter: authSvc, BasePath: apiBase, Log: log})).
 		WithChats(NewChatServer(ChatOptions{Service: svc, BasePath: apiBase, Log: log})).
 		WithMessages(NewMessageServer(MessageOptions{Service: msgs, Store: store, Directory: dir, BasePath: apiBase, Log: log, Searcher: searcher(index, msgs, store, repo)})).
-		WithNotifications(NotificationOptions{Tokens: tokens})
+		WithNotifications(NotificationOptions{Store: store.Notifications(), Tokens: tokens})
 	return &chatEnv{
 		authEnv: &authEnv{router: NewRouter(Options{
 			HTTP:          config.HTTP{BasePath: apiBase, RequestTimeout: 10 * time.Second, ReadinessTimeout: time.Second, MaxBodyBytes: 4096},
@@ -312,8 +312,9 @@ func TestNotificationReadTokenMarksOnlyItsChatRead(t *testing.T) {
 	if unread() != 1 {
 		t.Fatal("the message starts unread")
 	}
-	good := e.tokens.Read(num(bobID), num(chat), num(msg))
-	for _, bad := range []string{"nope", e.tokens.Avatar(num(bobID), num(aliceID)), strings.Replace(good, "."+chat+".", ".1"+chat+".", 1)} {
+	device, session := pushDevice(t, e.store, num(bobID))
+	good := e.tokens.Read(num(bobID), device, num(chat), num(msg))
+	for _, bad := range []string{"nope", e.tokens.Avatar(num(bobID), device, num(aliceID)), strings.Replace(good, "."+chat+".", ".1"+chat+".", 1), e.tokens.Read(num(bobID), uuid.New(), num(chat), num(msg))} {
 		if r := e.do(t, request{method: http.MethodPost, path: "/notifications/read/" + bad}); r.Code != http.StatusNotFound {
 			t.Fatalf("token %q: %d %s", bad, r.Code, r.Body)
 		}
@@ -327,6 +328,26 @@ func TestNotificationReadTokenMarksOnlyItsChatRead(t *testing.T) {
 	if unread() != 0 {
 		t.Fatal("the token did not mark the chat read")
 	}
+	if err := e.store.Sessions().Revoke(context.Background(), num(bobID), session); err != nil {
+		t.Fatal(err)
+	}
+	if r := e.do(t, request{method: http.MethodPost, path: "/notifications/read/" + good}); r.Code != http.StatusNotFound {
+		t.Fatalf("token after logout: %d", r.Code)
+	}
+}
+
+func pushDevice(t *testing.T, store *postgres.Store, uid int64) (uuid.UUID, uuid.UUID) {
+	t.Helper()
+	sessions, err := store.Sessions().ListActive(context.Background(), uid)
+	if err != nil || len(sessions) == 0 {
+		t.Fatalf("sessions: %v", err)
+	}
+	id := uuid.New()
+	d := postgres.NotificationDevice{ID: id, Platform: "web", Destination: "https://fcm.googleapis.com/fcm/send/" + id.String(), P256dh: "key", Auth: "auth"}
+	if err := store.Notifications().Register(context.Background(), uid, sessions[0].ID, d); err != nil {
+		t.Fatal(err)
+	}
+	return id, sessions[0].ID
 }
 
 func TestDirectMessagePrivacyAndRequests(t *testing.T) {

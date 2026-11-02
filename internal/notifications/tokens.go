@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 var ErrInvalidActionToken = errors.New("invalid notification action token")
@@ -22,40 +24,38 @@ type ActionTokens struct {
 	now func() time.Time
 }
 
+type ActionToken struct {
+	Recipient int64
+	Device    uuid.UUID
+	IDs       []int64
+}
+
 func NewActionTokens(secret string) *ActionTokens {
 	if secret == "" {
 		return nil
 	}
-	sum := sha256.Sum256([]byte("messenger notification action v1\x00" + secret))
+	sum := sha256.Sum256([]byte("messenger notification action v2\x00" + secret))
 	return &ActionTokens{key: sum[:], now: time.Now}
 }
 
-func (t *ActionTokens) Avatar(recipient, sender int64) string {
-	return t.sign("a", t.now().Add(AvatarTokenTTL), recipient, sender)
+func (t *ActionTokens) Avatar(recipient int64, device uuid.UUID, sender int64) string {
+	return t.sign("a", t.now().Add(AvatarTokenTTL), recipient, device, sender)
 }
 
-func (t *ActionTokens) Read(recipient, chat, message int64) string {
-	return t.sign("r", t.now().Add(ReadTokenTTL), recipient, chat, message)
+func (t *ActionTokens) Read(recipient int64, device uuid.UUID, chat, message int64) string {
+	return t.sign("r", t.now().Add(ReadTokenTTL), recipient, device, chat, message)
 }
 
-func (t *ActionTokens) ParseAvatar(token string) (recipient, sender int64, err error) {
-	ids, err := t.parse("a", 2, token)
-	if err != nil {
-		return 0, 0, err
-	}
-	return ids[0], ids[1], nil
+func (t *ActionTokens) ParseAvatar(token string) (ActionToken, error) {
+	return t.parse("a", 1, token)
 }
 
-func (t *ActionTokens) ParseRead(token string) (recipient, chat, message int64, err error) {
-	ids, err := t.parse("r", 3, token)
-	if err != nil {
-		return 0, 0, 0, err
-	}
-	return ids[0], ids[1], ids[2], nil
+func (t *ActionTokens) ParseRead(token string) (ActionToken, error) {
+	return t.parse("r", 2, token)
 }
 
-func (t *ActionTokens) sign(purpose string, exp time.Time, ids ...int64) string {
-	parts := []string{purpose}
+func (t *ActionTokens) sign(purpose string, exp time.Time, recipient int64, device uuid.UUID, ids ...int64) string {
+	parts := []string{purpose, strconv.FormatInt(recipient, 10), device.String()}
 	for _, id := range ids {
 		parts = append(parts, strconv.FormatInt(id, 10))
 	}
@@ -64,26 +64,34 @@ func (t *ActionTokens) sign(purpose string, exp time.Time, ids ...int64) string 
 	return body + "." + t.mac(body)
 }
 
-func (t *ActionTokens) parse(purpose string, n int, token string) ([]int64, error) {
+func (t *ActionTokens) parse(purpose string, n int, token string) (ActionToken, error) {
 	parts := strings.Split(token, ".")
-	if t == nil || len(parts) != n+3 || parts[0] != purpose {
-		return nil, ErrInvalidActionToken
+	if t == nil || len(parts) != n+5 || parts[0] != purpose {
+		return ActionToken{}, ErrInvalidActionToken
 	}
 	body := strings.Join(parts[:len(parts)-1], ".")
 	if !hmac.Equal([]byte(parts[len(parts)-1]), []byte(t.mac(body))) {
-		return nil, ErrInvalidActionToken
+		return ActionToken{}, ErrInvalidActionToken
 	}
-	exp, err := strconv.ParseInt(parts[n+1], 10, 64)
+	exp, err := strconv.ParseInt(parts[n+3], 10, 64)
 	if err != nil || t.now().Unix() > exp {
-		return nil, ErrInvalidActionToken
+		return ActionToken{}, ErrInvalidActionToken
+	}
+	recipient, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil || recipient <= 0 {
+		return ActionToken{}, ErrInvalidActionToken
+	}
+	device, err := uuid.Parse(parts[2])
+	if err != nil {
+		return ActionToken{}, ErrInvalidActionToken
 	}
 	ids := make([]int64, n)
 	for i := range ids {
-		if ids[i], err = strconv.ParseInt(parts[i+1], 10, 64); err != nil || ids[i] <= 0 {
-			return nil, ErrInvalidActionToken
+		if ids[i], err = strconv.ParseInt(parts[i+3], 10, 64); err != nil || ids[i] <= 0 {
+			return ActionToken{}, ErrInvalidActionToken
 		}
 	}
-	return ids, nil
+	return ActionToken{Recipient: recipient, Device: device, IDs: ids}, nil
 }
 
 func (t *ActionTokens) mac(body string) string {

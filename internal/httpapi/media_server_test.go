@@ -75,7 +75,7 @@ func newMediaEnv(t *testing.T) *mediaEnv {
 		API: NewServer(NewAuthServer(AuthOptions{Service: svc, Log: log, BasePath: apiBase, CookieSecure: true}),
 			NewMediaServer(MediaOptions{Service: msvc, Store: store, Directory: users.NewDirectory(store, nil, apiBase),
 				Limiter: redis.NewRateLimiter(rdb, "t"+uuid.NewString()+":"), BasePath: apiBase, Log: log})).
-			WithNotifications(NotificationOptions{Tokens: tokens}),
+			WithNotifications(NotificationOptions{Store: store.Notifications(), Tokens: tokens}),
 		Authenticator:  svc,
 		UploadMaxBytes: msvc.Limits().Max(),
 	})
@@ -258,18 +258,20 @@ func TestNotificationAvatarSeesWhatItsRecipientSees(t *testing.T) {
 	e := newMediaEnv(t)
 	alice, bob, carol := e.register(t, "alice"), e.register(t, "bob"), e.register(t, "carol")
 	aliceID, bobID, carolID := e.userID(t, alice), e.userID(t, bob), e.userID(t, carol)
+	bobDevice, _ := pushDevice(t, e.store, bobID)
+	carolDevice, _ := pushDevice(t, e.store, carolID)
 	avatar := func(token string) reply {
 		return e.do(t, request{method: http.MethodGet, path: "/notifications/avatar/" + token})
 	}
-	defaultBytes := avatar(e.tokens.Avatar(bobID, aliceID)).Body.Bytes()
+	defaultBytes := avatar(e.tokens.Avatar(bobID, bobDevice, aliceID)).Body.Bytes()
 	id := e.upload(t, alice.access, map[string]string{"purpose": "avatar"}, "me.png", smallPNG(t)).json()["id"].(string)
 	if r := e.do(t, request{method: http.MethodPut, path: "/me/avatar", token: alice.access, body: map[string]string{"attachment_id": id}}); r.Code != http.StatusOK {
 		t.Fatalf("set avatar: %d %s", r.Code, r.Body)
 	}
-	if got := avatar(e.tokens.Avatar(bobID, aliceID)); got.Code != http.StatusOK || bytes.Equal(got.Body.Bytes(), defaultBytes) {
+	if got := avatar(e.tokens.Avatar(bobID, bobDevice, aliceID)); got.Code != http.StatusOK || bytes.Equal(got.Body.Bytes(), defaultBytes) {
 		t.Fatalf("signed avatar without a session: %d", got.Code)
 	}
-	for _, bad := range []string{"nope", e.tokens.Read(bobID, 1, 1), notifications.NewActionTokens("other").Avatar(bobID, aliceID)} {
+	for _, bad := range []string{"nope", e.tokens.Read(bobID, bobDevice, 1, 1), notifications.NewActionTokens("other").Avatar(bobID, bobDevice, aliceID), e.tokens.Avatar(bobID, carolDevice, aliceID)} {
 		if r := avatar(bad); r.Code != http.StatusNotFound {
 			t.Fatalf("token %q: %d", bad, r.Code)
 		}
@@ -280,13 +282,13 @@ func TestNotificationAvatarSeesWhatItsRecipientSees(t *testing.T) {
 	if _, err := e.store.Social().UpdatePrivacy(context.Background(), s); err != nil {
 		t.Fatal(err)
 	}
-	if got := avatar(e.tokens.Avatar(carolID, aliceID)); !bytes.Equal(got.Body.Bytes(), defaultBytes) {
+	if got := avatar(e.tokens.Avatar(carolID, carolDevice, aliceID)); !bytes.Equal(got.Body.Bytes(), defaultBytes) {
 		t.Fatal("the avatar ignored the recipient's visibility")
 	}
 	if err := e.store.Social().Block(context.Background(), aliceID, bobID); err != nil {
 		t.Fatal(err)
 	}
-	if got := avatar(e.tokens.Avatar(bobID, aliceID)); !bytes.Equal(got.Body.Bytes(), defaultBytes) {
+	if got := avatar(e.tokens.Avatar(bobID, bobDevice, aliceID)); !bytes.Equal(got.Body.Bytes(), defaultBytes) {
 		t.Fatal("a blocked recipient got the avatar")
 	}
 }
