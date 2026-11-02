@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.2.0-alpha.1...v1.3.0-alpha.1) (2026-11-02)
+
+
+### Features
+
+* **messages:** allow editing the caption of file messages ([#137](https://github.com/myronsi/messenger-back/issues/137)) ([4b22b5a](https://github.com/myronsi/messenger-back/commit/4b22b5a73e748520704d6c77dad4c0f7f9467682))
+
 ## [1.2.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.1.0-alpha.1...v1.2.0-alpha.1) (2026-11-01)
 
 
