@@ -91,7 +91,7 @@ func workerFixture() (*Worker, *queueFake, *senderFake, postgres.NotificationJob
 	content := "private message"
 	q := &queueFake{p: postgres.NotificationPreferences{Enabled: true}, devices: []postgres.NotificationDevice{{ID: uuid.New()}}, delivered: map[uuid.UUID]bool{}}
 	s := &senderFake{}
-	w := &Worker{Queue: q, Chats: chatFake{}, Social: socialFake{}, Users: userFake{}, Messages: messageFake{m: scylla.Message{ID: 9, ChatID: 3, SenderID: &uid, Type: scylla.TypeText, Content: &content, CreatedAt: time.Now()}}, Sender: s}
+	w := &Worker{Queue: q, Chats: chatFake{}, Social: socialFake{}, Users: userFake{}, Messages: messageFake{m: scylla.Message{ID: 9, ChatID: 3, SenderID: &uid, Type: scylla.TypeText, Content: &content, CreatedAt: time.Now()}}, Sender: s, Tokens: NewActionTokens("secret")}
 	return w, q, s, postgres.NotificationJob{MessageID: 9, ChatID: 3, Recipients: []int64{1, 2}, CreatedAt: time.Now()}
 }
 func TestMessageNotificationPrivacyAndEligibility(t *testing.T) {
@@ -151,6 +151,15 @@ func TestMessageNotificationPrivacyAndEligibility(t *testing.T) {
 				}
 				if scenario == "preview" && p.Body != "private message" {
 					t.Fatal("preview missing")
+				}
+				if _, chat, message, err := w.Tokens.ParseRead(p.ReadToken); err != nil || chat != 3 || message != 9 {
+					t.Fatalf("read action missing: %v", err)
+				}
+				if scenario == "private" && p.AvatarToken != "" {
+					t.Fatal("the sender's avatar leaked without previews")
+				}
+				if _, sender, err := w.Tokens.ParseAvatar(p.AvatarToken); scenario == "preview" && (err != nil || sender != 1) {
+					t.Fatalf("preview avatar missing: %v", err)
 				}
 			}
 		})

@@ -19,6 +19,7 @@ import (
 	"github.com/myronsi/messenger-back/internal/config"
 	"github.com/myronsi/messenger-back/internal/httpapi"
 	"github.com/myronsi/messenger-back/internal/media"
+	"github.com/myronsi/messenger-back/internal/notifications"
 	"github.com/myronsi/messenger-back/internal/search"
 	"github.com/myronsi/messenger-back/internal/store/elastic"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
@@ -148,7 +149,7 @@ func run() error {
 		})).WithMessages(httpapi.NewMessageServer(httpapi.MessageOptions{
 			Service: rt.messages, Store: pg, Directory: rt.directory, Limiter: rt.limiter, BasePath: cfg.HTTP.BasePath, Log: log,
 			Searcher: search.NewSearcher(search.NewIndex(es, cfg.Search.Alias, cfg.Search.Replicas), searchAccess{rt.messages, pg}, rt.store),
-		})).WithNotifications(httpapi.NotificationOptions{Store: pg.Notifications(), Config: cfg.Notifications}).WithMeta(httpapi.MetaInfo{
+		})).WithNotifications(httpapi.NotificationOptions{Store: pg.Notifications(), Config: cfg.Notifications, Tokens: notifications.NewActionTokens(cfg.Notifications.VAPIDPrivate.Reveal())}).WithMeta(httpapi.MetaInfo{
 			BackendVersion: version.Backend, Commit: os.Getenv("APP_COMMIT"), MinClientAPIVersion: cfg.Realtime.MinClientAPIVersion,
 		}),
 		Authenticator:       authSvc,

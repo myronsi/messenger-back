@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/myronsi/messenger-back/internal/auth"
 	"github.com/myronsi/messenger-back/internal/config"
 	"github.com/myronsi/messenger-back/internal/notifications"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
@@ -17,6 +19,7 @@ import (
 type NotificationOptions struct {
 	Store  postgres.NotificationRepository
 	Config config.Notifications
+	Tokens *notifications.ActionTokens
 }
 
 func (s *Server) WithNotifications(o NotificationOptions) *Server { s.notifications = &o; return s }
@@ -189,6 +192,37 @@ func (s *Server) UpdateNotificationActivity(w http.ResponseWriter, r *http.Reque
 	}
 	if err := s.notifications.Store.Activity(r.Context(), p.UserID, p.SessionID, id, b.ClientID, *b.Active); err != nil {
 		WriteProblem(w, 503, ErrorCodeInternalError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) GetNotificationAvatar(w http.ResponseWriter, r *http.Request, token string) {
+	if s.notifications == nil || s.media == nil {
+		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
+		return
+	}
+	recipient, sender, err := s.notifications.Tokens.ParseAvatar(token)
+	if err != nil {
+		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
+		return
+	}
+	ctx := context.WithValue(r.Context(), principalKey{}, auth.Principal{UserID: recipient})
+	s.media.GetUserAvatar(w, r.WithContext(ctx), strconv.FormatInt(sender, 10), GetUserAvatarParams{})
+}
+
+func (s *Server) MarkNotificationRead(w http.ResponseWriter, r *http.Request, token string) {
+	if s.notifications == nil || s.chats == nil {
+		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
+		return
+	}
+	recipient, chat, message, err := s.notifications.Tokens.ParseRead(token)
+	if err != nil {
+		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
+		return
+	}
+	if _, err := s.chats.o.Service.MarkRead(r.Context(), recipient, chat, message); err != nil {
+		serviceError(w, r, s.chats.o.Log, "mark read from notification", err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

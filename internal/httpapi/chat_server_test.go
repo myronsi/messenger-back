@@ -6,6 +6,7 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"github.com/myronsi/messenger-back/internal/events"
 	"github.com/myronsi/messenger-back/internal/ids"
 	"github.com/myronsi/messenger-back/internal/messages"
+	"github.com/myronsi/messenger-back/internal/notifications"
 	"github.com/myronsi/messenger-back/internal/observability"
 	"github.com/myronsi/messenger-back/internal/search"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
@@ -69,6 +71,7 @@ func (c *chatEvents) RequestCreated(_ context.Context, r chats.RequestView) {
 
 type chatEnv struct {
 	*authEnv
+	tokens *notifications.ActionTokens
 	store  *postgres.Store
 	events *chatEvents
 	index  *search.Index
@@ -142,11 +145,13 @@ func newChatEnvWith(t *testing.T, withSearch bool) *chatEnv {
 	dir := users.NewDirectory(store, nil, apiBase)
 	ev := &chatEvents{created: map[int64][]int64{}, updated: map[int64][]int64{}, removed: map[int64][]int64{},
 		groupCreated: map[int64][]int64{}, groupUpdates: map[int64]int{}}
+	tokens := notifications.NewActionTokens("test-secret")
 	svc := chats.New(chats.Deps{Store: store, Messages: repo, Unread: unread, Members: members, Sender: msgs, Directory: dir, Notifier: ev})
 	api := NewServer(NewAuthServer(AuthOptions{Service: authSvc, Log: log, BasePath: apiBase, CookieSecure: true}), nil).
 		WithAccount(NewAccountServer(AccountOptions{Store: store, Directory: dir, Deleter: authSvc, BasePath: apiBase, Log: log})).
 		WithChats(NewChatServer(ChatOptions{Service: svc, BasePath: apiBase, Log: log})).
-		WithMessages(NewMessageServer(MessageOptions{Service: msgs, Store: store, Directory: dir, BasePath: apiBase, Log: log, Searcher: searcher(index, msgs, store, repo)}))
+		WithMessages(NewMessageServer(MessageOptions{Service: msgs, Store: store, Directory: dir, BasePath: apiBase, Log: log, Searcher: searcher(index, msgs, store, repo)})).
+		WithNotifications(NotificationOptions{Tokens: tokens})
 	return &chatEnv{
 		authEnv: &authEnv{router: NewRouter(Options{
 			HTTP:          config.HTTP{BasePath: apiBase, RequestTimeout: 10 * time.Second, ReadinessTimeout: time.Second, MaxBodyBytes: 4096},
@@ -155,7 +160,7 @@ func newChatEnvWith(t *testing.T, withSearch bool) *chatEnv {
 			API:           api,
 			Authenticator: authSvc,
 		})},
-		store: store, events: ev, index: index,
+		store: store, events: ev, index: index, tokens: tokens,
 	}
 }
 
@@ -290,6 +295,37 @@ func TestDirectChatsListPinsAndReads(t *testing.T) {
 	e.do(t, request{method: http.MethodPut, path: "/me/blocked-users/" + e.uid(t, alice), token: bob.access})
 	if r := e.create(t, alice, bobID, ""); r.Code != http.StatusForbidden || r.code() != "blocked_by_user" {
 		t.Fatalf("blocked: %d %s", r.Code, r.Body)
+	}
+}
+
+func TestNotificationReadTokenMarksOnlyItsChatRead(t *testing.T) {
+	e := newChatEnv(t)
+	alice, bob := e.register(t, "alice"), e.register(t, "bob")
+	aliceID, bobID := e.uid(t, alice), e.uid(t, bob)
+	r := e.create(t, alice, bobID, "Hello Bob")
+	chat := r.json()["id"].(string)
+	msg := r.json()["last_message"].(map[string]any)["id"].(string)
+	num := func(s string) int64 { n, _ := strconv.ParseInt(s, 10, 64); return n }
+	unread := func() float64 {
+		return e.do(t, request{method: http.MethodGet, path: "/chats/" + chat, token: bob.access}).json()["unread_count"].(float64)
+	}
+	if unread() != 1 {
+		t.Fatal("the message starts unread")
+	}
+	good := e.tokens.Read(num(bobID), num(chat), num(msg))
+	for _, bad := range []string{"nope", e.tokens.Avatar(num(bobID), num(aliceID)), strings.Replace(good, "."+chat+".", ".1"+chat+".", 1)} {
+		if r := e.do(t, request{method: http.MethodPost, path: "/notifications/read/" + bad}); r.Code != http.StatusNotFound {
+			t.Fatalf("token %q: %d %s", bad, r.Code, r.Body)
+		}
+	}
+	if unread() != 1 {
+		t.Fatal("a rejected token changed the read state")
+	}
+	if r := e.do(t, request{method: http.MethodPost, path: "/notifications/read/" + good}); r.Code != http.StatusNoContent {
+		t.Fatalf("read with token: %d %s", r.Code, r.Body)
+	}
+	if unread() != 0 {
+		t.Fatal("the token did not mark the chat read")
 	}
 }
 

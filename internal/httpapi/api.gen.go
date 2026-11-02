@@ -2627,6 +2627,12 @@ type ServerInterface interface {
 	// GetMeta Backend and contract versions
 	// (GET /meta)
 	GetMeta(w http.ResponseWriter, r *http.Request)
+	// GetNotificationAvatar Sender avatar for a push notification
+	// (GET /notifications/avatar/{token})
+	GetNotificationAvatar(w http.ResponseWriter, r *http.Request, token string)
+	// MarkNotificationRead Mark a chat read from a push notification
+	// (POST /notifications/read/{token})
+	MarkNotificationRead(w http.ResponseWriter, r *http.Request, token string)
 	// ListApprovalRequests Inbox of approval requests
 	// (GET /requests)
 	ListApprovalRequests(w http.ResponseWriter, r *http.Request, params ListApprovalRequestsParams)
@@ -6723,6 +6729,58 @@ func (siw *ServerInterfaceWrapper) GetMeta(w http.ResponseWriter, r *http.Reques
 	handler.ServeHTTP(w, r)
 }
 
+// GetNotificationAvatar operation middleware
+func (siw *ServerInterfaceWrapper) GetNotificationAvatar(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "token" -------------
+	var token string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "token", r.PathValue("token"), &token, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "token", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetNotificationAvatar(w, r, token)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// MarkNotificationRead operation middleware
+func (siw *ServerInterfaceWrapper) MarkNotificationRead(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "token" -------------
+	var token string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "token", r.PathValue("token"), &token, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "token", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.MarkNotificationRead(w, r, token)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListApprovalRequests operation middleware
 func (siw *ServerInterfaceWrapper) ListApprovalRequests(w http.ResponseWriter, r *http.Request) {
 
@@ -7915,6 +7973,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/groups/{chat_id}/leave", wrapper.LeaveGroup)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/notifications", wrapper.GetNotificationSettings)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/me/notifications", wrapper.UpdateNotificationSettings)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/notifications/avatar/{token}", wrapper.GetNotificationAvatar)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/notifications/read/{token}", wrapper.MarkNotificationRead)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/me/notification-devices", wrapper.RegisterNotificationDevice)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/me/notification-devices/{id}", wrapper.DeleteNotificationDevice)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/chats/{chatId}/notification-mute", wrapper.SetNotificationMute)
@@ -14363,6 +14423,91 @@ func (response GetMeta429ApplicationProblemPlusJSONResponse) VisitGetMetaRespons
 	return err
 }
 
+type GetNotificationAvatarRequestObject struct {
+	Token string `json:"token"`
+}
+
+type GetNotificationAvatarResponseObject interface {
+	VisitGetNotificationAvatarResponse(w http.ResponseWriter) error
+}
+
+type GetNotificationAvatar200ImageResponse struct {
+	Body          io.Reader
+	ContentType   string
+	ContentLength int64
+}
+
+func (response GetNotificationAvatar200ImageResponse) VisitGetNotificationAvatarResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", response.ContentType)
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type GetNotificationAvatar304Response struct {
+}
+
+func (response GetNotificationAvatar304Response) VisitGetNotificationAvatarResponse(w http.ResponseWriter) error {
+	w.WriteHeader(304)
+	return nil
+}
+
+type GetNotificationAvatar404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetNotificationAvatar404ApplicationProblemPlusJSONResponse) VisitGetNotificationAvatarResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MarkNotificationReadRequestObject struct {
+	Token string `json:"token"`
+}
+
+type MarkNotificationReadResponseObject interface {
+	VisitMarkNotificationReadResponse(w http.ResponseWriter) error
+}
+
+type MarkNotificationRead204Response struct {
+}
+
+func (response MarkNotificationRead204Response) VisitMarkNotificationReadResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type MarkNotificationRead404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response MarkNotificationRead404ApplicationProblemPlusJSONResponse) VisitMarkNotificationReadResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListApprovalRequestsRequestObject struct {
 	Params ListApprovalRequestsParams
 }
@@ -15742,6 +15887,12 @@ type StrictServerInterface interface {
 	// GetMeta Backend and contract versions
 	// (GET /meta)
 	GetMeta(ctx context.Context, request GetMetaRequestObject) (GetMetaResponseObject, error)
+	// GetNotificationAvatar Sender avatar for a push notification
+	// (GET /notifications/avatar/{token})
+	GetNotificationAvatar(ctx context.Context, request GetNotificationAvatarRequestObject) (GetNotificationAvatarResponseObject, error)
+	// MarkNotificationRead Mark a chat read from a push notification
+	// (POST /notifications/read/{token})
+	MarkNotificationRead(ctx context.Context, request MarkNotificationReadRequestObject) (MarkNotificationReadResponseObject, error)
 	// ListApprovalRequests Inbox of approval requests
 	// (GET /requests)
 	ListApprovalRequests(ctx context.Context, request ListApprovalRequestsRequestObject) (ListApprovalRequestsResponseObject, error)
@@ -17728,6 +17879,58 @@ func (sh *strictHandler) GetMeta(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetMetaResponseObject); ok {
 		if err := validResponse.VisitGetMetaResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetNotificationAvatar operation middleware
+func (sh *strictHandler) GetNotificationAvatar(w http.ResponseWriter, r *http.Request, token string) {
+	var request GetNotificationAvatarRequestObject
+
+	request.Token = token
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetNotificationAvatar(ctx, request.(GetNotificationAvatarRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetNotificationAvatar")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetNotificationAvatarResponseObject); ok {
+		if err := validResponse.VisitGetNotificationAvatarResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// MarkNotificationRead operation middleware
+func (sh *strictHandler) MarkNotificationRead(w http.ResponseWriter, r *http.Request, token string) {
+	var request MarkNotificationReadRequestObject
+
+	request.Token = token
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.MarkNotificationRead(ctx, request.(MarkNotificationReadRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "MarkNotificationRead")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(MarkNotificationReadResponseObject); ok {
+		if err := validResponse.VisitMarkNotificationReadResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

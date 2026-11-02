@@ -74,6 +74,13 @@ adding the provider configuration are required before device delivery can be ver
 - `PUT /me/notification-devices/{id}/activity`: `{active, client_id}`; same ownership restriction. Each browser tab has its own lease.
 - `PUT /chats/{chatId}/notification-mute`: `{duration: "off" | "1h" | "8h" | "forever"}`; membership required.
 
+- `GET /notifications/avatar/{token}` and `POST /notifications/read/{token}`: no session. The service worker uses
+  them for the sender's photo and the "Mark as read" action. The tokens come in the push payload.
+
+A web push payload carries `read_token` (always, valid seven days) and, only with previews on, `avatar_token`
+(valid one hour). Each token is an HMAC bound to one purpose, recipient and chat or sender, keyed from
+`PUSH_VAPID_PRIVATE_KEY`, so API and worker need no extra secret. Rotating that key invalidates all tokens.
+
 Destinations have one owning session. Registration on the same physical destination moves it to the new session.
 Each session may register at most sixteen destinations. No push destination or provider response body is logged.
 
