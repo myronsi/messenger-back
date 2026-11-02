@@ -216,6 +216,20 @@ func TestUploadAndDownloadOverHTTP(t *testing.T) {
 	}
 }
 
+func TestTokenRoutesStayOutOfTraces(t *testing.T) {
+	secret := tokenRoute(apiBase)
+	for path, want := range map[string]bool{
+		apiBase + "/notifications/avatar/a.1.2.3.sig": true,
+		apiBase + "/notifications/read/r.1.2.3.4.sig": true,
+		apiBase + "/me/notifications":                 false,
+		apiBase + "/users/1/avatar":                   false,
+	} {
+		if got := secret(httptest.NewRequest(http.MethodGet, path, nil)); got != want {
+			t.Errorf("%s: %v, want %v", path, got, want)
+		}
+	}
+}
+
 func TestTransferRoutes(t *testing.T) {
 	long := transferRoute(apiBase)
 	for path, want := range map[string]bool{
