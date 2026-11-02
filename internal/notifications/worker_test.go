@@ -155,6 +155,9 @@ func TestMessageNotificationPrivacyAndEligibility(t *testing.T) {
 				if _, chat, message, err := w.Tokens.ParseRead(p.ReadToken); err != nil || chat != 3 || message != 9 {
 					t.Fatalf("read action missing: %v", err)
 				}
+				if p.Preview != (scenario == "preview") {
+					t.Fatal("the preview flag does not match the preferences")
+				}
 				if scenario == "private" && p.AvatarToken != "" {
 					t.Fatal("the sender's avatar leaked without previews")
 				}

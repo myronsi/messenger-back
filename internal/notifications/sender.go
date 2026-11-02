@@ -29,6 +29,7 @@ type Payload struct {
 	UserID      string `json:"user_id"`
 	Sound       bool   `json:"sound"`
 	ExpiresAt   int64  `json:"expires_at"`
+	Preview     bool   `json:"preview"`
 	AvatarToken string `json:"avatar_token,omitempty"`
 	ReadToken   string `json:"read_token,omitempty"`
 }

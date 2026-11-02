@@ -113,6 +113,7 @@ func (w *Worker) Handle(ctx context.Context, j postgres.NotificationJob) error {
 			p.ReadToken = w.Tokens.Read(uid, j.ChatID, j.MessageID)
 		}
 		if prefs.Previews {
+			p.Preview = true
 			if w.Tokens != nil {
 				p.AvatarToken = w.Tokens.Avatar(uid, *m.SenderID)
 			}

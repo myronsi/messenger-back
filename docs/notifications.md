@@ -77,7 +77,7 @@ adding the provider configuration are required before device delivery can be ver
 - `GET /notifications/avatar/{token}` and `POST /notifications/read/{token}`: no session. The service worker uses
   them for the sender's photo and the "Mark as read" action. The tokens come in the push payload.
 
-A web push payload carries `read_token` (always, valid seven days) and, only with previews on, `avatar_token`
+A web push payload carries `preview` (whether the title and body show the sender and text), `read_token` (always, valid seven days) and, only with previews on, `avatar_token`
 (valid one hour). Each token is an HMAC bound to one purpose, recipient and chat or sender, keyed from
 `PUSH_VAPID_PRIVATE_KEY`, so API and worker need no extra secret. Rotating that key invalidates all tokens.
 
