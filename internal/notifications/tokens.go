@@ -27,6 +27,7 @@ type ActionTokens struct {
 type ActionToken struct {
 	Recipient int64
 	Device    uuid.UUID
+	Session   uuid.UUID
 	IDs       []int64
 }
 
@@ -38,12 +39,12 @@ func NewActionTokens(secret string) *ActionTokens {
 	return &ActionTokens{key: sum[:], now: time.Now}
 }
 
-func (t *ActionTokens) Avatar(recipient int64, device uuid.UUID, sender int64) string {
-	return t.sign("a", t.now().Add(AvatarTokenTTL), recipient, device, sender)
+func (t *ActionTokens) Avatar(recipient int64, device, session uuid.UUID, sender int64) string {
+	return t.sign("a", t.now().Add(AvatarTokenTTL), recipient, device, session, sender)
 }
 
-func (t *ActionTokens) Read(recipient int64, device uuid.UUID, chat, message int64) string {
-	return t.sign("r", t.now().Add(ReadTokenTTL), recipient, device, chat, message)
+func (t *ActionTokens) Read(recipient int64, device, session uuid.UUID, chat, message int64) string {
+	return t.sign("r", t.now().Add(ReadTokenTTL), recipient, device, session, chat, message)
 }
 
 func (t *ActionTokens) ParseAvatar(token string) (ActionToken, error) {
@@ -54,8 +55,8 @@ func (t *ActionTokens) ParseRead(token string) (ActionToken, error) {
 	return t.parse("r", 2, token)
 }
 
-func (t *ActionTokens) sign(purpose string, exp time.Time, recipient int64, device uuid.UUID, ids ...int64) string {
-	parts := []string{purpose, strconv.FormatInt(recipient, 10), device.String()}
+func (t *ActionTokens) sign(purpose string, exp time.Time, recipient int64, device, session uuid.UUID, ids ...int64) string {
+	parts := []string{purpose, strconv.FormatInt(recipient, 10), device.String(), session.String()}
 	for _, id := range ids {
 		parts = append(parts, strconv.FormatInt(id, 10))
 	}
@@ -66,14 +67,14 @@ func (t *ActionTokens) sign(purpose string, exp time.Time, recipient int64, devi
 
 func (t *ActionTokens) parse(purpose string, n int, token string) (ActionToken, error) {
 	parts := strings.Split(token, ".")
-	if t == nil || len(parts) != n+5 || parts[0] != purpose {
+	if t == nil || len(parts) != n+6 || parts[0] != purpose {
 		return ActionToken{}, ErrInvalidActionToken
 	}
 	body := strings.Join(parts[:len(parts)-1], ".")
 	if !hmac.Equal([]byte(parts[len(parts)-1]), []byte(t.mac(body))) {
 		return ActionToken{}, ErrInvalidActionToken
 	}
-	exp, err := strconv.ParseInt(parts[n+3], 10, 64)
+	exp, err := strconv.ParseInt(parts[n+4], 10, 64)
 	if err != nil || t.now().Unix() > exp {
 		return ActionToken{}, ErrInvalidActionToken
 	}
@@ -85,13 +86,17 @@ func (t *ActionTokens) parse(purpose string, n int, token string) (ActionToken, 
 	if err != nil {
 		return ActionToken{}, ErrInvalidActionToken
 	}
+	session, err := uuid.Parse(parts[3])
+	if err != nil {
+		return ActionToken{}, ErrInvalidActionToken
+	}
 	ids := make([]int64, n)
 	for i := range ids {
-		if ids[i], err = strconv.ParseInt(parts[i+3], 10, 64); err != nil || ids[i] <= 0 {
+		if ids[i], err = strconv.ParseInt(parts[i+4], 10, 64); err != nil || ids[i] <= 0 {
 			return ActionToken{}, ErrInvalidActionToken
 		}
 	}
-	return ActionToken{Recipient: recipient, Device: device, IDs: ids}, nil
+	return ActionToken{Recipient: recipient, Device: device, Session: session, IDs: ids}, nil
 }
 
 func (t *ActionTokens) mac(body string) string {

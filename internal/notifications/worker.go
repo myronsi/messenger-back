@@ -127,9 +127,9 @@ func (w *Worker) Handle(ctx context.Context, j postgres.NotificationJob) error {
 		for _, d := range devices {
 			dp := p
 			if w.Tokens != nil {
-				dp.ReadToken = w.Tokens.Read(uid, d.ID, j.ChatID, j.MessageID)
+				dp.ReadToken = w.Tokens.Read(uid, d.ID, d.SessionID, j.ChatID, j.MessageID)
 				if dp.Preview {
-					dp.AvatarToken = w.Tokens.Avatar(uid, d.ID, *m.SenderID)
+					dp.AvatarToken = w.Tokens.Avatar(uid, d.ID, d.SessionID, *m.SenderID)
 				}
 			}
 			err := w.Sender.Send(ctx, d, dp)

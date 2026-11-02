@@ -312,9 +312,10 @@ func TestNotificationReadTokenMarksOnlyItsChatRead(t *testing.T) {
 	if unread() != 1 {
 		t.Fatal("the message starts unread")
 	}
-	device, session := pushDevice(t, e.store, num(bobID))
-	good := e.tokens.Read(num(bobID), device, num(chat), num(msg))
-	for _, bad := range []string{"nope", e.tokens.Avatar(num(bobID), device, num(aliceID)), strings.Replace(good, "."+chat+".", ".1"+chat+".", 1), e.tokens.Read(num(bobID), uuid.New(), num(chat), num(msg))} {
+	device := pushDevice(t, e.store, num(bobID))
+	good := e.tokens.Read(num(bobID), device.ID, device.SessionID, num(chat), num(msg))
+	for _, bad := range []string{"nope", e.tokens.Avatar(num(bobID), device.ID, device.SessionID, num(aliceID)), strings.Replace(good, "."+chat+".", ".1"+chat+".", 1),
+		e.tokens.Read(num(bobID), uuid.New(), device.SessionID, num(chat), num(msg)), e.tokens.Read(num(bobID), device.ID, uuid.New(), num(chat), num(msg))} {
 		if r := e.do(t, request{method: http.MethodPost, path: "/notifications/read/" + bad}); r.Code != http.StatusNotFound {
 			t.Fatalf("token %q: %d %s", bad, r.Code, r.Body)
 		}
@@ -328,15 +329,25 @@ func TestNotificationReadTokenMarksOnlyItsChatRead(t *testing.T) {
 	if unread() != 0 {
 		t.Fatal("the token did not mark the chat read")
 	}
-	if err := e.store.Sessions().Revoke(context.Background(), num(bobID), session); err != nil {
+	if err := e.store.Sessions().Revoke(context.Background(), num(bobID), device.SessionID); err != nil {
 		t.Fatal(err)
 	}
 	if r := e.do(t, request{method: http.MethodPost, path: "/notifications/read/" + good}); r.Code != http.StatusNotFound {
 		t.Fatalf("token after logout: %d", r.Code)
 	}
+	if r := e.login(t, "bob"); r.Code != http.StatusOK {
+		t.Fatalf("login again: %d", r.Code)
+	}
+	again := pushDevice(t, e.store, num(bobID), device)
+	if again.ID != device.ID || again.SessionID == device.SessionID {
+		t.Fatalf("the browser did not move to the new session: %v", again)
+	}
+	if r := e.do(t, request{method: http.MethodPost, path: "/notifications/read/" + good}); r.Code != http.StatusNotFound {
+		t.Fatalf("an old token came back with the new session: %d", r.Code)
+	}
 }
 
-func pushDevice(t *testing.T, store *postgres.Store, uid int64) (uuid.UUID, uuid.UUID) {
+func pushDevice(t *testing.T, store *postgres.Store, uid int64, existing ...postgres.NotificationDevice) postgres.NotificationDevice {
 	t.Helper()
 	sessions, err := store.Sessions().ListActive(context.Background(), uid)
 	if err != nil || len(sessions) == 0 {
@@ -344,10 +355,14 @@ func pushDevice(t *testing.T, store *postgres.Store, uid int64) (uuid.UUID, uuid
 	}
 	id := uuid.New()
 	d := postgres.NotificationDevice{ID: id, Platform: "web", Destination: "https://fcm.googleapis.com/fcm/send/" + id.String(), P256dh: "key", Auth: "auth"}
+	if len(existing) > 0 {
+		d = existing[0]
+	}
 	if err := store.Notifications().Register(context.Background(), uid, sessions[0].ID, d); err != nil {
 		t.Fatal(err)
 	}
-	return id, sessions[0].ID
+	d.SessionID = sessions[0].ID
+	return d
 }
 
 func TestDirectMessagePrivacyAndRequests(t *testing.T) {

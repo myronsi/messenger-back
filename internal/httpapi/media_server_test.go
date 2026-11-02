@@ -258,20 +258,20 @@ func TestNotificationAvatarSeesWhatItsRecipientSees(t *testing.T) {
 	e := newMediaEnv(t)
 	alice, bob, carol := e.register(t, "alice"), e.register(t, "bob"), e.register(t, "carol")
 	aliceID, bobID, carolID := e.userID(t, alice), e.userID(t, bob), e.userID(t, carol)
-	bobDevice, _ := pushDevice(t, e.store, bobID)
-	carolDevice, _ := pushDevice(t, e.store, carolID)
+	bobPush := pushDevice(t, e.store, bobID)
+	carolPush := pushDevice(t, e.store, carolID)
 	avatar := func(token string) reply {
 		return e.do(t, request{method: http.MethodGet, path: "/notifications/avatar/" + token})
 	}
-	defaultBytes := avatar(e.tokens.Avatar(bobID, bobDevice, aliceID)).Body.Bytes()
+	defaultBytes := avatar(e.tokens.Avatar(bobID, bobPush.ID, bobPush.SessionID, aliceID)).Body.Bytes()
 	id := e.upload(t, alice.access, map[string]string{"purpose": "avatar"}, "me.png", smallPNG(t)).json()["id"].(string)
 	if r := e.do(t, request{method: http.MethodPut, path: "/me/avatar", token: alice.access, body: map[string]string{"attachment_id": id}}); r.Code != http.StatusOK {
 		t.Fatalf("set avatar: %d %s", r.Code, r.Body)
 	}
-	if got := avatar(e.tokens.Avatar(bobID, bobDevice, aliceID)); got.Code != http.StatusOK || bytes.Equal(got.Body.Bytes(), defaultBytes) {
+	if got := avatar(e.tokens.Avatar(bobID, bobPush.ID, bobPush.SessionID, aliceID)); got.Code != http.StatusOK || bytes.Equal(got.Body.Bytes(), defaultBytes) {
 		t.Fatalf("signed avatar without a session: %d", got.Code)
 	}
-	for _, bad := range []string{"nope", e.tokens.Read(bobID, bobDevice, 1, 1), notifications.NewActionTokens("other").Avatar(bobID, bobDevice, aliceID), e.tokens.Avatar(bobID, carolDevice, aliceID)} {
+	for _, bad := range []string{"nope", e.tokens.Read(bobID, bobPush.ID, bobPush.SessionID, 1, 1), notifications.NewActionTokens("other").Avatar(bobID, bobPush.ID, bobPush.SessionID, aliceID), e.tokens.Avatar(bobID, carolPush.ID, carolPush.SessionID, aliceID)} {
 		if r := avatar(bad); r.Code != http.StatusNotFound {
 			t.Fatalf("token %q: %d", bad, r.Code)
 		}
@@ -282,13 +282,13 @@ func TestNotificationAvatarSeesWhatItsRecipientSees(t *testing.T) {
 	if _, err := e.store.Social().UpdatePrivacy(context.Background(), s); err != nil {
 		t.Fatal(err)
 	}
-	if got := avatar(e.tokens.Avatar(carolID, carolDevice, aliceID)); !bytes.Equal(got.Body.Bytes(), defaultBytes) {
+	if got := avatar(e.tokens.Avatar(carolID, carolPush.ID, carolPush.SessionID, aliceID)); !bytes.Equal(got.Body.Bytes(), defaultBytes) {
 		t.Fatal("the avatar ignored the recipient's visibility")
 	}
 	if err := e.store.Social().Block(context.Background(), aliceID, bobID); err != nil {
 		t.Fatal(err)
 	}
-	if got := avatar(e.tokens.Avatar(bobID, bobDevice, aliceID)); !bytes.Equal(got.Body.Bytes(), defaultBytes) {
+	if got := avatar(e.tokens.Avatar(bobID, bobPush.ID, bobPush.SessionID, aliceID)); !bytes.Equal(got.Body.Bytes(), defaultBytes) {
 		t.Fatal("a blocked recipient got the avatar")
 	}
 }

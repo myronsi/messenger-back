@@ -79,8 +79,9 @@ adding the provider configuration are required before device delivery can be ver
 
 A web push payload carries `preview` (whether the title and body show the sender and text), `read_token` (always, valid seven days) and, only with previews on, `avatar_token`
 (valid one hour). Each token is an HMAC bound to one purpose, recipient, push device and chat or sender, keyed from
-`PUSH_VAPID_PRIVATE_KEY`, so API and worker need no extra secret. Rotating that key invalidates all tokens. A token works only while its device is registered and the device's
-session is active, so logging out or revoking the session ends it at once. The two token routes are left out of
+`PUSH_VAPID_PRIVATE_KEY`, so API and worker need no extra secret. Rotating that key invalidates all tokens. A token names its device and that device's session, and works only while both
+still match and the session is active. Logging out, revoking the session or registering the browser again under
+a new session ends it at once. The two token routes are left out of
 tracing, and request logs record only the route pattern, so tokens do not reach logs or spans.
 
 Destinations have one owning session. Registration on the same physical destination moves it to the new session.

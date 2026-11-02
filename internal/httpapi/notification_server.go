@@ -207,7 +207,7 @@ func (s *Server) actionToken(w http.ResponseWriter, r *http.Request, parse func(
 		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
 		return notifications.ActionToken{}, false
 	}
-	active, err := s.notifications.Store.DeviceActive(r.Context(), t.Recipient, t.Device)
+	active, err := s.notifications.Store.DeviceActive(r.Context(), t.Recipient, t.Device, t.Session)
 	if err != nil {
 		WriteProblem(w, http.StatusServiceUnavailable, ErrorCodeInternalError)
 		return notifications.ActionToken{}, false
