@@ -444,7 +444,8 @@ func (s *Service) Edit(ctx context.Context, userID, chatID, messageID int64, con
 		return scylla.Message{}, ErrNotFound
 	}
 	// A forwarded copy shows someone else's words: editing it would put new words in their mouth.
-	if m.SenderID == nil || *m.SenderID != userID || m.Type != scylla.TypeText || m.Forwarded != nil {
+	// A file keeps its attachment; only its caption changes.
+	if m.SenderID == nil || *m.SenderID != userID || (m.Type != scylla.TypeText && m.Type != scylla.TypeFile) || m.Forwarded != nil {
 		return scylla.Message{}, ErrForbidden
 	}
 	if err := s.requireNotBlocked(ctx, userID, chatID); err != nil {

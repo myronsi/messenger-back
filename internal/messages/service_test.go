@@ -182,6 +182,46 @@ func TestAttachmentsMustBelongToTheSenderAndChat(t *testing.T) {
 	}
 }
 
+func TestEditChangesOnlyTheCaptionOfAFile(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	alice, bob := f.user("alice"), f.user("bob")
+	chat, _, _ := f.pg.Chats().CreateDirect(ctx, alice, bob)
+	upload := func(mime string) uuid.UUID {
+		a, err := f.pg.Attachments().Create(ctx, postgres.NewAttachment{UploaderID: &alice, ChatID: &chat.ID, StorageKey: "attachments/" + uuid.NewString(), MimeType: mime, Size: 10})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return a.ID
+	}
+	photo := upload("image/png")
+	sent, err := f.svc.Send(ctx, messages.SendRequest{ChatID: chat.ID, SenderID: alice, ClientTempID: uuid.NewString(), Type: scylla.TypeFile, Content: str("old caption"), AttachmentID: &photo})
+	if err != nil {
+		t.Fatal(err)
+	}
+	edited, err := f.svc.Edit(ctx, alice, chat.ID, sent.Message.ID, "new caption")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if edited.Content == nil || *edited.Content != "new caption" || edited.EditedAt == nil {
+		t.Fatalf("caption not edited: %+v", edited)
+	}
+	if edited.Type != scylla.TypeFile || edited.AttachmentID == nil || edited.AttachmentID.String() != photo.String() {
+		t.Fatalf("attachment changed: %+v", edited)
+	}
+	if _, err := f.svc.Edit(ctx, bob, chat.ID, sent.Message.ID, "not yours"); !errors.Is(err, messages.ErrForbidden) {
+		t.Fatalf("editing someone else's file: %v", err)
+	}
+	voice := upload("audio/ogg")
+	recorded, err := f.svc.Send(ctx, messages.SendRequest{ChatID: chat.ID, SenderID: alice, ClientTempID: uuid.NewString(), Type: scylla.TypeVoice, AttachmentID: &voice})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.Edit(ctx, alice, chat.ID, recorded.Message.ID, "words"); !errors.Is(err, messages.ErrForbidden) {
+		t.Fatalf("editing a voice message: %v", err)
+	}
+}
+
 func TestSendIsIdempotentAndCountsUnread(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
