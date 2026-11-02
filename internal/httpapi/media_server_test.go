@@ -215,16 +215,19 @@ func TestUploadAndDownloadOverHTTP(t *testing.T) {
 func TestTransferRoutes(t *testing.T) {
 	long := transferRoute(apiBase)
 	for path, want := range map[string]bool{
-		"POST " + apiBase + "/attachments":             true,
-		"GET " + apiBase + "/attachments/x/content":    true,
-		"HEAD " + apiBase + "/attachments/x/content":   true,
-		"GET " + apiBase + "/users/1/avatar":           true,
-		"GET " + apiBase + "/chats/1/avatar":           true,
-		"GET " + apiBase + "/users/1/avatars":          false,
-		"GET " + apiBase + "/attachments":              false,
-		"POST " + apiBase + "/attachments/x/content":   false,
-		"GET " + apiBase + "/me":                       false,
-		"GET /elsewhere" + apiBase + "/users/1/avatar": false,
+		"POST " + apiBase + "/attachments":              true,
+		"GET " + apiBase + "/attachments/x/content":     true,
+		"HEAD " + apiBase + "/attachments/x/content":    true,
+		"GET " + apiBase + "/users/1/avatar":            true,
+		"GET " + apiBase + "/chats/1/avatar":            true,
+		"GET " + apiBase + "/notifications/avatar/a.1":  true,
+		"HEAD " + apiBase + "/notifications/avatar/a.1": true,
+		"POST " + apiBase + "/notifications/read/r.1":   false,
+		"GET " + apiBase + "/users/1/avatars":           false,
+		"GET " + apiBase + "/attachments":               false,
+		"POST " + apiBase + "/attachments/x/content":    false,
+		"GET " + apiBase + "/me":                        false,
+		"GET /elsewhere" + apiBase + "/users/1/avatar":  false,
 	} {
 		method, p, _ := strings.Cut(path, " ")
 		if got := long(httptest.NewRequest(method, p, nil)); got != want {

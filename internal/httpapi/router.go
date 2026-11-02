@@ -110,6 +110,7 @@ func transferRoute(basePath string) func(*http.Request) bool {
 		}
 		return (strings.HasPrefix(p, upload+"/") && strings.HasSuffix(p, "/content")) ||
 			(strings.HasPrefix(p, basePath+"/users/") && strings.HasSuffix(p, "/avatar")) ||
-			(strings.HasPrefix(p, basePath+"/chats/") && strings.HasSuffix(p, "/avatar"))
+			(strings.HasPrefix(p, basePath+"/chats/") && strings.HasSuffix(p, "/avatar")) ||
+			strings.HasPrefix(p, basePath+"/notifications/avatar/")
 	}
 }

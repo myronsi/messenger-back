@@ -14452,6 +14452,35 @@ func (response GetNotificationAvatar200ImageResponse) VisitGetNotificationAvatar
 	return err
 }
 
+type GetNotificationAvatar206ImageResponse struct {
+	Body          io.Reader
+	ContentType   string
+	ContentLength int64
+}
+
+func (response GetNotificationAvatar206ImageResponse) VisitGetNotificationAvatarResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", response.ContentType)
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	w.WriteHeader(206)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type GetNotificationAvatar302Response struct {
+}
+
+func (response GetNotificationAvatar302Response) VisitGetNotificationAvatarResponse(w http.ResponseWriter) error {
+	w.WriteHeader(302)
+	return nil
+}
+
 type GetNotificationAvatar304Response struct {
 }
 
@@ -14474,6 +14503,14 @@ func (response GetNotificationAvatar404ApplicationProblemPlusJSONResponse) Visit
 	w.WriteHeader(404)
 	_, err := buf.WriteTo(w)
 	return err
+}
+
+type GetNotificationAvatar416Response struct {
+}
+
+func (response GetNotificationAvatar416Response) VisitGetNotificationAvatarResponse(w http.ResponseWriter) error {
+	w.WriteHeader(416)
+	return nil
 }
 
 type MarkNotificationReadRequestObject struct {

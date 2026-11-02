@@ -1779,8 +1779,17 @@ paths:
           content:
             image/*:
               schema: { type: string, format: binary }
+        "206":
+          description: The requested byte range (`Range` header)
+          content:
+            image/*:
+              schema: { type: string, format: binary }
+        "302":
+          description: Redirect to a short-lived signed storage URL (with `MEDIA_SIGNED_URLS`)
         "304":
           description: Not modified (`If-None-Match` with the `ETag` of an earlier answer)
+        "416":
+          description: The requested range is outside the file
         "404": { $ref: "#/components/responses/NotFound" }
   /notifications/read/{token}:
     parameters:
