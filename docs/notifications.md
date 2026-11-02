@@ -79,7 +79,8 @@ adding the provider configuration are required before device delivery can be ver
 
 A web push payload carries `preview` (whether the title and body show the sender and text), `read_token` (always, valid seven days) and, only with previews on, `avatar_token`
 (valid one hour). Each token is an HMAC bound to one purpose, recipient and chat or sender, keyed from
-`PUSH_VAPID_PRIVATE_KEY`, so API and worker need no extra secret. Rotating that key invalidates all tokens.
+`PUSH_VAPID_PRIVATE_KEY`, so API and worker need no extra secret. Rotating that key invalidates all tokens. The two token routes are left out of
+tracing, and request logs record only the route pattern, so tokens do not reach logs or spans.
 
 Destinations have one owning session. Registration on the same physical destination moves it to the new session.
 Each session may register at most sixteen destinations. No push destination or provider response body is logged.
