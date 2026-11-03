@@ -776,7 +776,7 @@ type MarkReadRequest struct {
 
 // Me defines model for Me.
 type Me struct {
-	// AvatarUrl Path of the avatar, always same-origin (`/api/v2/users/{id}/avatar`).
+	// AvatarUrl Path of the avatar, always same-origin (`/api/v2/users/{id}/avatar?rev={revision}`).
 	AvatarUrl *string `json:"avatar_url"`
 	Bio       *string `json:"bio"`
 
@@ -1256,7 +1256,7 @@ type UploadPurpose string
 
 // User A user as visible to the requesting user; hidden fields are `null`.
 type User struct {
-	// AvatarUrl Path of the avatar, always same-origin (`/api/v2/users/{id}/avatar`).
+	// AvatarUrl Path of the avatar, always same-origin (`/api/v2/users/{id}/avatar?rev={revision}`).
 	AvatarUrl *string `json:"avatar_url"`
 	Bio       *string `json:"bio"`
 
@@ -2040,6 +2040,9 @@ type GetUserParams struct {
 type GetUserAvatarParams struct {
 	// Version `id` of an `AvatarVersion` of this user.
 	Version *Id `form:"version,omitempty" json:"version,omitempty"`
+
+	// Rev Revision of the current avatar, as given in `avatar_url`.
+	Rev *string `form:"rev,omitempty" json:"rev,omitempty"`
 
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
@@ -7434,6 +7437,19 @@ func (siw *ServerInterfaceWrapper) GetUserAvatar(w http.ResponseWriter, r *http.
 			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "version"})
 		} else {
 			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "version", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "rev" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "rev", r.URL.Query(), &params.Rev, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "rev"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "rev", Err: err})
 		}
 		return
 	}

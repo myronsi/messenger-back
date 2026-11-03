@@ -2,6 +2,12 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.5
+
+- A user's `avatar_url` adds `?rev={revision}`, which changes with every new avatar. `GET /users/{user_id}/avatar`
+  accepts `rev`; while it matches the current avatar, the answer is `Cache-Control: private, max-age=31536000, immutable`.
+- `GET /attachments/{attachment_id}/content` is cached for a year (`immutable`): an attachment's bytes never change.
+
 ## 2.1.0-alpha.4
 
 - Editing a file message accepts an empty `content` (HTTP `PATCH /messages/{message_id}` and the WebSocket `edit`
