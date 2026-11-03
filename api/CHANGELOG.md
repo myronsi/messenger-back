@@ -2,6 +2,11 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.7
+
+- Adds `DELETE /me/avatars/{avatar_id}`: removes one of your avatars from the history and answers the updated
+  `Me`. Deleting the current avatar makes the newest remaining one current again, or the default when none is left.
+
 ## 2.1.0-alpha.6
 
 - `Message` adds optional `reply_preview` (`ReplyPreview`: id, type, sender, the first 100 characters of the

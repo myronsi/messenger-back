@@ -64,6 +64,14 @@ func (s *Server) SetMyAvatar(w http.ResponseWriter, r *http.Request, params SetM
 	s.media.SetMyAvatar(w, r, params)
 }
 
+func (s *Server) DeleteMyAvatar(w http.ResponseWriter, r *http.Request, avatarID Id, params DeleteMyAvatarParams) {
+	if s.media == nil {
+		s.AuthServer.DeleteMyAvatar(w, r, avatarID, params)
+		return
+	}
+	s.media.DeleteMyAvatar(w, r, avatarID, params)
+}
+
 // GetUserAvatar implements GET /users/{id}/avatar.
 func (s *Server) GetUserAvatar(w http.ResponseWriter, r *http.Request, userID UserId, params GetUserAvatarParams) {
 	if s.media == nil {

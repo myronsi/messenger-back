@@ -358,6 +358,35 @@ func (m *MediaServer) SetMyAvatar(w http.ResponseWriter, r *http.Request, _ SetM
 	writeJSONStatus(w, http.StatusOK, PresentMe(u, m.o.BasePath))
 }
 
+func (m *MediaServer) DeleteMyAvatar(w http.ResponseWriter, r *http.Request, avatarID Id, _ DeleteMyAvatarParams) {
+	p, ok := PrincipalFrom(r.Context())
+	if !ok {
+		writeUnauthorized(w, ErrorCodeUnauthenticated)
+		return
+	}
+	version, ok := parseID(w, "avatar_id", avatarID)
+	if !ok {
+		return
+	}
+	err := m.o.Store.Attachments().DeleteUserAvatar(r.Context(), p.UserID, version)
+	if errors.Is(err, postgres.ErrNotFound) {
+		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
+		return
+	}
+	if err != nil {
+		m.o.Log.ErrorContext(r.Context(), "delete avatar", "error", err)
+		WriteProblem(w, http.StatusInternalServerError, ErrorCodeInternalError)
+		return
+	}
+	u, err := m.o.Store.Users().Get(r.Context(), p.UserID)
+	if err != nil {
+		WriteProblem(w, http.StatusInternalServerError, ErrorCodeInternalError)
+		return
+	}
+	noStore(w)
+	writeJSONStatus(w, http.StatusOK, PresentMe(u, m.o.BasePath))
+}
+
 // avatarVisible tells whether the viewer may see the user's avatar, and returns the user.
 func (m *MediaServer) avatarVisible(ctx context.Context, viewer, userID int64) (postgres.User, bool, error) {
 	views, err := m.o.Directory.ForViewer(ctx, viewer, []int64{userID})

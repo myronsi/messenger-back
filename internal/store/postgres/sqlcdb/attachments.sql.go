@@ -198,6 +198,22 @@ func (q *Queries) DeleteAttachmentIfUnreferenced(ctx context.Context, id uuid.UU
 	return i, err
 }
 
+const deleteAvatarHistoryEntry = `-- name: DeleteAvatarHistoryEntry :one
+DELETE FROM user_avatar_history WHERE user_id = $1 AND id = $2 AND attachment_id IS NOT NULL RETURNING is_current
+`
+
+type DeleteAvatarHistoryEntryParams struct {
+	UserID int64
+	ID     int64
+}
+
+func (q *Queries) DeleteAvatarHistoryEntry(ctx context.Context, arg DeleteAvatarHistoryEntryParams) (bool, error) {
+	row := q.db.QueryRow(ctx, deleteAvatarHistoryEntry, arg.UserID, arg.ID)
+	var is_current bool
+	err := row.Scan(&is_current)
+	return is_current, err
+}
+
 const getAttachment = `-- name: GetAttachment :one
 SELECT id, uploader_id, chat_id, storage_key, mime_type, size, width, height, duration, waveform, created_at, purpose, kind, filename, thumbnail_key FROM attachments WHERE id = $1
 `
@@ -532,6 +548,21 @@ func (q *Queries) LockAttachment(ctx context.Context, id uuid.UUID) (uuid.UUID, 
 	var id_2 uuid.UUID
 	err := row.Scan(&id_2)
 	return id_2, err
+}
+
+const promoteLatestAvatar = `-- name: PromoteLatestAvatar :one
+UPDATE user_avatar_history SET is_current = TRUE
+WHERE id = (
+  SELECT h.id FROM user_avatar_history h WHERE h.user_id = $1 AND h.attachment_id IS NOT NULL ORDER BY h.id DESC LIMIT 1
+)
+RETURNING attachment_id
+`
+
+func (q *Queries) PromoteLatestAvatar(ctx context.Context, userID int64) (*uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, promoteLatestAvatar, userID)
+	var attachment_id *uuid.UUID
+	err := row.Scan(&attachment_id)
+	return attachment_id, err
 }
 
 const setChatAvatar = `-- name: SetChatAvatar :execrows

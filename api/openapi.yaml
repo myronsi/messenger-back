@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.6
+  version: 2.1.0-alpha.7
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -434,6 +434,33 @@ paths:
         content:
           application/json:
             schema: { $ref: "#/components/schemas/SetAvatarRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /me/avatars/{avatar_id}:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - name: avatar_id
+        in: path
+        required: true
+        description: "`id` of an `AvatarVersion` of the caller."
+        schema: { $ref: "#/components/schemas/Id" }
+    delete:
+      tags: [me]
+      operationId: deleteMyAvatar
+      summary: Delete one of your avatars
+      description: |
+        Removes the avatar from your history. When it is the current one, the newest remaining avatar becomes
+        current again; without one you get the default avatar. The image is deleted from storage once nothing
+        uses it any more.
       responses:
         "426": { $ref: "#/components/responses/ClientOutdated" }
         "200":

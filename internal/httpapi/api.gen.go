@@ -1785,6 +1785,15 @@ type SetMyAvatarParams struct {
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
 }
 
+// DeleteMyAvatarParams defines parameters for DeleteMyAvatar.
+type DeleteMyAvatarParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
 // ListBlockedUsersParams defines parameters for ListBlockedUsers.
 type ListBlockedUsersParams struct {
 	// Limit Page size
@@ -2582,6 +2591,9 @@ type ServerInterface interface {
 	// SetMyAvatar Set the avatar from an uploaded attachment
 	// (PUT /me/avatar)
 	SetMyAvatar(w http.ResponseWriter, r *http.Request, params SetMyAvatarParams)
+	// DeleteMyAvatar Delete one of your avatars
+	// (DELETE /me/avatars/{avatar_id})
+	DeleteMyAvatar(w http.ResponseWriter, r *http.Request, avatarId Id, params DeleteMyAvatarParams)
 	// ListBlockedUsers Blocked users
 	// (GET /me/blocked-users)
 	ListBlockedUsers(w http.ResponseWriter, r *http.Request, params ListBlockedUsersParams)
@@ -5457,6 +5469,75 @@ func (siw *ServerInterfaceWrapper) SetMyAvatar(w http.ResponseWriter, r *http.Re
 	handler.ServeHTTP(w, r)
 }
 
+// DeleteMyAvatar operation middleware
+func (siw *ServerInterfaceWrapper) DeleteMyAvatar(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "avatar_id" -------------
+	var avatarId Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "avatar_id", r.PathValue("avatar_id"), &avatarId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "avatar_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteMyAvatarParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteMyAvatar(w, r, avatarId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListBlockedUsers operation middleware
 func (siw *ServerInterfaceWrapper) ListBlockedUsers(w http.ResponseWriter, r *http.Request) {
 
@@ -7958,6 +8039,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me", wrapper.GetMe)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/me", wrapper.UpdateMe)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/me/avatar", wrapper.SetMyAvatar)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/me/avatars/{avatar_id}", wrapper.DeleteMyAvatar)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/me/password", wrapper.ChangePassword)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/security", wrapper.GetSecuritySettings)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/me/security", wrapper.UpdateSecuritySettings)
@@ -12231,6 +12313,93 @@ func (response SetMyAvatar426ApplicationProblemPlusJSONResponse) VisitSetMyAvata
 	return err
 }
 
+type DeleteMyAvatarRequestObject struct {
+	AvatarId Id `json:"avatar_id"`
+	Params   DeleteMyAvatarParams
+}
+
+type DeleteMyAvatarResponseObject interface {
+	VisitDeleteMyAvatarResponse(w http.ResponseWriter) error
+}
+
+type DeleteMyAvatar200JSONResponse Me
+
+func (response DeleteMyAvatar200JSONResponse) VisitDeleteMyAvatarResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMyAvatar400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteMyAvatar400ApplicationProblemPlusJSONResponse) VisitDeleteMyAvatarResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMyAvatar401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteMyAvatar401ApplicationProblemPlusJSONResponse) VisitDeleteMyAvatarResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMyAvatar404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteMyAvatar404ApplicationProblemPlusJSONResponse) VisitDeleteMyAvatarResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMyAvatar426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteMyAvatar426ApplicationProblemPlusJSONResponse) VisitDeleteMyAvatarResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListBlockedUsersRequestObject struct {
 	Params ListBlockedUsersParams
 }
@@ -15892,6 +16061,9 @@ type StrictServerInterface interface {
 	// SetMyAvatar Set the avatar from an uploaded attachment
 	// (PUT /me/avatar)
 	SetMyAvatar(ctx context.Context, request SetMyAvatarRequestObject) (SetMyAvatarResponseObject, error)
+	// DeleteMyAvatar Delete one of your avatars
+	// (DELETE /me/avatars/{avatar_id})
+	DeleteMyAvatar(ctx context.Context, request DeleteMyAvatarRequestObject) (DeleteMyAvatarResponseObject, error)
 	// ListBlockedUsers Blocked users
 	// (GET /me/blocked-users)
 	ListBlockedUsers(ctx context.Context, request ListBlockedUsersRequestObject) (ListBlockedUsersResponseObject, error)
@@ -17262,6 +17434,33 @@ func (sh *strictHandler) SetMyAvatar(w http.ResponseWriter, r *http.Request, par
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(SetMyAvatarResponseObject); ok {
 		if err := validResponse.VisitSetMyAvatarResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteMyAvatar operation middleware
+func (sh *strictHandler) DeleteMyAvatar(w http.ResponseWriter, r *http.Request, avatarId Id, params DeleteMyAvatarParams) {
+	var request DeleteMyAvatarRequestObject
+
+	request.AvatarId = avatarId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteMyAvatar(ctx, request.(DeleteMyAvatarRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteMyAvatar")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteMyAvatarResponseObject); ok {
+		if err := validResponse.VisitDeleteMyAvatarResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

@@ -370,3 +370,70 @@ func TestAvatarsOverHTTP(t *testing.T) {
 		t.Fatalf("hidden history: %s", h.Body)
 	}
 }
+
+func TestDeleteAvatarsOverHTTP(t *testing.T) {
+	e := newMediaEnv(t)
+	alice, bob := e.register(t, "alice"), e.register(t, "bob")
+	aliceID := e.userID(t, alice)
+	setAvatar := func(s session) string {
+		t.Helper()
+		id := e.upload(t, s.access, map[string]string{"purpose": "avatar"}, "me.png", smallPNG(t)).json()["id"].(string)
+		if r := e.do(t, request{method: http.MethodPut, path: "/me/avatar", token: s.access, body: map[string]string{"attachment_id": id}}); r.Code != http.StatusOK {
+			t.Fatalf("set avatar: %d %s", r.Code, r.Body)
+		}
+		return id
+	}
+	versions := func() []string {
+		t.Helper()
+		var page struct {
+			Items []AvatarVersion `json:"items"`
+		}
+		r := e.do(t, request{method: http.MethodGet, path: "/users/" + strconv.FormatInt(aliceID, 10) + "/avatars", token: alice.access})
+		if err := json.Unmarshal(r.Body.Bytes(), &page); err != nil {
+			t.Fatal(err)
+		}
+		out := make([]string, len(page.Items))
+		for i, v := range page.Items {
+			out[i] = v.Id
+		}
+		return out
+	}
+	current := func() *uuid.UUID {
+		t.Helper()
+		u, err := e.store.Users().Get(context.Background(), aliceID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return u.AvatarAttachmentID
+	}
+	remove := func(s session, version string) reply {
+		return e.do(t, request{method: http.MethodDelete, path: "/me/avatars/" + version, token: s.access})
+	}
+
+	first, second, third := setAvatar(alice), setAvatar(alice), setAvatar(alice)
+	v := versions()
+	if len(v) != 3 {
+		t.Fatalf("history: %v", v)
+	}
+	if r := remove(bob, v[0]); r.Code != http.StatusNotFound {
+		t.Fatalf("someone else's avatar: %d", r.Code)
+	}
+	if r := remove(alice, "999999999"); r.Code != http.StatusNotFound {
+		t.Fatalf("unknown avatar: %d", r.Code)
+	}
+
+	if r := remove(alice, v[1]); r.Code != http.StatusOK || current().String() != third {
+		t.Fatalf("delete an older avatar: %d, current %v", r.Code, current())
+	}
+	r := remove(alice, v[0])
+	if r.Code != http.StatusOK || current().String() != first || r.json()["avatar_url"] == nil {
+		t.Fatalf("delete the current avatar: %d %s, current %v (second was %s)", r.Code, r.Body, current(), second)
+	}
+	if got := versions(); len(got) != 1 || got[0] != v[2] {
+		t.Fatalf("history after deleting: %v", got)
+	}
+	r = remove(alice, v[2])
+	if r.Code != http.StatusOK || current() != nil || r.json()["avatar_url"] != nil || len(versions()) != 0 {
+		t.Fatalf("delete the last avatar: %d %s", r.Code, r.Body)
+	}
+}

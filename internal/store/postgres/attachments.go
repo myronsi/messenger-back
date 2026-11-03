@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/myronsi/messenger-back/internal/store/postgres/sqlcdb"
 )
@@ -210,6 +211,21 @@ func (r attachmentRepo) SetUserAvatar(ctx context.Context, userID int64, attachm
 		}
 		return q.AddAvatarHistory(ctx, sqlcdb.AddAvatarHistoryParams{UserID: userID, AttachmentID: attachmentID})
 	})
+}
+
+func (r attachmentRepo) DeleteUserAvatar(ctx context.Context, userID, versionID int64) error {
+	return mapError(r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
+		current, err := q.DeleteAvatarHistoryEntry(ctx, sqlcdb.DeleteAvatarHistoryEntryParams{UserID: userID, ID: versionID})
+		if err != nil || !current {
+			return err
+		}
+		previous, err := q.PromoteLatestAvatar(ctx, userID)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		_, err = q.SetUserAvatar(ctx, sqlcdb.SetUserAvatarParams{UserID: userID, AttachmentID: previous})
+		return err
+	}))
 }
 
 func (r attachmentRepo) AvatarHistory(ctx context.Context, userID, beforeID int64, limit int) ([]AvatarVersion, error) {

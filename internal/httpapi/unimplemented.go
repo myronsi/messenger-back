@@ -161,6 +161,10 @@ func (Unimplemented) SetMyAvatar(w http.ResponseWriter, r *http.Request, params 
 	notImplemented(w, r)
 }
 
+func (Unimplemented) DeleteMyAvatar(w http.ResponseWriter, r *http.Request, avatarID Id, params DeleteMyAvatarParams) {
+	notImplemented(w, r)
+}
+
 func (Unimplemented) ListBlockedUsers(w http.ResponseWriter, r *http.Request, params ListBlockedUsersParams) {
 	notImplemented(w, r)
 }
