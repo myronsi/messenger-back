@@ -1,10 +1,10 @@
 # Deploying the Go backend
 
-How Go releases (`1.x`) get to staging and, after the switch, to production (#124). The production requirements of the stores are in [deployment.md](deployment.md), the release process in [releasing.md](releasing.md), and the switch itself in [switchover.md](switchover.md).
+How Go releases get to staging and production after the completed Python cutover. The production requirements of the stores are in [deployment.md](deployment.md), the release process in [releasing.md](releasing.md), and the switch itself in [switchover.md](switchover.md).
 
 ## What goes where
 
-The tag's major version decides which backend a release is:
+Only Go releases are supported; Python `0.x` tags are retired:
 
 | Release | Image built from | Deployed by | To |
 |---|---|---|---|
@@ -97,7 +97,7 @@ An upload replaces the bundle's files and `migrations/` as a whole: after a roll
 
 ## Python retirement
 
-The one-time migration is complete and its executable tooling has been removed. Historical runbooks are retained as records. Never set the refresh cookie path to `/api/auth`; use `/api/v2/auth/refresh`.
+The one-time migration is complete and its executable tooling has been removed. See the [completed cutover](switchover.md), [data migration](migration-v1.md), and [retirement/archive record](python-retirement.md). Never set the refresh cookie path to `/api/auth`; use `/api/v2/auth/refresh`.
 
 ## Testing the stack
 
