@@ -272,6 +272,7 @@ const cacheForever = "private, max-age=31536000, immutable"
 func (m *MediaServer) serve(w http.ResponseWriter, r *http.Request, d media.Download, cache, etag string) {
 	h := w.Header()
 	h.Set("X-Content-Type-Options", "nosniff")
+	h.Add("Vary", "Authorization")
 	if d.RedirectURL != "" {
 		// The signed URL expires within minutes, so the redirect must not outlive it in a cache.
 		h.Set("Cache-Control", "no-store")
