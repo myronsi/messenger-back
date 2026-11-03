@@ -183,8 +183,8 @@ func TestRequestID(t *testing.T) {
 
 	req = httptest.NewRequest(http.MethodGet, "/healthz", http.NoBody)
 	req.Header.Set(RequestIDHeader, "bad id\nwith newline")
-	if id := e.do(req).Header().Get(RequestIDHeader); strings.Contains(id, "bad") {
-		t.Fatalf("malformed id kept: %q", id)
+	if id := e.do(req).Header().Get(RequestIDHeader); id == "bad id\nwith newline" || len(id) != 32 {
+		t.Fatalf("malformed id not replaced: %q", id)
 	}
 }
 
