@@ -215,6 +215,9 @@ func (r attachmentRepo) SetUserAvatar(ctx context.Context, userID int64, attachm
 
 func (r attachmentRepo) DeleteUserAvatar(ctx context.Context, userID, versionID int64) error {
 	return mapError(r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
+		if _, err := q.LockUser(ctx, userID); err != nil {
+			return err
+		}
 		current, err := q.DeleteAvatarHistoryEntry(ctx, sqlcdb.DeleteAvatarHistoryEntryParams{UserID: userID, ID: versionID})
 		if err != nil || !current {
 			return err

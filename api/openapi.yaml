@@ -1399,8 +1399,9 @@ paths:
       operationId: forwardMessages
       summary: Forward several messages of a chat to other chats
       description: |
-        Copies up to 20 messages of the chat, oldest first, into every target chat. Every message and target is
-        checked before anything is written, so a refused one forwards nothing.
+        Copies up to 20 messages of the chat, oldest first, into every target chat, at most 20 copies in all. Every
+        copy counts against the sender's message rate. Every message and target is checked before anything is
+        written, so a refused one forwards nothing.
       requestBody:
         required: true
         content:

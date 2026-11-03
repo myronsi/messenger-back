@@ -1,15 +1,22 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/myronsi/messenger-back/internal/auth"
+	"github.com/myronsi/messenger-back/internal/messages"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
+	"github.com/myronsi/messenger-back/internal/store/redis"
 )
 
 func (e *chatEnv) send(t *testing.T, s session, chatID, temp, text string) reply {
@@ -261,6 +268,62 @@ func TestBulkForwardAndDeleteOverHTTP(t *testing.T) {
 	}
 	if r := remove(alice, "me", append(tooMany, tooMany...)); r.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("repeated ids: %d", r.Code)
+	}
+}
+
+type sendBudget struct{ charged map[string]int }
+
+func (b *sendBudget) Allow(ctx context.Context, r redis.Rate, subject string) (redis.Result, error) {
+	return b.AllowN(ctx, r, subject, 1)
+}
+
+func (b *sendBudget) AllowN(_ context.Context, r redis.Rate, _ string, n int) (redis.Result, error) {
+	b.charged[r.Name] += n
+	return redis.Result{Allowed: r.Name != RateSend.Name, RetryAfter: time.Second}, nil
+}
+
+func TestForwardChargesEveryCopy(t *testing.T) {
+	if messages.MaxForwardCopies > RateSend.Burst || messages.MaxForwardTargets > RateSend.Burst {
+		t.Fatalf("a forward allowed by the limits can never fit the send burst of %d", RateSend.Burst)
+	}
+	budget := &sendBudget{charged: map[string]int{}}
+	srv := NewMessageServer(MessageOptions{Limiter: budget, BasePath: apiBase})
+	ids := func(n int) []string {
+		out := make([]string, n)
+		for i := range out {
+			out[i] = strconv.Itoa(i + 1)
+		}
+		return out
+	}
+	call := func(single bool, sources, targets int) int {
+		t.Helper()
+		raw, err := json.Marshal(map[string]any{"message_ids": ids(sources), "chat_ids": ids(targets)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(raw))
+		req.Header.Set("Content-Type", "application/json")
+		req = req.WithContext(context.WithValue(req.Context(), principalKey{}, auth.Principal{UserID: 7}))
+		w := httptest.NewRecorder()
+		if single {
+			srv.ForwardMessage(w, req, "1", ForwardMessageParams{})
+		} else {
+			srv.ForwardMessages(w, req, "1", ForwardMessagesParams{})
+		}
+		return w.Code
+	}
+
+	if code := call(false, 4, 5); code != http.StatusTooManyRequests || budget.charged[RateSend.Name] != 20 {
+		t.Fatalf("4 messages to 5 chats: %d, charged %d", code, budget.charged[RateSend.Name])
+	}
+	if code := call(false, 5, 5); code != http.StatusUnprocessableEntity || budget.charged[RateSend.Name] != 20 {
+		t.Fatalf("25 copies: %d, charged %d", code, budget.charged[RateSend.Name])
+	}
+	if code := call(true, 1, 21); code != http.StatusUnprocessableEntity || budget.charged[RateSend.Name] != 20 {
+		t.Fatalf("one message to 21 chats: %d, charged %d", code, budget.charged[RateSend.Name])
+	}
+	if code := call(true, 1, 3); code != http.StatusTooManyRequests || budget.charged[RateSend.Name] != 23 {
+		t.Fatalf("one message to 3 chats: %d, charged %d", code, budget.charged[RateSend.Name])
 	}
 }
 

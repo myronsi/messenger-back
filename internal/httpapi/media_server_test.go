@@ -437,3 +437,60 @@ func TestDeleteAvatarsOverHTTP(t *testing.T) {
 		t.Fatalf("delete the last avatar: %d %s", r.Code, r.Body)
 	}
 }
+
+func TestConcurrentAvatarDeletesKeepTheOldest(t *testing.T) {
+	e := newMediaEnv(t)
+	alice := e.register(t, "alice")
+	aliceID := e.userID(t, alice)
+	setAvatar := func() string {
+		t.Helper()
+		id := e.upload(t, alice.access, map[string]string{"purpose": "avatar"}, "me.png", smallPNG(t)).json()["id"].(string)
+		if r := e.do(t, request{method: http.MethodPut, path: "/me/avatar", token: alice.access, body: map[string]string{"attachment_id": id}}); r.Code != http.StatusOK {
+			t.Fatalf("set avatar: %d %s", r.Code, r.Body)
+		}
+		return id
+	}
+	versions := func() []string {
+		t.Helper()
+		var page struct {
+			Items []AvatarVersion `json:"items"`
+		}
+		r := e.do(t, request{method: http.MethodGet, path: "/users/" + strconv.FormatInt(aliceID, 10) + "/avatars", token: alice.access})
+		if err := json.Unmarshal(r.Body.Bytes(), &page); err != nil {
+			t.Fatal(err)
+		}
+		out := make([]string, len(page.Items))
+		for i, v := range page.Items {
+			out[i] = v.Id
+		}
+		return out
+	}
+
+	for round := range 5 {
+		first := setAvatar()
+		setAvatar()
+		setAvatar()
+		v := versions()
+		codes := make(chan int, 2)
+		for _, version := range v[:2] {
+			go func() {
+				codes <- e.do(t, request{method: http.MethodDelete, path: "/me/avatars/" + version, token: alice.access}).Code
+			}()
+		}
+		for range 2 {
+			if code := <-codes; code != http.StatusOK {
+				t.Fatalf("round %d: delete: %d", round, code)
+			}
+		}
+		u, err := e.store.Users().Get(context.Background(), aliceID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if u.AvatarAttachmentID == nil || u.AvatarAttachmentID.String() != first {
+			t.Fatalf("round %d: current avatar %v, want the oldest %s", round, u.AvatarAttachmentID, first)
+		}
+		if r := e.do(t, request{method: http.MethodDelete, path: "/me/avatars/" + v[2], token: alice.access}); r.Code != http.StatusOK {
+			t.Fatalf("round %d: reset: %d", round, r.Code)
+		}
+	}
+}

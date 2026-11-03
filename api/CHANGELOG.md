@@ -13,7 +13,7 @@ Contract changes only. The backend changelog is `CHANGELOG.md` in the repository
 
 ## 2.1.0-alpha.8
 
-- Adds `POST /chats/{chat_id}/messages/forward` (up to 20 messages to up to 20 chats, at most 100 copies, oldest
+- Adds `POST /chats/{chat_id}/messages/forward` (up to 20 messages to up to 20 chats, at most 20 copies, oldest
   first) and `POST /chats/{chat_id}/messages/delete` (up to 100 messages, `scope` me or everyone). Both check
   every message first and change nothing when one is refused.
 

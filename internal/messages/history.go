@@ -21,7 +21,7 @@ const MaxForwardTargets = 20
 
 const (
 	MaxForwardMessages = 20
-	MaxForwardCopies   = 100
+	MaxForwardCopies   = 20
 	MaxDeleteMessages  = 100
 )
 
@@ -257,15 +257,22 @@ func (s *Service) forwardSources(ctx context.Context, userID, chatID int64, mess
 	return out, nil
 }
 
-func (s *Service) ForwardMany(ctx context.Context, userID, chatID int64, messageIDs, chatIDs []int64) ([]scylla.Message, error) {
+func CheckForward(messageIDs, chatIDs []int64) error {
 	if err := checkIDs("message_ids", messageIDs, MaxForwardMessages); err != nil {
-		return nil, err
+		return err
 	}
 	if err := checkIDs("chat_ids", chatIDs, MaxForwardTargets); err != nil {
-		return nil, err
+		return err
 	}
 	if len(messageIDs)*len(chatIDs) > MaxForwardCopies {
-		return nil, invalid("one forward makes at most %d copies", MaxForwardCopies)
+		return invalid("one forward makes at most %d copies", MaxForwardCopies)
+	}
+	return nil
+}
+
+func (s *Service) ForwardMany(ctx context.Context, userID, chatID int64, messageIDs, chatIDs []int64) ([]scylla.Message, error) {
+	if err := CheckForward(messageIDs, chatIDs); err != nil {
+		return nil, err
 	}
 	if err := s.requireMember(ctx, chatID, userID); err != nil {
 		return nil, err

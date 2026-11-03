@@ -382,15 +382,24 @@ func (m *MessageServer) ForwardMessages(w http.ResponseWriter, r *http.Request, 
 	if !ok {
 		return
 	}
-	subject := strconv.FormatInt(p.UserID, 10)
-	if !allow(w, r, m.o.Limiter, RateForward, subject, m.o.Log) {
-		return
-	}
-	if !allowN(w, r, m.o.Limiter, RateSend, subject, len(targets), m.o.Log) {
+	if !m.chargeForward(w, r, p.UserID, sources, targets) {
 		return
 	}
 	copies, err := m.o.Service.ForwardMany(r.Context(), p.UserID, chat, sources, targets)
 	m.answerForward(w, r, copies, err)
+}
+
+func (m *MessageServer) chargeForward(w http.ResponseWriter, r *http.Request, userID int64, sources, targets []int64) bool {
+	if err := messages.CheckForward(sources, targets); err != nil {
+		serviceError(w, r, m.o.Log, "forward message", err)
+		return false
+	}
+	subject := strconv.FormatInt(userID, 10)
+	if !allow(w, r, m.o.Limiter, RateForward, subject, m.o.Log) {
+		return false
+	}
+	// Every copy is a message: it uses up the sender's send budget like one.
+	return allowN(w, r, m.o.Limiter, RateSend, subject, len(sources)*len(targets), m.o.Log)
 }
 
 func (m *MessageServer) answerForward(w http.ResponseWriter, r *http.Request, copies []scylla.Message, err error) {
@@ -431,18 +440,11 @@ func (m *MessageServer) ForwardMessage(w http.ResponseWriter, r *http.Request, m
 	if !decode(w, r, &body) {
 		return
 	}
-	targets := make([]int64, len(body.ChatIds))
-	for i, s := range body.ChatIds {
-		if targets[i], ok = parseID(w, "chat_ids", s); !ok {
-			return
-		}
-	}
-	subject := strconv.FormatInt(p.UserID, 10)
-	if !allow(w, r, m.o.Limiter, RateForward, subject, m.o.Log) {
+	targets, ok := parseIDs(w, "chat_ids", body.ChatIds)
+	if !ok {
 		return
 	}
-	// Every copy is a message: it uses up the sender's send budget like one.
-	if !allowN(w, r, m.o.Limiter, RateSend, subject, len(targets), m.o.Log) {
+	if !m.chargeForward(w, r, p.UserID, []int64{id}, targets) {
 		return
 	}
 	copies, err := m.o.Service.Forward(r.Context(), p.UserID, id, targets)
