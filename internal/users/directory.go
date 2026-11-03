@@ -31,17 +31,21 @@ type View struct {
 
 // Visible reports whether a field guarded by a privacy setting with value setting is visible to a viewer,
 // given the owner's exception for that viewer ("" for none) and whether the two share a chat.
-// Exceptions only matter for the *_except values. The owner always sees everything.
+// An exception wins over the setting: allow always shows, deny always hides. The owner always sees everything.
 func Visible(setting, exception string, sharesChat bool) bool {
+	switch exception {
+	case postgres.EffectAllow:
+		return true
+	case postgres.EffectDeny:
+		return false
+	}
 	switch setting {
 	case postgres.VisibleEveryone:
 		return true
 	case postgres.VisibleSharedChats:
 		return sharesChat
 	case postgres.VisibleEveryoneExcept:
-		return exception != postgres.EffectDeny
-	case postgres.VisibleNobodyExcept:
-		return exception == postgres.EffectAllow
+		return true
 	}
 	return false // nobody, and anything unknown
 }

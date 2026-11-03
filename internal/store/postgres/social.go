@@ -20,10 +20,12 @@ const (
 
 // Setting keys that take per-user exceptions.
 const (
-	SettingAvatar       = "avatar_visibility"
-	SettingProfile      = "profile_visibility"
-	SettingPresence     = "presence_visibility"
-	SettingGroupInvites = "group_invites"
+	SettingAvatar         = "avatar_visibility"
+	SettingProfile        = "profile_visibility"
+	SettingPresence       = "presence_visibility"
+	SettingGroupInvites   = "group_invites"
+	SettingDirectMessages = "direct_messages"
+	SettingSearch         = "search_visibility"
 )
 
 // Exception effects.

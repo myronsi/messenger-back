@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.8
+  version: 2.1.0-alpha.9
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -697,7 +697,7 @@ paths:
         required: true
         schema:
           type: string
-          enum: [avatar_visibility, profile_visibility, presence_visibility, group_invites]
+          enum: [avatar_visibility, profile_visibility, presence_visibility, group_invites, direct_messages, search_visibility]
       - name: effect
         in: path
         required: true
@@ -2535,7 +2535,7 @@ components:
           description: A code of the authenticator app, or an unused recovery code.
     Visibility:
       type: string
-      description: Who may see the item. `*_except` scopes use the exception lists.
+      description: Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
       enum: [everyone, contacts, everyone_except, nobody_except, nobody]
     DirectMessagePolicy:
       type: string
@@ -2548,7 +2548,7 @@ components:
       enum: [everyone, nobody]
     PrivacyExceptions:
       type: object
-      description: User IDs per setting; `allow` applies to `nobody_except`, `deny` to `everyone_except`.
+      description: User IDs per setting. An exception wins over the setting whatever its value; `allow` always lets the user in, `deny` always keeps them out.
       additionalProperties:
         type: object
         required: [allow, deny]

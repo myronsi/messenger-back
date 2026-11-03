@@ -201,7 +201,10 @@ func visibilityFromDB(v string) string {
 	return v
 }
 
-var exceptionSettings = []string{postgres.SettingAvatar, postgres.SettingProfile, postgres.SettingPresence, postgres.SettingGroupInvites}
+var exceptionSettings = []string{
+	postgres.SettingAvatar, postgres.SettingProfile, postgres.SettingPresence, postgres.SettingGroupInvites,
+	postgres.SettingDirectMessages, postgres.SettingSearch,
+}
 
 func (a *AccountServer) privacy(ctx context.Context, userID int64) (PrivacySettings, error) {
 	all, err := a.o.Store.Social().Privacy(ctx, []int64{userID})
