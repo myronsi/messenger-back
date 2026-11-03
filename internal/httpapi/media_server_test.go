@@ -11,6 +11,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -120,6 +121,15 @@ func smallPNG(t *testing.T) []byte {
 	return b.Bytes()
 }
 
+func TestServeVariesByAuthorizationAndKeepsVary(t *testing.T) {
+	w := httptest.NewRecorder()
+	w.Header().Set("Vary", "Origin")
+	(&MediaServer{}).serve(w, httptest.NewRequest(http.MethodGet, "/", nil), media.Download{RedirectURL: "https://storage.example/x"}, cacheForever, "")
+	if got := w.Header().Values("Vary"); !slices.Equal(got, []string{"Origin", "Authorization"}) {
+		t.Fatalf("Vary: %v", got)
+	}
+}
+
 func TestUploadAndDownloadOverHTTP(t *testing.T) {
 	e := newMediaEnv(t)
 	alice, bob, eve := e.register(t, "alice"), e.register(t, "bob"), e.register(t, "eve")
@@ -162,7 +172,8 @@ func TestUploadAndDownloadOverHTTP(t *testing.T) {
 	}
 	r := get(bob.access, "")
 	if r.Code != http.StatusOK || r.Header().Get("Content-Type") != "image/png" || r.Header().Get("X-Content-Type-Options") != "nosniff" ||
-		r.Header().Get("Content-Security-Policy") == "" || r.Body.Len() == 0 || r.Header().Get("Cache-Control") != cacheForever {
+		r.Header().Get("Content-Security-Policy") == "" || r.Body.Len() == 0 || r.Header().Get("Cache-Control") != cacheForever ||
+		!slices.Contains(r.Header().Values("Vary"), "Authorization") {
 		t.Fatalf("download: %d %v", r.Code, r.Header())
 	}
 	// Players seek with byte ranges.
@@ -334,8 +345,8 @@ func TestAvatarsOverHTTP(t *testing.T) {
 	if got.Code != http.StatusOK || bytes.Equal(got.Body.Bytes(), defaultBytes) {
 		t.Fatal("bob does not see alice's avatar")
 	}
-	if c := got.Header().Get("Cache-Control"); c != cacheForever {
-		t.Fatalf("current rev: %q", c)
+	if c := got.Header().Get("Cache-Control"); c != cacheForever || !slices.Contains(got.Header().Values("Vary"), "Authorization") {
+		t.Fatalf("current rev: %q %v", c, got.Header().Values("Vary"))
 	}
 	for _, query := range []string{"", "?rev=" + msg} {
 		if c := e.do(t, request{method: http.MethodGet, path: avatarPath + query, token: bob.access}).Header().Get("Cache-Control"); c != "private, max-age=60" {
