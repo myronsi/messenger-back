@@ -172,6 +172,7 @@ func startRealtime(p *app.Process, pg *postgres.Store, rd *redis.Store, sc *scyl
 		Bus: bus, Directory: dir, Store: pg, IDs: idsrc, BasePath: cfg.HTTP.BasePath, Log: log,
 		Members:   func(ctx context.Context, chatID int64) ([]int64, error) { return svc.Members(ctx, chatID) },
 		Reactions: repo.Reactions,
+		Replies:   repo,
 	})
 	svc = messages.New(messages.Deps{
 		Messages: repo, Store: pg, Members: members, Unread: redis.NewUnread(rdb, ""),

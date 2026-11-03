@@ -128,6 +128,7 @@ func (e *env) instance(name string) *instance {
 		Bus: bus, Directory: dir, Store: e.pg, IDs: gen, BasePath: "/api/v2",
 		Members:   func(ctx context.Context, chatID int64) ([]int64, error) { return in.svc.Members(ctx, chatID) },
 		Reactions: e.repo.Reactions,
+		Replies:   e.repo,
 	})
 	in.svc = messages.New(messages.Deps{
 		Messages: e.repo, Store: e.pg, Members: in.members, Unread: redis.NewUnread(rdb, e.prefix),

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 
@@ -67,7 +68,11 @@ func (m *MessageServer) renderWith(ctx context.Context, viewer, chatID int64, ms
 	}
 	var senders []int64
 	files := map[uuid.UUID]*postgres.Attachment{}
-	for _, msg := range msgs {
+	origins := make([]scylla.Message, 0, len(deco.Replies))
+	for _, o := range deco.Replies {
+		origins = append(origins, o)
+	}
+	for _, msg := range append(slices.Clone(msgs), origins...) {
 		if msg.SenderID != nil {
 			senders = append(senders, *msg.SenderID)
 		}
@@ -107,6 +112,18 @@ func (m *MessageServer) renderWith(ctx context.Context, viewer, chatID int64, ms
 		}
 		if msg.AttachmentID != nil {
 			parts.Attachment = files[uuid.UUID(*msg.AttachmentID)]
+		}
+		if msg.ReplyTo != nil {
+			if o, ok := deco.Replies[*msg.ReplyTo]; ok {
+				parts.Reply = &ReplyOrigin{Message: o}
+				if o.SenderID != nil {
+					v := people[*o.SenderID]
+					parts.Reply.Sender = &v
+				}
+				if o.AttachmentID != nil {
+					parts.Reply.Attachment = files[uuid.UUID(*o.AttachmentID)]
+				}
+			}
 		}
 		for _, r := range deco.ReadBy(msg) {
 			parts.ReadBy = append(parts.ReadBy, ReadReceipt{UserId: FormatID(r.UserID), ReadAt: utc(*r.At)})
