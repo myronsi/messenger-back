@@ -32,7 +32,7 @@ The helpers are `internal/testenv`. CI starts ScyllaDB, RustFS and Elasticsearch
   - Every WebSocket event the realtime tests receive is validated against `api/websocket/server-events.schema.json` (`internal/realtime/contract_test.go`).
   - `api/scripts/check.mjs` checks the examples and some negative cases.
 - **WebSocket** (`internal/realtime`): delivery between two instances, removal from a chat, reconnect and catch-up, `ack` and `error` with `client_temp_id`, close codes, slow consumers.
-- **Security:** the B1â€“B9 issues of the Python backend (#18â€“#21 and the ones the epic lists) have tests in the new code:
+- **Security:** the B1–B9 issues of the Python backend (#18–#21 and the ones the epic lists) have tests in the new code:
 
 | Issue | Tests |
 |---|---|

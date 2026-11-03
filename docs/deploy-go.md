@@ -74,7 +74,7 @@ An upload replaces the bundle's files and `migrations/` as a whole: after a roll
 
 ## Rollback and restore
 
-- **To an earlier release:** Actions â†’ Deploy (Go) â†’ Run workflow, with the earlier tag and the environment. For production, run it from `edge`. The newer schema stays, which the earlier release works with.
+- **To an earlier release:** Actions → Deploy (Go) → Run workflow, with the earlier tag and the environment. For production, run it from `edge`. The newer schema stays, which the earlier release works with.
 - **A migration failed halfway:** golang-migrate marks the database dirty, and every later deployment stops at it.
   1. Look at what the migration did and finish or undo it by hand.
   2. Mark the version, either the one it reached or the one before it:
