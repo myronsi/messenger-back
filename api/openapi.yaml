@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.7
+  version: 2.1.0-alpha.8
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -1389,6 +1389,68 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
+  /chats/{chat_id}/messages/forward:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ChatId"
+    post:
+      tags: [messages]
+      operationId: forwardMessages
+      summary: Forward several messages of a chat to other chats
+      description: |
+        Copies up to 20 messages of the chat, oldest first, into every target chat. Every message and target is
+        checked before anything is written, so a refused one forwards nothing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ForwardMessagesRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "201":
+          description: The new messages, per target chat oldest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Message" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /chats/{chat_id}/messages/delete:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ChatId"
+    post:
+      tags: [messages]
+      operationId: deleteMessages
+      summary: Delete several messages of a chat
+      description: |
+        Deletes up to 100 messages of the chat with the rules of `DELETE /messages/{message_id}`. Every message
+        is checked first: when one may not be deleted, none is.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeleteMessagesRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Deleted
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
 
   # -------------------------------------------------------------- search
   /search/messages:
@@ -2837,6 +2899,35 @@ components:
           maxItems: 20
           uniqueItems: true
           items: { $ref: "#/components/schemas/Id" }
+    ForwardMessagesRequest:
+      type: object
+      required: [message_ids, chat_ids]
+      properties:
+        message_ids:
+          type: array
+          minItems: 1
+          maxItems: 20
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/Id" }
+        chat_ids:
+          type: array
+          minItems: 1
+          maxItems: 20
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/Id" }
+    DeleteMessagesRequest:
+      type: object
+      required: [message_ids, scope]
+      properties:
+        message_ids:
+          type: array
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/Id" }
+        scope:
+          type: string
+          enum: [me, everyone]
     MarkReadRequest:
       type: object
       required: [message_id]

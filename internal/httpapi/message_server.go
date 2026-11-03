@@ -321,6 +321,102 @@ func (m *MessageServer) DeleteMessage(w http.ResponseWriter, r *http.Request, me
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func parseIDs(w http.ResponseWriter, field string, list []Id) ([]int64, bool) {
+	out := make([]int64, len(list))
+	for i, s := range list {
+		id, ok := parseID(w, field, s)
+		if !ok {
+			return nil, false
+		}
+		out[i] = id
+	}
+	return out, true
+}
+
+func (m *MessageServer) DeleteMessages(w http.ResponseWriter, r *http.Request, chatID ChatId, _ DeleteMessagesParams) {
+	p, ok := principalOr401(w, r)
+	if !ok {
+		return
+	}
+	chat, ok := parseID(w, "chat_id", chatID)
+	if !ok {
+		return
+	}
+	var body DeleteMessagesRequest
+	if !decode(w, r, &body) {
+		return
+	}
+	if !body.Scope.Valid() {
+		WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "scope", Message: "me or everyone"})
+		return
+	}
+	ids, ok := parseIDs(w, "message_ids", body.MessageIds)
+	if !ok {
+		return
+	}
+	if err := m.o.Service.DeleteMany(r.Context(), p.UserID, chat, ids, string(body.Scope)); err != nil {
+		serviceError(w, r, m.o.Log, "delete messages", err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (m *MessageServer) ForwardMessages(w http.ResponseWriter, r *http.Request, chatID ChatId, _ ForwardMessagesParams) {
+	p, ok := principalOr401(w, r)
+	if !ok {
+		return
+	}
+	chat, ok := parseID(w, "chat_id", chatID)
+	if !ok {
+		return
+	}
+	var body ForwardMessagesRequest
+	if !decode(w, r, &body) {
+		return
+	}
+	sources, ok := parseIDs(w, "message_ids", body.MessageIds)
+	if !ok {
+		return
+	}
+	targets, ok := parseIDs(w, "chat_ids", body.ChatIds)
+	if !ok {
+		return
+	}
+	subject := strconv.FormatInt(p.UserID, 10)
+	if !allow(w, r, m.o.Limiter, RateForward, subject, m.o.Log) {
+		return
+	}
+	if !allowN(w, r, m.o.Limiter, RateSend, subject, len(targets), m.o.Log) {
+		return
+	}
+	copies, err := m.o.Service.ForwardMany(r.Context(), p.UserID, chat, sources, targets)
+	m.answerForward(w, r, copies, err)
+}
+
+func (m *MessageServer) answerForward(w http.ResponseWriter, r *http.Request, copies []scylla.Message, err error) {
+	p, _ := PrincipalFrom(r.Context())
+	if err != nil && len(copies) == 0 {
+		serviceError(w, r, m.o.Log, "forward message", err)
+		return
+	}
+	if err != nil {
+		// Some copies are delivered: answering an error would make the client forward them again.
+		m.o.Log.WarnContext(r.Context(), "forward stopped midway", "error", err, "written", len(copies))
+	}
+	items := make([]Message, 0, len(copies))
+	for _, c := range copies {
+		rendered, err := m.render(r.Context(), p.UserID, c.ChatID, []scylla.Message{c}, "")
+		if err != nil {
+			// Written already; a plainer rendering beats an error.
+			m.o.Log.WarnContext(r.Context(), "render forwarded copy", "error", err)
+			rendered = []Message{PresentMessage(c, MessageParts{BasePath: m.o.BasePath})}
+		}
+		items = append(items, rendered...)
+	}
+	noStore(w)
+	writeJSONStatus(w, http.StatusCreated, map[string]any{"items": items})
+}
+
 // ForwardMessage implements POST /messages/{id}/forward.
 func (m *MessageServer) ForwardMessage(w http.ResponseWriter, r *http.Request, messageID MessageId, _ ForwardMessageParams) {
 	p, ok := principalOr401(w, r)
@@ -350,26 +446,7 @@ func (m *MessageServer) ForwardMessage(w http.ResponseWriter, r *http.Request, m
 		return
 	}
 	copies, err := m.o.Service.Forward(r.Context(), p.UserID, id, targets)
-	if err != nil && len(copies) == 0 {
-		serviceError(w, r, m.o.Log, "forward message", err)
-		return
-	}
-	if err != nil {
-		// Some copies are delivered: answering an error would make the client forward them again.
-		m.o.Log.WarnContext(r.Context(), "forward stopped midway", "error", err, "written", len(copies))
-	}
-	items := make([]Message, 0, len(copies))
-	for _, c := range copies {
-		rendered, err := m.render(r.Context(), p.UserID, c.ChatID, []scylla.Message{c}, "")
-		if err != nil {
-			// Written already; a plainer rendering beats an error.
-			m.o.Log.WarnContext(r.Context(), "render forwarded copy", "error", err)
-			rendered = []Message{PresentMessage(c, MessageParts{BasePath: m.o.BasePath})}
-		}
-		items = append(items, rendered...)
-	}
-	noStore(w)
-	writeJSONStatus(w, http.StatusCreated, map[string]any{"items": items})
+	m.answerForward(w, r, copies, err)
 }
 
 // ListChatMedia implements GET /chats/{id}/media?kind=image|audio.
