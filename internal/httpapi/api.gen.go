@@ -692,6 +692,7 @@ type DisableTwoFactorRequest struct {
 
 // EditMessageRequest defines model for EditMessageRequest.
 type EditMessageRequest struct {
+	// Content New text, or the new caption of a file. Empty removes a file's caption; a text message rejects it.
 	Content string `json:"content"`
 }
 
@@ -2618,7 +2619,7 @@ type ServerInterface interface {
 	// DeleteMessage Delete a message
 	// (DELETE /messages/{message_id})
 	DeleteMessage(w http.ResponseWriter, r *http.Request, messageId MessageId, params DeleteMessageParams)
-	// EditMessage Edit your text message
+	// EditMessage Edit your text message or the caption of your file
 	// (PATCH /messages/{message_id})
 	EditMessage(w http.ResponseWriter, r *http.Request, messageId MessageId, params EditMessageParams)
 	// ForwardMessage Forward a message to other chats
@@ -15915,7 +15916,7 @@ type StrictServerInterface interface {
 	// DeleteMessage Delete a message
 	// (DELETE /messages/{message_id})
 	DeleteMessage(ctx context.Context, request DeleteMessageRequestObject) (DeleteMessageResponseObject, error)
-	// EditMessage Edit your text message
+	// EditMessage Edit your text message or the caption of your file
 	// (PATCH /messages/{message_id})
 	EditMessage(ctx context.Context, request EditMessageRequestObject) (EditMessageResponseObject, error)
 	// ForwardMessage Forward a message to other chats

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.3
+  version: 2.1.0-alpha.4
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -1281,7 +1281,8 @@ paths:
     patch:
       tags: [messages]
       operationId: editMessage
-      summary: Edit your text message
+      summary: Edit your text message or the caption of your file
+      description: An empty `content` removes the caption of a file message; a text message needs at least one character.
       requestBody:
         required: true
         content:
@@ -2764,7 +2765,10 @@ components:
       type: object
       required: [content]
       properties:
-        content: { type: string, minLength: 1, maxLength: 4096 }
+        content:
+          type: string
+          maxLength: 4096
+          description: New text, or the new caption of a file. Empty removes a file's caption; a text message rejects it.
     ForwardMessageRequest:
       type: object
       required: [chat_ids]

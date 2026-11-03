@@ -430,7 +430,10 @@ func (s *Service) checkAttachment(ctx context.Context, r SendRequest) (gocql.UUI
 
 // Edit replaces the text of the user's own text message.
 func (s *Service) Edit(ctx context.Context, userID, chatID, messageID int64, content string) (scylla.Message, error) {
-	if strings.TrimSpace(content) == "" || !validText(content, MaxContent) {
+	empty := strings.TrimSpace(content) == ""
+	if empty {
+		content = ""
+	} else if !validText(content, MaxContent) {
 		return scylla.Message{}, invalid("content must be 1 to %d characters", MaxContent)
 	}
 	if err := s.requireMember(ctx, chatID, userID); err != nil {
@@ -447,6 +450,9 @@ func (s *Service) Edit(ctx context.Context, userID, chatID, messageID int64, con
 	// A file keeps its attachment; only its caption changes.
 	if m.SenderID == nil || *m.SenderID != userID || (m.Type != scylla.TypeText && m.Type != scylla.TypeFile) || m.Forwarded != nil {
 		return scylla.Message{}, ErrForbidden
+	}
+	if empty && m.Type != scylla.TypeFile {
+		return scylla.Message{}, invalid("content must be 1 to %d characters", MaxContent)
 	}
 	if err := s.requireNotBlocked(ctx, userID, chatID); err != nil {
 		return scylla.Message{}, err

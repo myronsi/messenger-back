@@ -145,9 +145,10 @@ func PresentMessage(m scylla.Message, p MessageParts) Message {
 		t := utc(*m.EditedAt)
 		out.EditedAt = &t
 	}
-	if m.Deleted {
+	if m.Deleted || m.Type == scylla.TypeFile && m.Content != nil && *m.Content == "" {
 		out.Content = nil
-	} else if p.Attachment != nil {
+	}
+	if !m.Deleted && p.Attachment != nil {
 		a := PresentAttachment(*p.Attachment, m.Type, p.BasePath)
 		out.Attachment = &a
 	}

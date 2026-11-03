@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ClientEditEvent",
-  "description": "Edit your own text message.",
+  "description": "Edit your own text message or the caption of your file. An empty content removes a file's caption.",
   "type": "object",
   "properties": {
     "type": {
@@ -21,7 +21,6 @@
         },
         "content": {
           "type": "string",
-          "minLength": 1,
           "maxLength": 4096
         }
       },

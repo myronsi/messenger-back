@@ -235,8 +235,8 @@ func decodeClientEvent(frame []byte) (clientEvent, error) {
 		if err != nil {
 			return clientEvent{}, fail("%s", err)
 		}
-		if d.Content == nil || *d.Content == "" || utf8.RuneCountInString(*d.Content) > 4096 {
-			return clientEvent{}, fail("content must be 1 to 4096 characters")
+		if d.Content == nil || utf8.RuneCountInString(*d.Content) > 4096 {
+			return clientEvent{}, fail("content must be at most 4096 characters")
 		}
 		ev.Edit = &editData{MessageID: id, Content: *d.Content}
 	case "delete":
