@@ -6,7 +6,7 @@
 
 ## Running
 
-The tool needs the Go backend's own environment (`DATABASE_URL`, `SCYLLA_*`, `REDIS_URL`, `ELASTICSEARCH_URL`, the storage settings, `ENCRYPTION_KEY`, â€¦), with the v2 schema migrated (`make migrate`), and:
+The tool needs the Go backend's own environment (`DATABASE_URL`, `SCYLLA_*`, `REDIS_URL`, `ELASTICSEARCH_URL`, the storage settings, `ENCRYPTION_KEY`, …), with the v2 schema migrated (`make migrate`), and:
 
 | Variable | |
 |---|---|
@@ -46,7 +46,7 @@ The four `migrate_v1_*` tables can be dropped once the switch is final.
 
 - **Users:**
   - Ids and password hashes stay as they are. v2 verifies v1's argon2 and PBKDF2 hashes and upgrades them at the next login.
-  - Usernames that do not fit v2 (3â€“32 of `Aâ€“Z aâ€“z 0â€“9 _`, unique ignoring case; v1 never checked, B6) are renamed to their fitting characters plus `_<id>` (and `_<n>` should that be taken). Of names that differ only in case, the lowest id keeps it. Empty display names become the username.
+  - Usernames that do not fit v2 (3–32 of `A–Z a–z 0–9 _`, unique ignoring case; v1 never checked, B6) are renamed to their fitting characters plus `_<id>` (and `_<n>` should that be taken). Of names that differ only in case, the lowest id keeps it. Empty display names become the username.
   - New v2 users and chats get ids above every id v1 handed out, including senders of messages whose accounts are gone: a new user must never become the sender of someone else's old messages.
   - Privacy settings with unknown values fall back to `everyone`. Exceptions for settings v2 has none for (`direct_messages`) are dropped. Self-blocks are dropped.
 - **2FA:**
@@ -69,7 +69,7 @@ The four `migrate_v1_*` tables can be dropped once the switch is final.
   - `deleted_for` and `undelivered_to` become hidden markers. Legacy messages with empty content become deleted ones.
   - `read_by` moves the readers' read markers, and each chat's newest message orders the chat list.
 - **Files:**
-  - Uploads and voice messages become attachments with links for every message that uses them. A file used in one chat belongs to it; one that forwards spread over several chats belongs to none, so the links decide who may see it and deleting one chat does not take it from the others. Voice waveforms are scaled to 0â€“255.
+  - Uploads and voice messages become attachments with links for every message that uses them. A file used in one chat belongs to it; one that forwards spread over several chats belongs to none, so the links decide who may see it and deleting one chat does not take it from the others. Voice waveforms are scaled to 0–255.
   - Images are re-encoded like every v2 upload (EXIF such as locations is removed, and a thumbnail is made). Images the decoder refuses are copied as they are.
   - Avatars (current, history, group avatars) under `avatars/` become avatar attachments, and the current one is marked so in the history. The shared default images are skipped, and files that are not images leave the default avatar.
 - **Afterwards:**

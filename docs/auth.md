@@ -33,7 +33,7 @@ The Python migration is complete. Keep migrated password verification for existi
 
 ## Passwords
 
-Argon2id for new hashes. Verified: the Argon2id PHC strings of v1 (`argon2$â€¦`, argon2-cffi) and legacy PBKDF2 `salt:hash`. A successful login with an old format rehashes to the current parameters. At most `PASSWORD_HASH_CONCURRENCY` hashes run at once so that a flood of logins cannot exhaust memory. Unknown users are verified against a dummy hash, so timing does not reveal whether a username exists. Test fixtures are hashes created by the real v1 code.
+Argon2id for new hashes. Verified: the Argon2id PHC strings of v1 (`argon2$…`, argon2-cffi) and legacy PBKDF2 `salt:hash`. A successful login with an old format rehashes to the current parameters. At most `PASSWORD_HASH_CONCURRENCY` hashes run at once so that a flood of logins cannot exhaust memory. Unknown users are verified against a dummy hash, so timing does not reveal whether a username exists. Test fixtures are hashes created by the real v1 code.
 
 ## Two-factor authentication
 
