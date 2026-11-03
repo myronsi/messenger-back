@@ -344,18 +344,7 @@ func (m *MediaServer) SetMyAvatar(w http.ResponseWriter, r *http.Request, _ SetM
 		id := body.AttachmentId
 		err = m.o.Store.Attachments().SetUserAvatar(r.Context(), p.UserID, &id)
 	}
-	if err != nil {
-		m.o.Log.ErrorContext(r.Context(), "set avatar", "error", err)
-		WriteProblem(w, http.StatusInternalServerError, ErrorCodeInternalError)
-		return
-	}
-	u, err := m.o.Store.Users().Get(r.Context(), p.UserID)
-	if err != nil {
-		WriteProblem(w, http.StatusInternalServerError, ErrorCodeInternalError)
-		return
-	}
-	noStore(w)
-	writeJSONStatus(w, http.StatusOK, PresentMe(u, m.o.BasePath))
+	m.answerMe(w, r, p.UserID, "set avatar", err)
 }
 
 func (m *MediaServer) DeleteMyAvatar(w http.ResponseWriter, r *http.Request, avatarID Id, _ DeleteMyAvatarParams) {
@@ -373,12 +362,16 @@ func (m *MediaServer) DeleteMyAvatar(w http.ResponseWriter, r *http.Request, ava
 		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
 		return
 	}
+	m.answerMe(w, r, p.UserID, "delete avatar", err)
+}
+
+func (m *MediaServer) answerMe(w http.ResponseWriter, r *http.Request, userID int64, action string, err error) {
 	if err != nil {
-		m.o.Log.ErrorContext(r.Context(), "delete avatar", "error", err)
+		m.o.Log.ErrorContext(r.Context(), action, "error", err)
 		WriteProblem(w, http.StatusInternalServerError, ErrorCodeInternalError)
 		return
 	}
-	u, err := m.o.Store.Users().Get(r.Context(), p.UserID)
+	u, err := m.o.Store.Users().Get(r.Context(), userID)
 	if err != nil {
 		WriteProblem(w, http.StatusInternalServerError, ErrorCodeInternalError)
 		return
