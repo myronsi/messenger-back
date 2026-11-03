@@ -217,12 +217,19 @@ func TestUploadAndDownloadOverHTTP(t *testing.T) {
 }
 
 func TestTokenRoutesStayOutOfTraces(t *testing.T) {
-	secret := tokenRoute(apiBase)
+	secret := tokenRoute()
 	for path, want := range map[string]bool{
 		apiBase + "/notifications/avatar/a.1.2.3.sig": true,
 		apiBase + "/notifications/read/r.1.2.3.4.sig": true,
+		apiBase + "//notifications/read/r.1":          true,
+		apiBase + "/./notifications/read/r.1":         true,
+		apiBase + "/x/../notifications/avatar/a.1":    true,
+		apiBase + "/Notifications/READ/r.1":           true,
+		apiBase + "/notifications%2Fread%2Fr.1":       true,
+		apiBase + "/notifications%252Fread%252Fr.1":   true,
 		apiBase + "/me/notifications":                 false,
 		apiBase + "/users/1/avatar":                   false,
+		apiBase + "/notifications/readme":             false,
 	} {
 		if got := secret(httptest.NewRequest(http.MethodGet, path, nil)); got != want {
 			t.Errorf("%s: %v, want %v", path, got, want)

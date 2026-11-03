@@ -3,6 +3,8 @@ package httpapi
 import (
 	"log/slog"
 	"net/http"
+	"net/url"
+	"path"
 	"strings"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -77,7 +79,7 @@ func NewRouter(o Options) *Router {
 		timeout(o.HTTP.RequestTimeout, o.HTTP.TransferTimeout, transferRoute(o.HTTP.BasePath)),
 	)
 	if o.Tracing {
-		secret := tokenRoute(o.HTTP.BasePath)
+		secret := tokenRoute()
 		handler = otelhttp.NewHandler(handler, "http.server", otelhttp.WithFilter(func(r *http.Request) bool { return !secret(r) }))
 	}
 	return &Router{handler: handler, health: h}
@@ -99,9 +101,18 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) { r.handler
 func (r *Router) Drain() { r.health.draining.Store(true) }
 
 // transferRoute reports the requests that move file bytes: uploads, attachment contents and avatars.
-func tokenRoute(basePath string) func(*http.Request) bool {
+func tokenRoute() func(*http.Request) bool {
 	return func(r *http.Request) bool {
-		return strings.HasPrefix(r.URL.Path, basePath+"/notifications/avatar/") || strings.HasPrefix(r.URL.Path, basePath+"/notifications/read/")
+		p := strings.ToLower(r.URL.EscapedPath())
+		for range 3 {
+			decoded, err := url.PathUnescape(p)
+			if err != nil || decoded == p {
+				break
+			}
+			p = strings.ToLower(decoded)
+		}
+		p = path.Clean("/" + strings.ReplaceAll(p, "\\", "/"))
+		return strings.Contains(p+"/", "/notifications/avatar/") || strings.Contains(p+"/", "/notifications/read/")
 	}
 }
 
