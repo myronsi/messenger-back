@@ -56,7 +56,7 @@ It merges `hidden_for` instead of replacing it, so it cannot undo a hide that th
 2. It writes every chat's messages into the new index, with `hidden_for` from the deleted-for-me markers, merged with what the stream wrote meanwhile.
 3. It switches `messages` to the new index in one step, drops `messages-rebuild` and deletes the old index.
 
-Searches use the old index until the switch. The rebuild alias is also the lock: a second rebuild refuses to start while it exists. A failed rebuild deletes its index. Run it after a mapping change, or after the migration from v1 (#54).
+Searches use the old index until the switch. The rebuild alias is also the lock: a second rebuild refuses to start while it exists. A failed rebuild deletes its index. Run it after a mapping change or a Go data restore that requires rebuilding search. The one-time v1 migration is complete and its importer is retired.
 
 ## Security
 

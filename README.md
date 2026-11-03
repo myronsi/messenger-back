@@ -23,3 +23,7 @@ Refresh cookies must match `/api/v2/auth/refresh`. Never reuse the retired `/api
 ## Python retirement
 
 The Python service, build, deployment, tests and completed one-time importer have been removed. Historical source remains in Git history. Existing migrated password formats remain supported so users keep access to their accounts. Historical migration records and backups are retained for audit and recovery; they are not deployment instructions.
+
+## Migration records
+
+The [Go cutover is complete](docs/switchover.md). Read the [data migration record](docs/migration-v1.md) for retained account compatibility and the [Python retirement record](docs/python-retirement.md) for removed infrastructure, protected archives and the deployed-image cleanup boundary.

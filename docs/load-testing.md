@@ -37,7 +37,7 @@ Every script fails when it measured nothing: a ticket that could not be had, a s
 
 ## Results
 
-The targets are still to be measured on staging with migrated data before the switch (#56). Record each run here: date, commit, environment (instances, CPU, memory), parameters and the k6 summary of the thresholds.
+The cutover is complete. These capacity targets still need dedicated measurement on staging; completion of migration and functional smoke checks does not establish load capacity. Record each run here: date, commit, environment (instances, CPU, memory), parameters and the k6 summary of the thresholds.
 
 | Date | Run | Environment | Result |
 |---|---|---|---|
