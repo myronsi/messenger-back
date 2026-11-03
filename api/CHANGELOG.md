@@ -2,6 +2,15 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.9
+
+- Privacy exceptions apply to every value of avatar, profile and presence visibility, not only to `*_except`:
+  an `allow` exception always shows the item to that user and a `deny` exception always hides it. Group invites
+  already worked this way.
+- `direct_messages` and `search_visibility` take exception lists too (`PUT /me/privacy/exceptions/{setting_key}/{effect}`
+  and `exceptions` of `PrivacySettings`): `allow` lets the user start a direct chat without approval or find you in
+  search, `deny` never does.
+
 ## 2.1.0-alpha.8
 
 - Adds `POST /chats/{chat_id}/messages/forward` (up to 20 messages to up to 20 chats, at most 100 copies, oldest

@@ -966,7 +966,7 @@ type PasswordConfirmation struct {
 	Password *string `json:"password,omitempty"`
 }
 
-// PrivacyExceptions User IDs per setting; `allow` applies to `nobody_except`, `deny` to `everyone_except`.
+// PrivacyExceptions User IDs per setting. An exception wins over the setting whatever its value; `allow` always lets the user in, `deny` always keeps them out.
 type PrivacyExceptions map[string]struct {
 	Allow []Id `json:"allow"`
 	Deny  []Id `json:"deny"`
@@ -979,18 +979,18 @@ type PrivacyExceptionsRequest struct {
 
 // PrivacySettings defines model for PrivacySettings.
 type PrivacySettings struct {
-	// AvatarVisibility Who may see the item. `*_except` scopes use the exception lists.
+	// AvatarVisibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
 	AvatarVisibility Visibility          `json:"avatar_visibility"`
 	DirectMessages   DirectMessagePolicy `json:"direct_messages"`
 
-	// Exceptions User IDs per setting; `allow` applies to `nobody_except`, `deny` to `everyone_except`.
+	// Exceptions User IDs per setting. An exception wins over the setting whatever its value; `allow` always lets the user in, `deny` always keeps them out.
 	Exceptions   PrivacyExceptions `json:"exceptions"`
 	GroupInvites GroupInvitePolicy `json:"group_invites"`
 
-	// PresenceVisibility Who may see the item. `*_except` scopes use the exception lists.
+	// PresenceVisibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
 	PresenceVisibility Visibility `json:"presence_visibility"`
 
-	// ProfileVisibility Who may see the item. `*_except` scopes use the exception lists.
+	// ProfileVisibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
 	ProfileVisibility   Visibility       `json:"profile_visibility"`
 	ReadReceiptsEnabled bool             `json:"read_receipts_enabled"`
 	SearchVisibility    SearchVisibility `json:"search_visibility"`
@@ -1268,15 +1268,15 @@ type UpdateMeRequest struct {
 
 // UpdatePrivacySettingsRequest defines model for UpdatePrivacySettingsRequest.
 type UpdatePrivacySettingsRequest struct {
-	// AvatarVisibility Who may see the item. `*_except` scopes use the exception lists.
+	// AvatarVisibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
 	AvatarVisibility *Visibility          `json:"avatar_visibility,omitempty"`
 	DirectMessages   *DirectMessagePolicy `json:"direct_messages,omitempty"`
 	GroupInvites     *GroupInvitePolicy   `json:"group_invites,omitempty"`
 
-	// PresenceVisibility Who may see the item. `*_except` scopes use the exception lists.
+	// PresenceVisibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
 	PresenceVisibility *Visibility `json:"presence_visibility,omitempty"`
 
-	// ProfileVisibility Who may see the item. `*_except` scopes use the exception lists.
+	// ProfileVisibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
 	ProfileVisibility   *Visibility       `json:"profile_visibility,omitempty"`
 	ReadReceiptsEnabled *bool             `json:"read_receipts_enabled,omitempty"`
 	SearchVisibility    *SearchVisibility `json:"search_visibility,omitempty"`
@@ -1341,7 +1341,7 @@ type UserPage struct {
 // Username defines model for Username.
 type Username = string
 
-// Visibility Who may see the item. `*_except` scopes use the exception lists.
+// Visibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
 type Visibility string
 
 // WebSocketTicket defines model for WebSocketTicket.

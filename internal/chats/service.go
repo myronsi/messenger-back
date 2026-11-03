@@ -498,6 +498,16 @@ func (s *Service) permission(ctx context.Context, requester, recipient int64) (a
 	if err != nil || blocked {
 		return false, false, err
 	}
+	exc, err := social.ExceptionsOf(ctx, recipient, []int64{requester})
+	if err != nil {
+		return false, false, err
+	}
+	switch exc[requester][postgres.SettingDirectMessages] {
+	case postgres.EffectAllow:
+		return true, false, nil
+	case postgres.EffectDeny:
+		return false, false, nil
+	}
 	settings, err := social.Privacy(ctx, []int64{recipient})
 	if err != nil {
 		return false, false, err
