@@ -155,6 +155,9 @@ func TestMessageNotificationPrivacyAndEligibility(t *testing.T) {
 				if got, err := w.Tokens.ParseRead(p.ReadToken); err != nil || got.IDs[0] != 3 || got.IDs[1] != 9 || got.Device != q.devices[0].ID {
 					t.Fatalf("read action missing: %v", err)
 				}
+				if (p.SenderID != "") != (scenario == "preview") || scenario == "preview" && p.SenderID != "1" {
+					t.Fatal("the sender id must come only with previews")
+				}
 				if p.Preview != (scenario == "preview") {
 					t.Fatal("the preview flag does not match the preferences")
 				}

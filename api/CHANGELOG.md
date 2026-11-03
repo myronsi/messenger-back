@@ -6,7 +6,7 @@ Contract changes only. The backend changelog is `CHANGELOG.md` in the repository
 
 - Adds `GET /notifications/avatar/{token}` and `POST /notifications/read/{token}` without a session, for the
   sender photo and the "Mark as read" action of a web push. Both answer `404` for a forged, expired or ended token.
-- Web push payloads add `preview`, `read_token` and, with previews on, `avatar_token`. Tokens are bound to the push
+- Web push payloads add `preview`, `read_token` and, with previews on, `sender_id` and `avatar_token`. Tokens are bound to the push
   device and its session.
 
 ## 2.1.0-alpha.2
