@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.3.0-alpha.1...v1.4.0-alpha.1) (2026-11-03)
+
+
+### Features
+
+* **messages:** allow removing the caption of a file message ([#141](https://github.com/myronsi/messenger-back/issues/141)) ([2495a55](https://github.com/myronsi/messenger-back/commit/2495a5522b64e71319c78aae010a6948653d9163))
+* **notifications:** signed tokens for the sender avatar and Mark as read ([#139](https://github.com/myronsi/messenger-back/issues/139)) ([2359ff4](https://github.com/myronsi/messenger-back/commit/2359ff49583eca37863b578092f5bdd28b183c16))
+
 ## [1.3.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.2.0-alpha.1...v1.3.0-alpha.1) (2026-11-02)
 
 
