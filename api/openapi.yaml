@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.5
+  version: 2.1.0-alpha.6
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -2641,6 +2641,29 @@ components:
             - $ref: "#/components/schemas/Id"
             - type: "null"
         sender_name: { type: string }
+    ReplyPreview:
+      type: object
+      description: |
+        What a reply shows of the message it answers, so a client can draw the quote without loading that
+        message. Set on messages of history pages and `message` events when the recipient can see the answered
+        message; absent when it is gone or hidden for them, and on chat-list previews and search results.
+      required: [id, type, sender, content, attachment, is_deleted]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        type: { $ref: "#/components/schemas/MessageType" }
+        sender:
+          oneOf:
+            - $ref: "#/components/schemas/User"
+            - type: "null"
+        content:
+          type: [string, "null"]
+          maxLength: 100
+          description: The first 100 characters of the text or caption; `null` when deleted or empty.
+        attachment:
+          oneOf:
+            - $ref: "#/components/schemas/Attachment"
+            - type: "null"
+        is_deleted: { type: boolean }
     Message:
       type: object
       required:
@@ -2678,6 +2701,8 @@ components:
           oneOf:
             - $ref: "#/components/schemas/Id"
             - type: "null"
+        reply_preview:
+          $ref: "#/components/schemas/ReplyPreview"
         forwarded_from:
           oneOf:
             - $ref: "#/components/schemas/ForwardedFrom"

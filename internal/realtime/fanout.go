@@ -62,12 +62,18 @@ type Fanout struct {
 	store    Store
 	members  func(ctx context.Context, chatID int64) ([]int64, error)
 	reacts   func(ctx context.Context, chatID int64, ids []int64) (map[int64][]scylla.Reaction, error)
+	replies  ReplyLookup
 	ids      messages.IDSource
 	basePath string
 	log      *slog.Logger
 }
 
 var _ messages.Notifier = (*Fanout)(nil)
+
+type ReplyLookup interface {
+	Get(ctx context.Context, chatID, messageID int64) (scylla.Message, error)
+	HiddenAmong(ctx context.Context, chatID, messageID int64, userIDs []int64) (map[int64]bool, error)
+}
 
 // FanoutDeps are the collaborators of the fan-out.
 type FanoutDeps struct {
@@ -78,6 +84,7 @@ type FanoutDeps struct {
 	Members func(ctx context.Context, chatID int64) ([]int64, error)
 	// Reactions loads the reactions of messages (for edit events).
 	Reactions func(ctx context.Context, chatID int64, ids []int64) (map[int64][]scylla.Reaction, error)
+	Replies   ReplyLookup
 	// IDs numbers the events (event_id).
 	IDs      messages.IDSource
 	BasePath string
@@ -89,7 +96,7 @@ func NewFanout(d FanoutDeps) *Fanout {
 	if d.Log == nil {
 		d.Log = slog.New(slog.DiscardHandler)
 	}
-	return &Fanout{bus: d.Bus, dir: d.Directory, store: d.Store, members: d.Members, reacts: d.Reactions, ids: d.IDs, basePath: d.BasePath, log: d.Log}
+	return &Fanout{bus: d.Bus, dir: d.Directory, store: d.Store, members: d.Members, reacts: d.Reactions, replies: d.Replies, ids: d.IDs, basePath: d.BasePath, log: d.Log}
 }
 
 // eventID numbers an event; without an id source (Redis lost the node lease) the event still goes out.
@@ -160,9 +167,10 @@ func (f *Fanout) renderMessage(ctx context.Context, m scylla.Message, recipients
 			f.log.WarnContext(ctx, "render attachment", "error", err)
 		}
 	}
+	replies := f.replyOrigins(ctx, m, recipients)
 	out := make(map[int64]httpapi.Message, len(recipients))
 	for _, uid := range recipients {
-		parts := httpapi.MessageParts{Attachment: att, Reactions: reactions, BasePath: f.basePath}
+		parts := httpapi.MessageParts{Attachment: att, Reactions: reactions, BasePath: f.basePath, Reply: replies[uid]}
 		if m.SenderID != nil {
 			v, ok := senders[uid]
 			if !ok {
@@ -175,6 +183,48 @@ func (f *Fanout) renderMessage(ctx context.Context, m scylla.Message, recipients
 			}
 		}
 		out[uid] = httpapi.PresentMessage(m, parts)
+	}
+	return out
+}
+
+func (f *Fanout) replyOrigins(ctx context.Context, m scylla.Message, recipients []int64) map[int64]*httpapi.ReplyOrigin {
+	if f.replies == nil || m.ReplyTo == nil || m.Deleted {
+		return nil
+	}
+	o, err := f.replies.Get(ctx, m.ChatID, *m.ReplyTo)
+	if err != nil {
+		if !errors.Is(err, scylla.ErrNotFound) {
+			f.log.WarnContext(ctx, "render reply", "error", err)
+		}
+		return nil
+	}
+	hidden, err := f.replies.HiddenAmong(ctx, m.ChatID, o.ID, recipients)
+	if err != nil {
+		f.log.WarnContext(ctx, "render reply", "error", err)
+		return nil
+	}
+	var senders map[int64]users.View
+	if o.SenderID != nil {
+		if senders, err = f.dir.ToViewers(ctx, *o.SenderID, recipients, true); err != nil {
+			f.log.WarnContext(ctx, "render reply sender", "error", err)
+		}
+	}
+	var att *postgres.Attachment
+	if o.AttachmentID != nil && !o.Deleted {
+		if a, err := f.store.Attachments().Get(ctx, uuid.UUID(*o.AttachmentID)); err == nil {
+			att = &a
+		}
+	}
+	out := make(map[int64]*httpapi.ReplyOrigin, len(recipients))
+	for _, uid := range recipients {
+		if hidden[uid] {
+			continue
+		}
+		origin := &httpapi.ReplyOrigin{Message: o, Attachment: att}
+		if v, ok := senders[uid]; ok {
+			origin.Sender = &v
+		}
+		out[uid] = origin
 	}
 	return out
 }

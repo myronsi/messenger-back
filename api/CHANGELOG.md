@@ -2,6 +2,12 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.6
+
+- `Message` adds optional `reply_preview` (`ReplyPreview`: id, type, sender, the first 100 characters of the
+  text, attachment, is_deleted) on history pages and `message` events, so a reply shows what it answers even
+  when that message is not loaded. It is absent when the answered message is gone or hidden for the recipient.
+
 ## 2.1.0-alpha.5
 
 - A user's `avatar_url` adds `?rev={revision}`, which changes with every new avatar. `GET /users/{user_id}/avatar`

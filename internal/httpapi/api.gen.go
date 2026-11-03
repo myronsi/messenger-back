@@ -824,7 +824,12 @@ type Message struct {
 	IsDeleted bool          `json:"is_deleted"`
 	Reactions []Reaction    `json:"reactions"`
 	ReadBy    []ReadReceipt `json:"read_by"`
-	ReplyTo   *Id           `json:"reply_to"`
+
+	// ReplyPreview What a reply shows of the message it answers, so a client can draw the quote without loading that
+	// message. Set on messages of history pages and `message` events when the recipient can see the answered
+	// message; absent when it is gone or hidden for them, and on chat-list previews and search results.
+	ReplyPreview *ReplyPreview `json:"reply_preview,omitempty"`
+	ReplyTo      *Id           `json:"reply_to"`
 
 	// Sender `null` for system messages.
 	Sender *User       `json:"sender"`
@@ -1067,6 +1072,24 @@ type RegisterResponseTokenType string
 type ReplaceRecoveryKeyRequest struct {
 	Code     *string `json:"code,omitempty"`
 	Password string  `json:"password"`
+}
+
+// ReplyPreview What a reply shows of the message it answers, so a client can draw the quote without loading that
+// message. Set on messages of history pages and `message` events when the recipient can see the answered
+// message; absent when it is gone or hidden for them, and on chat-list previews and search results.
+type ReplyPreview struct {
+	Attachment *Attachment `json:"attachment"`
+
+	// Content The first 100 characters of the text or caption; `null` when deleted or empty.
+	Content *string `json:"content"`
+
+	// Id Decimal ID as a string (Snowflake IDs exceed 2^53).
+	//
+	// Examples: 7217400317439950848
+	Id        Id          `json:"id"`
+	IsDeleted bool        `json:"is_deleted"`
+	Sender    *User       `json:"sender"`
+	Type      MessageType `json:"type"`
 }
 
 // ResetPasswordRequest defines model for ResetPasswordRequest.
