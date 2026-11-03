@@ -1,15 +1,22 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/myronsi/messenger-back/internal/auth"
+	"github.com/myronsi/messenger-back/internal/messages"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
+	"github.com/myronsi/messenger-back/internal/store/redis"
 )
 
 func (e *chatEnv) send(t *testing.T, s session, chatID, temp, text string) reply {
@@ -198,6 +205,125 @@ func TestReplyPreviewOutsideThePageOverHTTP(t *testing.T) {
 	}
 	if p := preview(alice); p == nil || p["is_deleted"] != true || p["content"] != nil {
 		t.Fatalf("deleted original: %v", p)
+	}
+}
+
+func TestBulkForwardAndDeleteOverHTTP(t *testing.T) {
+	e := newChatEnv(t)
+	alice, bob, carol := e.register(t, "alice"), e.register(t, "bob"), e.register(t, "carol")
+	chat := e.create(t, alice, e.uid(t, bob), "").json()["id"].(string)
+	other := e.create(t, alice, e.uid(t, carol), "").json()["id"].(string)
+	var mine []string
+	for i, text := range []string{"one", "two", "three"} {
+		mine = append(mine, e.send(t, alice, chat, "a-"+strconv.Itoa(i), text).json()["id"].(string))
+	}
+	bobs := e.send(t, bob, chat, "b-1", "from bob").json()["id"].(string)
+	forward := func(s session, ids []string, targets ...string) reply {
+		return e.do(t, request{method: http.MethodPost, path: "/chats/" + chat + "/messages/forward", token: s.access,
+			body: map[string]any{"message_ids": ids, "chat_ids": targets}})
+	}
+	remove := func(s session, scope string, ids []string) reply {
+		return e.do(t, request{method: http.MethodPost, path: "/chats/" + chat + "/messages/delete", token: s.access,
+			body: map[string]any{"message_ids": ids, "scope": scope}})
+	}
+
+	fw := forward(alice, []string{mine[2], bobs, mine[0]}, other)
+	if fw.Code != http.StatusCreated {
+		t.Fatalf("forward: %d %s", fw.Code, fw.Body)
+	}
+	if got, _ := e.history(t, carol, other, ""); len(got) != 3 || texts(got)[0] != "one" || texts(got)[1] != "three" || texts(got)[2] != "from bob" {
+		t.Fatalf("forwarded copies, oldest first: %v", texts(got))
+	}
+	tooMany := make([]string, 21)
+	for i := range tooMany {
+		tooMany[i] = strconv.Itoa(i + 1)
+	}
+	if r := forward(alice, tooMany, other); r.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("21 messages: %d", r.Code)
+	}
+	if r := forward(carol, []string{mine[0]}, other); r.Code != http.StatusNotFound {
+		t.Fatalf("forward from a chat carol is not in: %d", r.Code)
+	}
+
+	if r := remove(bob, "everyone", []string{mine[0], bobs}); r.Code != http.StatusForbidden {
+		t.Fatalf("bob deletes alice's message for everyone: %d", r.Code)
+	}
+	if got, _ := e.history(t, alice, chat, ""); texts(got)[3] != "from bob" {
+		t.Fatalf("a refused bulk delete changed something: %v", texts(got))
+	}
+	if r := remove(alice, "everyone", mine[:2]); r.Code != http.StatusNoContent {
+		t.Fatalf("delete own messages: %d %s", r.Code, r.Body)
+	}
+	if got, _ := e.history(t, bob, chat, ""); texts(got)[0] != "<deleted>" || texts(got)[1] != "<deleted>" || texts(got)[2] != "three" {
+		t.Fatalf("after deleting for everyone: %v", texts(got))
+	}
+	if r := remove(bob, "me", []string{mine[2], bobs}); r.Code != http.StatusNoContent {
+		t.Fatalf("delete for me: %d", r.Code)
+	}
+	if got, _ := e.history(t, bob, chat, ""); len(got) != 2 {
+		t.Fatalf("bob still sees: %v", texts(got))
+	}
+	if got, _ := e.history(t, alice, chat, ""); len(got) != 4 {
+		t.Fatalf("alice lost messages bob deleted for himself: %v", texts(got))
+	}
+	if r := remove(alice, "me", append(tooMany, tooMany...)); r.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("repeated ids: %d", r.Code)
+	}
+}
+
+type sendBudget struct{ charged map[string]int }
+
+func (b *sendBudget) Allow(ctx context.Context, r redis.Rate, subject string) (redis.Result, error) {
+	return b.AllowN(ctx, r, subject, 1)
+}
+
+func (b *sendBudget) AllowN(_ context.Context, r redis.Rate, _ string, n int) (redis.Result, error) {
+	b.charged[r.Name] += n
+	return redis.Result{Allowed: r.Name != RateSend.Name, RetryAfter: time.Second}, nil
+}
+
+func TestForwardChargesEveryCopy(t *testing.T) {
+	if messages.MaxForwardCopies > RateSend.Burst || messages.MaxForwardTargets > RateSend.Burst {
+		t.Fatalf("a forward allowed by the limits can never fit the send burst of %d", RateSend.Burst)
+	}
+	budget := &sendBudget{charged: map[string]int{}}
+	srv := NewMessageServer(MessageOptions{Limiter: budget, BasePath: apiBase})
+	ids := func(n int) []string {
+		out := make([]string, n)
+		for i := range out {
+			out[i] = strconv.Itoa(i + 1)
+		}
+		return out
+	}
+	call := func(single bool, sources, targets int) int {
+		t.Helper()
+		raw, err := json.Marshal(map[string]any{"message_ids": ids(sources), "chat_ids": ids(targets)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(raw))
+		req.Header.Set("Content-Type", "application/json")
+		req = req.WithContext(context.WithValue(req.Context(), principalKey{}, auth.Principal{UserID: 7}))
+		w := httptest.NewRecorder()
+		if single {
+			srv.ForwardMessage(w, req, "1", ForwardMessageParams{})
+		} else {
+			srv.ForwardMessages(w, req, "1", ForwardMessagesParams{})
+		}
+		return w.Code
+	}
+
+	if code := call(false, 4, 5); code != http.StatusTooManyRequests || budget.charged[RateSend.Name] != 20 {
+		t.Fatalf("4 messages to 5 chats: %d, charged %d", code, budget.charged[RateSend.Name])
+	}
+	if code := call(false, 5, 5); code != http.StatusUnprocessableEntity || budget.charged[RateSend.Name] != 20 {
+		t.Fatalf("25 copies: %d, charged %d", code, budget.charged[RateSend.Name])
+	}
+	if code := call(true, 1, 21); code != http.StatusUnprocessableEntity || budget.charged[RateSend.Name] != 20 {
+		t.Fatalf("one message to 21 chats: %d, charged %d", code, budget.charged[RateSend.Name])
+	}
+	if code := call(true, 1, 3); code != http.StatusTooManyRequests || budget.charged[RateSend.Name] != 23 {
+		t.Fatalf("one message to 3 chats: %d, charged %d", code, budget.charged[RateSend.Name])
 	}
 }
 

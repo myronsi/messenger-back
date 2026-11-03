@@ -365,6 +365,51 @@ func pushDevice(t *testing.T, store *postgres.Store, uid int64, existing ...post
 	return d
 }
 
+func TestDirectMessageAndSearchExceptions(t *testing.T) {
+	e := newChatEnv(t)
+	alice, bob, carol, dave := e.register(t, "alice"), e.register(t, "bob"), e.register(t, "carol"), e.register(t, "dave")
+	aliceID, bobID, carolID := e.uid(t, alice), e.uid(t, bob), e.uid(t, carol)
+	setList := func(key, effect string, ids ...string) {
+		t.Helper()
+		r := e.do(t, request{method: http.MethodPut, path: "/me/privacy/exceptions/" + key + "/" + effect, token: alice.access, body: map[string]any{"user_ids": ids}})
+		if r.Code != http.StatusOK {
+			t.Fatalf("%s %s: %d %s", key, effect, r.Code, r.Body)
+		}
+	}
+	e.do(t, request{method: http.MethodPatch, path: "/me/privacy", token: alice.access, body: map[string]any{"direct_messages": "wait_approval", "search_visibility": "nobody"}})
+	setList("direct_messages", "allow", bobID)
+	setList("direct_messages", "deny", carolID)
+	setList("search_visibility", "allow", bobID)
+
+	if r := e.create(t, bob, aliceID, ""); r.Code != http.StatusCreated {
+		t.Fatalf("always allowed skips the approval: %d %s", r.Code, r.Body)
+	}
+	if r := e.create(t, carol, aliceID, ""); r.Code != http.StatusForbidden {
+		t.Fatalf("never allowed may not even ask: %d %s", r.Code, r.Body)
+	}
+	if r := e.create(t, dave, aliceID, ""); r.Code != http.StatusAccepted {
+		t.Fatalf("everyone else still asks: %d %s", r.Code, r.Body)
+	}
+
+	found := func(s session) bool {
+		t.Helper()
+		for _, u := range items(t, e.do(t, request{method: http.MethodGet, path: "/users?q=alice", token: s.access})) {
+			if u["id"] == aliceID {
+				return true
+			}
+		}
+		return false
+	}
+	if !found(bob) || found(dave) {
+		t.Fatalf("search: bob %v, dave %v", found(bob), found(dave))
+	}
+	e.do(t, request{method: http.MethodPatch, path: "/me/privacy", token: alice.access, body: map[string]any{"search_visibility": "everyone"}})
+	setList("search_visibility", "deny", carolID)
+	if found(carol) || !found(dave) {
+		t.Fatalf("search after deny: carol %v, dave %v", found(carol), found(dave))
+	}
+}
+
 func TestDirectMessagePrivacyAndRequests(t *testing.T) {
 	e := newChatEnv(t)
 	alice, dave, erin, frank := e.register(t, "alice"), e.register(t, "dave"), e.register(t, "erin"), e.register(t, "frank")

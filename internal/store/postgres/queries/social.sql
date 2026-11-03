@@ -99,7 +99,10 @@ SELECT u.*
 FROM users u
 LEFT JOIN user_privacy_settings p ON p.user_id = u.id
 WHERE (LOWER(u.username) LIKE @prefix::text || '%' OR LOWER(u.display_name) LIKE '%' || @contains::text || '%')
-  AND (u.id = @viewer_id OR COALESCE(p.search_visibility, 'everyone') <> 'nobody')
+  AND (u.id = @viewer_id OR COALESCE(
+    (SELECT e.effect = 'allow' FROM user_privacy_exceptions e
+     WHERE e.owner_id = u.id AND e.setting_key = 'search_visibility' AND e.target_user_id = @viewer_id),
+    COALESCE(p.search_visibility, 'everyone') <> 'nobody'))
   AND NOT EXISTS (SELECT 1 FROM user_blocks b WHERE b.blocker_id = u.id AND b.blocked_id = @viewer_id)
   AND (sqlc.narg(after)::text IS NULL OR LOWER(u.username) > sqlc.narg(after)::text)
 ORDER BY LOWER(u.username)
@@ -129,7 +132,10 @@ SELECT u.*
 FROM users u
 LEFT JOIN user_privacy_settings p ON p.user_id = u.id
 WHERE LOWER(u.username) LIKE @prefix::text || '%'
-  AND (u.id = @viewer_id OR COALESCE(p.search_visibility, 'everyone') <> 'nobody')
+  AND (u.id = @viewer_id OR COALESCE(
+    (SELECT e.effect = 'allow' FROM user_privacy_exceptions e
+     WHERE e.owner_id = u.id AND e.setting_key = 'search_visibility' AND e.target_user_id = @viewer_id),
+    COALESCE(p.search_visibility, 'everyone') <> 'nobody'))
   AND NOT EXISTS (SELECT 1 FROM user_blocks b WHERE b.blocker_id = u.id AND b.blocked_id = @viewer_id)
   AND (sqlc.narg(after)::text IS NULL OR LOWER(u.username) > sqlc.narg(after)::text)
 ORDER BY LOWER(u.username)

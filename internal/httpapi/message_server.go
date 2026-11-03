@@ -321,35 +321,89 @@ func (m *MessageServer) DeleteMessage(w http.ResponseWriter, r *http.Request, me
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ForwardMessage implements POST /messages/{id}/forward.
-func (m *MessageServer) ForwardMessage(w http.ResponseWriter, r *http.Request, messageID MessageId, _ ForwardMessageParams) {
+func parseIDs(w http.ResponseWriter, field string, list []Id) ([]int64, bool) {
+	out := make([]int64, len(list))
+	for i, s := range list {
+		id, ok := parseID(w, field, s)
+		if !ok {
+			return nil, false
+		}
+		out[i] = id
+	}
+	return out, true
+}
+
+func (m *MessageServer) DeleteMessages(w http.ResponseWriter, r *http.Request, chatID ChatId, _ DeleteMessagesParams) {
 	p, ok := principalOr401(w, r)
 	if !ok {
 		return
 	}
-	id, ok := parseID(w, "message_id", messageID)
+	chat, ok := parseID(w, "chat_id", chatID)
 	if !ok {
 		return
 	}
-	var body ForwardMessageRequest
+	var body DeleteMessagesRequest
 	if !decode(w, r, &body) {
 		return
 	}
-	targets := make([]int64, len(body.ChatIds))
-	for i, s := range body.ChatIds {
-		if targets[i], ok = parseID(w, "chat_ids", s); !ok {
-			return
-		}
-	}
-	subject := strconv.FormatInt(p.UserID, 10)
-	if !allow(w, r, m.o.Limiter, RateForward, subject, m.o.Log) {
+	if !body.Scope.Valid() {
+		WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "scope", Message: "me or everyone"})
 		return
+	}
+	ids, ok := parseIDs(w, "message_ids", body.MessageIds)
+	if !ok {
+		return
+	}
+	if err := m.o.Service.DeleteMany(r.Context(), p.UserID, chat, ids, string(body.Scope)); err != nil {
+		serviceError(w, r, m.o.Log, "delete messages", err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (m *MessageServer) ForwardMessages(w http.ResponseWriter, r *http.Request, chatID ChatId, _ ForwardMessagesParams) {
+	p, ok := principalOr401(w, r)
+	if !ok {
+		return
+	}
+	chat, ok := parseID(w, "chat_id", chatID)
+	if !ok {
+		return
+	}
+	var body ForwardMessagesRequest
+	if !decode(w, r, &body) {
+		return
+	}
+	sources, ok := parseIDs(w, "message_ids", body.MessageIds)
+	if !ok {
+		return
+	}
+	targets, ok := parseIDs(w, "chat_ids", body.ChatIds)
+	if !ok {
+		return
+	}
+	if !m.chargeForward(w, r, p.UserID, sources, targets) {
+		return
+	}
+	copies, err := m.o.Service.ForwardMany(r.Context(), p.UserID, chat, sources, targets)
+	m.answerForward(w, r, copies, err)
+}
+
+func (m *MessageServer) chargeForward(w http.ResponseWriter, r *http.Request, userID int64, sources, targets []int64) bool {
+	if err := messages.CheckForward(sources, targets); err != nil {
+		serviceError(w, r, m.o.Log, "forward message", err)
+		return false
+	}
+	subject := strconv.FormatInt(userID, 10)
+	if !allow(w, r, m.o.Limiter, RateForward, subject, m.o.Log) {
+		return false
 	}
 	// Every copy is a message: it uses up the sender's send budget like one.
-	if !allowN(w, r, m.o.Limiter, RateSend, subject, len(targets), m.o.Log) {
-		return
-	}
-	copies, err := m.o.Service.Forward(r.Context(), p.UserID, id, targets)
+	return allowN(w, r, m.o.Limiter, RateSend, subject, len(sources)*len(targets), m.o.Log)
+}
+
+func (m *MessageServer) answerForward(w http.ResponseWriter, r *http.Request, copies []scylla.Message, err error) {
+	p, _ := PrincipalFrom(r.Context())
 	if err != nil && len(copies) == 0 {
 		serviceError(w, r, m.o.Log, "forward message", err)
 		return
@@ -370,6 +424,31 @@ func (m *MessageServer) ForwardMessage(w http.ResponseWriter, r *http.Request, m
 	}
 	noStore(w)
 	writeJSONStatus(w, http.StatusCreated, map[string]any{"items": items})
+}
+
+// ForwardMessage implements POST /messages/{id}/forward.
+func (m *MessageServer) ForwardMessage(w http.ResponseWriter, r *http.Request, messageID MessageId, _ ForwardMessageParams) {
+	p, ok := principalOr401(w, r)
+	if !ok {
+		return
+	}
+	id, ok := parseID(w, "message_id", messageID)
+	if !ok {
+		return
+	}
+	var body ForwardMessageRequest
+	if !decode(w, r, &body) {
+		return
+	}
+	targets, ok := parseIDs(w, "chat_ids", body.ChatIds)
+	if !ok {
+		return
+	}
+	if !m.chargeForward(w, r, p.UserID, []int64{id}, targets) {
+		return
+	}
+	copies, err := m.o.Service.Forward(r.Context(), p.UserID, id, targets)
+	m.answerForward(w, r, copies, err)
 }
 
 // ListChatMedia implements GET /chats/{id}/media?kind=image|audio.

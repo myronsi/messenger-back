@@ -64,6 +64,14 @@ func (s *Server) SetMyAvatar(w http.ResponseWriter, r *http.Request, params SetM
 	s.media.SetMyAvatar(w, r, params)
 }
 
+func (s *Server) DeleteMyAvatar(w http.ResponseWriter, r *http.Request, avatarID Id, params DeleteMyAvatarParams) {
+	if s.media == nil {
+		s.AuthServer.DeleteMyAvatar(w, r, avatarID, params)
+		return
+	}
+	s.media.DeleteMyAvatar(w, r, avatarID, params)
+}
+
 // GetUserAvatar implements GET /users/{id}/avatar.
 func (s *Server) GetUserAvatar(w http.ResponseWriter, r *http.Request, userID UserId, params GetUserAvatarParams) {
 	if s.media == nil {
@@ -341,6 +349,22 @@ func (s *Server) ForwardMessage(w http.ResponseWriter, r *http.Request, messageI
 		return
 	}
 	s.messages.ForwardMessage(w, r, messageID, params)
+}
+
+func (s *Server) ForwardMessages(w http.ResponseWriter, r *http.Request, chatID ChatId, params ForwardMessagesParams) {
+	if s.messages == nil {
+		s.AuthServer.ForwardMessages(w, r, chatID, params)
+		return
+	}
+	s.messages.ForwardMessages(w, r, chatID, params)
+}
+
+func (s *Server) DeleteMessages(w http.ResponseWriter, r *http.Request, chatID ChatId, params DeleteMessagesParams) {
+	if s.messages == nil {
+		s.AuthServer.DeleteMessages(w, r, chatID, params)
+		return
+	}
+	s.messages.DeleteMessages(w, r, chatID, params)
 }
 
 // ListGroups delegates to the group endpoints.

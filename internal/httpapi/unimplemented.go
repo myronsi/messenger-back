@@ -161,6 +161,10 @@ func (Unimplemented) SetMyAvatar(w http.ResponseWriter, r *http.Request, params 
 	notImplemented(w, r)
 }
 
+func (Unimplemented) DeleteMyAvatar(w http.ResponseWriter, r *http.Request, avatarID Id, params DeleteMyAvatarParams) {
+	notImplemented(w, r)
+}
+
 func (Unimplemented) ListBlockedUsers(w http.ResponseWriter, r *http.Request, params ListBlockedUsersParams) {
 	notImplemented(w, r)
 }
@@ -218,6 +222,14 @@ func (Unimplemented) EditMessage(w http.ResponseWriter, r *http.Request, message
 }
 
 func (Unimplemented) ForwardMessage(w http.ResponseWriter, r *http.Request, messageId MessageId, params ForwardMessageParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) ForwardMessages(w http.ResponseWriter, r *http.Request, chatId ChatId, params ForwardMessagesParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) DeleteMessages(w http.ResponseWriter, r *http.Request, chatId ChatId, params DeleteMessagesParams) {
 	notImplemented(w, r)
 }
 

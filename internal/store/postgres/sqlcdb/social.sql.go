@@ -486,7 +486,10 @@ SELECT u.id, u.username, u.display_name, u.password_hash, u.avatar_url, u.bio, u
 FROM users u
 LEFT JOIN user_privacy_settings p ON p.user_id = u.id
 WHERE (LOWER(u.username) LIKE $1::text || '%' OR LOWER(u.display_name) LIKE '%' || $2::text || '%')
-  AND (u.id = $3 OR COALESCE(p.search_visibility, 'everyone') <> 'nobody')
+  AND (u.id = $3 OR COALESCE(
+    (SELECT e.effect = 'allow' FROM user_privacy_exceptions e
+     WHERE e.owner_id = u.id AND e.setting_key = 'search_visibility' AND e.target_user_id = $3),
+    COALESCE(p.search_visibility, 'everyone') <> 'nobody'))
   AND NOT EXISTS (SELECT 1 FROM user_blocks b WHERE b.blocker_id = u.id AND b.blocked_id = $3)
   AND ($4::text IS NULL OR LOWER(u.username) > $4::text)
 ORDER BY LOWER(u.username)
@@ -545,7 +548,10 @@ SELECT u.id, u.username, u.display_name, u.password_hash, u.avatar_url, u.bio, u
 FROM users u
 LEFT JOIN user_privacy_settings p ON p.user_id = u.id
 WHERE LOWER(u.username) LIKE $1::text || '%'
-  AND (u.id = $2 OR COALESCE(p.search_visibility, 'everyone') <> 'nobody')
+  AND (u.id = $2 OR COALESCE(
+    (SELECT e.effect = 'allow' FROM user_privacy_exceptions e
+     WHERE e.owner_id = u.id AND e.setting_key = 'search_visibility' AND e.target_user_id = $2),
+    COALESCE(p.search_visibility, 'everyone') <> 'nobody'))
   AND NOT EXISTS (SELECT 1 FROM user_blocks b WHERE b.blocker_id = u.id AND b.blocked_id = $2)
   AND ($3::text IS NULL OR LOWER(u.username) > $3::text)
 ORDER BY LOWER(u.username)

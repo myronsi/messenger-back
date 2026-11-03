@@ -385,6 +385,7 @@ type AttachmentRepository interface {
 	SetUserAvatar(ctx context.Context, userID int64, attachmentID *uuid.UUID) error
 	// AvatarHistory returns the user's avatars, newest first, with ids below beforeID (0: from the newest).
 	AvatarHistory(ctx context.Context, userID, beforeID int64, limit int) ([]AvatarVersion, error)
+	DeleteUserAvatar(ctx context.Context, userID, versionID int64) error
 	// SetChatAvatar sets or (nil) removes the avatar of a group.
 	SetChatAvatar(ctx context.Context, chatID int64, attachmentID *uuid.UUID) error
 	// ChatsWithAvatar returns the groups that use the attachment as their avatar.

@@ -17,14 +17,17 @@ func TestVisible(t *testing.T) {
 		shares, want       bool
 	}{
 		{postgres.VisibleEveryone, "", false, true},
-		{postgres.VisibleEveryone, postgres.EffectDeny, false, true}, // exceptions only apply to *_except
+		{postgres.VisibleEveryone, postgres.EffectDeny, false, false},
 		{postgres.VisibleSharedChats, "", false, false},
 		{postgres.VisibleSharedChats, "", true, true},
+		{postgres.VisibleSharedChats, postgres.EffectAllow, false, true},
+		{postgres.VisibleSharedChats, postgres.EffectDeny, true, false},
 		{postgres.VisibleEveryoneExcept, "", false, true},
 		{postgres.VisibleEveryoneExcept, postgres.EffectDeny, true, false},
 		{postgres.VisibleNobodyExcept, "", true, false},
 		{postgres.VisibleNobodyExcept, postgres.EffectAllow, false, true},
-		{postgres.VisibleNobody, postgres.EffectAllow, true, false},
+		{postgres.VisibleNobody, postgres.EffectAllow, false, true},
+		{postgres.VisibleNobody, postgres.EffectDeny, true, false},
 		{"something new", "", true, false},
 	}
 	for _, c := range cases {

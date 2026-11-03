@@ -345,12 +345,34 @@ func (m *MediaServer) SetMyAvatar(w http.ResponseWriter, r *http.Request, _ SetM
 		id := body.AttachmentId
 		err = m.o.Store.Attachments().SetUserAvatar(r.Context(), p.UserID, &id)
 	}
+	m.answerMe(w, r, p.UserID, "set avatar", err)
+}
+
+func (m *MediaServer) DeleteMyAvatar(w http.ResponseWriter, r *http.Request, avatarID Id, _ DeleteMyAvatarParams) {
+	p, ok := PrincipalFrom(r.Context())
+	if !ok {
+		writeUnauthorized(w, ErrorCodeUnauthenticated)
+		return
+	}
+	version, ok := parseID(w, "avatar_id", avatarID)
+	if !ok {
+		return
+	}
+	err := m.o.Store.Attachments().DeleteUserAvatar(r.Context(), p.UserID, version)
+	if errors.Is(err, postgres.ErrNotFound) {
+		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
+		return
+	}
+	m.answerMe(w, r, p.UserID, "delete avatar", err)
+}
+
+func (m *MediaServer) answerMe(w http.ResponseWriter, r *http.Request, userID int64, action string, err error) {
 	if err != nil {
-		m.o.Log.ErrorContext(r.Context(), "set avatar", "error", err)
+		m.o.Log.ErrorContext(r.Context(), action, "error", err)
 		WriteProblem(w, http.StatusInternalServerError, ErrorCodeInternalError)
 		return
 	}
-	u, err := m.o.Store.Users().Get(r.Context(), p.UserID)
+	u, err := m.o.Store.Users().Get(r.Context(), userID)
 	if err != nil {
 		WriteProblem(w, http.StatusInternalServerError, ErrorCodeInternalError)
 		return

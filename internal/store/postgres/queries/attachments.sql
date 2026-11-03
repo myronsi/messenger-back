@@ -97,6 +97,16 @@ LIMIT @max_rows;
 -- name: GetAvatarHistoryEntry :one
 SELECT h.id, h.attachment_id, h.created_at, h.is_current FROM user_avatar_history h WHERE h.user_id = @user_id AND h.id = @id;
 
+-- name: DeleteAvatarHistoryEntry :one
+DELETE FROM user_avatar_history WHERE user_id = @user_id AND id = @id AND attachment_id IS NOT NULL RETURNING is_current;
+
+-- name: PromoteLatestAvatar :one
+UPDATE user_avatar_history SET is_current = TRUE
+WHERE id = (
+  SELECT h.id FROM user_avatar_history h WHERE h.user_id = @user_id AND h.attachment_id IS NOT NULL ORDER BY h.id DESC LIMIT 1
+)
+RETURNING attachment_id;
+
 -- name: SetChatAvatar :execrows
 UPDATE chats SET avatar_attachment_id = sqlc.narg(attachment_id) WHERE id = @chat_id;
 
