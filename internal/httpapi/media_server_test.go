@@ -162,7 +162,7 @@ func TestUploadAndDownloadOverHTTP(t *testing.T) {
 	}
 	r := get(bob.access, "")
 	if r.Code != http.StatusOK || r.Header().Get("Content-Type") != "image/png" || r.Header().Get("X-Content-Type-Options") != "nosniff" ||
-		r.Header().Get("Content-Security-Policy") == "" || r.Body.Len() == 0 {
+		r.Header().Get("Content-Security-Policy") == "" || r.Body.Len() == 0 || r.Header().Get("Cache-Control") != cacheForever {
 		t.Fatalf("download: %d %v", r.Code, r.Header())
 	}
 	// Players seek with byte ranges.
@@ -326,12 +326,21 @@ func TestAvatarsOverHTTP(t *testing.T) {
 		t.Fatalf("someone else's avatar: %d", r.Code)
 	}
 	me := e.do(t, request{method: http.MethodPut, path: "/me/avatar", token: alice.access, body: map[string]string{"attachment_id": avatarID}})
-	if me.Code != http.StatusOK || me.json()["avatar_url"] != apiBase+"/users/"+strconv.FormatInt(aliceID, 10)+"/avatar" {
+	avatarPath := "/users/" + strconv.FormatInt(aliceID, 10) + "/avatar"
+	if me.Code != http.StatusOK || me.json()["avatar_url"] != apiBase+avatarPath+"?rev="+avatarID {
 		t.Fatalf("set avatar: %d %s", me.Code, me.Body)
 	}
-	got := e.do(t, request{method: http.MethodGet, path: "/users/" + strconv.FormatInt(aliceID, 10) + "/avatar", token: bob.access})
+	got := e.do(t, request{method: http.MethodGet, path: avatarPath + "?rev=" + avatarID, token: bob.access})
 	if got.Code != http.StatusOK || bytes.Equal(got.Body.Bytes(), defaultBytes) {
 		t.Fatal("bob does not see alice's avatar")
+	}
+	if c := got.Header().Get("Cache-Control"); c != cacheForever {
+		t.Fatalf("current rev: %q", c)
+	}
+	for _, query := range []string{"", "?rev=" + msg} {
+		if c := e.do(t, request{method: http.MethodGet, path: avatarPath + query, token: bob.access}).Header().Get("Cache-Control"); c != "private, max-age=60" {
+			t.Fatalf("avatar%s: %q", query, c)
+		}
 	}
 	// The avatar itself is not downloadable as an attachment by others.
 	if r := e.do(t, request{method: http.MethodGet, path: "/attachments/" + avatarID + "/content", token: bob.access}); r.Code != http.StatusNotFound {
@@ -353,8 +362,8 @@ func TestAvatarsOverHTTP(t *testing.T) {
 	if _, err := e.store.Social().UpdatePrivacy(context.Background(), s); err != nil {
 		t.Fatal(err)
 	}
-	hidden := e.do(t, request{method: http.MethodGet, path: "/users/" + strconv.FormatInt(aliceID, 10) + "/avatar", token: bob.access})
-	if !bytes.Equal(hidden.Body.Bytes(), defaultBytes) {
+	hidden := e.do(t, request{method: http.MethodGet, path: avatarPath + "?rev=" + avatarID, token: bob.access})
+	if !bytes.Equal(hidden.Body.Bytes(), defaultBytes) || hidden.Header().Get("Cache-Control") != "private, max-age=60" {
 		t.Fatal("hidden avatar was served")
 	}
 	if h := e.do(t, request{method: http.MethodGet, path: "/users/" + strconv.FormatInt(aliceID, 10) + "/avatars", token: bob.access}); !bytes.Contains(h.Body.Bytes(), []byte(`"items":[]`)) {

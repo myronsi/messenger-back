@@ -264,6 +264,8 @@ func (m *MediaServer) uploadFailed(w http.ResponseWriter, r *http.Request, err e
 	}
 }
 
+const cacheForever = "private, max-age=31536000, immutable"
+
 // serve writes a download: a redirect to object storage, or the bytes with headers no browser can turn
 // into a page. Byte ranges are served (players need them to seek, and Safari to play at all); etag names
 // the stored bytes, which never change.
@@ -319,7 +321,7 @@ func (m *MediaServer) GetAttachmentContent(w http.ResponseWriter, r *http.Reques
 	if thumb {
 		etag += "-thumb"
 	}
-	m.serve(w, r, d, "private, max-age=3600", etag)
+	m.serve(w, r, d, cacheForever, etag)
 }
 
 // SetMyAvatar implements PUT /me/avatar.
@@ -417,8 +419,11 @@ func (m *MediaServer) GetUserAvatar(w http.ResponseWriter, r *http.Request, user
 		WriteProblem(w, http.StatusInternalServerError, ErrorCodeInternalError)
 		return
 	}
-	// Short: visibility can change, and the URL stays the same when the avatar does.
-	m.serve(w, r, d, "private, max-age=60", attachment.String())
+	cache := "private, max-age=60"
+	if params.Version == nil && params.Rev != nil && *params.Rev == attachment.String() {
+		cache = cacheForever
+	}
+	m.serve(w, r, d, cache, attachment.String())
 }
 
 // ListUserAvatars implements GET /users/{id}/avatars.

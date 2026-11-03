@@ -53,7 +53,7 @@ func PresentMe(u postgres.User, basePath string) Me {
 		me.LastSeen = &seen
 	}
 	if u.HasAvatar() {
-		path := basePath + "/users/" + id + "/avatar"
+		path := users.AvatarPath(basePath, u)
 		me.AvatarUrl = &path
 	}
 	return me

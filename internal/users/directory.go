@@ -69,9 +69,17 @@ func NewDirectory(store Store, online Online, basePath string) *Directory {
 	return &Directory{store: store, online: online, basePath: basePath}
 }
 
+func AvatarPath(basePath string, u postgres.User) string {
+	path := basePath + "/users/" + strconv.FormatInt(u.ID, 10) + "/avatar"
+	if u.AvatarAttachmentID != nil {
+		path += "?rev=" + u.AvatarAttachmentID.String()
+	}
+	return path
+}
+
 // AvatarURL is the same-origin path of a user's avatar.
-func (d *Directory) AvatarURL(userID int64) string {
-	return d.basePath + "/users/" + strconv.FormatInt(userID, 10) + "/avatar"
+func (d *Directory) AvatarURL(u postgres.User) string {
+	return AvatarPath(d.basePath, u)
 }
 
 func (d *Directory) deleted(id int64) View {
@@ -96,7 +104,7 @@ func (d *Directory) render(u postgres.User, viewer int64, f facts) View {
 		return self || (!f.blocked && Visible(setting, f.exceptions[key], f.shares))
 	}
 	if u.HasAvatar() && allowed(f.settings.AvatarVisibility, postgres.SettingAvatar) {
-		url := d.AvatarURL(u.ID)
+		url := d.AvatarURL(u)
 		v.AvatarURL = &url
 	}
 	if allowed(f.settings.ProfileVisibility, postgres.SettingProfile) {

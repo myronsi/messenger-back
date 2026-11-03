@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/google/uuid"
+
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/testenv"
 	"github.com/myronsi/messenger-back/internal/users"
@@ -28,6 +30,20 @@ func TestVisible(t *testing.T) {
 	for _, c := range cases {
 		if got := users.Visible(c.setting, c.exception, c.shares); got != c.want {
 			t.Errorf("%+v: %v", c, got)
+		}
+	}
+}
+
+func TestAvatarPathChangesWithTheAvatar(t *testing.T) {
+	attachment := uuid.MustParse("5f0c8a64-2f2b-4c7e-9d0e-6b1f3a2c4d5e")
+	legacy := "avatars/alice.png"
+	cases := map[string]postgres.User{
+		"/api/v2/users/7/avatar?rev=5f0c8a64-2f2b-4c7e-9d0e-6b1f3a2c4d5e": {ID: 7, AvatarAttachmentID: &attachment},
+		"/api/v2/users/7/avatar": {ID: 7, AvatarURL: &legacy},
+	}
+	for want, u := range cases {
+		if got := users.AvatarPath("/api/v2", u); got != want {
+			t.Errorf("got %q, want %q", got, want)
 		}
 	}
 }
@@ -85,7 +101,7 @@ func TestDirectoryAppliesPrivacy(t *testing.T) {
 		t.Fatal(err)
 	}
 	a := asBob[alice]
-	if a.AvatarURL == nil || *a.AvatarURL != dir.AvatarURL(alice) || a.Bio != nil || !a.IsOnline || a.ContactName == nil || *a.ContactName != "Ally" {
+	if a.AvatarURL == nil || *a.AvatarURL != dir.AvatarURL(postgres.User{ID: alice}) || a.Bio != nil || !a.IsOnline || a.ContactName == nil || *a.ContactName != "Ally" {
 		t.Fatalf("as bob: %+v", a)
 	}
 	if !asBob[999999].IsDeleted {

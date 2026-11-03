@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.4
+  version: 2.1.0-alpha.5
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -825,12 +825,18 @@ paths:
       summary: Current avatar image
       description: |
         Respects the avatar visibility of the user; falls back to the default avatar. With `version`, an
-        earlier avatar of the history (`AvatarVersion.url`).
+        earlier avatar of the history (`AvatarVersion.url`). `avatar_url` carries `rev`, the revision of the
+        current avatar: while it matches, the answer may be cached for a year (`immutable`), because a new
+        avatar gets a new `rev` and so a new URL.
       parameters:
         - name: version
           in: query
           description: "`id` of an `AvatarVersion` of this user."
           schema: { $ref: "#/components/schemas/Id" }
+        - name: rev
+          in: query
+          description: Revision of the current avatar, as given in `avatar_url`.
+          schema: { type: string, maxLength: 64 }
       responses:
         "426": { $ref: "#/components/responses/ClientOutdated" }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -2518,7 +2524,7 @@ components:
           description: The requesting user's own name for this user, if set.
         avatar_url:
           type: [string, "null"]
-          description: Path of the avatar, always same-origin (`/api/v2/users/{id}/avatar`).
+          description: Path of the avatar, always same-origin (`/api/v2/users/{id}/avatar?rev={revision}`).
         bio: { type: [string, "null"] }
         is_online: { type: boolean }
         last_seen:
