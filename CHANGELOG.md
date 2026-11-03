@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.5.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.4.0-alpha.1...v1.5.0-alpha.1) (2026-11-03)
+
+
+### Features
+
+* **media:** let users delete their avatars ([e542c1a](https://github.com/myronsi/messenger-back/commit/e542c1ad6c7e592220887866215df9b45994c12a))
+* **media:** versioned avatar URLs with a year-long cache ([#142](https://github.com/myronsi/messenger-back/issues/142)) ([ef1a3d5](https://github.com/myronsi/messenger-back/commit/ef1a3d566e09e65741098bf36eb71a0d33876de1))
+* **messages:** forward and delete several messages at once ([e542c1a](https://github.com/myronsi/messenger-back/commit/e542c1ad6c7e592220887866215df9b45994c12a))
+* **messages:** reply preview for replied-to messages outside the page ([#143](https://github.com/myronsi/messenger-back/issues/143)) ([0eaff15](https://github.com/myronsi/messenger-back/commit/0eaff15806ec7032dcfca92819cd3975a270b269))
+* **privacy:** exceptions for every privacy choice, with database migration 000014 ([e542c1a](https://github.com/myronsi/messenger-back/commit/e542c1ad6c7e592220887866215df9b45994c12a))
+
+
+### Bug Fixes
+
+* **media:** vary cached downloads by Authorization ([#149](https://github.com/myronsi/messenger-back/issues/149)) ([2f15e64](https://github.com/myronsi/messenger-back/commit/2f15e642644b5be1bfc5317d08ae7954fd31544f))
+* **messages,media:** charge every forwarded copy and serialise avatar deletes ([e542c1a](https://github.com/myronsi/messenger-back/commit/e542c1ad6c7e592220887866215df9b45994c12a))
+
 ## [1.4.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.3.0-alpha.1...v1.4.0-alpha.1) (2026-11-03)
 
 
