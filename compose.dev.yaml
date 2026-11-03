@@ -4,8 +4,7 @@
 #   make up       # docker compose -f compose.dev.yaml up --build --wait
 #
 # Development only. Credentials come from .env (see .env.example), nothing secret is written here, and
-# every published port is bound to 127.0.0.1. The root compose.yaml is the Python backend's production
-# deployment and is left alone. See docs/dev-environment.md for the RAM needed and troubleshooting.
+# every published port is bound to 127.0.0.1. See docs/dev-environment.md for requirements.
 name: messenger-dev
 
 x-go-app: &go-app

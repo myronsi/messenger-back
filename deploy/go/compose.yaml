@@ -2,7 +2,7 @@
 # steps, and, with COMPOSE_PROFILES=stores, single-node stores for staging. Production points .env at its
 # own clusters instead (docs/deployment.md). deploy.sh runs it; see docs/deploy-go.md.
 #
-# The root compose.yaml is the Python backend and stays as it is until the switch (docs/switchover.md).
+# Python deployment has been retired. This is the production stack.
 name: messenger-go
 
 x-app: &app

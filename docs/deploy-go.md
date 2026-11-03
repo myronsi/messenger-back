@@ -8,27 +8,25 @@ The tag's major version decides which backend a release is:
 
 | Release | Image built from | Deployed by | To |
 |---|---|---|---|
-| `0.x` | `Dockerfile` (Python) | `deploy.yml` | production, as before |
 | `1.x` pre-release (`1.0.0-alpha.1`) | `go.Dockerfile` | `deploy-go.yml` | staging |
 | `1.x` | `go.Dockerfile` | `deploy-go.yml` | staging; production too once the repository variable `GO_PRODUCTION` is `true` |
 
-Until the switch, `GO_PRODUCTION` stays unset, so production keeps the Python backend whatever is released. `deploy-go.yml` also refuses production by hand while it is unset, and it refuses `0.x` tags.
+Python deployment is retired. `deploy-go.yml` refuses `0.x` tags. `GO_PRODUCTION=true` enables production deployment.
 
-Every merge to `master` also publishes snapshot images: `master` and `sha-<sha>` (Python) and `go-master` and `go-sha-<sha>` (Go).
+Every merge publishes Go snapshot images `go-master` and `go-sha-<sha>`. Release images carry these tags without a duplicate snapshot build.
 
 ## The stack
 
-`deploy-go.yml` uploads a bundle (`deploy/go/bundle.sh`) to `GO_DEPLOY_PATH` (default `/opt/messenger-go`), next to the Python backend's `/opt/messenger` and never touching it. The bundle contains:
+`deploy-go.yml` uploads a bundle (`deploy/go/bundle.sh`) to `GO_DEPLOY_PATH` (default `/opt/messenger-go`). The bundle contains:
 
 | File | |
 |---|---|
 | `compose.yaml` | `api` and `worker` from the release image, the migrations as one-shot steps, a `pg_dump` step, and, with `COMPOSE_PROFILES=stores`, single-node stores |
 | `deploy.sh` | the deployment (below) |
-| `migrate-v1.sh`, `compose.migrate-v1.yaml`, `v1.env.example` | the data copy from the Python backend (the switch) |
 | `env.example` | every setting the stack needs, documented |
 | `migrations/`, `migrate.sh`, `object-storage/` | what the one-shot steps run |
 
-An upload replaces the bundle's files and `migrations/` as a whole: after a rollback, no later release's migrations are left on disk. It never touches what only the server has: `.env`, `v1.env`, `backups/` and `reports/`.
+An upload replaces the bundle's files and `migrations/` as a whole: after a rollback, no later release's migrations are left on disk. It never touches what only the server has: `.env`, `.env.notifications`, `backups/` and `reports/`.
 
 **Stores.** Staging can run single-node stores on its host (`COMPOSE_PROFILES=stores`). Their ports are not published, and they hold data that is staging's alone. Production leaves the profile out and points `.env` at its own clusters ([deployment.md](deployment.md)).
 
@@ -76,7 +74,7 @@ An upload replaces the bundle's files and `migrations/` as a whole: after a roll
 
 ## Rollback and restore
 
-- **To an earlier release:** Actions → Deploy (Go) → Run workflow, with the earlier tag and the environment. For production, run it from `edge`. The newer schema stays, which the earlier release works with.
+- **To an earlier release:** Actions â†’ Deploy (Go) â†’ Run workflow, with the earlier tag and the environment. For production, run it from `edge`. The newer schema stays, which the earlier release works with.
 - **A migration failed halfway:** golang-migrate marks the database dirty, and every later deployment stops at it.
   1. Look at what the migration did and finish or undo it by hand.
   2. Mark the version, either the one it reached or the one before it:
@@ -97,22 +95,9 @@ An upload replaces the bundle's files and `migrations/` as a whole: after a roll
     -c 'pg_restore --clean --if-exists --no-owner -d "$DATABASE_URL"' < backups/messenger-YYYYmmdd-HHMMSS.dump
   ```
 
-## The data copy (switch)
+## Python retirement
 
-`migrate-v1.sh /opt/messenger-go [flags]` runs `cmd/migrate-v1` ([migration-v1.md](migration-v1.md)) with the deployed image:
-
-- **Access to v1:** it joins the Python stack's Docker network (`V1_NETWORK`, default `messenger_default`) and mounts its `static/` volume read-only (`V1_STATIC_VOLUME`, default `messenger_messenger_static`).
-- **Credentials in `v1.env`** (mode 0600, from `v1.env.example`). Only the `migrate-v1` container reads it, never `api` or `worker`:
-  - `V1_DATABASE_URL`: a read-only user on the Python database; its host is the container name, for example `messenger-postgres-1`;
-  - `V1_SECRET_KEY`: the Python backend's `SECRET_KEY`.
-- **Reports:** written to `reports/`, owned by the deploy user.
-
-```sh
-./migrate-v1.sh /opt/messenger-go -dry-run -report dry.json
-./migrate-v1.sh /opt/messenger-go -report run.json
-```
-
-Delete `v1.env` and the `V1_*` settings after the switch.
+The one-time migration is complete and its executable tooling has been removed. Historical runbooks are retained as records. Never set the refresh cookie path to `/api/auth`; use `/api/v2/auth/refresh`.
 
 ## Testing the stack
 

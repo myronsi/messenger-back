@@ -183,9 +183,8 @@ type Auth struct {
 	// CookieSecure marks the refresh cookie Secure. Only turn it off for plain-HTTP local development;
 	// production refuses to start without it.
 	CookieSecure bool `env:"COOKIE_SECURE" envDefault:"true"`
-	// RefreshCookiePath overrides the cookie path, which defaults to <API_BASE_PATH>/auth/refresh. During
-	// the migration from the Python backend (MSGC-77) set it to the old path (/auth) so the browser sends
-	// the existing cookie and the first refresh replaces it.
+	// RefreshCookiePath overrides <API_BASE_PATH>/auth/refresh. It must match the public
+	// refresh endpoint; retired Python paths do not match Go requests.
 	RefreshCookiePath string `env:"REFRESH_COOKIE_PATH"`
 	// SessionCacheTTL is how long Redis caches "this session is active"; revocations apply immediately.
 	SessionCacheTTL time.Duration `env:"SESSION_CACHE_TTL" envDefault:"30s"`

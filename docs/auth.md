@@ -29,11 +29,11 @@ The worker (`cmd/worker`) runs a maintenance job every hour: it deletes sessions
 
 ### Migration from the Python backend (MSGC-77)
 
-Refresh hashes and sessions are kept as they are, so existing sessions continue. v1 cookies have `Path=/auth` (or `<COOKIE_PATH_PREFIX>/auth`); set `REFRESH_COOKIE_PATH` to that value during the migration window so browsers still send them.
+The Python migration is complete. Keep migrated password verification for existing accounts. Refresh cookies must use `/api/v2/auth/refresh` (or the matching public Go base path); `/api/auth` does not match the Go endpoint and causes logout when access tokens expire.
 
 ## Passwords
 
-Argon2id for new hashes. Verified: the Argon2id PHC strings of v1 (`argon2$…`, argon2-cffi) and legacy PBKDF2 `salt:hash`. A successful login with an old format rehashes to the current parameters. At most `PASSWORD_HASH_CONCURRENCY` hashes run at once so that a flood of logins cannot exhaust memory. Unknown users are verified against a dummy hash, so timing does not reveal whether a username exists. Test fixtures are hashes created by the real v1 code.
+Argon2id for new hashes. Verified: the Argon2id PHC strings of v1 (`argon2$â€¦`, argon2-cffi) and legacy PBKDF2 `salt:hash`. A successful login with an old format rehashes to the current parameters. At most `PASSWORD_HASH_CONCURRENCY` hashes run at once so that a flood of logins cannot exhaust memory. Unknown users are verified against a dummy hash, so timing does not reveal whether a username exists. Test fixtures are hashes created by the real v1 code.
 
 ## Two-factor authentication
 

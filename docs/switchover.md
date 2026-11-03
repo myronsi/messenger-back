@@ -1,3 +1,5 @@
+> Historical record: Python retirement is complete. The importer and Python deployment files have been removed. These commands describe the completed migration and must not be used for current deployments.
+
 # Switching to the Go backend
 
 This is the runbook for #56: moving production from the Python backend (`0.x`) to the Go backend (`1.0.0`, API contract `2.0.0`), and retiring the Python code afterwards. It sends no command to production by itself. Every step marked **production** is done by a person, in the maintenance window, with access the repository does not have.
@@ -40,7 +42,7 @@ Until then, `0.x` releases keep deploying Python to production, as they should. 
 
 - **Backend:** `1.0.0-alpha.N` or `-beta.N` releases on staging. Then `1.0.0` with contract `2.0.0` (a `Release-As: 1.0.0` footer; see [releasing.md](releasing.md)).
 - **Contract:** `2.0.0` is published under `latest` by that release.
-- **Frontend:** the frontend for v2 (F26–F30) can only be released after that, because its `main` requires a stable contract. Have the release PR ready.
+- **Frontend:** the frontend for v2 (F26â€“F30) can only be released after that, because its `main` requires a stable contract. Have the release PR ready.
 
 ### 5. Rehearsal on staging
 
@@ -68,7 +70,7 @@ All steps are **production**.
    The migration only reads v1 (give its `V1_DATABASE_URL` a read-only user, and mount `static/` read-only).
 4. **Deploy `1.0.0` to production:**
    - set the repository variable `GO_PRODUCTION` to `true`;
-   - run Actions → Deploy (Go) from `edge` with `v1.0.0` and `production`. `deploy.sh` migrates the empty stores and starts `api` and `worker` in `/opt/messenger-go`.
+   - run Actions â†’ Deploy (Go) from `edge` with `v1.0.0` and `production`. `deploy.sh` migrates the empty stores and starts `api` and `worker` in `/opt/messenger-go`.
 
    The proxy does not send them traffic yet.
 5. **Dry run:**
@@ -120,6 +122,6 @@ After the window, there is no rollback: fix forward on `1.0.x`.
 - Drop the `migrate_v1_*` tables (`docs/migration-v1.md`), and remove `V1_SECRET_KEY` from the secret manager.
 - After the agreed time, archive and then delete the v1 database, the `messenger_static` copy and the v1 backups.
 - Remove the Python code from `master`: `server/`, `tests/`, `Dockerfile`, `compose.yaml`, `requirements*.txt`, `start.sh` and the Python CI jobs. Update the README.
-- Close B10–B20 as superseded by the Go backend.
+- Close B10â€“B20 as superseded by the Go backend.
 - Raise `MIN_CLIENT_API_VERSION` once old clients are gone (see [releasing.md](releasing.md)).
 - Close #56.

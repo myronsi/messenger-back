@@ -6,8 +6,7 @@
   "include-component-in-tag": false,
   "packages": {
     ".": {
-      "package-name": "messenger-back",
-      "extra-files": ["server/version.py"]
+      "package-name": "messenger-back"
     }
   }
 }

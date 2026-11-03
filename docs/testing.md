@@ -32,7 +32,7 @@ The helpers are `internal/testenv`. CI starts ScyllaDB, RustFS and Elasticsearch
   - Every WebSocket event the realtime tests receive is validated against `api/websocket/server-events.schema.json` (`internal/realtime/contract_test.go`).
   - `api/scripts/check.mjs` checks the examples and some negative cases.
 - **WebSocket** (`internal/realtime`): delivery between two instances, removal from a chat, reconnect and catch-up, `ack` and `error` with `client_temp_id`, close codes, slow consumers.
-- **Security:** the B1–B9 issues of the Python backend (#18–#21 and the ones the epic lists) have tests in the new code:
+- **Security:** the B1â€“B9 issues of the Python backend (#18â€“#21 and the ones the epic lists) have tests in the new code:
 
 | Issue | Tests |
 |---|---|
@@ -47,4 +47,3 @@ The helpers are `internal/testenv`. CI starts ScyllaDB, RustFS and Elasticsearch
 | rate limiting | `TestLoginRateLimit`, `TestLoginRateLimitSendsRetryAfter`, `TestLimiter*`, `TestTwoFactorChallengeAttemptsAreLimited` |
 
 - **Load:** k6 scripts and how to run them in [load-testing.md](load-testing.md).
-- **Migration from v1** (`cmd/migrate-v1/migrate_test.go`): a fixture database with the v1 schema (`testdata/v1_schema.sql`, from `server/database.py`) and files, migrated twice (the second run must change nothing). The TOTP decryption is checked against a token made by Python's `cryptography`.

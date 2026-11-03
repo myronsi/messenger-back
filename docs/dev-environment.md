@@ -4,8 +4,7 @@ One command starts the Go backend with every data store it needs: PostgreSQL, Re
 Elasticsearch and an S3-compatible object storage. It is for development only. The production
 layout is described in [deployment.md](deployment.md).
 
-`compose.dev.yaml` is separate from the root `compose.yaml`, which is the production deployment of the
-Python backend and is not touched by this stack.
+`compose.dev.yaml` is the development stack; production uses `deploy/go/compose.yaml`.
 
 ## Quick start
 
@@ -116,5 +115,5 @@ Docker Desktop on Windows and macOS: give the VM at least 6 GB (Settings, Resour
 - **Port already in use**: set another host port in `.env`, for example `POSTGRES_PORT=5433`.
 - **Start from scratch**: `docker compose -f compose.dev.yaml down --volumes`, then `make up`.
 - **Changing secrets**: delete `.env` only after wiping the volumes as above. PostgreSQL and Elasticsearch keep the passwords they were first initialised with, so new values in `.env` would not match.
-- **`.env` already exists** (for example from the Python backend): `make env` leaves it alone. Append the
+- **`.env` already exists**: `make env` leaves it alone. Append the
   values from the end of `.env.example` and fill them in.
