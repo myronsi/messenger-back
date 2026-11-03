@@ -6,12 +6,12 @@ Both repositories (`messenger-back`, `messenger-front`) follow [Semantic Version
 
 | Number | Where | Rule | Example |
 | --- | --- | --- | --- |
-| App version | git tags `vX.Y.Z`, GitHub Releases, `server/version.py`, shown in the app | SemVer; both repos share `MAJOR.MINOR` for each release | backend `0.5.0` + frontend `0.5.2` |
+| App version | git tags `vX.Y.Z`, GitHub Releases, `internal/version`, shown in the app | SemVer; both repos share `MAJOR.MINOR` for each release | backend `0.5.0` + frontend `0.5.2` |
 | API contract version | `info.version` in `api/openapi.yaml` = npm package `@myronsi/messenger-api` | MAJOR = breaking change (new base path `/api/vN`), MINOR = backwards-compatible addition, PATCH = docs and fixes | `2.3.0` |
 
 Compatibility is decided by the API contract version, not by app versions. The frontend requires the contract version it was built with (same MAJOR, at least that MINOR). The backend implements the newest contract and supports clients down to `min_client_api_version`. What counts as a breaking change, and how CI enforces it, is in `docs/api-compatibility.md`; the contract package is described in `api/README.md`.
 
-The version of the Python backend lives in `server/version.py` (`__version__`). It is updated automatically by release-please; do not edit it by hand. `API_VERSION` in the same file is the contract version this backend implements (`1.0.0` for the Python API); change it only together with an API change.
+The Go backend embeds its release version at build time. Release-please manages release tags and the manifest; `api/openapi.yaml` declares the API contract version.
 
 ## Exposing versions and rejecting outdated clients
 
@@ -19,7 +19,7 @@ The version of the Python backend lives in `server/version.py` (`__version__`). 
 - Clients send `X-Client-Version` (app version) and `X-Client-Api-Version` (contract version). Each new (app version, contract version) pair is logged once, rejected requests are logged every time, and requests are counted per contract version (`messenger_client_api_requests_total` at `GET /metrics` when `METRICS_ENABLED=true`; keep that endpoint off the public proxy).
 - If `X-Client-Api-Version` has a different MAJOR than the backend or is below `MIN_CLIENT_API_VERSION` (compared by SemVer precedence, so `1.0.0-alpha.3` is below `1.0.0`), the API answers `426 Upgrade Required` with `application/problem+json` and `code: "client_outdated"`. A malformed value gets `400` with `code: "invalid_client_version"`. Requests without the header are served, and `/`, `/version` and `/metrics` are never blocked.
 - The first WebSocket event after connecting is `{ "type": "hello", "api_version": "1.0.0", "min_client_api_version": "1.0.0" }`, so clients that reconnect after a deploy learn about the new contract. Browsers cannot set headers on WebSockets, so the check is not applied to them.
-- The Go backend serves the same information at `GET /api/v2/meta` (`backend_version`, `commit`, `api_version`, `min_client_api_version`; cacheable for 60 s; never blocked) and embeds its version with `-ldflags "-X github.com/myronsi/messenger-back/internal/version.Backend=…"` (`--build-arg VERSION=` for `go.Dockerfile`); the commit comes from `APP_COMMIT`. The version check applies to every route except `/meta`, `/ws` and the operational endpoints; see [accounts.md](accounts.md).
+- The Go backend serves the same information at `GET /api/v2/meta` (`backend_version`, `commit`, `api_version`, `min_client_api_version`; cacheable for 60 s; never blocked) and embeds its version with `-ldflags "-X github.com/myronsi/messenger-back/internal/version.Backend=â€¦"` (`--build-arg VERSION=` for `go.Dockerfile`); the commit comes from `APP_COMMIT`. The version check applies to every route except `/meta`, `/ws` and the operational endpoints; see [accounts.md](accounts.md).
 
 ## Roadmap
 
@@ -34,7 +34,7 @@ The version of the Python backend lives in `server/version.py` (`__version__`). 
 
 ## Commits
 
-Use [Conventional Commits](https://www.conventionalcommits.org/): `feat(chat): …`, `fix(auth): …`, `feat(api)!: …` or a `BREAKING CHANGE:` footer. Merge pull requests with squash; the PR title is checked by `pr-title.yml` so every commit on `master` follows the format.
+Use [Conventional Commits](https://www.conventionalcommits.org/): `feat(chat): â€¦`, `fix(auth): â€¦`, `feat(api)!: â€¦` or a `BREAKING CHANGE:` footer. Merge pull requests with squash; the PR title is checked by `pr-title.yml` so every commit on `master` follows the format.
 
 ## Milestones
 

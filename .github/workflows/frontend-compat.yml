@@ -58,19 +58,22 @@ jobs:
       matrix:
         frontend: ${{ fromJSON(needs.plan.outputs.targets) }}
     env:
-      BACKEND_URL: http://127.0.0.1:8000
+      BACKEND_URL: http://127.0.0.1:8080/api/v2
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - name: Build the backend from this commit
-        run: docker build --build-arg COMMIT="$GITHUB_SHA" -t messenger-back:compat .
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
       - name: Start the stack
         run: |
-          BACKEND_IMAGE=messenger-back:compat docker compose -f deploy/compose.stack.yaml up -d
+          go run deploy/dev/genenv.go
+          docker compose -f compose.dev.yaml up --build -d --wait --wait-timeout 300
           for _ in $(seq 1 60); do
-            curl -fsS "$BACKEND_URL/version" && exit 0
+            curl -fsS "http://127.0.0.1:8080/readyz" && exit 0
             sleep 2
           done
-          docker compose -f deploy/compose.stack.yaml logs
+          docker compose -f compose.dev.yaml logs
           echo "::error::The backend did not become ready"
           exit 1
       - name: Pick the frontend version
@@ -111,12 +114,15 @@ jobs:
         run: |
           npm ci --legacy-peer-deps --ignore-scripts
           ./node_modules/.bin/playwright install --with-deps chromium
+          export E2E_CLIENT_API_VERSION="$(node --input-type=module -e 'import { API_VERSION } from "@myronsi/messenger-api"; console.log(API_VERSION)')"
           npm run test:smoke
         env:
-          VITE_BASE_URL: http://127.0.0.1:8000
-          VITE_WS_URL: ws://127.0.0.1:8000
+          GO_API_TESTS: "1"
+          E2E_API_URL: http://127.0.0.1:8080/api/v2
+          VITE_BASE_URL: http://127.0.0.1:8080/api/v2
+          VITE_WS_URL: ws://127.0.0.1:8080/api/v2
       - if: failure()
-        run: docker compose -f deploy/compose.stack.yaml logs --tail 200
+        run: docker compose -f compose.dev.yaml logs --tail 200
       - if: failure() && steps.smoke.outputs.present == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -126,4 +132,4 @@ jobs:
             frontend/test-results
           if-no-files-found: ignore
       - if: always()
-        run: docker compose -f deploy/compose.stack.yaml down -v
+        run: docker compose -f compose.dev.yaml down -v

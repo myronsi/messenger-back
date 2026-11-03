@@ -1,6 +1,6 @@
 # Go backend
 
-The Go backend replaces the Python one (`server/`). Its skeleton is in place; features are added issue by issue.
+The Go backend is the sole supported backend. The Python implementation and its one-time importer are retired.
 
 ## Layout
 
@@ -8,7 +8,6 @@ The Go backend replaces the Python one (`server/`). Its skeleton is in place; fe
 |---|---|
 | `cmd/api` | REST API and realtime gateway |
 | `cmd/worker` | event consumers ([events.md](events.md)) and maintenance jobs; serves `/healthz` and `/metrics` on `WORKER_ADDR` |
-| `cmd/migrate-v1` | the data migration from the Python backend ([migration-v1.md](migration-v1.md)) |
 | `internal/app` | process plumbing shared by the commands: config, logger, tracing, signals, HTTP server lifecycle |
 | `internal/config` | environment configuration, validated on startup |
 | `internal/observability` | JSON `slog` logger with redaction, Prometheus metrics, optional OpenTelemetry tracing |
@@ -51,7 +50,7 @@ make docker            # distroless, non-root image from go.Dockerfile
 - Logs are JSON and carry a `request_id`. Message content, tokens and secrets are never logged: sensitive attribute names are redacted and request paths with query strings are not logged, only the route pattern.
 - Shutdown on SIGINT/SIGTERM: `/readyz` turns 503, optionally waits `HTTP_DRAIN_DELAY`, closes WebSockets with code 1012 "reconnect", and finishes in-flight requests within `HTTP_SHUTDOWN_TIMEOUT`.
 - CORS origins come from `CORS_ORIGINS`; `*` is rejected. Request bodies are limited by `HTTP_MAX_BODY_BYTES`.
-- `go.Dockerfile` is separate from the Python `Dockerfile` until cutover. It is not called `Dockerfile.go` because Go would treat that name as a source file.
+- `go.Dockerfile` and the default `Dockerfile` build the Go API and worker.
 
 - Authentication, sessions and 2FA are described in [auth.md](auth.md). Every route except a short allowlist needs a bearer token.
 

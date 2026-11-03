@@ -19,7 +19,7 @@ FROM mwader/static-ffmpeg:8.0.1 AS ffmpeg
 # Runtime stage: distroless static image, runs as the non-root user (uid 65532).
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=ffmpeg /ffmpeg /ffprobe /usr/local/bin/
-COPY --from=build /out/api /out/worker /out/migrate-v1 /app/
+COPY --from=build /out/api /out/worker /app/
 ARG COMMIT=unknown
 ENV APP_COMMIT=$COMMIT
 USER nonroot:nonroot

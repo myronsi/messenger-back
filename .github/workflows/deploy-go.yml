@@ -2,7 +2,7 @@ name: Deploy (Go)
 
 # Deploys a Go release (1.x) with deploy/go: dispatched by the release workflow, to staging for every Go
 # release and to production (from edge) once GO_PRODUCTION is true. Run it manually to roll back to an
-# earlier tag. Python releases (0.x) go through deploy.yml. See docs/deploy-go.md.
+# earlier tag. Python releases (0.x) are retired. See docs/deploy-go.md.
 on:
   workflow_dispatch:
     inputs:
@@ -50,12 +50,12 @@ jobs:
           PROD_SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
         run: |
           case "$TAG" in
-            v0.*) echo "::error::$TAG is a Python release; deploy it with deploy.yml"; exit 1 ;;
+            v0.*) echo "::error::$TAG is a retired Python release"; exit 1 ;;
             v[1-9]*) ;;
             *) echo "::error::$TAG is not a release tag"; exit 1 ;;
           esac
           if [ "$TARGET" = production ] && [ "$GO_PRODUCTION" != true ]; then
-            echo "::error::Production runs the Python backend until the switch (docs/switchover.md); GO_PRODUCTION is not true"
+            echo "::error::Production deployment is disabled: GO_PRODUCTION is not true"
             exit 1
           fi
           case "$TARGET" in
@@ -76,7 +76,7 @@ jobs:
         with:
           ref: ${{ inputs.tag }}
       # migrations/ is replaced as a whole, so it always is this release's: a rollback must not find the
-      # migrations of a later release there. .env, v1.env, backups/ and reports/ are not in the bundle.
+      # migrations of a later release there. .env, .env.notifications, backups/ and reports/ are not in the bundle.
       - name: Upload the stack, its scripts and the migrations
         run: |
           bash deploy/go/bundle.sh "$RUNNER_TEMP/bundle"

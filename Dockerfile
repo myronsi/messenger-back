@@ -1,29 +1,28 @@
-FROM python:3.12-slim
+# syntax=docker/dockerfile:1
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+# Build stage: static binaries, no cgo.
+FROM golang:1.27.3 AS build
+WORKDIR /src
 
-WORKDIR /app
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
 
-RUN apt-get update \
-    && apt-get install --no-install-recommends -y ffmpeg ssss \
-    && rm -rf /var/lib/apt/lists/*
+COPY cmd ./cmd
+COPY internal ./internal
+ARG VERSION=dev
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X github.com/myronsi/messenger-back/internal/version.Backend=${VERSION}" -o /out/ ./cmd/...
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Static ffmpeg and ffprobe, which measure voice messages (duration and waveform).
+FROM mwader/static-ffmpeg:8.0.1 AS ffmpeg
 
-COPY server ./server
-COPY static ./static
-
-# Keep an immutable copy so the built-in avatars are restored when /app/static is a volume.
-COPY static /opt/default-static
-
-RUN mkdir -p /app/static
-
-# Set by CI (github.sha); shown by GET /version.
+# Runtime stage: distroless static image, runs as the non-root user (uid 65532).
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=ffmpeg /ffmpeg /ffprobe /usr/local/bin/
+COPY --from=build /out/api /out/worker /app/
 ARG COMMIT=unknown
 ENV APP_COMMIT=$COMMIT
-
-EXPOSE 8000
-
-CMD ["sh", "-c", "mkdir -p /app/static/avatars && cp -f /opt/default-static/avatars/default.jpg /opt/default-static/avatars/deleted.jpg /opt/default-static/avatars/group.png /app/static/avatars/ && exec uvicorn server.main:app --host 0.0.0.0 --port 8000 --ws-max-size 131072"]
+USER nonroot:nonroot
+EXPOSE 8080
+# The worker runs from the same image: set the command to /app/worker.
+CMD ["/app/api"]
