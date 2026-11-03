@@ -2,6 +2,11 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.4
+
+- Editing a file message accepts an empty `content` (HTTP `PATCH /messages/{message_id}` and the WebSocket `edit`
+  event): it removes the caption. A text message still needs at least one character.
+
 ## 2.1.0-alpha.3
 
 - Adds `GET /notifications/avatar/{token}` and `POST /notifications/read/{token}` without a session, for the

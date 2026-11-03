@@ -56,7 +56,7 @@ func TestDecodeRejectsWhatTheSchemasReject(t *testing.T) {
 		"trailing data":             `{"type":"read","client_temp_id":"a","chat_id":"1","data":{"message_id":"2"}} {}`,
 		"invalid utf-8":             "{\"type\":\"read\",\"client_temp_id\":\"\xff\",\"chat_id\":\"1\",\"data\":{\"message_id\":\"2\"}}",
 		"reply_to not an id":        `{"type":"message","client_temp_id":"a","chat_id":"1","data":{"type":"text","content":"x","reply_to":5}}`,
-		"edit with empty content":   `{"type":"edit","client_temp_id":"a","chat_id":"1","data":{"message_id":"2","content":""}}`,
+		"edit without content":      `{"type":"edit","client_temp_id":"a","chat_id":"1","data":{"message_id":"2"}}`,
 		"chat id too large for i64": `{"type":"read","client_temp_id":"a","chat_id":"99999999999999999999","data":{"message_id":"2"}}`,
 	}
 	for name, frame := range cases {
@@ -65,6 +65,9 @@ func TestDecodeRejectsWhatTheSchemasReject(t *testing.T) {
 		if !errors.As(err, &pe) {
 			t.Errorf("%s: accepted (%v)", name, err)
 		}
+	}
+	if ev, err := decodeClientEvent([]byte(`{"type":"edit","client_temp_id":"a","chat_id":"1","data":{"message_id":"2","content":""}}`)); err != nil || ev.Edit == nil || ev.Edit.Content != "" {
+		t.Fatalf("an empty edit for a file caption was refused: %v", err)
 	}
 	// A rejected event still names its client_temp_id, so the client can match the error.
 	_, err := decodeClientEvent([]byte(`{"type":"delete","client_temp_id":"mine","chat_id":"7","data":{"message_id":"2","scope":"all"}}`))

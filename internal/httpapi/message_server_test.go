@@ -161,6 +161,31 @@ func TestMessagesOverHTTP(t *testing.T) {
 	}
 }
 
+func TestEditClearsTheCaptionOfAFileOverHTTP(t *testing.T) {
+	e := newChatEnv(t)
+	alice, bob := e.register(t, "alice"), e.register(t, "bob")
+	aliceID, _ := strconv.ParseInt(e.uid(t, alice), 10, 64)
+	chat := e.create(t, alice, e.uid(t, bob), "").json()["id"].(string)
+	a, err := e.store.Attachments().Create(context.Background(), postgres.NewAttachment{UploaderID: &aliceID, Purpose: "message", Kind: "image",
+		Filename: "p.png", StorageKey: "attachments/" + uuid.NewString(), MimeType: "image/png", Size: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	photo := e.do(t, request{method: http.MethodPost, path: "/chats/" + chat + "/messages", token: alice.access,
+		body: map[string]any{"client_temp_id": "p-1", "type": "file", "attachment_id": a.ID.String(), "content": "holiday"}})
+	if photo.Code != http.StatusCreated {
+		t.Fatalf("send a photo: %d %s", photo.Code, photo.Body)
+	}
+	cleared := e.do(t, request{method: http.MethodPatch, path: "/messages/" + photo.json()["id"].(string), token: alice.access, body: map[string]any{"content": ""}})
+	if cleared.Code != http.StatusOK || cleared.json()["content"] != nil || cleared.json()["attachment"] == nil || cleared.json()["edited_at"] == nil {
+		t.Fatalf("clear the caption: %d %s", cleared.Code, cleared.Body)
+	}
+	text := e.send(t, alice, chat, "text", "hello")
+	if r := e.do(t, request{method: http.MethodPatch, path: "/messages/" + text.json()["id"].(string), token: alice.access, body: map[string]any{"content": ""}}); r.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("empty a text message: %d %s", r.Code, r.Body)
+	}
+}
+
 func TestChatMediaLists(t *testing.T) {
 	e := newChatEnv(t)
 	alice, bob := e.register(t, "alice"), e.register(t, "bob")

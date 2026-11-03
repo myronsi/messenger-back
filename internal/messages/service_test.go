@@ -212,6 +212,17 @@ func TestEditChangesOnlyTheCaptionOfAFile(t *testing.T) {
 	if _, err := f.svc.Edit(ctx, bob, chat.ID, sent.Message.ID, "not yours"); !errors.Is(err, messages.ErrForbidden) {
 		t.Fatalf("editing someone else's file: %v", err)
 	}
+	cleared, err := f.svc.Edit(ctx, alice, chat.ID, sent.Message.ID, "   ")
+	if err != nil || cleared.Content == nil || *cleared.Content != "" || cleared.AttachmentID == nil {
+		t.Fatalf("clearing the caption: %+v %v", cleared, err)
+	}
+	text, err := f.svc.Send(ctx, messages.SendRequest{ChatID: chat.ID, SenderID: alice, ClientTempID: uuid.NewString(), Type: scylla.TypeText, Content: str("hello")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.Edit(ctx, alice, chat.ID, text.Message.ID, ""); !errors.Is(err, messages.ErrInvalid) {
+		t.Fatalf("emptying a text message: %v", err)
+	}
 	voice := upload("audio/ogg")
 	recorded, err := f.svc.Send(ctx, messages.SendRequest{ChatID: chat.ID, SenderID: alice, ClientTempID: uuid.NewString(), Type: scylla.TypeVoice, AttachmentID: &voice})
 	if err != nil {
