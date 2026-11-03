@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"sync"
 
 	"github.com/google/uuid"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/myronsi/messenger-back/internal/ids"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
@@ -80,6 +82,7 @@ type Decorations struct {
 	Reactions map[int64][]scylla.Reaction
 	// Readers are the other members who share read receipts, with how far they read.
 	Readers []postgres.ReadMarker
+	Replies map[int64]scylla.Message
 }
 
 // Decorate loads the reactions of the messages and, in a direct chat, the read marker of the other user when
@@ -92,7 +95,7 @@ func (s *Service) Decorate(ctx context.Context, userID, chatID int64, msgs []scy
 			idList = append(idList, m.ID)
 		}
 	}
-	var d Decorations
+	d := Decorations{Replies: s.replyOrigins(ctx, userID, chatID, msgs)}
 	if len(idList) > 0 {
 		r, err := s.d.Messages.Reactions(ctx, chatID, idList)
 		if err != nil {
@@ -131,6 +134,47 @@ func (s *Service) Decorate(ctx context.Context, userID, chatID int64, msgs []scy
 		}
 	}
 	return d, nil
+}
+
+const replyLookups = 8
+
+func (s *Service) replyOrigins(ctx context.Context, userID, chatID int64, msgs []scylla.Message) map[int64]scylla.Message {
+	page := make(map[int64]scylla.Message, len(msgs))
+	for _, m := range msgs {
+		page[m.ID] = m
+	}
+	out := map[int64]scylla.Message{}
+	var missing []int64
+	for _, m := range msgs {
+		if m.Deleted || m.ReplyTo == nil {
+			continue
+		}
+		if o, ok := page[*m.ReplyTo]; ok {
+			out[o.ID] = o
+		} else if !slices.Contains(missing, *m.ReplyTo) {
+			missing = append(missing, *m.ReplyTo)
+		}
+	}
+	var mu sync.Mutex
+	var g errgroup.Group
+	g.SetLimit(replyLookups)
+	for _, id := range missing {
+		g.Go(func() error {
+			o, err := s.d.Messages.Get(ctx, chatID, id)
+			if err != nil {
+				return nil
+			}
+			if hidden, err := s.d.Messages.Hidden(ctx, userID, chatID, id); err != nil || hidden {
+				return nil
+			}
+			mu.Lock()
+			out[id] = o
+			mu.Unlock()
+			return nil
+		})
+	}
+	_ = g.Wait()
+	return out
 }
 
 // ReadBy picks the readers of one message: those whose marker reached it, except its sender.

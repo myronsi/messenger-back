@@ -161,6 +161,46 @@ func TestMessagesOverHTTP(t *testing.T) {
 	}
 }
 
+func TestReplyPreviewOutsideThePageOverHTTP(t *testing.T) {
+	e := newChatEnv(t)
+	alice, bob := e.register(t, "alice"), e.register(t, "bob")
+	chat := e.create(t, alice, e.uid(t, bob), "").json()["id"].(string)
+	long := strings.Repeat("ä", 150)
+	original := e.send(t, alice, chat, "o-1", long).json()["id"].(string)
+	for i := range 3 {
+		e.send(t, alice, chat, "f-"+strconv.Itoa(i), "filler")
+	}
+	r := e.do(t, request{method: http.MethodPost, path: "/chats/" + chat + "/messages", token: bob.access,
+		body: map[string]any{"client_temp_id": "r-1", "type": "text", "content": "answer", "reply_to": original}})
+	if r.Code != http.StatusCreated {
+		t.Fatalf("reply: %d %s", r.Code, r.Body)
+	}
+	preview := func(s session) map[string]any {
+		t.Helper()
+		got, _ := e.history(t, s, chat, "?limit=2")
+		p, _ := got[len(got)-1]["reply_preview"].(map[string]any)
+		return p
+	}
+
+	p := preview(bob)
+	if p == nil || p["id"] != original || p["content"] != strings.Repeat("ä", 100) || p["is_deleted"] != false ||
+		p["sender"].(map[string]any)["username"] != "alice" {
+		t.Fatalf("preview: %v", p)
+	}
+	if r := e.do(t, request{method: http.MethodDelete, path: "/messages/" + original + "?scope=me", token: bob.access}); r.Code != http.StatusNoContent {
+		t.Fatalf("delete for me: %d", r.Code)
+	}
+	if p := preview(bob); p != nil {
+		t.Fatalf("a message deleted for bob still shows: %v", p)
+	}
+	if r := e.do(t, request{method: http.MethodDelete, path: "/messages/" + original + "?scope=everyone", token: alice.access}); r.Code != http.StatusNoContent {
+		t.Fatalf("delete for everyone: %d", r.Code)
+	}
+	if p := preview(alice); p == nil || p["is_deleted"] != true || p["content"] != nil {
+		t.Fatalf("deleted original: %v", p)
+	}
+}
+
 func TestEditClearsTheCaptionOfAFileOverHTTP(t *testing.T) {
 	e := newChatEnv(t)
 	alice, bob := e.register(t, "alice"), e.register(t, "bob")

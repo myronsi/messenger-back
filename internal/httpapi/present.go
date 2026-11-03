@@ -125,6 +125,37 @@ type MessageParts struct {
 	// ClientTempID is set on the sender's own copy of a new message.
 	ClientTempID string
 	BasePath     string
+	Reply        *ReplyOrigin
+}
+
+type ReplyOrigin struct {
+	Message    scylla.Message
+	Sender     *users.View
+	Attachment *postgres.Attachment
+}
+
+const replyExcerpt = 100
+
+func PresentReplyPreview(o ReplyOrigin, basePath string) ReplyPreview {
+	m := o.Message
+	out := ReplyPreview{Id: FormatID(m.ID), Type: MessageType(m.Type), IsDeleted: m.Deleted}
+	if o.Sender != nil {
+		u := PresentUser(*o.Sender)
+		out.Sender = &u
+	}
+	if m.Deleted {
+		return out
+	}
+	if m.Content != nil && *m.Content != "" {
+		text := []rune(*m.Content)
+		excerpt := string(text[:min(len(text), replyExcerpt)])
+		out.Content = &excerpt
+	}
+	if o.Attachment != nil {
+		a := PresentAttachment(*o.Attachment, m.Type, basePath)
+		out.Attachment = &a
+	}
+	return out
 }
 
 // PresentMessage renders a stored message for one recipient.
@@ -151,6 +182,10 @@ func PresentMessage(m scylla.Message, p MessageParts) Message {
 	if !m.Deleted && p.Attachment != nil {
 		a := PresentAttachment(*p.Attachment, m.Type, p.BasePath)
 		out.Attachment = &a
+	}
+	if p.Reply != nil && m.ReplyTo != nil && !m.Deleted {
+		r := PresentReplyPreview(*p.Reply, p.BasePath)
+		out.ReplyPreview = &r
 	}
 	if f := m.Forwarded; f != nil {
 		out.ForwardedFrom = &ForwardedFrom{MessageId: FormatID(f.MessageID), SenderId: formatIDPtr(f.SenderID), SenderName: f.SenderName}
