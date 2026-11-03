@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.2
+  version: 2.1.0-alpha.3
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -1758,6 +1758,58 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+  /notifications/avatar/{token}:
+    parameters:
+      - name: token
+        in: path
+        required: true
+        description: "`avatar_token` of a push notification."
+        schema: { type: string, maxLength: 256 }
+    get:
+      tags: [me]
+      operationId: getNotificationAvatar
+      summary: Sender avatar for a push notification
+      description: |
+        For the service worker, which has no session: the token in the push payload names the recipient
+        and the sender and expires after an hour. Follows the sender's avatar visibility for the recipient.
+      security: []
+      responses:
+        "200":
+          description: Image
+          content:
+            image/*:
+              schema: { type: string, format: binary }
+        "206":
+          description: The requested byte range (`Range` header)
+          content:
+            image/*:
+              schema: { type: string, format: binary }
+        "302":
+          description: Redirect to a short-lived signed storage URL (with `MEDIA_SIGNED_URLS`)
+        "304":
+          description: Not modified (`If-None-Match` with the `ETag` of an earlier answer)
+        "416":
+          description: The requested range is outside the file
+        "404": { $ref: "#/components/responses/NotFound" }
+  /notifications/read/{token}:
+    parameters:
+      - name: token
+        in: path
+        required: true
+        description: "`read_token` of a push notification."
+        schema: { type: string, maxLength: 256 }
+    post:
+      tags: [me]
+      operationId: markNotificationRead
+      summary: Mark a chat read from a push notification
+      description: |
+        For the notification's "Mark as read" action: marks the chat read up to the notified message for
+        the recipient the token names. The token expires after seven days.
+      security: []
+      responses:
+        "204":
+          description: Marked as read
+        "404": { $ref: "#/components/responses/NotFound" }
   /me/notification-devices:
     post:
       tags:

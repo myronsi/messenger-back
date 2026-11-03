@@ -24,3 +24,9 @@ func (Unimplemented) DeleteNotificationDevice(w http.ResponseWriter, r *http.Req
 func (Unimplemented) UpdateNotificationActivity(w http.ResponseWriter, r *http.Request, _ uuid.UUID) {
 	notImplemented(w, r)
 }
+func (Unimplemented) GetNotificationAvatar(w http.ResponseWriter, r *http.Request, _ string) {
+	notImplemented(w, r)
+}
+func (Unimplemented) MarkNotificationRead(w http.ResponseWriter, r *http.Request, _ string) {
+	notImplemented(w, r)
+}

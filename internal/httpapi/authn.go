@@ -39,15 +39,17 @@ const (
 // routeAccess lists the operations of the contract that do not require an access token
 // (`security: []` or cookie-only in api/openapi.yaml), keyed by "METHOD path" below the base path.
 var routeAccess = map[string]access{
-	"GET /meta":                 accessPublic,
-	"POST /auth/register":       accessPublic,
-	"POST /auth/login":          accessPublic,
-	"POST /auth/login/2fa":      accessPublic,
-	"POST /auth/refresh":        accessPublic,
-	"POST /auth/recover/key":    accessPublic,
-	"POST /auth/recover":        accessPublic,
-	"POST /auth/reset-password": accessPublic,
-	"POST /auth/logout":         accessOptional,
+	"GET /meta":                         accessPublic,
+	"POST /auth/register":               accessPublic,
+	"POST /auth/login":                  accessPublic,
+	"POST /auth/login/2fa":              accessPublic,
+	"POST /auth/refresh":                accessPublic,
+	"POST /auth/recover/key":            accessPublic,
+	"POST /auth/recover":                accessPublic,
+	"POST /auth/reset-password":         accessPublic,
+	"POST /auth/logout":                 accessOptional,
+	"GET /notifications/avatar/{token}": accessPublic,
+	"POST /notifications/read/{token}":  accessPublic,
 }
 
 func accessFor(pattern, basePath string) access {

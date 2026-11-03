@@ -22,13 +22,17 @@ import (
 )
 
 type Payload struct {
-	Title     string `json:"title"`
-	Body      string `json:"body"`
-	ChatID    string `json:"chat_id"`
-	MessageID string `json:"message_id"`
-	UserID    string `json:"user_id"`
-	Sound     bool   `json:"sound"`
-	ExpiresAt int64  `json:"expires_at"`
+	Title       string `json:"title"`
+	Body        string `json:"body"`
+	ChatID      string `json:"chat_id"`
+	MessageID   string `json:"message_id"`
+	UserID      string `json:"user_id"`
+	Sound       bool   `json:"sound"`
+	ExpiresAt   int64  `json:"expires_at"`
+	Preview     bool   `json:"preview"`
+	SenderID    string `json:"sender_id,omitempty"`
+	AvatarToken string `json:"avatar_token,omitempty"`
+	ReadToken   string `json:"read_token,omitempty"`
 }
 
 var ErrUnregistered = errors.New("notification destination expired")

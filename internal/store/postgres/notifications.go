@@ -24,6 +24,7 @@ type NotificationDevice struct {
 	Destination string    `json:"destination"`
 	P256dh      string    `json:"p256dh,omitempty"`
 	Auth        string    `json:"auth,omitempty"`
+	SessionID   uuid.UUID `json:"-"`
 }
 type NotificationJob struct {
 	MessageID, ChatID int64
@@ -47,6 +48,7 @@ type NotificationRepository interface {
 	Devices(context.Context, int64, int64, int64) ([]NotificationDevice, error)
 	Delivered(context.Context, int64, uuid.UUID) error
 	RemoveDevice(context.Context, uuid.UUID) error
+	DeviceActive(context.Context, int64, uuid.UUID, uuid.UUID) (bool, error)
 }
 type notificationRepo struct{ s *Store }
 
@@ -156,7 +158,7 @@ func (r notificationRepo) Finish(ctx context.Context, mid int64) error {
 func (r notificationRepo) Devices(ctx context.Context, uid, cid, mid int64) ([]NotificationDevice, error) {
 	ctx, cancel := r.s.call(ctx)
 	defer cancel()
-	rows, err := r.s.pool.Query(ctx, `SELECT d.id,d.platform,d.destination,d.p256dh,d.auth FROM notification_devices d
+	rows, err := r.s.pool.Query(ctx, `SELECT d.id,d.platform,d.destination,d.p256dh,d.auth,d.session_id FROM notification_devices d
  JOIN user_sessions s ON s.id=d.session_id
  JOIN participants p ON p.user_id=d.user_id AND p.chat_id=$2
  LEFT JOIN notification_preferences n ON n.user_id=d.user_id
@@ -173,7 +175,7 @@ func (r notificationRepo) Devices(ctx context.Context, uid, cid, mid int64) ([]N
 	out := []NotificationDevice{}
 	for rows.Next() {
 		var d NotificationDevice
-		if err := rows.Scan(&d.ID, &d.Platform, &d.Destination, &d.P256dh, &d.Auth); err != nil {
+		if err := rows.Scan(&d.ID, &d.Platform, &d.Destination, &d.P256dh, &d.Auth, &d.SessionID); err != nil {
 			return nil, err
 		}
 		out = append(out, d)
@@ -204,4 +206,13 @@ func (r notificationRepo) Activity(ctx context.Context, uid int64, sid, id, clie
 	 SELECT id,session_id,$4,now()+interval '25 seconds' FROM notification_devices WHERE id=$1 AND user_id=$2 AND session_id=$3
 	 ON CONFLICT(device_id,client_id) DO UPDATE SET session_id=$3,active_until=now()+interval '25 seconds'`, id, uid, sid, clientID)
 	return err
+}
+
+func (r notificationRepo) DeviceActive(ctx context.Context, uid int64, id, session uuid.UUID) (bool, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	var ok bool
+	err := r.s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM notification_devices d JOIN user_sessions s ON s.id=d.session_id
+ WHERE d.id=$1 AND d.user_id=$2 AND d.session_id=$3 AND s.revoked_at IS NULL AND s.expires_at>now())`, id, uid, session).Scan(&ok)
+	return ok, err
 }

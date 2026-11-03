@@ -21,6 +21,7 @@ type Worker struct {
 	Users    postgres.UserRepository
 	Messages scylla.MessageRepository
 	Sender   Delivery
+	Tokens   *ActionTokens
 	Log      *slog.Logger
 	OnResult func(string)
 }
@@ -109,6 +110,8 @@ func (w *Worker) Handle(ctx context.Context, j postgres.NotificationJob) error {
 		}
 		p := Payload{Title: "Messenger", Body: "New message", ChatID: fmt.Sprint(j.ChatID), MessageID: fmt.Sprint(j.MessageID), UserID: fmt.Sprint(uid), Sound: prefs.Sound, ExpiresAt: m.CreatedAt.Add(15 * time.Minute).Unix()}
 		if prefs.Previews {
+			p.Preview = true
+			p.SenderID = fmt.Sprint(*m.SenderID)
 			sender, err := w.Users.Get(ctx, *m.SenderID)
 			if err != nil {
 				return err
@@ -123,7 +126,14 @@ func (w *Worker) Handle(ctx context.Context, j postgres.NotificationJob) error {
 			}
 		}
 		for _, d := range devices {
-			err := w.Sender.Send(ctx, d, p)
+			dp := p
+			if w.Tokens != nil {
+				dp.ReadToken = w.Tokens.Read(uid, d.ID, d.SessionID, j.ChatID, j.MessageID)
+				if dp.Preview {
+					dp.AvatarToken = w.Tokens.Avatar(uid, d.ID, d.SessionID, *m.SenderID)
+				}
+			}
+			err := w.Sender.Send(ctx, d, dp)
 			if errors.Is(err, ErrUnregistered) {
 				w.result("unregistered")
 				err = w.Queue.RemoveDevice(ctx, d.ID)
