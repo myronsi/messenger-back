@@ -225,6 +225,14 @@ func (Unimplemented) ForwardMessage(w http.ResponseWriter, r *http.Request, mess
 	notImplemented(w, r)
 }
 
+func (Unimplemented) ForwardMessages(w http.ResponseWriter, r *http.Request, chatId ChatId, params ForwardMessagesParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) DeleteMessages(w http.ResponseWriter, r *http.Request, chatId ChatId, params DeleteMessagesParams) {
+	notImplemented(w, r)
+}
+
 func (Unimplemented) GetMeta(w http.ResponseWriter, r *http.Request) {
 	notImplemented(w, r)
 }

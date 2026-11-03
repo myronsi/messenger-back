@@ -507,6 +507,53 @@ func (s *Service) Delete(ctx context.Context, userID, chatID, messageID int64, s
 	if err != nil {
 		return err
 	}
+	if scope == ScopeEveryone && (m.SenderID == nil || *m.SenderID != userID) {
+		if err := s.requireModerator(ctx, chatID, userID); err != nil {
+			return err
+		}
+	}
+	return s.deleteChecked(ctx, userID, chatID, messageID, scope)
+}
+
+func (s *Service) DeleteMany(ctx context.Context, userID, chatID int64, messageIDs []int64, scope string) error {
+	if scope != ScopeMe && scope != ScopeEveryone {
+		return invalid("scope must be me or everyone")
+	}
+	if err := checkIDs("message_ids", messageIDs, MaxDeleteMessages); err != nil {
+		return err
+	}
+	if err := s.requireMember(ctx, chatID, userID); err != nil {
+		return err
+	}
+	moderatorChecked := false
+	for _, messageID := range messageIDs {
+		m, err := s.message(ctx, chatID, messageID)
+		if err != nil {
+			return err
+		}
+		if scope == ScopeEveryone {
+			if visible, err := s.Visible(ctx, userID, chatID, messageID); err != nil {
+				return fmt.Errorf("%w: %w", ErrUnavailable, err)
+			} else if !visible {
+				return ErrNotFound
+			}
+		}
+		if scope == ScopeEveryone && !moderatorChecked && (m.SenderID == nil || *m.SenderID != userID) {
+			if err := s.requireModerator(ctx, chatID, userID); err != nil {
+				return err
+			}
+			moderatorChecked = true
+		}
+	}
+	for _, messageID := range messageIDs {
+		if err := s.deleteChecked(ctx, userID, chatID, messageID, scope); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Service) deleteChecked(ctx context.Context, userID, chatID, messageID int64, scope string) error {
 	if scope == ScopeMe {
 		if err := s.d.Messages.Hide(ctx, userID, chatID, messageID, scylla.HiddenDeletedForMe); err != nil {
 			return fmt.Errorf("%w: %w", ErrUnavailable, err)
@@ -514,11 +561,6 @@ func (s *Service) Delete(ctx context.Context, userID, chatID, messageID int64, s
 		s.d.Notifier.MessageDeleted(ctx, chatID, messageID, ScopeMe, []int64{userID})
 		s.emit(ctx, events.Event{Type: events.MessageHidden, ChatID: chatID, MessageID: messageID, UserID: userID, ActorID: userID})
 		return nil
-	}
-	if m.SenderID == nil || *m.SenderID != userID {
-		if err := s.requireModerator(ctx, chatID, userID); err != nil {
-			return err
-		}
 	}
 	if err := s.d.Messages.Delete(ctx, chatID, messageID); errors.Is(err, scylla.ErrNotFound) {
 		return ErrNotFound

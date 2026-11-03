@@ -351,6 +351,22 @@ func (s *Server) ForwardMessage(w http.ResponseWriter, r *http.Request, messageI
 	s.messages.ForwardMessage(w, r, messageID, params)
 }
 
+func (s *Server) ForwardMessages(w http.ResponseWriter, r *http.Request, chatID ChatId, params ForwardMessagesParams) {
+	if s.messages == nil {
+		s.AuthServer.ForwardMessages(w, r, chatID, params)
+		return
+	}
+	s.messages.ForwardMessages(w, r, chatID, params)
+}
+
+func (s *Server) DeleteMessages(w http.ResponseWriter, r *http.Request, chatID ChatId, params DeleteMessagesParams) {
+	if s.messages == nil {
+		s.AuthServer.DeleteMessages(w, r, chatID, params)
+		return
+	}
+	s.messages.DeleteMessages(w, r, chatID, params)
+}
+
 // ListGroups delegates to the group endpoints.
 func (s *Server) ListGroups(w http.ResponseWriter, r *http.Request, params ListGroupsParams) {
 	if s.chats == nil {

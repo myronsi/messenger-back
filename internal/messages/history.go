@@ -19,6 +19,12 @@ import (
 // MaxForwardTargets is how many chats one forward can reach.
 const MaxForwardTargets = 20
 
+const (
+	MaxForwardMessages = 20
+	MaxForwardCopies   = 100
+	MaxDeleteMessages  = 100
+)
+
 // LocateVisible returns the chat of a message the user can see: they are in its chat, it is not deleted for
 // everyone and not hidden for them (ErrNotFound otherwise).
 func (s *Service) LocateVisible(ctx context.Context, userID, messageID int64) (int64, error) {
@@ -192,32 +198,81 @@ func (d Decorations) ReadBy(m scylla.Message) []postgres.ReadMarker {
 // keeps the type, text and file and names where it came from (the original of a forwarded message). When a
 // store fails midway, the copies written so far are returned with the error.
 func (s *Service) Forward(ctx context.Context, userID, messageID int64, chatIDs []int64) ([]scylla.Message, error) {
-	if len(chatIDs) == 0 || len(chatIDs) > MaxForwardTargets {
-		return nil, invalid("chat_ids must name 1 to %d chats", MaxForwardTargets)
-	}
-	targets := slices.Clone(chatIDs)
-	slices.Sort(targets)
-	if len(slices.Compact(targets)) != len(chatIDs) {
-		return nil, invalid("chat_ids must not repeat")
+	if err := checkIDs("chat_ids", chatIDs, MaxForwardTargets); err != nil {
+		return nil, err
 	}
 	from, err := s.LocateVisible(ctx, userID, messageID)
 	if err != nil {
 		return nil, err
 	}
-	src, err := s.message(ctx, from, messageID)
-	if err != nil {
-		return nil, err
+	return s.ForwardMany(ctx, userID, from, []int64{messageID}, chatIDs)
+}
+
+func checkIDs(field string, list []int64, maxLen int) error {
+	if len(list) == 0 || len(list) > maxLen {
+		return invalid("%s must name 1 to %d items", field, maxLen)
 	}
-	if src.Type == scylla.TypeSystem || src.Deleted {
-		return nil, invalid("this message cannot be forwarded")
+	sorted := slices.Clone(list)
+	slices.Sort(sorted)
+	if len(slices.Compact(sorted)) != len(list) {
+		return invalid("%s must not repeat", field)
 	}
-	origin := src.Forwarded
-	if origin == nil {
-		name, err := s.senderName(ctx, src.SenderID)
+	return nil
+}
+
+type forwardSource struct {
+	msg    scylla.Message
+	origin *scylla.Forwarded
+}
+
+func (s *Service) forwardSources(ctx context.Context, userID, chatID int64, messageIDs []int64) ([]forwardSource, error) {
+	ordered := slices.Clone(messageIDs)
+	slices.Sort(ordered)
+	out := make([]forwardSource, 0, len(ordered))
+	for _, messageID := range ordered {
+		ok, err := s.Visible(ctx, userID, chatID, messageID)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrUnavailable, err)
+		}
+		if !ok {
+			return nil, ErrNotFound
+		}
+		src, err := s.message(ctx, chatID, messageID)
 		if err != nil {
 			return nil, err
 		}
-		origin = &scylla.Forwarded{MessageID: src.ID, SenderID: src.SenderID, SenderName: name}
+		if src.Type == scylla.TypeSystem || src.Deleted {
+			return nil, invalid("this message cannot be forwarded")
+		}
+		origin := src.Forwarded
+		if origin == nil {
+			name, err := s.senderName(ctx, src.SenderID)
+			if err != nil {
+				return nil, err
+			}
+			origin = &scylla.Forwarded{MessageID: src.ID, SenderID: src.SenderID, SenderName: name}
+		}
+		out = append(out, forwardSource{src, origin})
+	}
+	return out, nil
+}
+
+func (s *Service) ForwardMany(ctx context.Context, userID, chatID int64, messageIDs, chatIDs []int64) ([]scylla.Message, error) {
+	if err := checkIDs("message_ids", messageIDs, MaxForwardMessages); err != nil {
+		return nil, err
+	}
+	if err := checkIDs("chat_ids", chatIDs, MaxForwardTargets); err != nil {
+		return nil, err
+	}
+	if len(messageIDs)*len(chatIDs) > MaxForwardCopies {
+		return nil, invalid("one forward makes at most %d copies", MaxForwardCopies)
+	}
+	if err := s.requireMember(ctx, chatID, userID); err != nil {
+		return nil, err
+	}
+	sources, err := s.forwardSources(ctx, userID, chatID, messageIDs)
+	if err != nil {
+		return nil, err
 	}
 	// Every target is checked before anything is written, so a refused target forwards nothing.
 	type target struct {
@@ -238,32 +293,41 @@ func (s *Service) Forward(ctx context.Context, userID, messageID int64, chatIDs 
 		}
 		checked = append(checked, target{chatID, members})
 	}
-	out := make([]scylla.Message, 0, len(checked))
-	sender := userID
+	out := make([]scylla.Message, 0, len(checked)*len(sources))
 	for _, t := range checked {
-		id, err := s.d.IDs.Next()
-		if err != nil {
-			return out, fmt.Errorf("%w: %w", ErrUnavailable, err)
-		}
-		m := scylla.Message{
-			ChatID: t.chatID, ID: id, SenderID: &sender, Type: src.Type, Content: src.Content,
-			AttachmentID: src.AttachmentID, Forwarded: origin, CreatedAt: ids.Time(id),
-		}
-		if m.AttachmentID != nil {
-			if err := s.d.Store.Attachments().Link(ctx, uuid.UUID(*m.AttachmentID), t.chatID, id); err != nil {
-				return out, fmt.Errorf("%w: %w", ErrUnavailable, err)
+		for _, src := range sources {
+			m, err := s.forwardCopy(ctx, userID, t.chatID, t.members, src)
+			if err != nil {
+				return out, err
 			}
+			out = append(out, m)
 		}
-		if err := s.queueNotification(ctx, m, t.members); err != nil {
-			return out, fmt.Errorf("%w: %w", ErrUnavailable, err)
-		}
-		if err := s.d.Messages.Insert(ctx, m); err != nil {
-			return out, fmt.Errorf("%w: %w", ErrUnavailable, err)
-		}
-		s.delivered(ctx, m, t.members, "")
-		out = append(out, m)
 	}
 	return out, nil
+}
+
+func (s *Service) forwardCopy(ctx context.Context, sender, chatID int64, members []int64, src forwardSource) (scylla.Message, error) {
+	id, err := s.d.IDs.Next()
+	if err != nil {
+		return scylla.Message{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
+	}
+	m := scylla.Message{
+		ChatID: chatID, ID: id, SenderID: &sender, Type: src.msg.Type, Content: src.msg.Content,
+		AttachmentID: src.msg.AttachmentID, Forwarded: src.origin, CreatedAt: ids.Time(id),
+	}
+	if m.AttachmentID != nil {
+		if err := s.d.Store.Attachments().Link(ctx, uuid.UUID(*m.AttachmentID), chatID, id); err != nil {
+			return scylla.Message{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
+		}
+	}
+	if err := s.queueNotification(ctx, m, members); err != nil {
+		return scylla.Message{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
+	}
+	if err := s.d.Messages.Insert(ctx, m); err != nil {
+		return scylla.Message{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
+	}
+	s.delivered(ctx, m, members, "")
+	return m, nil
 }
 
 // senderName is the display name a forwarded copy keeps for the original sender (it is stored with the copy,
