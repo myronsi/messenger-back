@@ -104,6 +104,24 @@ func (e ChatType) Valid() bool {
 	}
 }
 
+// Defines values for DeleteMessagesRequestScope.
+const (
+	DeleteMessagesRequestScopeEveryone DeleteMessagesRequestScope = "everyone"
+	DeleteMessagesRequestScopeMe       DeleteMessagesRequestScope = "me"
+)
+
+// Valid indicates whether the value is a known member of the DeleteMessagesRequestScope enum.
+func (e DeleteMessagesRequestScope) Valid() bool {
+	switch e {
+	case DeleteMessagesRequestScopeEveryone:
+		return true
+	case DeleteMessagesRequestScopeMe:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for DirectMessagePolicy.
 const (
 	DirectMessagePolicyEveryone     DirectMessagePolicy = "everyone"
@@ -680,6 +698,15 @@ type CreateGroupRequest struct {
 // Cursor Opaque cursor; `null` when there are no more results.
 type Cursor = string
 
+// DeleteMessagesRequest defines model for DeleteMessagesRequest.
+type DeleteMessagesRequest struct {
+	MessageIds []Id                       `json:"message_ids"`
+	Scope      DeleteMessagesRequestScope `json:"scope"`
+}
+
+// DeleteMessagesRequestScope defines model for DeleteMessagesRequest.Scope.
+type DeleteMessagesRequestScope string
+
 // DirectMessagePolicy defines model for DirectMessagePolicy.
 type DirectMessagePolicy string
 
@@ -703,6 +730,12 @@ type ErrorCode string
 // ForwardMessageRequest defines model for ForwardMessageRequest.
 type ForwardMessageRequest struct {
 	ChatIds []Id `json:"chat_ids"`
+}
+
+// ForwardMessagesRequest defines model for ForwardMessagesRequest.
+type ForwardMessagesRequest struct {
+	ChatIds    []Id `json:"chat_ids"`
+	MessageIds []Id `json:"message_ids"`
 }
 
 // ForwardedFrom defines model for ForwardedFrom.
@@ -1573,6 +1606,24 @@ type SendMessageParams struct {
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
 }
 
+// DeleteMessagesParams defines parameters for DeleteMessages.
+type DeleteMessagesParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// ForwardMessagesParams defines parameters for ForwardMessages.
+type ForwardMessagesParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
 // SearchMessagesParams defines parameters for SearchMessages.
 type SearchMessagesParams struct {
 	Q string `form:"q" json:"q"`
@@ -2155,6 +2206,12 @@ type SetNotificationMuteJSONRequestBody = NotificationMuteRequest
 // SendMessageJSONRequestBody defines body for SendMessage for application/json ContentType.
 type SendMessageJSONRequestBody = SendMessageRequest
 
+// DeleteMessagesJSONRequestBody defines body for DeleteMessages for application/json ContentType.
+type DeleteMessagesJSONRequestBody = DeleteMessagesRequest
+
+// ForwardMessagesJSONRequestBody defines body for ForwardMessages for application/json ContentType.
+type ForwardMessagesJSONRequestBody = ForwardMessagesRequest
+
 // MarkChatReadJSONRequestBody defines body for MarkChatRead for application/json ContentType.
 type MarkChatReadJSONRequestBody = MarkReadRequest
 
@@ -2525,6 +2582,12 @@ type ServerInterface interface {
 	// SendMessage Send a message over HTTP
 	// (POST /chats/{chat_id}/messages)
 	SendMessage(w http.ResponseWriter, r *http.Request, chatId ChatId, params SendMessageParams)
+	// DeleteMessages Delete several messages of a chat
+	// (POST /chats/{chat_id}/messages/delete)
+	DeleteMessages(w http.ResponseWriter, r *http.Request, chatId ChatId, params DeleteMessagesParams)
+	// ForwardMessages Forward several messages of a chat to other chats
+	// (POST /chats/{chat_id}/messages/forward)
+	ForwardMessages(w http.ResponseWriter, r *http.Request, chatId ChatId, params ForwardMessagesParams)
 	// SearchMessages Search messages in a chat
 	// (GET /chats/{chat_id}/messages/search)
 	SearchMessages(w http.ResponseWriter, r *http.Request, chatId ChatId, params SearchMessagesParams)
@@ -3940,6 +4003,144 @@ func (siw *ServerInterfaceWrapper) SendMessage(w http.ResponseWriter, r *http.Re
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.SendMessage(w, r, chatId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteMessages operation middleware
+func (siw *ServerInterfaceWrapper) DeleteMessages(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteMessagesParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteMessages(w, r, chatId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ForwardMessages operation middleware
+func (siw *ServerInterfaceWrapper) ForwardMessages(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ForwardMessagesParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ForwardMessages(w, r, chatId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -8078,6 +8279,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/messages/{message_id}", wrapper.DeleteMessage)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/messages/{message_id}", wrapper.EditMessage)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/messages/{message_id}/forward", wrapper.ForwardMessage)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/chats/{chat_id}/messages/forward", wrapper.ForwardMessages)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/chats/{chat_id}/messages/delete", wrapper.DeleteMessages)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/search/messages", wrapper.SearchAllMessages)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/requests", wrapper.ListApprovalRequests)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/requests/{request_id}/approve", wrapper.ApproveRequest)
@@ -10068,6 +10271,261 @@ type SendMessage429ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response SendMessage429ApplicationProblemPlusJSONResponse) VisitSendMessageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMessagesRequestObject struct {
+	ChatId ChatId `json:"chat_id"`
+	Params DeleteMessagesParams
+	Body   *DeleteMessagesJSONRequestBody
+}
+
+type DeleteMessagesResponseObject interface {
+	VisitDeleteMessagesResponse(w http.ResponseWriter) error
+}
+
+type DeleteMessages204Response struct {
+}
+
+func (response DeleteMessages204Response) VisitDeleteMessagesResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteMessages400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteMessages400ApplicationProblemPlusJSONResponse) VisitDeleteMessagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMessages401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteMessages401ApplicationProblemPlusJSONResponse) VisitDeleteMessagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMessages403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteMessages403ApplicationProblemPlusJSONResponse) VisitDeleteMessagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMessages404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteMessages404ApplicationProblemPlusJSONResponse) VisitDeleteMessagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMessages422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteMessages422ApplicationProblemPlusJSONResponse) VisitDeleteMessagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMessages426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteMessages426ApplicationProblemPlusJSONResponse) VisitDeleteMessagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ForwardMessagesRequestObject struct {
+	ChatId ChatId `json:"chat_id"`
+	Params ForwardMessagesParams
+	Body   *ForwardMessagesJSONRequestBody
+}
+
+type ForwardMessagesResponseObject interface {
+	VisitForwardMessagesResponse(w http.ResponseWriter) error
+}
+
+type ForwardMessages201JSONResponse struct {
+	Items []Message `json:"items"`
+}
+
+func (response ForwardMessages201JSONResponse) VisitForwardMessagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ForwardMessages400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response ForwardMessages400ApplicationProblemPlusJSONResponse) VisitForwardMessagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ForwardMessages401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ForwardMessages401ApplicationProblemPlusJSONResponse) VisitForwardMessagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ForwardMessages403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response ForwardMessages403ApplicationProblemPlusJSONResponse) VisitForwardMessagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ForwardMessages404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response ForwardMessages404ApplicationProblemPlusJSONResponse) VisitForwardMessagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ForwardMessages422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response ForwardMessages422ApplicationProblemPlusJSONResponse) VisitForwardMessagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ForwardMessages426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response ForwardMessages426ApplicationProblemPlusJSONResponse) VisitForwardMessagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ForwardMessages429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response ForwardMessages429ApplicationProblemPlusJSONResponse) VisitForwardMessagesResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -15995,6 +16453,12 @@ type StrictServerInterface interface {
 	// SendMessage Send a message over HTTP
 	// (POST /chats/{chat_id}/messages)
 	SendMessage(ctx context.Context, request SendMessageRequestObject) (SendMessageResponseObject, error)
+	// DeleteMessages Delete several messages of a chat
+	// (POST /chats/{chat_id}/messages/delete)
+	DeleteMessages(ctx context.Context, request DeleteMessagesRequestObject) (DeleteMessagesResponseObject, error)
+	// ForwardMessages Forward several messages of a chat to other chats
+	// (POST /chats/{chat_id}/messages/forward)
+	ForwardMessages(ctx context.Context, request ForwardMessagesRequestObject) (ForwardMessagesResponseObject, error)
 	// SearchMessages Search messages in a chat
 	// (GET /chats/{chat_id}/messages/search)
 	SearchMessages(ctx context.Context, request SearchMessagesRequestObject) (SearchMessagesResponseObject, error)
@@ -16756,6 +17220,74 @@ func (sh *strictHandler) SendMessage(w http.ResponseWriter, r *http.Request, cha
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(SendMessageResponseObject); ok {
 		if err := validResponse.VisitSendMessageResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteMessages operation middleware
+func (sh *strictHandler) DeleteMessages(w http.ResponseWriter, r *http.Request, chatId ChatId, params DeleteMessagesParams) {
+	var request DeleteMessagesRequestObject
+
+	request.ChatId = chatId
+	request.Params = params
+
+	var body DeleteMessagesJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteMessages(ctx, request.(DeleteMessagesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteMessages")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteMessagesResponseObject); ok {
+		if err := validResponse.VisitDeleteMessagesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ForwardMessages operation middleware
+func (sh *strictHandler) ForwardMessages(w http.ResponseWriter, r *http.Request, chatId ChatId, params ForwardMessagesParams) {
+	var request ForwardMessagesRequestObject
+
+	request.ChatId = chatId
+	request.Params = params
+
+	var body ForwardMessagesJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ForwardMessages(ctx, request.(ForwardMessagesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ForwardMessages")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ForwardMessagesResponseObject); ok {
+		if err := validResponse.VisitForwardMessagesResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

@@ -201,6 +201,69 @@ func TestReplyPreviewOutsideThePageOverHTTP(t *testing.T) {
 	}
 }
 
+func TestBulkForwardAndDeleteOverHTTP(t *testing.T) {
+	e := newChatEnv(t)
+	alice, bob, carol := e.register(t, "alice"), e.register(t, "bob"), e.register(t, "carol")
+	chat := e.create(t, alice, e.uid(t, bob), "").json()["id"].(string)
+	other := e.create(t, alice, e.uid(t, carol), "").json()["id"].(string)
+	var mine []string
+	for i, text := range []string{"one", "two", "three"} {
+		mine = append(mine, e.send(t, alice, chat, "a-"+strconv.Itoa(i), text).json()["id"].(string))
+	}
+	bobs := e.send(t, bob, chat, "b-1", "from bob").json()["id"].(string)
+	forward := func(s session, ids []string, targets ...string) reply {
+		return e.do(t, request{method: http.MethodPost, path: "/chats/" + chat + "/messages/forward", token: s.access,
+			body: map[string]any{"message_ids": ids, "chat_ids": targets}})
+	}
+	remove := func(s session, scope string, ids []string) reply {
+		return e.do(t, request{method: http.MethodPost, path: "/chats/" + chat + "/messages/delete", token: s.access,
+			body: map[string]any{"message_ids": ids, "scope": scope}})
+	}
+
+	fw := forward(alice, []string{mine[2], bobs, mine[0]}, other)
+	if fw.Code != http.StatusCreated {
+		t.Fatalf("forward: %d %s", fw.Code, fw.Body)
+	}
+	if got, _ := e.history(t, carol, other, ""); len(got) != 3 || texts(got)[0] != "one" || texts(got)[1] != "three" || texts(got)[2] != "from bob" {
+		t.Fatalf("forwarded copies, oldest first: %v", texts(got))
+	}
+	tooMany := make([]string, 21)
+	for i := range tooMany {
+		tooMany[i] = strconv.Itoa(i + 1)
+	}
+	if r := forward(alice, tooMany, other); r.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("21 messages: %d", r.Code)
+	}
+	if r := forward(carol, []string{mine[0]}, other); r.Code != http.StatusNotFound {
+		t.Fatalf("forward from a chat carol is not in: %d", r.Code)
+	}
+
+	if r := remove(bob, "everyone", []string{mine[0], bobs}); r.Code != http.StatusForbidden {
+		t.Fatalf("bob deletes alice's message for everyone: %d", r.Code)
+	}
+	if got, _ := e.history(t, alice, chat, ""); texts(got)[3] != "from bob" {
+		t.Fatalf("a refused bulk delete changed something: %v", texts(got))
+	}
+	if r := remove(alice, "everyone", mine[:2]); r.Code != http.StatusNoContent {
+		t.Fatalf("delete own messages: %d %s", r.Code, r.Body)
+	}
+	if got, _ := e.history(t, bob, chat, ""); texts(got)[0] != "<deleted>" || texts(got)[1] != "<deleted>" || texts(got)[2] != "three" {
+		t.Fatalf("after deleting for everyone: %v", texts(got))
+	}
+	if r := remove(bob, "me", []string{mine[2], bobs}); r.Code != http.StatusNoContent {
+		t.Fatalf("delete for me: %d", r.Code)
+	}
+	if got, _ := e.history(t, bob, chat, ""); len(got) != 2 {
+		t.Fatalf("bob still sees: %v", texts(got))
+	}
+	if got, _ := e.history(t, alice, chat, ""); len(got) != 4 {
+		t.Fatalf("alice lost messages bob deleted for himself: %v", texts(got))
+	}
+	if r := remove(alice, "me", append(tooMany, tooMany...)); r.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("repeated ids: %d", r.Code)
+	}
+}
+
 func TestEditClearsTheCaptionOfAFileOverHTTP(t *testing.T) {
 	e := newChatEnv(t)
 	alice, bob := e.register(t, "alice"), e.register(t, "bob")
