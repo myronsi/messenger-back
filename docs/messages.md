@@ -146,4 +146,4 @@ WebSocket, with the same rules as the WebSocket events:
 
 ## Migration from v1 (cutover prerequisite)
 
-`cmd/migrate-v1` copies the v1 history into this store, with the v1 ids, times, reactions and hidden markers ([migration-v1.md](migration-v1.md)). The switch (#56) runs it and checks its report before reads go to this store.
+The completed one-time migration copied v1 history into this store with its IDs, timestamps, reactions and visibility markers. Go now serves these reads. The importer is retired; see the [migration record](migration-v1.md) and [cutover outcome](switchover.md).

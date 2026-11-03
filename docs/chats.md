@@ -8,7 +8,7 @@ One page of the caller's chats:
 - **Order:** pinned chats first (most recently pinned first), then the others by their last activity (the newest message, or the creation of the chat), then by id.
 - **Paging:** the cursor is opaque and names the last entry of the page. The list is a moving target: a chat that moves above the cursor while you page (a new message, a pin) is not in the later pages, and one that moves below it (unpinned) can show up twice. Clients page once after connecting and then follow the realtime events, which keep the list current.
 - **Ordering data:** it comes from PostgreSQL alone. `chats.last_message_id` and `chats.last_activity_at` are written with every new message (migration 000009), so the order never needs the message store.
-- **v1 chats:** chats from before migration 000009 order by their creation time and show no `last_message` until their next message. `cmd/migrate-v1` (#54) sets both columns from the migrated history.
+- **v1 chats:** chats from before migration 000009 order by their creation time and show no `last_message` until their next message. The completed one-time importer populated both columns from migrated history. That importer is retired; see [migration record](migration-v1.md).
 
 Each entry carries:
 

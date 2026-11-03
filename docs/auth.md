@@ -77,7 +77,7 @@ A reset atomically replaces the password and recovery key, consumes a supplied 2
 
 For 24 hours after recovery, creating/replacing recovery keys and setting up, confirming or removing 2FA return 409 conflict. The replacement key issued inside the reset transaction is the exception, so the account retains recovery protection. GET /me/security-events returns the owner's newest 50 events.
 
-Existing users without a key receive recovery_setup_required=true from GET /me and must enroll using their current password and 2FA. The frontend prompts enrollment and also offers it in Security & devices. Keep the legacy Shamir data during transition; it is not converted into new keys. POST /auth/recover remains 501 and does not accept old shares. Existing-user enrollment and a communicated recovery transition are required before production cutover.
+Existing users without a key receive recovery_setup_required=true from GET /me and must enroll using their current password and 2FA. The frontend prompts enrollment and also offers it in Security & devices. Keep the legacy Shamir data during transition; it is not converted into new keys. POST /auth/recover remains 501 and does not accept old shares. The Go production cutover is complete. Existing accounts that have not enrolled still need to create a recovery key using their current credentials; keep this enrollment path available. See [completed migration](migration-v1.md) and [Python retirement](python-retirement.md).
 
 Migration 000012 is additive. Apply it before deploying the updated API. Keep recovery keys out of logs, browser storage, screenshots and analytics. A failed response after a committed reset may require signing in with the new password; the rotated key cannot be retrieved from the server.
 
