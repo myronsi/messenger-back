@@ -690,9 +690,7 @@ func (s *Service) Delete(ctx context.Context, userID, chatID int64) error {
 	if err := s.d.Unread.Forget(ctx, chatID, members...); err != nil {
 		s.d.Log.WarnContext(ctx, "forget unread", "error", err)
 	}
-	if err := s.d.Members.Invalidate(ctx, chatID); err != nil {
-		s.d.Log.WarnContext(ctx, "invalidate members", "error", err)
-	}
+	stale := s.invalidateMembers(context.WithoutCancel(ctx), chatID)
 	s.emit(ctx, events.Event{Type: events.ChatDeleted, ChatID: chatID, ActorID: userID, At: time.Now()})
 	if s.d.DeleteFile != nil {
 		for _, k := range keys {
@@ -701,7 +699,7 @@ func (s *Service) Delete(ctx context.Context, userID, chatID int64) error {
 			}
 		}
 	}
-	return nil
+	return stale
 }
 
 // ---------------------------------------------------------------- pins and reading

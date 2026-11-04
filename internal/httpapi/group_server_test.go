@@ -54,6 +54,25 @@ func roles(g map[string]any) map[string]string {
 	return out
 }
 
+func TestRemovalFailsWhileTheMembersCacheIsStale(t *testing.T) {
+	e := newChatEnv(t)
+	owner, bob := e.register(t, "owner"), e.register(t, "bob")
+	bobID := e.uid(t, bob)
+	r := e.do(t, request{method: http.MethodPost, path: "/groups", token: owner.access, body: map[string]any{"name": "Team", "member_ids": []string{bobID}}})
+	if r.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", r.Code, r.Body)
+	}
+	gid := r.json()["id"].(string)
+	e.cacheDown.Store(true)
+	if r := e.do(t, request{method: http.MethodDelete, path: "/groups/" + gid + "/participants/" + bobID, token: owner.access}); r.Code != http.StatusServiceUnavailable {
+		t.Fatalf("removal with a stale cache: %d %s", r.Code, r.Body)
+	}
+	e.cacheDown.Store(false)
+	if r := e.do(t, request{method: http.MethodGet, path: "/groups/" + gid, token: bob.access}); r.Code != http.StatusNotFound {
+		t.Fatalf("bob was still removed in the database: %d", r.Code)
+	}
+}
+
 func TestGroupsOverHTTP(t *testing.T) {
 	e := newChatEnv(t)
 	owner, bob, carol, dave, erin := e.register(t, "owner"), e.register(t, "bob"), e.register(t, "carol"), e.register(t, "dave"), e.register(t, "erin")

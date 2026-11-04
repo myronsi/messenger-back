@@ -273,11 +273,12 @@ func (s *Service) publishGroup(ctx context.Context, n GroupNotifier, chatID int6
 }
 
 // membership finishes a membership change: the cache, unread counters and events.
-func (s *Service) membership(ctx context.Context, chatID, actor int64, added, removed []int64) {
+func (s *Service) membership(ctx context.Context, chatID, actor int64, added, removed []int64) error {
 	// The change is committed: the cleanup must happen even if the client went away.
 	ctx = context.WithoutCancel(ctx)
-	if err := s.d.Members.Invalidate(ctx, chatID); err != nil {
-		s.d.Log.WarnContext(ctx, "invalidate members", "error", err)
+	stale := s.invalidateMembers(ctx, chatID)
+	if len(removed) == 0 {
+		stale = nil
 	}
 	for _, uid := range added {
 		s.emit(ctx, events.Event{Type: events.ChatMemberAdded, ChatID: chatID, UserID: uid, ActorID: actor})
@@ -291,6 +292,19 @@ func (s *Service) membership(ctx context.Context, chatID, actor int64, added, re
 			s.emit(ctx, events.Event{Type: events.ChatMemberRemoved, ChatID: chatID, UserID: uid, ActorID: actor})
 		}
 	}
+	return stale
+}
+
+func (s *Service) invalidateMembers(ctx context.Context, chatID int64) error {
+	var err error
+	for attempt := range 3 {
+		if err = s.d.Members.Invalidate(ctx, chatID); err == nil {
+			return nil
+		}
+		time.Sleep(time.Duration(attempt+1) * 25 * time.Millisecond)
+	}
+	s.d.Log.ErrorContext(ctx, "members cache not invalidated", "chat_id", chatID, "error", err)
+	return unavailable(err)
 }
 
 // ListGroups is the chat list of the user's groups.
@@ -350,7 +364,7 @@ func (s *Service) CreateGroup(ctx context.Context, owner int64, name string, des
 	if err != nil {
 		return GroupView{}, unavailable(err)
 	}
-	s.membership(ctx, chat.ID, owner, append([]int64{owner}, direct...), nil)
+	_ = s.membership(ctx, chat.ID, owner, append([]int64{owner}, direct...), nil)
 	for _, uid := range invited {
 		s.invite(ctx, chat.ID, owner, uid)
 	}
@@ -409,20 +423,17 @@ func (s *Service) DeleteGroup(ctx context.Context, userID, chatID int64) error {
 	if err != nil {
 		return groupError(err)
 	}
-	s.removedChat(ctx, chatID, userID, members, keys)
-	return nil
+	return s.removedChat(ctx, chatID, userID, members, keys)
 }
 
 // removedChat cleans up after a deleted chat: sockets, counters, cache, the worker and files.
-func (s *Service) removedChat(ctx context.Context, chatID, actor int64, members []int64, keys []string) {
+func (s *Service) removedChat(ctx context.Context, chatID, actor int64, members []int64, keys []string) error {
 	ctx = context.WithoutCancel(ctx)
 	s.d.Notifier.ChatRemoved(ctx, chatID, members)
 	if err := s.d.Unread.Forget(ctx, chatID, members...); err != nil {
 		s.d.Log.WarnContext(ctx, "forget unread", "error", err)
 	}
-	if err := s.d.Members.Invalidate(ctx, chatID); err != nil {
-		s.d.Log.WarnContext(ctx, "invalidate members", "error", err)
-	}
+	stale := s.invalidateMembers(ctx, chatID)
 	s.emit(ctx, events.Event{Type: events.ChatDeleted, ChatID: chatID, ActorID: actor, At: time.Now()})
 	if s.d.DeleteFile != nil {
 		for _, k := range keys {
@@ -431,6 +442,7 @@ func (s *Service) removedChat(ctx context.Context, chatID, actor int64, members 
 			}
 		}
 	}
+	return stale
 }
 
 // SetGroupAvatar sets the group's avatar to an image the caller uploaded (purpose avatar).
@@ -478,7 +490,7 @@ func (s *Service) AddMember(ctx context.Context, userID, chatID, target int64) (
 		if err := s.d.Store.Chats().AddMemberAs(ctx, chatID, userID, target); err != nil {
 			return GroupView{}, groupError(err)
 		}
-		s.membership(ctx, chatID, userID, []int64{target}, nil)
+		_ = s.membership(ctx, chatID, userID, []int64{target}, nil)
 		s.changed(ctx, chatID, target)
 	default:
 		return GroupView{}, ErrForbidden
@@ -501,9 +513,9 @@ func (s *Service) RemoveMember(ctx context.Context, userID, chatID, target int64
 		}
 		return groupError(err)
 	}
-	s.membership(ctx, chatID, userID, nil, []int64{target})
+	err := s.membership(ctx, chatID, userID, nil, []int64{target})
 	s.changed(ctx, chatID)
-	return nil
+	return err
 }
 
 // Leave takes the user out of the group; the owner has to transfer ownership first.
@@ -511,9 +523,9 @@ func (s *Service) Leave(ctx context.Context, userID, chatID int64) error {
 	if err := s.d.Store.Chats().RemoveMemberAs(ctx, chatID, userID, userID); err != nil {
 		return groupError(err)
 	}
-	s.membership(ctx, chatID, userID, nil, []int64{userID})
+	err := s.membership(ctx, chatID, userID, nil, []int64{userID})
 	s.changed(ctx, chatID)
-	return nil
+	return err
 }
 
 // SetRole makes a member an admin or a member again.
@@ -560,7 +572,7 @@ func (s *Service) approveInvite(ctx context.Context, userID, requestID int64) (V
 		return View{}, requestError(err)
 	}
 	if joined {
-		s.membership(ctx, *req.ChatID, req.RequesterID, []int64{userID}, nil)
+		_ = s.membership(ctx, *req.ChatID, req.RequesterID, []int64{userID}, nil)
 		s.changed(ctx, *req.ChatID, userID)
 	}
 	return s.Get(ctx, userID, *req.ChatID)

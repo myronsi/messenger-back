@@ -3,11 +3,13 @@ package httpapi
 import (
 	"bytes"
 	"context"
+	"errors"
 	"math/rand/v2"
 	"net/http"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -71,10 +73,23 @@ func (c *chatEvents) RequestCreated(_ context.Context, r chats.RequestView) {
 
 type chatEnv struct {
 	*authEnv
-	tokens *notifications.ActionTokens
-	store  *postgres.Store
-	events *chatEvents
-	index  *search.Index
+	tokens    *notifications.ActionTokens
+	store     *postgres.Store
+	events    *chatEvents
+	index     *search.Index
+	cacheDown *atomic.Bool
+}
+
+type flakyMembers struct {
+	*redis.Members
+	down *atomic.Bool
+}
+
+func (m flakyMembers) Invalidate(ctx context.Context, chatIDs ...int64) error {
+	if m.down.Load() {
+		return errors.New("redis is away")
+	}
+	return m.Members.Invalidate(ctx, chatIDs...)
 }
 
 func newChatEnv(t *testing.T) *chatEnv { return newChatEnvWith(t, false) }
@@ -146,7 +161,8 @@ func newChatEnvWith(t *testing.T, withSearch bool) *chatEnv {
 	ev := &chatEvents{created: map[int64][]int64{}, updated: map[int64][]int64{}, removed: map[int64][]int64{},
 		groupCreated: map[int64][]int64{}, groupUpdates: map[int64]int{}}
 	tokens := notifications.NewActionTokens("test-secret")
-	svc := chats.New(chats.Deps{Store: store, Messages: repo, Unread: unread, Members: members, Sender: msgs, Directory: dir, Notifier: ev})
+	cacheDown := new(atomic.Bool)
+	svc := chats.New(chats.Deps{Store: store, Messages: repo, Unread: unread, Members: flakyMembers{members, cacheDown}, Sender: msgs, Directory: dir, Notifier: ev})
 	api := NewServer(NewAuthServer(AuthOptions{Service: authSvc, Log: log, BasePath: apiBase, CookieSecure: true}), nil).
 		WithAccount(NewAccountServer(AccountOptions{Store: store, Directory: dir, Deleter: authSvc, BasePath: apiBase, Log: log})).
 		WithChats(NewChatServer(ChatOptions{Service: svc, BasePath: apiBase, Log: log})).
@@ -160,7 +176,7 @@ func newChatEnvWith(t *testing.T, withSearch bool) *chatEnv {
 			API:           api,
 			Authenticator: authSvc,
 		})},
-		store: store, events: ev, index: index, tokens: tokens,
+		store: store, events: ev, index: index, tokens: tokens, cacheDown: cacheDown,
 	}
 }
 
