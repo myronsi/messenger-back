@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.5.1-alpha.1...v1.6.0-alpha.1) (2026-11-04)
+
+
+### Features
+
+* **media:** serve a 1600 px display copy of large images ([#155](https://github.com/myronsi/messenger-back/issues/155)) ([a0cdc84](https://github.com/myronsi/messenger-back/commit/a0cdc846fef154fc8512f9f3943cddcb2101f878))
+
 ## [1.5.1-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.5.0-alpha.1...v1.5.1-alpha.1) (2026-11-04)
 
 
