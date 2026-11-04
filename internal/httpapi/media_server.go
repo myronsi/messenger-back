@@ -324,7 +324,7 @@ func (m *MediaServer) GetAttachmentContent(w http.ResponseWriter, r *http.Reques
 	if thumb {
 		etag += "-thumb"
 	}
-	m.serve(w, r, d, cacheForever, etag)
+	m.serve(w, r, d, "private, max-age=3600", etag)
 }
 
 // SetMyAvatar implements PUT /me/avatar.

@@ -2,6 +2,12 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.10
+
+- `GET /attachments/{attachment_id}/content` is cached for an hour again (`private, max-age=3600`) instead of a
+  year, so a file is not kept in caches long after its message is deleted. Versioned avatar URLs keep the
+  year-long cache.
+
 ## 2.1.0-alpha.9
 
 - Privacy exceptions apply to every value of avatar, profile and presence visibility, not only to `*_except`:
