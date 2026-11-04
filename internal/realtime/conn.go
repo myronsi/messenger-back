@@ -23,6 +23,7 @@ type conn struct {
 	sessionID uuid.UUID
 
 	send chan []byte
+	in   chan inbound
 	// done is closed when the connection is finished.
 	done      chan struct{}
 	closeOnce sync.Once
@@ -32,6 +33,13 @@ type conn struct {
 	flushMu        sync.Mutex
 	flushThenClose *closeReason
 }
+
+type inbound struct {
+	ev    clientEvent
+	reply []byte
+}
+
+const eventQueue = 64
 
 type closeReason struct {
 	code   websocket.StatusCode
@@ -43,7 +51,7 @@ var _ Conn = (*conn)(nil)
 func newConn(g *Gateway, ws *websocket.Conn, userID int64, sessionID uuid.UUID) *conn {
 	return &conn{
 		gw: g, ws: ws, userID: userID, sessionID: sessionID,
-		send: make(chan []byte, g.o.SendBuffer), done: make(chan struct{}),
+		send: make(chan []byte, g.o.SendBuffer), in: make(chan inbound, eventQueue), done: make(chan struct{}),
 	}
 }
 
@@ -117,6 +125,7 @@ func (c *conn) run() {
 	var wg sync.WaitGroup
 	wg.Go(c.writeLoop)
 	wg.Go(c.pingLoop)
+	wg.Go(c.handleLoop)
 	c.readLoop()
 	_ = c.Close(int(websocket.StatusNormalClosure), "")
 	wg.Wait()
@@ -191,18 +200,49 @@ func (c *conn) readLoop() {
 			return
 		}
 		if typ != websocket.MessageText {
-			c.reply(c.errorEvent("", 0, "invalid_request", "events are JSON text frames"))
+			if !c.queue(inbound{reply: c.errorEvent("", 0, "invalid_request", "events are JSON text frames")}) {
+				return
+			}
 			continue
 		}
 		ev, err := decodeClientEvent(frame)
 		if err != nil {
 			var pe *protocolError
-			if errors.As(err, &pe) {
-				c.reply(c.errorEvent(pe.ClientTempID, pe.ChatID, pe.Code, pe.Msg))
+			if errors.As(err, &pe) && !c.queue(inbound{reply: c.errorEvent(pe.ClientTempID, pe.ChatID, pe.Code, pe.Msg)}) {
+				return
 			}
 			continue
 		}
-		c.handle(ev)
+		if !c.queue(inbound{ev: ev}) {
+			return
+		}
+	}
+}
+
+func (c *conn) queue(item inbound) bool {
+	select {
+	case <-c.done:
+		return false
+	case c.in <- item:
+		return true
+	default:
+		_ = c.Close(int(websocket.StatusTryAgainLater), "too many events")
+		return false
+	}
+}
+
+func (c *conn) handleLoop() {
+	for {
+		select {
+		case <-c.done:
+			return
+		case item := <-c.in:
+			if item.reply != nil {
+				c.reply(item.reply)
+				continue
+			}
+			c.handle(item.ev)
+		}
 	}
 }
 

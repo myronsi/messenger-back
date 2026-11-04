@@ -76,6 +76,7 @@ type env struct {
 	node    int
 	// ping is the ping (and session re-check) interval of new instances.
 	ping time.Duration
+	wrap func(Limiter) Limiter
 }
 
 func newEnv(t *testing.T) *env {
@@ -143,9 +144,13 @@ func (e *env) instance(name string) *instance {
 	})
 	hub := NewHub(log, nil)
 	in.hub = hub
+	var limiter Limiter = redis.NewRateLimiter(rdb, e.prefix)
+	if e.wrap != nil {
+		limiter = e.wrap(limiter)
+	}
 	in.gw, err = New(Options{
 		Auth: e.tickets, Messages: in.svc, Fanout: in.fanout, Bus: bus, Presence: in.presence,
-		Limiter: redis.NewRateLimiter(rdb, e.prefix), LastSeen: e.pg.Users(), Hub: hub,
+		Limiter: limiter, LastSeen: e.pg.Users(), Hub: hub,
 		MinClientAPIVersion: "2.0.0-alpha.1", PingInterval: e.ping, Log: log,
 	})
 	if err != nil {
@@ -720,3 +725,56 @@ func (s *syncBuffer) Write(p []byte) (int, error) {
 	return s.b.Write(p)
 }
 func (s *syncBuffer) String() string { s.mu.Lock(); defer s.mu.Unlock(); return s.b.String() }
+
+type stalledLimiter struct {
+	Limiter
+	release chan struct{}
+}
+
+func (l stalledLimiter) Allow(ctx context.Context, r redis.Rate, subject string) (redis.Result, error) {
+	if r.Name == RateOther.Name {
+		<-l.release
+	}
+	return l.Limiter.Allow(ctx, r, subject)
+}
+
+func TestSlowEventsDoNotStallTheReader(t *testing.T) {
+	e := newEnv(t)
+	stall := stalledLimiter{release: make(chan struct{})}
+	var released sync.Once
+	release := func() { released.Do(func() { close(stall.release) }) }
+	t.Cleanup(release)
+	e.wrap = func(l Limiter) Limiter { stall.Limiter = l; return stall }
+	a := e.instance("a")
+	alice, bob := e.user("alice"), e.user("bob")
+	chat, _, _ := e.pg.Chats().CreateDirect(context.Background(), alice, bob)
+	c := e.online(a, alice)
+	read := map[string]any{"type": "read", "client_temp_id": "r", "chat_id": fmt.Sprint(chat.ID), "data": map[string]any{"message_id": "1"}}
+	c.send(read)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := c.ws.Ping(ctx); err != nil {
+		t.Fatalf("the server must answer pings while an event is handled: %v", err)
+	}
+
+	frame, _ := json.Marshal(read)
+	for range eventQueue + 1 {
+		if c.ws.Write(ctx, websocket.MessageText, frame) != nil {
+			break
+		}
+	}
+	if code := c.closeCode(); code != websocket.StatusTryAgainLater {
+		t.Fatalf("close code %d", code)
+	}
+	release()
+	wctx, wcancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer wcancel()
+	done := make(chan struct{})
+	go func() { a.gw.conns.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-wctx.Done():
+		t.Fatal("the connection's goroutines did not finish after it closed")
+	}
+}

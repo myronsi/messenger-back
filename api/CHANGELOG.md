@@ -9,6 +9,7 @@ Contract changes only. The backend changelog is `CHANGELOG.md` in the repository
   year-long cache.
 - `POST /chats/{chat_id}/messages/delete` with `scope` everyone treats messages that are already deleted for
   everyone as done (`204` instead of `404`), so a retry after a partial failure deletes the rest.
+- WebSocket: a connection with more than 64 client events waiting to be handled is closed with `1013`.
 
 ## 2.1.0-alpha.9
 

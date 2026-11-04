@@ -37,7 +37,8 @@ borrows one from the pool briefly.
 Every frame is decoded strictly (unknown fields, wrong types and oversized values are refused with
 `validation_failed`, exactly as the JSON Schemas of the contract; a test runs every example through the decoder).
 Frames are limited to 32 KiB. Events of one connection are handled in order, each within 10 s, and answered with
-`ack` or `error` carrying the `client_temp_id`; `typing` is never answered.
+`ack` or `error` carrying the `client_temp_id`; `typing` is never answered. They are handled apart from the reader,
+so pongs are still read while an event is slow; a connection with more than 64 events waiting is closed with `1013`.
 
 Limits per user, across connections and instances (Redis GCRA): 30 messages (and resends) per 10 s with bursts of
 20, 60 other actions per 10 s, one typing indicator per second (excess ones are dropped silently).
