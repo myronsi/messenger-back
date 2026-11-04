@@ -516,7 +516,7 @@ func (s *Service) permission(ctx context.Context, requester, recipient int64) (a
 	case postgres.VisibleEveryone:
 		return true, false, nil
 	case postgres.VisibleSharedChats:
-		shared, err := social.SharedChatPartners(ctx, recipient, []int64{requester})
+		shared, err := social.SharedChatViewers(ctx, recipient, []int64{requester})
 		return shared[requester], false, err
 	case postgres.WaitApproval:
 		return false, true, nil

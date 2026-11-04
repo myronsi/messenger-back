@@ -110,7 +110,7 @@ func (s *Service) invitePermission(ctx context.Context, actor, target int64) (al
 	case effect == postgres.EffectDeny:
 		return false, false, nil
 	case v == postgres.VisibleSharedChats:
-		shared, err := social.SharedChatPartners(ctx, target, []int64{actor})
+		shared, err := social.SharedChatViewers(ctx, target, []int64{actor})
 		return shared[actor], false, err
 	default:
 		return users.Visible(v, "", false), false, nil

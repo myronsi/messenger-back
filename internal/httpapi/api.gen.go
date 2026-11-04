@@ -980,6 +980,7 @@ type PrivacyExceptionsRequest struct {
 // PrivacySettings defines model for PrivacySettings.
 type PrivacySettings struct {
 	// AvatarVisibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
+	// `contacts` are the users you share a group with, or a direct chat that you opened or read in.
 	AvatarVisibility Visibility          `json:"avatar_visibility"`
 	DirectMessages   DirectMessagePolicy `json:"direct_messages"`
 
@@ -988,9 +989,11 @@ type PrivacySettings struct {
 	GroupInvites GroupInvitePolicy `json:"group_invites"`
 
 	// PresenceVisibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
+	// `contacts` are the users you share a group with, or a direct chat that you opened or read in.
 	PresenceVisibility Visibility `json:"presence_visibility"`
 
 	// ProfileVisibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
+	// `contacts` are the users you share a group with, or a direct chat that you opened or read in.
 	ProfileVisibility   Visibility       `json:"profile_visibility"`
 	ReadReceiptsEnabled bool             `json:"read_receipts_enabled"`
 	SearchVisibility    SearchVisibility `json:"search_visibility"`
@@ -1269,14 +1272,17 @@ type UpdateMeRequest struct {
 // UpdatePrivacySettingsRequest defines model for UpdatePrivacySettingsRequest.
 type UpdatePrivacySettingsRequest struct {
 	// AvatarVisibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
+	// `contacts` are the users you share a group with, or a direct chat that you opened or read in.
 	AvatarVisibility *Visibility          `json:"avatar_visibility,omitempty"`
 	DirectMessages   *DirectMessagePolicy `json:"direct_messages,omitempty"`
 	GroupInvites     *GroupInvitePolicy   `json:"group_invites,omitempty"`
 
 	// PresenceVisibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
+	// `contacts` are the users you share a group with, or a direct chat that you opened or read in.
 	PresenceVisibility *Visibility `json:"presence_visibility,omitempty"`
 
 	// ProfileVisibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
+	// `contacts` are the users you share a group with, or a direct chat that you opened or read in.
 	ProfileVisibility   *Visibility       `json:"profile_visibility,omitempty"`
 	ReadReceiptsEnabled *bool             `json:"read_receipts_enabled,omitempty"`
 	SearchVisibility    *SearchVisibility `json:"search_visibility,omitempty"`
@@ -1342,6 +1348,7 @@ type UserPage struct {
 type Username = string
 
 // Visibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
+// `contacts` are the users you share a group with, or a direct chat that you opened or read in.
 type Visibility string
 
 // WebSocketTicket defines model for WebSocketTicket.

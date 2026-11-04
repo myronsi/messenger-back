@@ -12,6 +12,8 @@ Contract changes only. The backend changelog is `CHANGELOG.md` in the repository
 - WebSocket: a connection with more than 64 client events waiting to be handled is closed with `1013`.
 - `GET /users/{user_id}` and `GET /usernames/{username}` answer `404` for a user whose `search_visibility` hides
   them from the current user, unless the two share a chat, and are rate limited per user (`429`).
+- `contacts` (and `shared_chats`) count a direct chat only once the user opened it or read a message in it, so
+  opening an empty chat with someone does not make you their contact. Groups count as before.
 
 ## 2.1.0-alpha.9
 

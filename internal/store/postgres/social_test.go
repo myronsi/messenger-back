@@ -86,10 +86,31 @@ func TestSocial(t *testing.T) {
 	}
 
 	chat, _, _ := s.Chats().CreateDirect(ctx, alice.ID, bob.ID)
-	if shared, _ := social.SharedChatPartners(ctx, alice.ID, []int64{bob.ID, carol.ID}); !shared[bob.ID] || shared[carol.ID] {
-		t.Fatalf("shared chats: %v", shared)
+	if shared, _ := social.SharedChatPartners(ctx, bob.ID, []int64{alice.ID, carol.ID}); !shared[alice.ID] || shared[carol.ID] {
+		t.Fatalf("alice opened the chat and counts as bob's contact: %v", shared)
 	}
-	if chats, _ := social.ChatIDs(ctx, alice.ID); len(chats) != 1 || chats[0] != chat.ID {
+	if shared, _ := social.SharedChatPartners(ctx, alice.ID, []int64{bob.ID}); shared[bob.ID] {
+		t.Fatalf("bob has not taken part in the chat alice opened: %v", shared)
+	}
+	if shared, _ := social.SharedChatViewers(ctx, bob.ID, []int64{alice.ID}); shared[alice.ID] {
+		t.Fatalf("viewers of bob: %v", shared)
+	}
+	if _, err := s.Chats().MarkRead(ctx, chat.ID, bob.ID, 5); err != nil {
+		t.Fatal(err)
+	}
+	if shared, _ := social.SharedChatPartners(ctx, alice.ID, []int64{bob.ID}); !shared[bob.ID] {
+		t.Fatalf("bob read in the chat: %v", shared)
+	}
+	if shared, _ := social.SharedChatViewers(ctx, bob.ID, []int64{alice.ID, carol.ID}); !shared[alice.ID] || shared[carol.ID] {
+		t.Fatalf("viewers of bob after reading: %v", shared)
+	}
+	if _, err := s.Chats().CreateGroup(ctx, NewGroup{OwnerID: carol.ID, Name: "g", MemberIDs: []int64{alice.ID}}); err != nil {
+		t.Fatal(err)
+	}
+	if shared, _ := social.SharedChatViewers(ctx, alice.ID, []int64{carol.ID}); !shared[carol.ID] {
+		t.Fatalf("groups count without taking part: %v", shared)
+	}
+	if chats, _ := social.ChatIDs(ctx, bob.ID); len(chats) != 1 || chats[0] != chat.ID {
 		t.Fatalf("chat ids: %v", chats)
 	}
 }

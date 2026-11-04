@@ -26,7 +26,7 @@ The profile, privacy, blocking, contact-name and user lookup endpoints (`interna
 | `search_visibility` | `everyone`, `nobody` |
 | `read_receipts_enabled` | `true`, `false` |
 
-The contract's `contacts` means "people you share a chat with" (`shared_chats` in the schema). `PUT /me/privacy/exceptions/{setting}/{allow|deny}` replaces one exception list: `allow` matters for `nobody_except`, `deny` for `everyone_except`. A user can be on only one list per setting, so putting them on one removes them from the other. Unknown user IDs are rejected.
+The contract's `contacts` means "people you share a chat with" (`shared_chats` in the schema): a group, or a direct chat that you opened yourself or read a message in. A direct chat someone else opened with you, and that you never read in, does not make them your contact. `PUT /me/privacy/exceptions/{setting}/{allow|deny}` replaces one exception list; the lists apply to every value of the setting. A user can be on only one list per setting, so putting them on one removes them from the other. Unknown user IDs are rejected.
 
 ## Blocking and contact names
 

@@ -2547,7 +2547,9 @@ components:
           description: A code of the authenticator app, or an unused recovery code.
     Visibility:
       type: string
-      description: Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
+      description: |
+        Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
+        `contacts` are the users you share a group with, or a direct chat that you opened or read in.
       enum: [everyone, contacts, everyone_except, nobody_except, nobody]
     DirectMessagePolicy:
       type: string

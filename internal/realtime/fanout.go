@@ -363,7 +363,7 @@ func (f *Fanout) Presence(ctx context.Context, c redis.Change, lastSeen time.Tim
 		f.log.WarnContext(ctx, "presence watchers", "error", err)
 		return
 	}
-	visible, err := f.dir.PresenceVisibleTo(ctx, c.UserID, watchers, true)
+	visible, err := f.dir.PresenceVisibleTo(ctx, c.UserID, watchers, false)
 	if err != nil {
 		f.log.WarnContext(ctx, "presence visibility", "error", err)
 		return

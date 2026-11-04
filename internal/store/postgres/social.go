@@ -107,8 +107,8 @@ type SocialRepository interface {
 	// ContactNamesFor returns the names that each owner gave the target.
 	ContactNamesFor(ctx context.Context, ownerIDs []int64, targetID int64) (map[int64]string, error)
 
-	// SharedChatPartners returns which of the users share at least one chat with the viewer.
 	SharedChatPartners(ctx context.Context, viewerID int64, userIDs []int64) (map[int64]bool, error)
+	SharedChatViewers(ctx context.Context, userID int64, viewerIDs []int64) (map[int64]bool, error)
 	// ChatIDs returns the chats of the user.
 	ChatIDs(ctx context.Context, userID int64) ([]int64, error)
 }
@@ -350,6 +350,23 @@ func (r socialRepo) ContactNamesFor(ctx context.Context, ownerIDs []int64, targe
 	}
 	for _, c := range rows {
 		out[c.OwnerID] = c.DisplayName
+	}
+	return out, nil
+}
+
+func (r socialRepo) SharedChatViewers(ctx context.Context, userID int64, viewerIDs []int64) (map[int64]bool, error) {
+	out := make(map[int64]bool)
+	if len(viewerIDs) == 0 {
+		return out, nil
+	}
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	rows, err := r.s.q.SharedChatViewers(ctx, sqlcdb.SharedChatViewersParams{UserID: userID, ViewerIds: viewerIDs})
+	if err != nil {
+		return nil, mapError(err)
+	}
+	for _, id := range rows {
+		out[id] = true
 	}
 	return out, nil
 }

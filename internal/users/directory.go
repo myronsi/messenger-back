@@ -213,7 +213,7 @@ func (d *Directory) ToViewers(ctx context.Context, subject int64, viewers []int6
 	}
 	shared := map[int64]bool{}
 	if !sharesChat {
-		if shared, err = social.SharedChatPartners(ctx, subject, viewers); err != nil {
+		if shared, err = social.SharedChatViewers(ctx, subject, viewers); err != nil {
 			return nil, err
 		}
 	}
@@ -265,7 +265,7 @@ func (d *Directory) PresenceVisibleTo(ctx context.Context, subject int64, viewer
 	}
 	shared := map[int64]bool{}
 	if !sharesChat {
-		if shared, err = social.SharedChatPartners(ctx, subject, viewers); err != nil {
+		if shared, err = social.SharedChatViewers(ctx, subject, viewers); err != nil {
 			return nil, err
 		}
 	}
