@@ -290,11 +290,13 @@ SELECT k::text FROM (
     SELECT storage_key AS k FROM attachments WHERE chat_id = ANY($1::bigint[])
     UNION ALL
     SELECT thumbnail_key FROM attachments WHERE chat_id = ANY($1::bigint[]) AND thumbnail_key IS NOT NULL
+    UNION ALL
+    SELECT storage_key || '.display.jpg' FROM attachments WHERE chat_id = ANY($1::bigint[]) AND width IS NOT NULL
 ) keys
 ORDER BY k
 `
 
-// The stored objects of the chats' v1 attachments: files and thumbnails.
+// The stored objects of the chats' v1 attachments: files, thumbnails and display copies of images.
 func (q *Queries) ListAttachmentKeysOfChats(ctx context.Context, chatIds []int64) ([]string, error) {
 	rows, err := q.db.Query(ctx, listAttachmentKeysOfChats, chatIds)
 	if err != nil {

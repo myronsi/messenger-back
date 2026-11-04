@@ -11,6 +11,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -117,17 +119,7 @@ func TestDisplayCopyOfLargeImages(t *testing.T) {
 	root := t.TempDir()
 	disk, _ := media.NewDisk(root)
 	svc := media.NewService(media.Options{Storage: disk, Attachments: pg.Attachments(), Prober: media.NewProber("/nonexistent", "/nonexistent")})
-	upload := func(w, h int) postgres.Attachment {
-		var b bytes.Buffer
-		if err := png.Encode(&b, image.NewRGBA(image.Rect(0, 0, w, h))); err != nil {
-			t.Fatal(err)
-		}
-		a, err := svc.Upload(ctx, media.Upload{UploaderID: u.ID, Purpose: media.PurposeMessage, Filename: "photo.png", Body: &b})
-		if err != nil {
-			t.Fatal(err)
-		}
-		return a
-	}
+	upload := func(w, h int) postgres.Attachment { return uploadPNG(t, svc, u.ID, w, h) }
 	display := func(a postgres.Attachment) (string, image.Config) {
 		d, err := svc.Open(ctx, u.ID, a.ID, media.VariantDisplay)
 		if err != nil {
@@ -164,6 +156,174 @@ func TestDisplayCopyOfLargeImages(t *testing.T) {
 	}
 	if ctype, cfg := display(small); ctype != "image/png" || cfg.Width != 800 {
 		t.Fatalf("small image: %s %dx%d", ctype, cfg.Width, cfg.Height)
+	}
+}
+
+func uploadPNG(t *testing.T, svc *media.Service, uploaderID int64, w, h int) postgres.Attachment {
+	t.Helper()
+	var b bytes.Buffer
+	if err := png.Encode(&b, image.NewRGBA(image.Rect(0, 0, w, h))); err != nil {
+		t.Fatal(err)
+	}
+	a, err := svc.Upload(context.Background(), media.Upload{UploaderID: uploaderID, Purpose: media.PurposeMessage, Filename: "photo.png", Body: &b})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return a
+}
+
+type hookedStorage struct {
+	media.Storage
+	onGet     func(key string, err error)
+	beforePut func(key string)
+	signErr   error
+	open      atomic.Int32
+}
+
+func (h *hookedStorage) Get(ctx context.Context, key string) (media.Object, error) {
+	obj, err := h.Storage.Get(ctx, key)
+	if h.onGet != nil {
+		h.onGet(key, err)
+	}
+	if err == nil {
+		h.open.Add(1)
+		obj.Body = closeCounter{obj.Body, &h.open}
+	}
+	return obj, err
+}
+
+func (h *hookedStorage) Put(ctx context.Context, key string, r io.Reader, size int64, contentType string) error {
+	if h.beforePut != nil {
+		h.beforePut(key)
+	}
+	return h.Storage.Put(ctx, key, r, size, contentType)
+}
+
+func (h *hookedStorage) SignedURL(ctx context.Context, key string, ttl time.Duration, contentType, disposition string) (string, error) {
+	if h.signErr != nil {
+		return "", h.signErr
+	}
+	return h.Storage.SignedURL(ctx, key, ttl, contentType, disposition)
+}
+
+type closeCounter struct {
+	io.ReadCloser
+	open *atomic.Int32
+}
+
+func (c closeCounter) Close() error {
+	c.open.Add(-1)
+	return c.ReadCloser.Close()
+}
+
+func TestConcurrentDisplayRequestsDecodeTheOriginalOnce(t *testing.T) {
+	pg := testenv.Postgres(t)
+	ctx := context.Background()
+	u, _ := pg.Users().Register(ctx, "photographer", "P", "hash")
+	disk, _ := media.NewDisk(t.TempDir())
+	store := &hookedStorage{Storage: disk}
+	svc := media.NewService(media.Options{Storage: store, Attachments: pg.Attachments(), Prober: media.NewProber("/nonexistent", "/nonexistent"), ImageWorkers: 1})
+	a := uploadPNG(t, svc, u.ID, 2400, 1200)
+	if err := disk.Delete(ctx, postgres.DisplayKey(a.StorageKey)); err != nil {
+		t.Fatal(err)
+	}
+
+	const requests = 3
+	var misses, originals atomic.Int32
+	store.onGet = func(key string, err error) {
+		switch {
+		case key == postgres.DisplayKey(a.StorageKey) && errors.Is(err, media.ErrNotFound):
+			misses.Add(1)
+		case key == a.StorageKey:
+			originals.Add(1)
+			for deadline := time.Now().Add(5 * time.Second); misses.Load() < requests && time.Now().Before(deadline); {
+				time.Sleep(5 * time.Millisecond)
+			}
+		}
+	}
+	var wg sync.WaitGroup
+	for range requests {
+		wg.Go(func() {
+			d, err := svc.Open(ctx, u.ID, a.ID, media.VariantDisplay)
+			if err != nil || d.ContentType != "image/jpeg" {
+				t.Errorf("display: %q %v", d.ContentType, err)
+				return
+			}
+			_ = d.Object.Body.Close()
+		})
+	}
+	wg.Wait()
+	if n := originals.Load(); n != 1 {
+		t.Fatalf("the original was read %d times", n)
+	}
+}
+
+func TestDisplayCopyReadsStoredOriginalsAboveTheUploadLimit(t *testing.T) {
+	pg := testenv.Postgres(t)
+	ctx := context.Background()
+	u, _ := pg.Users().Register(ctx, "photographer", "P", "hash")
+	disk, _ := media.NewDisk(t.TempDir())
+	a := uploadPNG(t, media.NewService(media.Options{Storage: disk, Attachments: pg.Attachments()}), u.ID, 2400, 1200)
+	if err := disk.Delete(ctx, postgres.DisplayKey(a.StorageKey)); err != nil {
+		t.Fatal(err)
+	}
+	const limit = 100
+	if a.Size <= limit {
+		t.Fatalf("the stored original has only %d bytes", a.Size)
+	}
+	svc := media.NewService(media.Options{Storage: disk, Attachments: pg.Attachments(), Limits: media.Limits{Image: limit}})
+	d, err := svc.Open(ctx, u.ID, a.ID, media.VariantDisplay)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = d.Object.Body.Close()
+	if d.ContentType != "image/jpeg" {
+		t.Fatalf("served %s instead of the display copy", d.ContentType)
+	}
+}
+
+func TestDisplayCopyOfADeletedAttachmentIsNotKept(t *testing.T) {
+	pg := testenv.Postgres(t)
+	ctx := context.Background()
+	u, _ := pg.Users().Register(ctx, "photographer", "P", "hash")
+	root := t.TempDir()
+	disk, _ := media.NewDisk(root)
+	store := &hookedStorage{Storage: disk}
+	svc := media.NewService(media.Options{Storage: store, Attachments: pg.Attachments()})
+	a := uploadPNG(t, svc, u.ID, 2400, 1200)
+	if err := disk.Delete(ctx, postgres.DisplayKey(a.StorageKey)); err != nil {
+		t.Fatal(err)
+	}
+	store.beforePut = func(string) {
+		keys, err := pg.Attachments().Delete(ctx, a.ID)
+		if err != nil {
+			t.Error(err)
+		}
+		for _, k := range keys {
+			_ = disk.Delete(ctx, k)
+		}
+	}
+	if _, err := svc.Open(ctx, u.ID, a.ID, media.VariantDisplay); !errors.Is(err, media.ErrNoAccess) {
+		t.Fatalf("open: %v", err)
+	}
+	if _, err := os.Stat(root + "/" + postgres.DisplayKey(a.StorageKey)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the display copy outlived its attachment: %v", err)
+	}
+}
+
+func TestDisplayCopyIsClosedWhenSigningFails(t *testing.T) {
+	pg := testenv.Postgres(t)
+	ctx := context.Background()
+	u, _ := pg.Users().Register(ctx, "photographer", "P", "hash")
+	disk, _ := media.NewDisk(t.TempDir())
+	store := &hookedStorage{Storage: disk, signErr: errors.New("sign")}
+	svc := media.NewService(media.Options{Storage: store, Attachments: pg.Attachments(), SignedURLs: true})
+	a := uploadPNG(t, svc, u.ID, 2400, 1200)
+	if _, err := svc.Open(ctx, u.ID, a.ID, media.VariantDisplay); !errors.Is(err, store.signErr) {
+		t.Fatalf("open: %v", err)
+	}
+	if n := store.open.Load(); n != 0 {
+		t.Fatalf("%d objects left open", n)
 	}
 }
 

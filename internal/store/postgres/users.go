@@ -235,7 +235,6 @@ func (r userRepo) DeleteAccount(ctx context.Context, id int64) (DeletedAccount, 
 		if out.AttachmentKeys, err = q.ListAttachmentKeysOfChats(ctx, doomed); err != nil {
 			return err
 		}
-		out.AttachmentKeys = withDisplayKeys(out.AttachmentKeys)
 		all, err := q.ListChatIDsOfUser(ctx, id)
 		if err != nil {
 			return err

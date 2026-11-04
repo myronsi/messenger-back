@@ -327,7 +327,7 @@ func TestAttachments(t *testing.T) {
 		t.Fatalf("list: %+v, %v", list, err)
 	}
 	keys, err := s.Attachments().Delete(ctx, att.ID)
-	if err != nil || len(keys) != 1 || keys[0] != "chats/1/a.png" {
+	if err != nil || !slices.Equal(keys, []string{"chats/1/a.png", DisplayKey("chats/1/a.png")}) {
 		t.Fatalf("delete: %q, %v", keys, err)
 	}
 	if _, err := s.Attachments().Delete(ctx, uuid.New()); !errors.Is(err, ErrNotFound) {
@@ -707,8 +707,12 @@ func TestDeleteChatReturnsAttachmentKeys(t *testing.T) {
 	if _, err := s.Attachments().Create(ctx, NewAttachment{ChatID: &c.ID, StorageKey: "k/1", MimeType: "image/png", Size: 1}); err != nil {
 		t.Fatal(err)
 	}
+	w := int32(4000)
+	if _, err := s.Attachments().Create(ctx, NewAttachment{ChatID: &c.ID, StorageKey: "k/2", MimeType: "image/jpeg", Size: 1, Width: &w, Height: &w}); err != nil {
+		t.Fatal(err)
+	}
 	keys, err := s.Chats().Delete(ctx, c.ID)
-	if err != nil || len(keys) != 1 || keys[0] != "k/1" {
+	if err != nil || !slices.Equal(keys, []string{"k/1", "k/2", DisplayKey("k/2")}) {
 		t.Fatalf("delete: %v, %v", keys, err)
 	}
 	if _, err := s.Chats().Delete(ctx, c.ID); !errors.Is(err, ErrNotFound) {

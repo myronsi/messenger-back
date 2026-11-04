@@ -447,6 +447,9 @@ func (s *Service) displayObject(ctx context.Context, a postgres.Attachment) (Obj
 		return Object{}, ErrBusy
 	}
 	defer func() { <-s.images }()
+	if obj, err := s.o.Storage.Get(ctx, key); !errors.Is(err, ErrNotFound) {
+		return obj, err
+	}
 	src, err := s.o.Storage.Get(ctx, a.StorageKey)
 	if errors.Is(err, ErrNotFound) {
 		return Object{}, ErrNoAccess
@@ -454,16 +457,27 @@ func (s *Service) displayObject(ctx context.Context, a postgres.Attachment) (Obj
 	if err != nil {
 		return Object{}, err
 	}
-	data, err := io.ReadAll(io.LimitReader(src.Body, s.o.Limits.Image+1))
+	limit := max(a.Size, s.o.Limits.Image)
+	data, err := io.ReadAll(io.LimitReader(src.Body, limit+1))
 	_ = src.Body.Close()
 	if err != nil {
 		return Object{}, err
+	}
+	if int64(len(data)) > limit {
+		return Object{}, ErrImageTooLarge
 	}
 	out, err := DisplayImage(data)
 	if err != nil {
 		return Object{}, err
 	}
 	if err := s.o.Storage.Put(ctx, key, bytes.NewReader(out), int64(len(out)), "image/jpeg"); err != nil {
+		return Object{}, err
+	}
+	if _, err := s.o.Attachments.Get(ctx, a.ID); err != nil {
+		_ = s.o.Storage.Delete(context.WithoutCancel(ctx), key)
+		if errors.Is(err, postgres.ErrNotFound) {
+			return Object{}, ErrNoAccess
+		}
 		return Object{}, err
 	}
 	return Object{Body: readSeekNopCloser{bytes.NewReader(out)}, Size: int64(len(out))}, nil
@@ -485,13 +499,15 @@ func (s *Service) download(ctx context.Context, key, ctype, name string, obj *Ob
 	}
 	if s.o.SignedURLs {
 		url, err := s.o.Storage.SignedURL(ctx, key, s.o.SignedURLTTL, ctype, disposition)
+		if err != nil || url != "" {
+			if obj != nil {
+				_ = obj.Body.Close()
+			}
+		}
 		if err != nil {
 			return Download{}, err
 		}
 		if url != "" {
-			if obj != nil {
-				_ = obj.Body.Close()
-			}
 			return Download{RedirectURL: url, ContentType: ctype, Disposition: disposition}, nil
 		}
 	}
