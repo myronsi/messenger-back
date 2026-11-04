@@ -545,17 +545,17 @@ func (s *Service) DeleteMany(ctx context.Context, userID, chatID int64, messageI
 		return err
 	}
 	moderatorChecked := false
+	done := map[int64]bool{}
 	for _, messageID := range messageIDs {
 		m, err := s.message(ctx, chatID, messageID)
 		if err != nil {
 			return err
 		}
 		if scope == ScopeEveryone {
-			if visible, err := s.Visible(ctx, userID, chatID, messageID); err != nil {
-				return fmt.Errorf("%w: %w", ErrUnavailable, err)
-			} else if !visible {
-				return ErrNotFound
+			if err := s.requireNotHidden(ctx, userID, m); err != nil {
+				return err
 			}
+			done[messageID] = m.Deleted
 		}
 		if scope == ScopeEveryone && !moderatorChecked && (m.SenderID == nil || *m.SenderID != userID) {
 			if err := s.requireModerator(ctx, chatID, userID); err != nil {
@@ -565,9 +565,23 @@ func (s *Service) DeleteMany(ctx context.Context, userID, chatID int64, messageI
 		}
 	}
 	for _, messageID := range messageIDs {
+		if done[messageID] {
+			continue
+		}
 		if err := s.deleteChecked(ctx, userID, chatID, messageID, scope); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func (s *Service) requireNotHidden(ctx context.Context, userID int64, m scylla.Message) error {
+	hidden, err := s.d.Messages.Hidden(ctx, userID, m.ChatID, m.ID)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrUnavailable, err)
+	}
+	if hidden {
+		return ErrNotFound
 	}
 	return nil
 }

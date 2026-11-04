@@ -1437,7 +1437,8 @@ paths:
       summary: Delete several messages of a chat
       description: |
         Deletes up to 100 messages of the chat with the rules of `DELETE /messages/{message_id}`. Every message
-        is checked first: when one may not be deleted, none is.
+        is checked first: when one may not be deleted, none is. With `scope` everyone, messages that are already
+        deleted for everyone count as done, so a retry after a partial failure finishes the rest.
       requestBody:
         required: true
         content:

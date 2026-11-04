@@ -7,6 +7,8 @@ Contract changes only. The backend changelog is `CHANGELOG.md` in the repository
 - `GET /attachments/{attachment_id}/content` is cached for an hour again (`private, max-age=3600`) instead of a
   year, so a file is not kept in caches long after its message is deleted. Versioned avatar URLs keep the
   year-long cache.
+- `POST /chats/{chat_id}/messages/delete` with `scope` everyone treats messages that are already deleted for
+  everyone as done (`204` instead of `404`), so a retry after a partial failure deletes the rest.
 
 ## 2.1.0-alpha.9
 
