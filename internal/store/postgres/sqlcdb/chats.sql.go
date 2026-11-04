@@ -7,6 +7,7 @@ package sqlcdb
 
 import (
 	"context"
+	"time"
 )
 
 const addParticipant = `-- name: AddParticipant :one
@@ -36,7 +37,9 @@ func (q *Queries) AddParticipant(ctx context.Context, arg AddParticipantParams) 
 }
 
 const deleteChat = `-- name: DeleteChat :execrows
-DELETE FROM chats WHERE id = $1
+WITH gone AS (DELETE FROM chats WHERE id = $1 RETURNING id)
+INSERT INTO chat_deletions (chat_id) SELECT id FROM gone
+ON CONFLICT (chat_id) DO UPDATE SET deleted_at = now(), emitted_at = NULL
 `
 
 func (q *Queries) DeleteChat(ctx context.Context, id int64) (int64, error) {
@@ -45,6 +48,15 @@ func (q *Queries) DeleteChat(ctx context.Context, id int64) (int64, error) {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const finishChatDeletion = `-- name: FinishChatDeletion :exec
+DELETE FROM chat_deletions WHERE chat_id = $1
+`
+
+func (q *Queries) FinishChatDeletion(ctx context.Context, chatID int64) error {
+	_, err := q.db.Exec(ctx, finishChatDeletion, chatID)
+	return err
 }
 
 const getChat = `-- name: GetChat :one
@@ -302,6 +314,43 @@ func (q *Queries) ListParticipants(ctx context.Context, chatID int64) ([]Partici
 	return items, nil
 }
 
+const listStaleChatDeletions = `-- name: ListStaleChatDeletions :many
+SELECT chat_id, deleted_at FROM chat_deletions
+WHERE COALESCE(emitted_at, deleted_at) < $1::timestamptz
+ORDER BY deleted_at
+LIMIT $2
+`
+
+type ListStaleChatDeletionsParams struct {
+	Before  time.Time
+	MaxRows int32
+}
+
+type ListStaleChatDeletionsRow struct {
+	ChatID    int64
+	DeletedAt time.Time
+}
+
+func (q *Queries) ListStaleChatDeletions(ctx context.Context, arg ListStaleChatDeletionsParams) ([]ListStaleChatDeletionsRow, error) {
+	rows, err := q.db.Query(ctx, listStaleChatDeletions, arg.Before, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListStaleChatDeletionsRow{}
+	for rows.Next() {
+		var i ListStaleChatDeletionsRow
+		if err := rows.Scan(&i.ChatID, &i.DeletedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserChats = `-- name: ListUserChats :many
 SELECT c.id, c.type, c.name, c.description, c.avatar_url, c.direct_key, c.created_by, c.created_at, c.updated_at, c.avatar_attachment_id, c.last_message_id, c.last_activity_at
 FROM chats c
@@ -437,6 +486,15 @@ func (q *Queries) LockParticipant(ctx context.Context, arg LockParticipantParams
 		&i.LastReadAt,
 	)
 	return i, err
+}
+
+const markChatDeletionEmitted = `-- name: MarkChatDeletionEmitted :exec
+UPDATE chat_deletions SET emitted_at = now() WHERE chat_id = $1
+`
+
+func (q *Queries) MarkChatDeletionEmitted(ctx context.Context, chatID int64) error {
+	_, err := q.db.Exec(ctx, markChatDeletionEmitted, chatID)
+	return err
 }
 
 const markRead = `-- name: MarkRead :execrows

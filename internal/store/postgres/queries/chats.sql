@@ -20,7 +20,21 @@ SELECT * FROM chats WHERE id = @id;
 SELECT * FROM chats WHERE id = @id FOR UPDATE;
 
 -- name: DeleteChat :execrows
-DELETE FROM chats WHERE id = @id;
+WITH gone AS (DELETE FROM chats WHERE id = @id RETURNING id)
+INSERT INTO chat_deletions (chat_id) SELECT id FROM gone
+ON CONFLICT (chat_id) DO UPDATE SET deleted_at = now(), emitted_at = NULL;
+
+-- name: ListStaleChatDeletions :many
+SELECT chat_id, deleted_at FROM chat_deletions
+WHERE COALESCE(emitted_at, deleted_at) < @before::timestamptz
+ORDER BY deleted_at
+LIMIT @max_rows;
+
+-- name: MarkChatDeletionEmitted :exec
+UPDATE chat_deletions SET emitted_at = now() WHERE chat_id = @chat_id;
+
+-- name: FinishChatDeletion :exec
+DELETE FROM chat_deletions WHERE chat_id = @chat_id;
 
 -- name: ListUserChats :many
 SELECT c.*

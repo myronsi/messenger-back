@@ -5,13 +5,16 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/myronsi/messenger-back/internal/jobs"
 	"github.com/myronsi/messenger-back/internal/media"
 	"github.com/myronsi/messenger-back/internal/search"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 )
 
 const (
-	maintenanceEvery = time.Hour
+	maintenanceEvery   = time.Hour
+	deletionSweepEvery = 5 * time.Minute
+	deletionLostAfter  = 15 * time.Minute
 	// sessionRetention is how long ended sessions and the refresh rotation history are kept. After that a
 	// replayed old refresh token is simply unknown instead of being recognised as reuse.
 	sessionRetention = 30 * 24 * time.Hour
@@ -33,6 +36,28 @@ func maintain(ctx context.Context, log *slog.Logger, store *postgres.Store, ever
 		}
 	}
 	run()
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			run()
+		}
+	}
+}
+
+func resendChatDeletions(ctx context.Context, log *slog.Logger, store jobs.DeletionStore, emit jobs.Emitter, every, olderThan time.Duration) {
+	run := func() {
+		n, err := jobs.ResendChatDeletions(ctx, store, emit, olderThan, 500)
+		if err != nil && ctx.Err() == nil {
+			log.ErrorContext(ctx, "resending chat deletions failed", "err", err)
+		}
+		if n > 0 {
+			log.WarnContext(ctx, "resent lost chat deletions", "count", n)
+		}
+	}
 	t := time.NewTicker(every)
 	defer t.Stop()
 	for {

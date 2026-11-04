@@ -13,6 +13,7 @@ import (
 	"github.com/gocql/gocql"
 
 	"github.com/myronsi/messenger-back/internal/app"
+	"github.com/myronsi/messenger-back/internal/events"
 	"github.com/myronsi/messenger-back/internal/jobs"
 	"github.com/myronsi/messenger-back/internal/media"
 	"github.com/myronsi/messenger-back/internal/notifications"
@@ -117,6 +118,8 @@ func run() error {
 		log.Info("consumer started", "stream", o.Stream, "group", group)
 		return nil
 	}
+	evlog := events.NewLog(redis.NewStreams(rd.Client(), "", 0))
+	wg.Go(func() { resendChatDeletions(bg, log, pg.Chats(), evlog, deletionSweepEvery, deletionLostAfter) })
 	if err := start(redis.ConsumerOptions{
 		Stream: redis.StreamChats, Group: jobs.GroupChatCleanup,
 		Handler: jobs.ChatCleanup(msgs, redis.NewUnread(rd.Client(), ""), pg.Chats(), scylla.DeleteGracePeriod, log),

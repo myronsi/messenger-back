@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -292,6 +293,32 @@ func (r chatRepo) MarkRead(ctx context.Context, chatID, userID, messageID int64)
 		return false, mapError(err)
 	}
 	return false, nil
+}
+
+func (r chatRepo) StaleDeletions(ctx context.Context, olderThan time.Duration, limit int) ([]ChatDeletion, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	rows, err := r.s.q.ListStaleChatDeletions(ctx, sqlcdb.ListStaleChatDeletionsParams{Before: time.Now().Add(-olderThan), MaxRows: clampLimit(limit)})
+	if err != nil {
+		return nil, mapError(err)
+	}
+	out := make([]ChatDeletion, len(rows))
+	for i, row := range rows {
+		out[i] = ChatDeletion{ChatID: row.ChatID, DeletedAt: row.DeletedAt}
+	}
+	return out, nil
+}
+
+func (r chatRepo) MarkDeletionEmitted(ctx context.Context, chatID int64) error {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	return mapError(r.s.q.MarkChatDeletionEmitted(ctx, chatID))
+}
+
+func (r chatRepo) FinishDeletion(ctx context.Context, chatID int64) error {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	return mapError(r.s.q.FinishChatDeletion(ctx, chatID))
 }
 
 func (r chatRepo) Delete(ctx context.Context, chatID int64) ([]string, error) {

@@ -63,6 +63,12 @@ type Chat struct {
 	LastActivityAt     time.Time
 }
 
+type ChatDeletion struct {
+	ChatID    int64
+	DeletedAt time.Time
+	EmittedAt *time.Time
+}
+
 type NotificationActivity struct {
 	DeviceID    uuid.UUID
 	SessionID   uuid.UUID

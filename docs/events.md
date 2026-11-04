@@ -62,7 +62,7 @@ were in flight are reclaimed.
 
 | Group | Stream | Does |
 |---|---|---|
-| `chat-cleanup` | `events:chats` | `chat.deleted`: deletes the chat's messages from ScyllaDB, then once more after the grace period (`scylla.DeleteGracePeriod`) for writes that were in flight; `chat.member_removed`: drops the chat from the member's unread counters unless they are a member again by then (entries can be handled late or replayed) |
+| `chat-cleanup` | `events:chats` | `chat.deleted`: deletes the chat's messages from ScyllaDB, then once more after the grace period (`scylla.DeleteGracePeriod`) for writes that were in flight, then removes the chat's row from `chat_deletions`; `chat.member_removed`: drops the chat from the member's unread counters unless they are a member again by then (entries can be handled late or replayed) |
 | `search-indexer` | `events:messages`, `events:chats` | keeps the message search index current ([search.md](search.md)) |
 
 ## Reconciliation
@@ -72,6 +72,13 @@ the trimmed length misses entries. Each consumer that keeps derived data therefo
 compares with the source of truth periodically; for the search index that is part of #52 (re-indexing recent
 buckets). Chat deletion needs none: deleting the chat in PostgreSQL removes every way to reach its messages, and the
 event only cleans up storage.
+
+## Lost chat deletions
+
+Deleting a chat in PostgreSQL also writes a row to `chat_deletions` in the same transaction. The `chat-cleanup`
+consumer removes the row once the chat's messages are gone. Every 5 minutes the worker emits `chat.deleted` again
+for rows older than 15 minutes (counted from the deletion or from the last time it emitted them), so a deletion
+whose event was never written (Redis was away) still gets its messages and search documents removed.
 
 ## Metrics
 
