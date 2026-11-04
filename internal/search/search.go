@@ -237,7 +237,7 @@ func (s *Searcher) Search(ctx context.Context, userID int64, q Query) ([]Hit, st
 				return
 			}
 			if !hidden {
-				found[i] = &Hit{Message: m, Highlight: current(excerpt(h.Highlight), m)}
+				found[i] = &Hit{Message: m, Highlight: current(h.Highlight, m)}
 			}
 		})
 	}
@@ -256,16 +256,23 @@ func (s *Searcher) Search(ctx context.Context, userID int64, q Query) ([]Hit, st
 
 // current keeps an excerpt only if it still matches the message: an index that lags behind an edit must not
 // show the text the edit removed.
-func current(excerpt *string, m scylla.Message) *string {
-	if excerpt == nil {
-		return nil
-	}
-	plain := strings.NewReplacer(MarkStart, "", MarkEnd, "").Replace(*excerpt)
-	if m.Content != nil && strings.Contains(*m.Content, plain) {
-		return excerpt
-	}
-	if m.AttachmentID != nil {
-		return excerpt // a file name (not in the text); file messages cannot be edited
+func current(h map[string][]string, m scylla.Message) *string {
+	for _, f := range []string{"content", "content.en", "content.ru", "file_name"} {
+		v := h[f]
+		if len(v) == 0 || v[0] == "" {
+			continue
+		}
+		excerpt := v[0]
+		if f == "file_name" {
+			if m.AttachmentID != nil {
+				return &excerpt
+			}
+			continue
+		}
+		plain := strings.NewReplacer(MarkStart, "", MarkEnd, "").Replace(excerpt)
+		if m.Content != nil && strings.Contains(*m.Content, plain) {
+			return &excerpt
+		}
 	}
 	return nil
 }
@@ -275,13 +282,3 @@ var errNotMember = fmt.Errorf("%w: not a member", ErrNotFound)
 
 // ErrNotFound: the chat does not exist or the user is not in it.
 var ErrNotFound = errors.New("not found")
-
-func excerpt(h map[string][]string) *string {
-	for _, f := range []string{"content", "content.en", "content.ru", "file_name"} {
-		if v := h[f]; len(v) > 0 && v[0] != "" {
-			s := v[0]
-			return &s
-		}
-	}
-	return nil
-}
