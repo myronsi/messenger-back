@@ -84,3 +84,54 @@ func TestReplySenderFollowsSharedChatsOfEachRecipient(t *testing.T) {
 		t.Fatalf("bob shares no chat with carol and must not see her bio: %s", bus.sent[bob])
 	}
 }
+
+func TestSenderFollowsTheSharedChatsOfEachRecipient(t *testing.T) {
+	pg := testenv.Postgres(t)
+	ctx := context.Background()
+	user := func(name string) int64 {
+		u, err := pg.Users().Register(ctx, name, name, "hash")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return u.ID
+	}
+	alice, bob := user("alice"), user("bob")
+	bio := "bob-private-bio"
+	if _, err := pg.Users().UpdateProfile(ctx, bob, postgres.Profile{DisplayName: "bob", Bio: &bio}); err != nil {
+		t.Fatal(err)
+	}
+	settings, err := pg.Social().Privacy(ctx, []int64{bob})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := settings[bob]
+	p.ProfileVisibility = postgres.VisibleSharedChats
+	if _, err := pg.Social().UpdatePrivacy(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	chat, _, err := pg.Chats().CreateDirect(ctx, alice, bob)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bus := &capturedBus{sent: map[int64]string{}}
+	gen, _ := ids.NewGenerator(1)
+	f := NewFanout(FanoutDeps{Bus: bus, Directory: users.NewDirectory(pg, nil, "/api/v2"), Store: pg, IDs: gen, BasePath: "/api/v2"})
+	text := "hi"
+	send := func(id int64) {
+		f.MessageCreated(ctx, scylla.Message{ChatID: chat.ID, ID: id, SenderID: &bob, Type: scylla.TypeText, Content: &text}, []int64{alice, bob}, "")
+	}
+	send(20)
+	if strings.Contains(bus.sent[alice], bio) {
+		t.Fatalf("bob never took part in the chat alice opened: %s", bus.sent[alice])
+	}
+	if !strings.Contains(bus.sent[bob], bio) {
+		t.Fatalf("bob sees his own bio: %s", bus.sent[bob])
+	}
+	if _, err := pg.Chats().MarkRead(ctx, chat.ID, bob, 20); err != nil {
+		t.Fatal(err)
+	}
+	send(21)
+	if !strings.Contains(bus.sent[alice], bio) {
+		t.Fatalf("bob read in the chat: %s", bus.sent[alice])
+	}
+}

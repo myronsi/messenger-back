@@ -153,7 +153,7 @@ func (f *Fanout) renderMessage(ctx context.Context, m scylla.Message, recipients
 	var senders map[int64]users.View
 	if m.SenderID != nil {
 		var err error
-		if senders, err = f.dir.ToViewers(ctx, *m.SenderID, recipients, true); err != nil {
+		if senders, err = f.dir.ToViewers(ctx, *m.SenderID, recipients, false); err != nil {
 			f.log.WarnContext(ctx, "render sender", "error", err)
 			senders = nil
 		}
