@@ -205,7 +205,7 @@ func (f *Fanout) replyOrigins(ctx context.Context, m scylla.Message, recipients 
 	}
 	var senders map[int64]users.View
 	if o.SenderID != nil {
-		if senders, err = f.dir.ToViewers(ctx, *o.SenderID, recipients, true); err != nil {
+		if senders, err = f.dir.ToViewers(ctx, *o.SenderID, recipients, false); err != nil {
 			f.log.WarnContext(ctx, "render reply sender", "error", err)
 		}
 	}
