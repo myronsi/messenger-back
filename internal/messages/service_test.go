@@ -382,6 +382,49 @@ func TestReadDuringSendCountsTheMessageOnce(t *testing.T) {
 	}
 }
 
+func TestDeletedFileMessagesFreeTheirFile(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	alice, bob, carol := f.user("alice"), f.user("bob"), f.user("carol")
+	chat, _, _ := f.pg.Chats().CreateDirect(ctx, alice, bob)
+	other, _, _ := f.pg.Chats().CreateDirect(ctx, alice, carol)
+	a, err := f.pg.Attachments().Create(ctx, postgres.NewAttachment{UploaderID: &alice, StorageKey: "attachments/" + uuid.NewString(), MimeType: "image/png", Size: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sent, err := f.svc.Send(ctx, messages.SendRequest{ChatID: chat.ID, SenderID: alice, ClientTempID: uuid.NewString(), Type: scylla.TypeFile, AttachmentID: &a.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	copies, err := f.svc.Forward(ctx, alice, sent.Message.ID, []int64{other.ID})
+	if err != nil || len(copies) != 1 {
+		t.Fatalf("forward: %v %v", copies, err)
+	}
+	unused := func() bool {
+		t.Helper()
+		list, err := f.pg.Attachments().Unreferenced(ctx, time.Now().Add(time.Hour), 100)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return slices.ContainsFunc(list, func(u postgres.UnreferencedAttachment) bool { return u.ID == a.ID })
+	}
+	if err := f.svc.Delete(ctx, alice, chat.ID, sent.Message.ID, messages.ScopeEveryone); err != nil {
+		t.Fatal(err)
+	}
+	if unused() {
+		t.Fatal("the forwarded copy still uses the file")
+	}
+	if links, err := f.pg.Attachments().LinksForViewer(ctx, a.ID, bob); err != nil || len(links) != 0 {
+		t.Fatalf("bob still reaches the file of the deleted message: %v %v", links, err)
+	}
+	if err := f.svc.DeleteMany(ctx, alice, other.ID, []int64{copies[0].ID}, messages.ScopeEveryone); err != nil {
+		t.Fatal(err)
+	}
+	if !unused() {
+		t.Fatal("the file of deleted messages is never collected")
+	}
+}
+
 func TestEditAndDeletePermissions(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()

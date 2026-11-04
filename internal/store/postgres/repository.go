@@ -379,6 +379,7 @@ type AttachmentRepository interface {
 	Delete(ctx context.Context, id uuid.UUID) (keys []string, err error)
 	// Link records that a message uses the attachment (idempotent).
 	Link(ctx context.Context, attachmentID uuid.UUID, chatID, messageID int64) error
+	Unlink(ctx context.Context, attachmentID uuid.UUID, chatID, messageID int64) error
 	// LinksForViewer returns the messages using the attachment in chats the viewer is a member of (at most 50).
 	LinksForViewer(ctx context.Context, attachmentID uuid.UUID, viewerID int64) ([]AttachmentLink, error)
 	// ListLinked returns a chat's attachments of the kinds, newest first, linked before `before` (zero: now).

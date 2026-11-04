@@ -598,3 +598,18 @@ func (q *Queries) SetUserAvatar(ctx context.Context, arg SetUserAvatarParams) (i
 	}
 	return result.RowsAffected(), nil
 }
+
+const unlinkAttachment = `-- name: UnlinkAttachment :exec
+DELETE FROM attachment_links WHERE attachment_id = $1 AND chat_id = $2 AND message_id = $3
+`
+
+type UnlinkAttachmentParams struct {
+	AttachmentID uuid.UUID
+	ChatID       int64
+	MessageID    int64
+}
+
+func (q *Queries) UnlinkAttachment(ctx context.Context, arg UnlinkAttachmentParams) error {
+	_, err := q.db.Exec(ctx, unlinkAttachment, arg.AttachmentID, arg.ChatID, arg.MessageID)
+	return err
+}

@@ -531,7 +531,7 @@ func (s *Service) Delete(ctx context.Context, userID, chatID, messageID int64, s
 			return err
 		}
 	}
-	return s.deleteChecked(ctx, userID, chatID, messageID, scope)
+	return s.deleteChecked(ctx, userID, m, scope)
 }
 
 func (s *Service) DeleteMany(ctx context.Context, userID, chatID int64, messageIDs []int64, scope string) error {
@@ -546,11 +546,13 @@ func (s *Service) DeleteMany(ctx context.Context, userID, chatID int64, messageI
 	}
 	moderatorChecked := false
 	done := map[int64]bool{}
+	found := make([]scylla.Message, 0, len(messageIDs))
 	for _, messageID := range messageIDs {
 		m, err := s.message(ctx, chatID, messageID)
 		if err != nil {
 			return err
 		}
+		found = append(found, m)
 		if scope == ScopeEveryone {
 			if err := s.requireNotHidden(ctx, userID, m); err != nil {
 				return err
@@ -564,11 +566,12 @@ func (s *Service) DeleteMany(ctx context.Context, userID, chatID int64, messageI
 			moderatorChecked = true
 		}
 	}
-	for _, messageID := range messageIDs {
-		if done[messageID] {
+	for _, m := range found {
+		if done[m.ID] {
+			s.unlink(ctx, m)
 			continue
 		}
-		if err := s.deleteChecked(ctx, userID, chatID, messageID, scope); err != nil {
+		if err := s.deleteChecked(ctx, userID, m, scope); err != nil {
 			return err
 		}
 	}
@@ -586,7 +589,17 @@ func (s *Service) requireNotHidden(ctx context.Context, userID int64, m scylla.M
 	return nil
 }
 
-func (s *Service) deleteChecked(ctx context.Context, userID, chatID, messageID int64, scope string) error {
+func (s *Service) unlink(ctx context.Context, m scylla.Message) {
+	if m.AttachmentID == nil {
+		return
+	}
+	if err := s.d.Store.Attachments().Unlink(context.WithoutCancel(ctx), uuid.UUID(*m.AttachmentID), m.ChatID, m.ID); err != nil {
+		s.d.Log.WarnContext(ctx, "unlink attachment of a deleted message", "error", err, "chat_id", m.ChatID)
+	}
+}
+
+func (s *Service) deleteChecked(ctx context.Context, userID int64, m scylla.Message, scope string) error {
+	chatID, messageID := m.ChatID, m.ID
 	if scope == ScopeMe {
 		if err := s.d.Messages.Hide(ctx, userID, chatID, messageID, scylla.HiddenDeletedForMe); err != nil {
 			return fmt.Errorf("%w: %w", ErrUnavailable, err)
@@ -600,6 +613,7 @@ func (s *Service) deleteChecked(ctx context.Context, userID, chatID, messageID i
 	} else if err != nil {
 		return fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
+	s.unlink(ctx, m)
 	if members, err := s.Members(ctx, chatID); err == nil {
 		s.d.Notifier.MessageDeleted(ctx, chatID, messageID, ScopeEveryone, members)
 	}
