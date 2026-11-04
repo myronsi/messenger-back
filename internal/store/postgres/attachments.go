@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -35,12 +36,26 @@ func attachmentFrom(a sqlcdb.Attachment) Attachment {
 	}
 }
 
+const thumbnailSuffix, displaySuffix = ".thumb.jpg", ".display.jpg"
+
+func DisplayKey(storageKey string) string { return storageKey + displaySuffix }
+
 func keysOf(file string, thumb *string) []string {
 	keys := []string{file}
 	if thumb != nil {
-		keys = append(keys, *thumb)
+		keys = append(keys, *thumb, DisplayKey(file))
 	}
 	return keys
+}
+
+func withDisplayKeys(keys []string) []string {
+	out := keys
+	for _, k := range keys {
+		if file, ok := strings.CutSuffix(k, thumbnailSuffix); ok {
+			out = append(out, DisplayKey(file))
+		}
+	}
+	return out
 }
 
 func (r attachmentRepo) Create(ctx context.Context, a NewAttachment) (Attachment, error) {

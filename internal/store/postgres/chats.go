@@ -343,6 +343,7 @@ func (r chatRepo) Delete(ctx context.Context, chatID int64) ([]string, error) {
 		if keys, err = q.ListAttachmentKeysOfChats(ctx, []int64{chatID}); err != nil {
 			return err
 		}
+		keys = withDisplayKeys(keys)
 		n, err := q.DeleteChat(ctx, chatID)
 		if err != nil {
 			return err

@@ -165,6 +165,7 @@ func (r chatRepo) DeleteGroupAs(ctx context.Context, chatID, actorID int64) ([]s
 		if keys, err = q.ListAttachmentKeysOfChats(ctx, []int64{chatID}); err != nil {
 			return err
 		}
+		keys = withDisplayKeys(keys)
 		_, err = q.DeleteChat(ctx, chatID)
 		return err
 	})

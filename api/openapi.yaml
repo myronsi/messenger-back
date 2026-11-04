@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.10
+  version: 2.1.0-alpha.11
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -1011,10 +1011,13 @@ paths:
       parameters:
         - name: variant
           in: query
-          description: "`thumbnail`: a JPEG of at most 320 px (images only; `thumbnail_url` of the attachment)."
+          description: |
+            `thumbnail`: a JPEG of at most 320 px (images only; `thumbnail_url` of the attachment).
+            `display`: a JPEG of at most 1600 px for viewing a large still image (`display_url` of the attachment);
+            the original for any other attachment.
           schema:
             type: string
-            enum: [thumbnail]
+            enum: [thumbnail, display]
       responses:
         "426": { $ref: "#/components/responses/ClientOutdated" }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -2714,6 +2717,10 @@ components:
         width: { type: [integer, "null"], minimum: 1 }
         height: { type: [integer, "null"], minimum: 1 }
         thumbnail_url: { type: [string, "null"], readOnly: true }
+        display_url:
+          type: [string, "null"]
+          readOnly: true
+          description: A JPEG of at most 1600 px to show in an image viewer instead of the original; `null` for small images and GIFs, which are shown as they are.
         duration_ms: { type: [integer, "null"], minimum: 0 }
         waveform:
           type: [array, "null"]

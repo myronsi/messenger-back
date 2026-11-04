@@ -499,12 +499,15 @@ func (e Visibility) Valid() bool {
 
 // Defines values for GetAttachmentContentParamsVariant.
 const (
+	Display   GetAttachmentContentParamsVariant = "display"
 	Thumbnail GetAttachmentContentParamsVariant = "thumbnail"
 )
 
 // Valid indicates whether the value is a known member of the GetAttachmentContentParamsVariant enum.
 func (e GetAttachmentContentParamsVariant) Valid() bool {
 	switch e {
+	case Display:
+		return true
 	case Thumbnail:
 		return true
 	default:
@@ -590,9 +593,12 @@ type ApprovalRequestType string
 type Attachment struct {
 	// ContentType Detected by the server
 	ContentType string `json:"content_type"`
-	DurationMs  *int   `json:"duration_ms,omitempty"`
-	Filename    string `json:"filename"`
-	Height      *int   `json:"height,omitempty"`
+
+	// DisplayUrl A JPEG of at most 1600 px to show in an image viewer instead of the original; `null` for small images and GIFs, which are shown as they are.
+	DisplayUrl *string `json:"display_url,omitempty"`
+	DurationMs *int    `json:"duration_ms,omitempty"`
+	Filename   string  `json:"filename"`
+	Height     *int    `json:"height,omitempty"`
 
 	// Id ID of an uploaded attachment (a UUID, unlike the decimal IDs of messages, users and chats).
 	//
@@ -1440,6 +1446,8 @@ type UploadAttachmentParams struct {
 // GetAttachmentContentParams defines parameters for GetAttachmentContent.
 type GetAttachmentContentParams struct {
 	// Variant `thumbnail`: a JPEG of at most 320 px (images only; `thumbnail_url` of the attachment).
+	// `display`: a JPEG of at most 1600 px for viewing a large still image (`display_url` of the attachment);
+	// the original for any other attachment.
 	Variant *GetAttachmentContentParamsVariant `form:"variant,omitempty" json:"variant,omitempty"`
 
 	// XClientVersion Version of the client app, for logs and the per-client metric.

@@ -210,7 +210,7 @@ func (s *Service) Upload(ctx context.Context, u Upload) (postgres.Attachment, er
 		UploaderID: &u.UploaderID, Purpose: u.Purpose, Kind: det.Kind, Filename: cleanName(u.Filename, det.ContentType),
 		StorageKey: prefix + id.String(), MimeType: det.ContentType, Size: size,
 	}
-	var thumb []byte
+	var thumb, display []byte
 	var body io.Reader
 	switch det.Kind {
 	case KindImage:
@@ -220,7 +220,7 @@ func (s *Service) Upload(ctx context.Context, u Upload) (postgres.Attachment, er
 		}
 		w, h := int32(img.Width), int32(img.Height) //nolint:gosec // bounded by MaxImageSide
 		rec.Width, rec.Height, rec.MimeType, rec.Size = &w, &h, img.ContentType, int64(len(img.Data))
-		body, thumb = bytes.NewReader(img.Data), img.Thumbnail
+		body, thumb, display = bytes.NewReader(img.Data), img.Thumbnail, img.Display
 	case KindAudio, KindVoice:
 		info := ClientAudio(u.DurationMS, u.Waveform)
 		if s.o.Prober.Available() {
@@ -254,10 +254,21 @@ func (s *Service) Upload(ctx context.Context, u Upload) (postgres.Attachment, er
 		}
 		rec.ThumbnailKey = &key
 	}
+	stored := append([]string{rec.StorageKey}, ptrList(rec.ThumbnailKey)...)
+	if display != nil {
+		key := postgres.DisplayKey(rec.StorageKey)
+		if err := s.o.Storage.Put(ctx, key, bytes.NewReader(display), int64(len(display)), "image/jpeg"); err != nil {
+			for _, k := range stored {
+				_ = s.o.Storage.Delete(context.WithoutCancel(ctx), k)
+			}
+			return postgres.Attachment{}, err
+		}
+		stored = append(stored, key)
+	}
 	a, err := s.o.Attachments.Create(ctx, rec)
 	if err != nil {
 		// The objects are unreferenced; remove them now rather than leaving them to nobody.
-		for _, k := range append([]string{rec.StorageKey}, ptrList(rec.ThumbnailKey)...) {
+		for _, k := range stored {
 			_ = s.o.Storage.Delete(context.WithoutCancel(ctx), k)
 		}
 		return postgres.Attachment{}, err
@@ -337,7 +348,7 @@ func (s *Service) CanSee(ctx context.Context, viewerID int64, a postgres.Attachm
 
 // Open returns the attachment's content (or its thumbnail) for the viewer. Avatars are served by the avatar
 // endpoints, which apply the avatar visibility, so they are not reachable here except for their uploader.
-func (s *Service) Open(ctx context.Context, viewerID int64, id uuid.UUID, thumbnail bool) (Download, error) {
+func (s *Service) Open(ctx context.Context, viewerID int64, id uuid.UUID, v Variant) (Download, error) {
 	a, err := s.o.Attachments.Get(ctx, id)
 	if errors.Is(err, postgres.ErrNotFound) {
 		return Download{}, ErrNoAccess
@@ -357,7 +368,7 @@ func (s *Service) Open(ctx context.Context, viewerID int64, id uuid.UUID, thumbn
 	if !ok {
 		return Download{}, ErrNoAccess
 	}
-	return s.content(ctx, a, thumbnail)
+	return s.content(ctx, a, v)
 }
 
 // canSeeAvatar: the uploader, and the members of groups that use it. User avatars are served by the
@@ -380,7 +391,7 @@ func (s *Service) canSeeAvatar(ctx context.Context, viewerID int64, a postgres.A
 }
 
 // OpenUnchecked serves an attachment whose access was decided by the caller (avatars).
-func (s *Service) OpenUnchecked(ctx context.Context, id uuid.UUID, thumbnail bool) (Download, error) {
+func (s *Service) OpenUnchecked(ctx context.Context, id uuid.UUID, v Variant) (Download, error) {
 	a, err := s.o.Attachments.Get(ctx, id)
 	if errors.Is(err, postgres.ErrNotFound) {
 		return Download{}, ErrNoAccess
@@ -388,17 +399,81 @@ func (s *Service) OpenUnchecked(ctx context.Context, id uuid.UUID, thumbnail boo
 	if err != nil {
 		return Download{}, err
 	}
-	return s.content(ctx, a, thumbnail)
+	return s.content(ctx, a, v)
 }
 
-func (s *Service) content(ctx context.Context, a postgres.Attachment, thumbnail bool) (Download, error) {
+type Variant int
+
+const (
+	VariantOriginal Variant = iota
+	VariantThumbnail
+	VariantDisplay
+)
+
+func HasDisplay(a postgres.Attachment) bool {
+	return a.Width != nil && a.Height != nil && NeedsDisplay(a.MimeType, int(*a.Width), int(*a.Height))
+}
+
+func (s *Service) content(ctx context.Context, a postgres.Attachment, v Variant) (Download, error) {
 	key, ctype, name := a.StorageKey, a.MimeType, a.Filename
-	if thumbnail {
+	switch {
+	case v == VariantThumbnail:
 		if a.ThumbnailKey == nil {
 			return Download{}, ErrNoAccess
 		}
 		key, ctype, name = *a.ThumbnailKey, "image/jpeg", "thumbnail.jpg"
+	case v == VariantDisplay && HasDisplay(a):
+		obj, err := s.displayObject(ctx, a)
+		if err == nil {
+			return s.download(ctx, postgres.DisplayKey(a.StorageKey), "image/jpeg", "display.jpg", &obj)
+		}
+		if !errors.Is(err, ErrUnsupported) && !errors.Is(err, ErrImageTooLarge) {
+			return Download{}, err
+		}
+		s.o.Log.WarnContext(ctx, "display copy", "attachment_id", a.ID.String(), "error", err)
 	}
+	return s.download(ctx, key, ctype, name, nil)
+}
+
+func (s *Service) displayObject(ctx context.Context, a postgres.Attachment) (Object, error) {
+	key := postgres.DisplayKey(a.StorageKey)
+	obj, err := s.o.Storage.Get(ctx, key)
+	if !errors.Is(err, ErrNotFound) {
+		return obj, err
+	}
+	select {
+	case s.images <- struct{}{}:
+	case <-ctx.Done():
+		return Object{}, ErrBusy
+	}
+	defer func() { <-s.images }()
+	src, err := s.o.Storage.Get(ctx, a.StorageKey)
+	if errors.Is(err, ErrNotFound) {
+		return Object{}, ErrNoAccess
+	}
+	if err != nil {
+		return Object{}, err
+	}
+	data, err := io.ReadAll(io.LimitReader(src.Body, s.o.Limits.Image+1))
+	_ = src.Body.Close()
+	if err != nil {
+		return Object{}, err
+	}
+	out, err := DisplayImage(data)
+	if err != nil {
+		return Object{}, err
+	}
+	if err := s.o.Storage.Put(ctx, key, bytes.NewReader(out), int64(len(out)), "image/jpeg"); err != nil {
+		return Object{}, err
+	}
+	return Object{Body: readSeekNopCloser{bytes.NewReader(out)}, Size: int64(len(out))}, nil
+}
+
+type readSeekNopCloser struct{ *bytes.Reader }
+
+func (readSeekNopCloser) Close() error { return nil }
+
+func (s *Service) download(ctx context.Context, key, ctype, name string, obj *Object) (Download, error) {
 	disposition := mime.FormatMediaType("attachment", map[string]string{"filename": name})
 	if Inline(ctype) {
 		disposition = mime.FormatMediaType("inline", map[string]string{"filename": name})
@@ -414,17 +489,23 @@ func (s *Service) content(ctx context.Context, a postgres.Attachment, thumbnail 
 			return Download{}, err
 		}
 		if url != "" {
+			if obj != nil {
+				_ = obj.Body.Close()
+			}
 			return Download{RedirectURL: url, ContentType: ctype, Disposition: disposition}, nil
 		}
 	}
-	obj, err := s.o.Storage.Get(ctx, key)
+	if obj != nil {
+		return Download{Object: *obj, ContentType: ctype, Disposition: disposition}, nil
+	}
+	got, err := s.o.Storage.Get(ctx, key)
 	if errors.Is(err, ErrNotFound) {
 		return Download{}, ErrNoAccess
 	}
 	if err != nil {
 		return Download{}, err
 	}
-	return Download{Object: obj, ContentType: ctype, Disposition: disposition}, nil
+	return Download{Object: got, ContentType: ctype, Disposition: disposition}, nil
 }
 
 // UnusedAfter is how long an upload may stay unused before it is deleted.

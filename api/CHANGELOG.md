@@ -2,6 +2,12 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.11
+
+- Attachments have `display_url`: a JPEG of at most 1600 px (`GET /attachments/{attachment_id}/content?variant=display`)
+  for showing a large still image in a viewer, much smaller than the original. It is `null` for small images and
+  GIFs. Older images get their display copy on the first request.
+
 ## 2.1.0-alpha.10
 
 - `GET /attachments/{attachment_id}/content` is cached for an hour again (`private, max-age=3600`) instead of a

@@ -23,7 +23,8 @@ message), `duration_ms` and `waveform`. The answer is the `Attachment`; its `id`
    `MEDIA_IMAGE_WORKERS` slots (default 2, since one image can take a few hundred MB; uploads wait for a slot within
    their deadline, then get `503` with `Retry-After`) and **encoded again**: EXIF (location, camera), comments and anything malformed are gone, and the EXIF orientation of
    a JPEG is applied to the pixels first. WebP becomes PNG (with transparency) or JPEG. A 320 px JPEG thumbnail is
-   stored next to it; width and height are recorded.
+   stored next to it, and for a still image over 1600 px a 1600 px JPEG display copy (`{key}.display.jpg`) that
+   image viewers load instead of the original; width and height are recorded.
 4. **Voice and audio** are measured with `ffprobe` (duration) and `ffmpeg` (64-bar waveform for voice messages),
    each with a 15 s timeout of its own and allowed to read only the file (`-protocol_whitelist`). The decoded PCM is
    streamed into the waveform, never held, and cut at one hour whatever the container claims. A file the tools
@@ -48,7 +49,8 @@ Everyone else gets `404`, so the existence of a file is not revealed.
 The answer streams the object, with byte ranges (`206`, needed to seek and for Safari to play audio and video at
 all) and an `ETag`, with `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src
 'none'; sandbox` and `Content-Disposition: inline` for images, audio and video, `attachment` (and
-`application/octet-stream`) for everything else. `?variant=thumbnail` returns the thumbnail. With
+`application/octet-stream`) for everything else. `?variant=thumbnail` returns the thumbnail and
+`?variant=display` the display copy (`display_url`), or the original when the image needs none. Images uploaded display copies existed get theirs on the first such request, made in an image worker slot and stored. With
 `MEDIA_SIGNED_URLS=true` the API answers with a `302` to a five-minute signed URL of the bucket instead
 (`Cache-Control: no-store`, so no browser follows a cached redirect to an expired URL); the bucket then needs CORS
 for the app's origin, and `S3_PUBLIC_ENDPOINT` is the address clients reach. The signature can only force

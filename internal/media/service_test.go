@@ -73,8 +73,8 @@ func TestUploadLinkAndAccess(t *testing.T) {
 		t.Fatalf("upload: %+v", a)
 	}
 
-	open := func(viewer int64, thumb bool) error {
-		d, err := svc.Open(ctx, viewer, a.ID, thumb)
+	open := func(viewer int64, v media.Variant) error {
+		d, err := svc.Open(ctx, viewer, a.ID, v)
 		if err == nil {
 			b, _ := io.ReadAll(d.Object.Body)
 			_ = d.Object.Body.Close()
@@ -85,10 +85,10 @@ func TestUploadLinkAndAccess(t *testing.T) {
 		return err
 	}
 	// Before it is sent, only the uploader sees it.
-	if err := open(alice, false); err != nil {
+	if err := open(alice, media.VariantOriginal); err != nil {
 		t.Fatalf("uploader: %v", err)
 	}
-	if err := open(bob, false); !errors.Is(err, media.ErrNoAccess) {
+	if err := open(bob, media.VariantOriginal); !errors.Is(err, media.ErrNoAccess) {
 		t.Fatalf("bob before the message: %v", err)
 	}
 	// Sent in the chat: members who can see the message may download it.
@@ -96,17 +96,74 @@ func TestUploadLinkAndAccess(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.visible[[3]int64{bob, chat.ID, 77}] = true
-	if err := open(bob, true); err != nil {
+	if err := open(bob, media.VariantThumbnail); err != nil {
 		t.Fatalf("bob after the message: %v", err)
 	}
 	// A non-member never, whatever link exists.
-	if err := open(eve, false); !errors.Is(err, media.ErrNoAccess) {
+	if err := open(eve, media.VariantOriginal); !errors.Is(err, media.ErrNoAccess) {
 		t.Fatalf("eve: %v", err)
 	}
 	// The message is deleted (or hidden for bob): no more access.
 	r.visible[[3]int64{bob, chat.ID, 77}] = false
-	if err := open(bob, false); !errors.Is(err, media.ErrNoAccess) {
+	if err := open(bob, media.VariantOriginal); !errors.Is(err, media.ErrNoAccess) {
 		t.Fatalf("bob after the delete: %v", err)
+	}
+}
+
+func TestDisplayCopyOfLargeImages(t *testing.T) {
+	pg := testenv.Postgres(t)
+	ctx := context.Background()
+	u, _ := pg.Users().Register(ctx, "photographer", "P", "hash")
+	root := t.TempDir()
+	disk, _ := media.NewDisk(root)
+	svc := media.NewService(media.Options{Storage: disk, Attachments: pg.Attachments(), Prober: media.NewProber("/nonexistent", "/nonexistent")})
+	upload := func(w, h int) postgres.Attachment {
+		var b bytes.Buffer
+		if err := png.Encode(&b, image.NewRGBA(image.Rect(0, 0, w, h))); err != nil {
+			t.Fatal(err)
+		}
+		a, err := svc.Upload(ctx, media.Upload{UploaderID: u.ID, Purpose: media.PurposeMessage, Filename: "photo.png", Body: &b})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return a
+	}
+	display := func(a postgres.Attachment) (string, image.Config) {
+		d, err := svc.Open(ctx, u.ID, a.ID, media.VariantDisplay)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = d.Object.Body.Close() }()
+		cfg, _, err := image.DecodeConfig(d.Object.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return d.ContentType, cfg
+	}
+
+	large := upload(2400, 1200)
+	if !media.HasDisplay(large) {
+		t.Fatal("a 2400 px image has no display copy")
+	}
+	if ctype, cfg := display(large); ctype != "image/jpeg" || cfg.Width != media.DisplaySide || cfg.Height != 800 {
+		t.Fatalf("display copy: %s %dx%d", ctype, cfg.Width, cfg.Height)
+	}
+	if err := disk.Delete(ctx, postgres.DisplayKey(large.StorageKey)); err != nil {
+		t.Fatal(err)
+	}
+	if _, cfg := display(large); cfg.Width != media.DisplaySide {
+		t.Fatalf("regenerated display copy: %dx%d", cfg.Width, cfg.Height)
+	}
+	if _, err := os.Stat(root + "/" + postgres.DisplayKey(large.StorageKey)); err != nil {
+		t.Fatalf("regenerated display copy is not stored: %v", err)
+	}
+
+	small := upload(800, 600)
+	if media.HasDisplay(small) {
+		t.Fatal("an 800 px image has a display copy")
+	}
+	if ctype, cfg := display(small); ctype != "image/png" || cfg.Width != 800 {
+		t.Fatalf("small image: %s %dx%d", ctype, cfg.Width, cfg.Height)
 	}
 }
 
@@ -125,7 +182,7 @@ func TestUploadsAreCheckedByContent(t *testing.T) {
 	if err != nil || a.Kind != media.KindFile || a.MimeType != "application/octet-stream" {
 		t.Fatalf("html: %+v %v", a, err)
 	}
-	if d, err := svc.Open(ctx, u.ID, a.ID, false); err != nil || d.ContentType != "application/octet-stream" || !strings.HasPrefix(d.Disposition, "attachment") {
+	if d, err := svc.Open(ctx, u.ID, a.ID, media.VariantOriginal); err != nil || d.ContentType != "application/octet-stream" || !strings.HasPrefix(d.Disposition, "attachment") {
 		t.Fatalf("html download: %+v %v", d, err)
 	} else {
 		_ = d.Object.Body.Close()
