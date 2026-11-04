@@ -10,6 +10,8 @@ Contract changes only. The backend changelog is `CHANGELOG.md` in the repository
 - `POST /chats/{chat_id}/messages/delete` with `scope` everyone treats messages that are already deleted for
   everyone as done (`204` instead of `404`), so a retry after a partial failure deletes the rest.
 - WebSocket: a connection with more than 64 client events waiting to be handled is closed with `1013`.
+- WebSocket: a user has at most 10 connections per server; opening another closes the oldest with the new close
+  code `4429`.
 - `GET /users/{user_id}` and `GET /usernames/{username}` answer `404` for a user whose `search_visibility` hides
   them from the current user, unless the two share a chat, and are rate limited per user (`429`).
 - `contacts` (and `shared_chats`) count a direct chat only once the user opened it or read a message in it, so

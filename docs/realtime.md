@@ -26,6 +26,7 @@ client ──ws──► gateway (instance A) ──► messages.Service ──�
 2. `wss://…/api/v2/ws?ticket=…&api_version=…`. The origin must be the API's own or one of `CORS_ORIGINS`.
 3. The ticket is redeemed during the handshake (and the session checked). An invalid ticket gets close code `4401`;
    a client whose `api_version` is below `MIN_CLIENT_API_VERSION` gets `hello` and then `4426`.
+   A user has at most 10 connections per instance; one more closes the user's oldest connection with `4429`.
 4. The first connection of the user on this instance subscribes `user:{id}` and claims presence.
 
 The HTTP server's timeouts do not apply to the upgraded connection (net/http clears the deadlines when the

@@ -75,8 +75,9 @@ type env struct {
 	tickets *tickets
 	node    int
 	// ping is the ping (and session re-check) interval of new instances.
-	ping time.Duration
-	wrap func(Limiter) Limiter
+	ping     time.Duration
+	wrap     func(Limiter) Limiter
+	maxConns int
 }
 
 func newEnv(t *testing.T) *env {
@@ -151,7 +152,7 @@ func (e *env) instance(name string) *instance {
 	in.gw, err = New(Options{
 		Auth: e.tickets, Messages: in.svc, Fanout: in.fanout, Bus: bus, Presence: in.presence,
 		Limiter: limiter, LastSeen: e.pg.Users(), Hub: hub,
-		MinClientAPIVersion: "2.0.0-alpha.1", PingInterval: e.ping, Log: log,
+		MinClientAPIVersion: "2.0.0-alpha.1", PingInterval: e.ping, MaxUserConns: e.maxConns, Log: log,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -776,5 +777,26 @@ func TestSlowEventsDoNotStallTheReader(t *testing.T) {
 	case <-done:
 	case <-wctx.Done():
 		t.Fatal("the connection's goroutines did not finish after it closed")
+	}
+}
+
+func TestTooManyConnectionsCloseTheOldest(t *testing.T) {
+	e := newEnv(t)
+	e.maxConns = 2
+	a := e.instance("a")
+	alice := e.user("alice")
+	first := e.online(a, alice)
+	second := e.online(a, alice)
+	third := e.online(a, alice)
+	if code := first.closeCode(); code != CloseTooManyConnections {
+		t.Fatalf("close code %d", code)
+	}
+	for _, c := range []*client{second, third} {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		err := c.ws.Ping(ctx)
+		cancel()
+		if err != nil {
+			t.Fatalf("a newer connection was closed: %v", err)
+		}
 	}
 }

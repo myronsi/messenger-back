@@ -21,6 +21,7 @@ type conn struct {
 	ws        *websocket.Conn
 	userID    int64
 	sessionID uuid.UUID
+	seq       uint64
 
 	send chan []byte
 	in   chan inbound

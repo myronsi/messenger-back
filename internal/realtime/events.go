@@ -16,7 +16,8 @@ const (
 	// CloseInvalidTicket: the ticket was unknown, expired or used.
 	CloseInvalidTicket = 4401
 	// CloseClientOutdated: the client's contract version is no longer served (sent after hello).
-	CloseClientOutdated = 4426
+	CloseClientOutdated     = 4426
+	CloseTooManyConnections = 4429
 )
 
 // MaxClientEvent bounds one client frame: a 4096-character message plus the envelope, with room for
