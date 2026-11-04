@@ -531,6 +531,9 @@ func (s *Service) Delete(ctx context.Context, userID, chatID, messageID int64, s
 			return err
 		}
 	}
+	if scope == ScopeEveryone && m.Deleted {
+		return s.unlink(ctx, m)
+	}
 	return s.deleteChecked(ctx, userID, m, scope)
 }
 
@@ -568,7 +571,9 @@ func (s *Service) DeleteMany(ctx context.Context, userID, chatID int64, messageI
 	}
 	for _, m := range found {
 		if done[m.ID] {
-			s.unlink(ctx, m)
+			if err := s.unlink(ctx, m); err != nil {
+				return err
+			}
 			continue
 		}
 		if err := s.deleteChecked(ctx, userID, m, scope); err != nil {
@@ -589,13 +594,11 @@ func (s *Service) requireNotHidden(ctx context.Context, userID int64, m scylla.M
 	return nil
 }
 
-func (s *Service) unlink(ctx context.Context, m scylla.Message) {
-	if m.AttachmentID == nil {
-		return
+func (s *Service) unlink(ctx context.Context, m scylla.Message) error {
+	if err := s.d.Store.Attachments().UnlinkMessage(context.WithoutCancel(ctx), m.ChatID, m.ID); err != nil {
+		return fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
-	if err := s.d.Store.Attachments().Unlink(context.WithoutCancel(ctx), uuid.UUID(*m.AttachmentID), m.ChatID, m.ID); err != nil {
-		s.d.Log.WarnContext(ctx, "unlink attachment of a deleted message", "error", err, "chat_id", m.ChatID)
-	}
+	return nil
 }
 
 func (s *Service) deleteChecked(ctx context.Context, userID int64, m scylla.Message, scope string) error {
@@ -613,12 +616,11 @@ func (s *Service) deleteChecked(ctx context.Context, userID int64, m scylla.Mess
 	} else if err != nil {
 		return fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
-	s.unlink(ctx, m)
 	if members, err := s.Members(ctx, chatID); err == nil {
 		s.d.Notifier.MessageDeleted(ctx, chatID, messageID, ScopeEveryone, members)
 	}
 	s.emit(ctx, events.Event{Type: events.MessageDeleted, ChatID: chatID, MessageID: messageID, ActorID: userID})
-	return nil
+	return s.unlink(ctx, m)
 }
 
 func (s *Service) requireModerator(ctx context.Context, chatID, userID int64) error {

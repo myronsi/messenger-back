@@ -115,10 +115,10 @@ func (r attachmentRepo) Link(ctx context.Context, attachmentID uuid.UUID, chatID
 	return mapError(r.s.q.LinkAttachment(ctx, sqlcdb.LinkAttachmentParams{AttachmentID: attachmentID, ChatID: chatID, MessageID: messageID}))
 }
 
-func (r attachmentRepo) Unlink(ctx context.Context, attachmentID uuid.UUID, chatID, messageID int64) error {
+func (r attachmentRepo) UnlinkMessage(ctx context.Context, chatID, messageID int64) error {
 	ctx, cancel := r.s.call(ctx)
 	defer cancel()
-	return mapError(r.s.q.UnlinkAttachment(ctx, sqlcdb.UnlinkAttachmentParams{AttachmentID: attachmentID, ChatID: chatID, MessageID: messageID}))
+	return mapError(r.s.q.UnlinkMessageAttachments(ctx, sqlcdb.UnlinkMessageAttachmentsParams{ChatID: chatID, MessageID: messageID}))
 }
 
 func (r attachmentRepo) LinksForViewer(ctx context.Context, attachmentID uuid.UUID, viewerID int64) ([]AttachmentLink, error) {

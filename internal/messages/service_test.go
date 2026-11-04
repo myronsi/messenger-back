@@ -81,12 +81,34 @@ func (l *eventLog) types() []string {
 }
 
 type fixture struct {
-	events *eventLog
-	t      *testing.T
-	pg     *postgres.Store
-	svc    *messages.Service
-	unread *redis.Unread
-	rec    *recorder
+	events   *eventLog
+	t        *testing.T
+	pg       *postgres.Store
+	svc      *messages.Service
+	unread   *redis.Unread
+	rec      *recorder
+	linkDown *atomic.Bool
+}
+
+type flakyLinkStore struct {
+	*postgres.Store
+	down *atomic.Bool
+}
+
+func (s flakyLinkStore) Attachments() postgres.AttachmentRepository {
+	return flakyLinks{s.Store.Attachments(), s.down}
+}
+
+type flakyLinks struct {
+	postgres.AttachmentRepository
+	down *atomic.Bool
+}
+
+func (l flakyLinks) UnlinkMessage(ctx context.Context, chatID, messageID int64) error {
+	if l.down.Load() {
+		return errors.New("postgres is away")
+	}
+	return l.AttachmentRepository.UnlinkMessage(ctx, chatID, messageID)
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -103,12 +125,13 @@ func newFixtureWith(t *testing.T, wrap func(scylla.MessageRepository) scylla.Mes
 	rec := &recorder{}
 	log := &eventLog{}
 	unread := redis.NewUnread(rd.Client(), prefix)
+	linkDown := new(atomic.Bool)
 	svc := messages.New(messages.Deps{
-		Messages: repo, Store: pg, Members: redis.NewMembers(rd.Client(), prefix, time.Minute), Unread: unread,
+		Messages: repo, Store: flakyLinkStore{pg, linkDown}, Members: redis.NewMembers(rd.Client(), prefix, time.Minute), Unread: unread,
 		Dedup: redis.NewDedup(rd.Client(), prefix, 0), IDs: gen, Notifier: rec, Events: log,
 		QueueNotification: pg.Notifications().Enqueue,
 	})
-	return &fixture{t: t, pg: pg, svc: svc, unread: unread, rec: rec, events: log}
+	return &fixture{t: t, pg: pg, svc: svc, unread: unread, rec: rec, events: log, linkDown: linkDown}
 }
 
 func (f *fixture) user(name string) int64 {
@@ -408,8 +431,16 @@ func TestDeletedFileMessagesFreeTheirFile(t *testing.T) {
 		}
 		return slices.ContainsFunc(list, func(u postgres.UnreferencedAttachment) bool { return u.ID == a.ID })
 	}
+	f.linkDown.Store(true)
+	if err := f.svc.Delete(ctx, alice, chat.ID, sent.Message.ID, messages.ScopeEveryone); !errors.Is(err, messages.ErrUnavailable) {
+		t.Fatalf("a failed unlink must fail the delete: %v", err)
+	}
+	f.linkDown.Store(false)
+	if links, _ := f.pg.Attachments().LinksForViewer(ctx, a.ID, bob); len(links) != 1 {
+		t.Fatalf("links before the retry: %v", links)
+	}
 	if err := f.svc.Delete(ctx, alice, chat.ID, sent.Message.ID, messages.ScopeEveryone); err != nil {
-		t.Fatal(err)
+		t.Fatalf("retry of the delete: %v", err)
 	}
 	if unused() {
 		t.Fatal("the forwarded copy still uses the file")
@@ -417,8 +448,13 @@ func TestDeletedFileMessagesFreeTheirFile(t *testing.T) {
 	if links, err := f.pg.Attachments().LinksForViewer(ctx, a.ID, bob); err != nil || len(links) != 0 {
 		t.Fatalf("bob still reaches the file of the deleted message: %v %v", links, err)
 	}
+	f.linkDown.Store(true)
+	if err := f.svc.DeleteMany(ctx, alice, other.ID, []int64{copies[0].ID}, messages.ScopeEveryone); !errors.Is(err, messages.ErrUnavailable) {
+		t.Fatalf("a failed unlink must fail the bulk delete: %v", err)
+	}
+	f.linkDown.Store(false)
 	if err := f.svc.DeleteMany(ctx, alice, other.ID, []int64{copies[0].ID}, messages.ScopeEveryone); err != nil {
-		t.Fatal(err)
+		t.Fatalf("retry of the bulk delete: %v", err)
 	}
 	if !unused() {
 		t.Fatal("the file of deleted messages is never collected")
