@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -90,9 +91,14 @@ type fixture struct {
 
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
+	return newFixtureWith(t, func(r scylla.MessageRepository) scylla.MessageRepository { return r })
+}
+
+func newFixtureWith(t *testing.T, wrap func(scylla.MessageRepository) scylla.MessageRepository) *fixture {
+	t.Helper()
 	pg := testenv.Postgres(t)
 	rd, prefix := testenv.Redis(t)
-	repo := scylla.NewMessages(testenv.Scylla(t), 10*time.Second)
+	repo := wrap(scylla.NewMessages(testenv.Scylla(t), 10*time.Second))
 	gen, _ := ids.NewGenerator(1)
 	rec := &recorder{}
 	log := &eventLog{}
@@ -277,6 +283,62 @@ func TestSendIsIdempotentAndCountsUnread(t *testing.T) {
 	}
 	if got := f.rec.reads[1]; len(got) != 1 || got[0] != bob {
 		t.Fatalf("receipts off: %v", got)
+	}
+}
+
+type failingInsert struct {
+	scylla.MessageRepository
+	failures atomic.Int32
+	ids      []int64
+}
+
+func (r *failingInsert) Insert(ctx context.Context, m scylla.Message) error {
+	r.ids = append(r.ids, m.ID)
+	if r.failures.Add(-1) >= 0 {
+		return errors.New("scylla is down")
+	}
+	return r.MessageRepository.Insert(ctx, m)
+}
+
+func TestRetryAfterFailedInsertKeepsTheMessageID(t *testing.T) {
+	flaky := &failingInsert{}
+	f := newFixtureWith(t, func(r scylla.MessageRepository) scylla.MessageRepository {
+		flaky.MessageRepository = r
+		return flaky
+	})
+	ctx := context.Background()
+	alice, bob := f.user("alice"), f.user("bob")
+	chat, _, _ := f.pg.Chats().CreateDirect(ctx, alice, bob)
+	if err := f.unread.Load(ctx, bob, map[int64]int64{}); err != nil {
+		t.Fatal(err)
+	}
+	req := messages.SendRequest{ChatID: chat.ID, SenderID: alice, ClientTempID: "flaky", Type: scylla.TypeText, Content: str("hello")}
+	flaky.failures.Store(2)
+	for range 2 {
+		if _, err := f.svc.Send(ctx, req); !errors.Is(err, messages.ErrUnavailable) {
+			t.Fatalf("failed insert: %v", err)
+		}
+	}
+	sent, err := f.svc.Send(ctx, req)
+	if err != nil || sent.Duplicate {
+		t.Fatalf("retry: %+v %v", sent, err)
+	}
+	if len(flaky.ids) != 3 || flaky.ids[1] != flaky.ids[0] || flaky.ids[2] != flaky.ids[0] || sent.Message.ID != flaky.ids[0] {
+		t.Fatalf("every retry must store the first id: %v, sent %d", flaky.ids, sent.Message.ID)
+	}
+	again, err := f.svc.Send(ctx, req)
+	if err != nil || !again.Duplicate || again.Message.ID != sent.Message.ID {
+		t.Fatalf("after the stored retry: %+v %v", again, err)
+	}
+	if counts, _, _ := f.unread.Get(ctx, bob); counts[chat.ID] != 1 {
+		t.Fatalf("bob has %d unread, want 1", counts[chat.ID])
+	}
+	if len(f.rec.created) != 1 {
+		t.Fatalf("%d deliveries, want 1", len(f.rec.created))
+	}
+	page, err := f.svc.History(ctx, bob, scylla.PageQuery{ChatID: chat.ID, Viewer: bob, Limit: 10})
+	if err != nil || len(page.Messages) != 1 {
+		t.Fatalf("history: %d messages, %v", len(page.Messages), err)
 	}
 }
 

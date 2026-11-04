@@ -70,6 +70,8 @@ type Unread interface {
 type Dedup interface {
 	Claim(ctx context.Context, userID, chatID int64, clientTempID string, id int64) (existing int64, claimed bool, err error)
 	Release(ctx context.Context, userID, chatID int64, clientTempID string, id int64) error
+	Fail(ctx context.Context, userID, chatID int64, clientTempID string, id int64) error
+	Resume(ctx context.Context, userID, chatID int64, clientTempID string, id int64) (bool, error)
 }
 
 // Store is the PostgreSQL side.
@@ -302,8 +304,15 @@ func (s *Service) Send(ctx context.Context, r SendRequest) (Sent, error) {
 	if err != nil {
 		return Sent{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
+	resumed := false
 	if !claimed {
-		return s.duplicate(ctx, r, prev)
+		if resumed, err = s.d.Dedup.Resume(ctx, r.SenderID, r.ChatID, r.ClientTempID, prev); err != nil {
+			return Sent{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
+		}
+		if !resumed {
+			return s.duplicate(ctx, r, prev)
+		}
+		id = prev
 	}
 
 	sender := r.SenderID
@@ -314,24 +323,35 @@ func (s *Service) Send(ctx context.Context, r SendRequest) (Sent, error) {
 	if attachment != nil {
 		// Linked before the message is stored, so recipients can download the file as soon as they see it.
 		if err := s.d.Store.Attachments().Link(ctx, uuid.UUID(*attachment), r.ChatID, id); err != nil {
-			if rerr := s.d.Dedup.Release(context.WithoutCancel(ctx), r.SenderID, r.ChatID, r.ClientTempID, id); rerr != nil {
-				s.d.Log.WarnContext(ctx, "release client_temp_id", "error", rerr)
-			}
+			s.abandon(ctx, r, id, resumed)
 			return Sent{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 		}
 	}
-	if err := s.queueNotification(ctx, m, members); err != nil {
-		_ = s.d.Dedup.Release(context.WithoutCancel(ctx), r.SenderID, r.ChatID, r.ClientTempID, id)
-		return Sent{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
+	if !resumed {
+		if err := s.queueNotification(ctx, m, members); err != nil {
+			s.abandon(ctx, r, id, false)
+			return Sent{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
+		}
 	}
 	if err := s.d.Messages.Insert(ctx, m); err != nil {
-		if rerr := s.d.Dedup.Release(context.WithoutCancel(ctx), r.SenderID, r.ChatID, r.ClientTempID, id); rerr != nil {
-			s.d.Log.WarnContext(ctx, "release client_temp_id", "error", rerr)
-		}
+		s.abandon(ctx, r, id, true)
 		return Sent{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
 	s.delivered(ctx, m, members, r.ClientTempID)
 	return Sent{Message: m}, nil
+}
+
+func (s *Service) abandon(ctx context.Context, r SendRequest, id int64, keep bool) {
+	ctx = context.WithoutCancel(ctx)
+	var err error
+	if keep {
+		err = s.d.Dedup.Fail(ctx, r.SenderID, r.ChatID, r.ClientTempID, id)
+	} else {
+		err = s.d.Dedup.Release(ctx, r.SenderID, r.ChatID, r.ClientTempID, id)
+	}
+	if err != nil {
+		s.d.Log.WarnContext(ctx, "release client_temp_id", "error", err)
+	}
 }
 
 // delivered finishes a stored new message: chat order, unread counters, delivery and the event. Failures only
@@ -353,12 +373,11 @@ func (s *Service) delivered(ctx context.Context, m scylla.Message, members []int
 	s.emit(ctx, events.Event{Type: events.MessageCreated, ChatID: m.ChatID, MessageID: m.ID, ActorID: sender, At: m.CreatedAt})
 }
 
-// ErrSendInProgress: a send with this client_temp_id is still being stored (or failed). The client retries.
+// ErrSendInProgress: a send with this client_temp_id is still being stored. The client retries.
 var ErrSendInProgress = fmt.Errorf("%w: the first send with this client_temp_id is not stored yet", ErrUnavailable)
 
 // duplicate answers a repeated send with the first message, but only once that message is stored: until then
-// (the first send is still running, or failed and will release its claim) the retry fails as unavailable, so
-// a client never gets an ack for a message that does not exist.
+// the retry fails as unavailable, so a client never gets an ack for a message that does not exist.
 func (s *Service) duplicate(ctx context.Context, r SendRequest, id int64) (Sent, error) {
 	m, err := s.d.Messages.Get(ctx, r.ChatID, id)
 	if err != nil || m.SenderID == nil || *m.SenderID != r.SenderID {
