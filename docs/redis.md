@@ -19,7 +19,8 @@ Production keys have no prefix; tests put a random namespace in front of every k
 | Last seen | written to PostgreSQL (`users.last_seen_at`) when the user goes offline | – | – | gateway |
 | Live delivery | `user:{user_id}` | pub/sub channel | – | `Bus` |
 | Typing indicator | published on `user:{user_id}`, never stored | pub/sub | – | `Bus` |
-| Unread counters | `unread:{user_id}`: field per chat id, `{chat_id}:upto` per read chat, plus `_built` | hash | none (rebuilt when `_built` is missing) | `Unread` |
+| Unread counters | `unread:{user_id}`: field per chat id, `{chat_id}:read` per read chat, plus `_built` | hash | none (rebuilt when `_built` is missing) | `Unread` |
+| Unread message ids | `unread:{user_id}:{chat_id}`: zero-padded message ids | sorted set (lex order) | 7 days after the last change, at most 1000 ids | `Unread` |
 | Chat membership cache | `members:{chat_id}` (user ids plus the marker `0`), `members:{chat_id}:v` (version) | set, string | 10 min; version 24 h | `Members` |
 | Rate limits (frequent actions) | `rl:{action}:{digest of ip or user}` | string (GCRA) | until the bucket is full again | `RateLimiter` |
 | Rate limits (auth failures) | `auth:rl:{rule}:{digest}` | sorted set (sliding window) | the window | `auth.Limiter` |
@@ -70,9 +71,10 @@ member except the sender, reading resets it (or sets it to the number of message
 The hash carries `_built` once it holds the counts of all chats; when it is missing (a new Redis, an evicted
 key), the counts are rebuilt from ScyllaDB and the read positions in PostgreSQL. Increments for a user whose
 hash is not built are skipped, because the rebuild counts those messages anyway. A message that arrives during
-a rebuild can be missed until the user next reads that chat. A read stores in `{chat_id}:upto` the newest message
-its count covers, and a later increment for a message up to that id is skipped, so a message stored while the
-user reads is not counted twice.
+a rebuild can be missed until the user next reads that chat. Counting is per message: an increment adds the
+message id to `unread:{user_id}:{chat_id}` and counts only when the id is new and above the read position stored
+in `{chat_id}:read`. A read drops the ids up to its position, adds the ids its recount found and stores the size
+of the set as the count, so a message is counted once whether its increment comes before or after the recount.
 
 ## Membership cache
 

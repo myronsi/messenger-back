@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"time"
 
 	goredis "github.com/redis/go-redis/v9"
 )
@@ -30,19 +31,26 @@ func (u *Unread) key(userID int64) string {
 	return u.prefix + "unread:" + strconv.FormatInt(userID, 10)
 }
 
-const idNotAbove = `
-local function notAbove(id, mark)
-  if not mark then return false end
-  if #id ~= #mark then return #id < #mark end
-  return id <= mark
-end
-`
+func (u *Unread) idsKey(userID, chatID int64) string {
+	return u.key(userID) + ":" + strconv.FormatInt(chatID, 10)
+}
+
+func paddedID(id int64) string { return fmt.Sprintf("%020d", id) }
+
+const (
+	unreadIDsTTL = 7 * 24 * time.Hour
+	unreadIDsCap = 1000
+)
 
 var (
-	incrScript = goredis.NewScript(idNotAbove + `
+	incrScript = goredis.NewScript(`
 if redis.call('HEXISTS', KEYS[1], '_built') == 0 then return 0 end
-if notAbove(ARGV[3], redis.call('HGET', KEYS[1], ARGV[1] .. ':upto')) then return 0 end
-redis.call('HINCRBY', KEYS[1], ARGV[1], tonumber(ARGV[2]))
+local read = redis.call('HGET', KEYS[1], ARGV[1] .. ':read')
+if read and ARGV[2] <= read then return 0 end
+if redis.call('ZADD', KEYS[2], 'NX', 0, ARGV[2]) == 0 then return 0 end
+redis.call('PEXPIRE', KEYS[2], ARGV[3])
+redis.call('ZREMRANGEBYRANK', KEYS[2], 0, -(tonumber(ARGV[4]) + 1))
+redis.call('HINCRBY', KEYS[1], ARGV[1], 1)
 return 1`)
 
 	// KEYS[1] hash; ARGV: chat, count, chat, count, ... Replaces the hash unless another rebuild finished
@@ -63,9 +71,9 @@ func (u *Unread) Increment(ctx context.Context, chatID, messageID int64, userIDs
 	if len(userIDs) == 0 {
 		return nil
 	}
-	field, id := strconv.FormatInt(chatID, 10), strconv.FormatInt(messageID, 10)
+	field, id := strconv.FormatInt(chatID, 10), paddedID(messageID)
 	_, err := pipelineScript(ctx, u.rdb, incrScript, len(userIDs), func(pipe goredis.Pipeliner, i int) *goredis.Cmd {
-		return incrScript.EvalSha(ctx, pipe, []string{u.key(userIDs[i])}, field, 1, id)
+		return incrScript.EvalSha(ctx, pipe, []string{u.key(userIDs[i]), u.idsKey(userIDs[i], chatID)}, field, id, unreadIDsTTL.Milliseconds(), unreadIDsCap)
 	})
 	if err != nil {
 		return fmt.Errorf("unread increment: %w", err)
@@ -75,27 +83,43 @@ func (u *Unread) Increment(ctx context.Context, chatID, messageID int64, userIDs
 
 // Set stores the count of one chat, for example after the user read up to a message that is not the
 // latest. A hash that is not built stays unbuilt.
-func (u *Unread) Set(ctx context.Context, userID, chatID, count, upTo int64) error {
-	field := strconv.FormatInt(chatID, 10)
-	err := setScript.Run(ctx, u.rdb, []string{u.key(userID)}, field, max(count, 0), strconv.FormatInt(upTo, 10)).Err()
-	if err != nil {
+func (u *Unread) Set(ctx context.Context, userID, chatID, readUpTo int64, unread []int64) error {
+	args := make([]any, 0, 4+len(unread))
+	args = append(args, strconv.FormatInt(chatID, 10), paddedID(readUpTo), unreadIDsTTL.Milliseconds(), unreadIDsCap)
+	for _, id := range unread {
+		if id > readUpTo {
+			args = append(args, paddedID(id))
+		}
+	}
+	if err := setScript.Run(ctx, u.rdb, []string{u.key(userID), u.idsKey(userID, chatID)}, args...).Err(); err != nil {
 		return fmt.Errorf("unread set: %w", err)
 	}
 	return nil
 }
 
-var setScript = goredis.NewScript(idNotAbove + `
+var setScript = goredis.NewScript(`
 if redis.call('HEXISTS', KEYS[1], '_built') == 0 then
   redis.call('HDEL', KEYS[1], ARGV[1])
   return 0
 end
-if tonumber(ARGV[2]) > 0 then
-  redis.call('HSET', KEYS[1], ARGV[1], ARGV[2])
+local mark = ARGV[1] .. ':read'
+local read = redis.call('HGET', KEYS[1], mark)
+if not read or ARGV[2] > read then
+  read = ARGV[2]
+  redis.call('HSET', KEYS[1], mark, read)
+end
+redis.call('ZREMRANGEBYLEX', KEYS[2], '-', '[' .. read)
+for i = 5, #ARGV do
+  if ARGV[i] > read then redis.call('ZADD', KEYS[2], 'NX', 0, ARGV[i]) end
+end
+redis.call('ZREMRANGEBYRANK', KEYS[2], 0, -(tonumber(ARGV[4]) + 1))
+local n = redis.call('ZCARD', KEYS[2])
+if n > 0 then
+  redis.call('PEXPIRE', KEYS[2], ARGV[3])
+  redis.call('HSET', KEYS[1], ARGV[1], n)
 else
   redis.call('HDEL', KEYS[1], ARGV[1])
 end
-local mark = ARGV[1] .. ':upto'
-if not notAbove(ARGV[3], redis.call('HGET', KEYS[1], mark)) then redis.call('HSET', KEYS[1], mark, ARGV[3]) end
 return 1`)
 
 // Forget removes the chat from the counters of the users (the chat was deleted or they left it).
@@ -106,7 +130,8 @@ func (u *Unread) Forget(ctx context.Context, chatID int64, userIDs ...int64) err
 	field := strconv.FormatInt(chatID, 10)
 	pipe := u.rdb.Pipeline()
 	for _, uid := range userIDs {
-		pipe.HDel(ctx, u.key(uid), field, field+":upto")
+		pipe.HDel(ctx, u.key(uid), field, field+":read")
+		pipe.Del(ctx, u.idsKey(uid, chatID))
 	}
 	if _, err := pipe.Exec(ctx); err != nil {
 		return fmt.Errorf("unread forget: %w", err)

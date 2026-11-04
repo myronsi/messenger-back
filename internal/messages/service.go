@@ -63,7 +63,7 @@ type Members interface {
 // Unread keeps the unread counters.
 type Unread interface {
 	Increment(ctx context.Context, chatID, messageID int64, userIDs ...int64) error
-	Set(ctx context.Context, userID, chatID, count, upTo int64) error
+	Set(ctx context.Context, userID, chatID, readUpTo int64, unread []int64) error
 }
 
 // Dedup remembers the message of a client_temp_id (per user and chat).
@@ -724,13 +724,14 @@ func (s *Service) Read(ctx context.Context, userID, chatID, messageID int64) (in
 		}
 		return n, nil
 	}
-	n, newest, err := s.d.Messages.CountUnread(ctx, chatID, userID, messageID, unreadCap)
+	unread, err := s.d.Messages.UnreadIDs(ctx, chatID, userID, messageID, unreadCap)
+	n := len(unread)
 	countErr := err
 	if err != nil {
 		// The marker moved but the count is unknown: the caller is told to retry (which only recounts), and the
 		// other members still learn about the read below.
 		s.d.Log.WarnContext(ctx, "unread recount", "error", err, "chat_id", chatID)
-	} else if err := s.d.Unread.Set(ctx, userID, chatID, int64(n), max(newest, messageID)); err != nil {
+	} else if err := s.d.Unread.Set(ctx, userID, chatID, messageID, unread); err != nil {
 		s.d.Log.WarnContext(ctx, "unread set", "error", err, "chat_id", chatID)
 	}
 	recipients := []int64{userID}

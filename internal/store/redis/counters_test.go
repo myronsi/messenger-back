@@ -45,10 +45,10 @@ func TestUnreadRebuildAndCount(t *testing.T) {
 		t.Fatalf("after increments: %v (rebuilds %d) %v", counts, rebuilds, err)
 	}
 
-	if err := u.Set(ctx, alice, 10, 0, 101); err != nil {
+	if err := u.Set(ctx, alice, 10, 101, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := u.Set(ctx, alice, 11, 5, 102); err != nil {
+	if err := u.Set(ctx, alice, 11, 101, []int64{102, 103, 104, 105, 106}); err != nil {
 		t.Fatal(err)
 	}
 	counts, _, _ = u.Get(ctx, alice)
@@ -63,7 +63,7 @@ func TestUnreadRebuildAndCount(t *testing.T) {
 		t.Fatalf("after forget: %v built=%v", counts, built)
 	}
 	// Set on an unbuilt hash does not make it look built.
-	if err := u.Set(ctx, bob, 10, 2, 101); err != nil {
+	if err := u.Set(ctx, bob, 10, 99, []int64{100, 101}); err != nil {
 		t.Fatal(err)
 	}
 	if _, built, _ := u.Get(ctx, bob); built {
@@ -76,38 +76,73 @@ func TestUnreadRebuildAndCount(t *testing.T) {
 	}
 }
 
-func TestUnreadCountsAMessageOnce(t *testing.T) {
+func TestUnreadCountsEveryMessageOnce(t *testing.T) {
 	s, prefix := testStore(t)
 	ctx := context.Background()
 	u := NewUnread(s.Client(), prefix)
 	if err := u.Load(ctx, 1, map[int64]int64{}); err != nil {
 		t.Fatal(err)
 	}
-	if err := u.Set(ctx, 1, 5, 2, 9007199254740993); err != nil {
+	const big = 9007199254740993
+	count := func() int64 {
+		t.Helper()
+		counts, _, err := u.Get(ctx, 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return counts[5]
+	}
+	if err := u.Increment(ctx, 5, big+3, 1); err != nil {
 		t.Fatal(err)
 	}
-	for _, id := range []int64{9007199254740992, 9007199254740993, 999} {
+	if err := u.Set(ctx, 1, 5, big, []int64{big + 2}); err != nil {
+		t.Fatal(err)
+	}
+	if n := count(); n != 2 {
+		t.Fatalf("an increment that came before the recount stored is kept: %d", n)
+	}
+	for _, id := range []int64{big + 2, big + 3, big - 1, big} {
 		if err := u.Increment(ctx, 5, id, 1); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if counts, _, _ := u.Get(ctx, 1); counts[5] != 2 {
-		t.Fatalf("messages covered by the recount were counted again: %d", counts[5])
+	if n := count(); n != 2 {
+		t.Fatalf("counted or read messages were counted again: %d", n)
 	}
-	if err := u.Increment(ctx, 5, 9007199254740994, 1); err != nil {
+	if err := u.Increment(ctx, 5, big+1, 1); err != nil {
 		t.Fatal(err)
 	}
-	if counts, _, _ := u.Get(ctx, 1); counts[5] != 3 {
-		t.Fatalf("a newer message: %d", counts[5])
+	if n := count(); n != 3 {
+		t.Fatalf("a pending older message below the recount's newest must count: %d", n)
 	}
-	if err := u.Set(ctx, 1, 5, 1, 9007199254740992); err != nil {
+	if err := u.Set(ctx, 1, 5, big+2, []int64{big + 3}); err != nil {
 		t.Fatal(err)
 	}
-	if err := u.Increment(ctx, 5, 9007199254740993, 1); err != nil {
+	if n := count(); n != 1 {
+		t.Fatalf("after reading up to %d: %d", big+2, n)
+	}
+	if err := u.Set(ctx, 1, 5, big-5, []int64{big - 4, big + 3}); err != nil {
 		t.Fatal(err)
 	}
-	if counts, _, _ := u.Get(ctx, 1); counts[5] != 1 {
-		t.Fatalf("an older recount lowered the mark: %d", counts[5])
+	if err := u.Increment(ctx, 5, big-4, 1); err != nil {
+		t.Fatal(err)
+	}
+	if n := count(); n != 1 {
+		t.Fatalf("an older read lowered the read position: %d", n)
+	}
+	for i := range int64(unreadIDsCap + 50) {
+		if err := u.Increment(ctx, 5, big+10+i, 1); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n, err := s.Client().ZCard(ctx, u.idsKey(1, 5)).Result(); err != nil || n != unreadIDsCap {
+		t.Fatalf("remembered ids: %d %v", n, err)
+	}
+	if err := u.Forget(ctx, 5, 1); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := s.Client().Exists(ctx, u.idsKey(1, 5)).Result(); n != 0 || count() != 0 {
+		t.Fatal("forget left the chat's ids")
 	}
 }
 
