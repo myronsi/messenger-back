@@ -172,7 +172,7 @@ func run() error {
 	if err := p.Serve(srv); err != nil {
 		return err
 	}
-	if err := shutdown(log, cfg.HTTP, srv, router, rt); err != nil {
+	if err := shutdown(log, cfg.HTTP, srv, router.Drain, rt); err != nil {
 		return err
 	}
 	return p.Err()
@@ -180,9 +180,9 @@ func run() error {
 
 // shutdown drains the server: /readyz turns 503, the listener closes, in-flight requests finish
 // and open WebSockets get the "reconnect" close code.
-func shutdown(log *slog.Logger, cfg config.HTTP, srv *http.Server, router *httpapi.Router, rt *realtimeStack) error {
+func shutdown(log *slog.Logger, cfg config.HTTP, srv *http.Server, drain func(), rt *realtimeStack) error {
 	log.Info("shutting down")
-	router.Drain()
+	drain()
 	if cfg.DrainDelay > 0 {
 		time.Sleep(cfg.DrainDelay)
 	}
@@ -193,10 +193,11 @@ func shutdown(log *slog.Logger, cfg config.HTTP, srv *http.Server, router *httpa
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		rt.stop(ctx)
+		rt.closeSockets(ctx)
 	}()
 	err := srv.Shutdown(ctx)
 	<-done
+	rt.stop()
 	if err != nil {
 		_ = srv.Close()
 		return fmt.Errorf("shutdown: %w", err)

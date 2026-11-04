@@ -203,12 +203,15 @@ func (st *realtimeStack) closeSessions(ctx context.Context, sessions []uuid.UUID
 	}
 }
 
-// stop closes the open sockets with the reconnect code (each one releases its presence on the way out),
-// then stops the gateway and waits for the background loops.
-func (st *realtimeStack) stop(ctx context.Context) {
+// closeSockets closes the open sockets with the reconnect code (each one releases its presence on the way
+// out), then stops the gateway.
+func (st *realtimeStack) closeSockets(ctx context.Context) {
 	st.hub.Shutdown(ctx)
 	st.gateway.Wait(ctx) // every socket releases its presence and records last-seen
 	st.gateway.Close()
+}
+
+func (st *realtimeStack) stop() {
 	st.cancel()
 	st.done.Wait()
 }
