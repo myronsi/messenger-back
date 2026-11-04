@@ -309,24 +309,32 @@ func (r *Messages) Page(ctx context.Context, q PageQuery) (Page, error) {
 }
 
 func (r *Messages) CountAfter(ctx context.Context, chatID, viewer, afterID int64, limit int) (int, error) {
+	n, _, err := r.CountUnread(ctx, chatID, viewer, afterID, limit)
+	return n, err
+}
+
+func (r *Messages) CountUnread(ctx context.Context, chatID, viewer, afterID int64, limit int) (n int, newest int64, err error) {
 	if limit <= 0 {
-		return 0, nil
+		return 0, 0, nil
 	}
 	ctx, cancel, sess, err := r.session(ctx)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	defer cancel()
 	var start *int
 	if afterID != 0 {
 		if start, err = r.startAt(ctx, sess, chatID, afterID); err != nil {
-			return 0, err
+			return 0, 0, err
 		}
 	}
 	keep := func(m Message) bool { return !m.Deleted && (m.SenderID == nil || *m.SenderID != viewer) }
 	msgs, _, err := r.run(ctx, sess, scan{chatID: chatID, viewer: viewer, bound: afterID, start: start, need: limit, keep: keep})
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	return len(msgs), nil
+	for _, m := range msgs {
+		newest = max(newest, m.ID)
+	}
+	return len(msgs), newest, nil
 }

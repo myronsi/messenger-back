@@ -62,8 +62,8 @@ type Members interface {
 
 // Unread keeps the unread counters.
 type Unread interface {
-	Increment(ctx context.Context, chatID int64, userIDs ...int64) error
-	Set(ctx context.Context, userID, chatID, count int64) error
+	Increment(ctx context.Context, chatID, messageID int64, userIDs ...int64) error
+	Set(ctx context.Context, userID, chatID, count, upTo int64) error
 }
 
 // Dedup remembers the message of a client_temp_id (per user and chat).
@@ -366,7 +366,7 @@ func (s *Service) delivered(ctx context.Context, m scylla.Message, members []int
 	if m.SenderID != nil {
 		sender = *m.SenderID
 	}
-	if err := s.d.Unread.Increment(ctx, m.ChatID, without(members, sender)...); err != nil {
+	if err := s.d.Unread.Increment(ctx, m.ChatID, m.ID, without(members, sender)...); err != nil {
 		s.d.Log.WarnContext(ctx, "unread increment", "error", err, "chat_id", m.ChatID)
 	}
 	s.d.Notifier.MessageCreated(ctx, m, members, clientTempID)
@@ -708,13 +708,13 @@ func (s *Service) Read(ctx context.Context, userID, chatID, messageID int64) (in
 		}
 		return n, nil
 	}
-	n, err := s.d.Messages.CountAfter(ctx, chatID, userID, messageID, unreadCap)
+	n, newest, err := s.d.Messages.CountUnread(ctx, chatID, userID, messageID, unreadCap)
 	countErr := err
 	if err != nil {
 		// The marker moved but the count is unknown: the caller is told to retry (which only recounts), and the
 		// other members still learn about the read below.
 		s.d.Log.WarnContext(ctx, "unread recount", "error", err, "chat_id", chatID)
-	} else if err := s.d.Unread.Set(ctx, userID, chatID, int64(n)); err != nil {
+	} else if err := s.d.Unread.Set(ctx, userID, chatID, int64(n), max(newest, messageID)); err != nil {
 		s.d.Log.WarnContext(ctx, "unread set", "error", err, "chat_id", chatID)
 	}
 	recipients := []int64{userID}

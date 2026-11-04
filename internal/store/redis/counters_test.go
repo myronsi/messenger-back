@@ -18,7 +18,7 @@ func TestUnreadRebuildAndCount(t *testing.T) {
 	const alice, bob = 1, 2
 
 	// Nothing is counted for a user whose hash is not built: the rebuild includes those messages.
-	if err := u.Increment(ctx, 10, alice); err != nil {
+	if err := u.Increment(ctx, 10, 100, alice); err != nil {
 		t.Fatal(err)
 	}
 	if _, built, err := u.Get(ctx, alice); err != nil || built {
@@ -34,10 +34,10 @@ func TestUnreadRebuildAndCount(t *testing.T) {
 	if err != nil || !maps.Equal(counts, map[int64]int64{10: 3, 11: 0}) {
 		t.Fatalf("counts: %v %v", counts, err)
 	}
-	if err := u.Increment(ctx, 10, alice, bob); err != nil {
+	if err := u.Increment(ctx, 10, 101, alice, bob); err != nil {
 		t.Fatal(err)
 	}
-	if err := u.Increment(ctx, 11, alice); err != nil {
+	if err := u.Increment(ctx, 11, 102, alice); err != nil {
 		t.Fatal(err)
 	}
 	counts, err = u.Counts(ctx, alice, rebuild)
@@ -45,10 +45,10 @@ func TestUnreadRebuildAndCount(t *testing.T) {
 		t.Fatalf("after increments: %v (rebuilds %d) %v", counts, rebuilds, err)
 	}
 
-	if err := u.Reset(ctx, alice, 10); err != nil {
+	if err := u.Set(ctx, alice, 10, 0, 101); err != nil {
 		t.Fatal(err)
 	}
-	if err := u.Set(ctx, alice, 11, 5); err != nil {
+	if err := u.Set(ctx, alice, 11, 5, 102); err != nil {
 		t.Fatal(err)
 	}
 	counts, _, _ = u.Get(ctx, alice)
@@ -63,7 +63,7 @@ func TestUnreadRebuildAndCount(t *testing.T) {
 		t.Fatalf("after forget: %v built=%v", counts, built)
 	}
 	// Set on an unbuilt hash does not make it look built.
-	if err := u.Set(ctx, bob, 10, 2); err != nil {
+	if err := u.Set(ctx, bob, 10, 2, 101); err != nil {
 		t.Fatal(err)
 	}
 	if _, built, _ := u.Get(ctx, bob); built {
@@ -76,6 +76,41 @@ func TestUnreadRebuildAndCount(t *testing.T) {
 	}
 }
 
+func TestUnreadCountsAMessageOnce(t *testing.T) {
+	s, prefix := testStore(t)
+	ctx := context.Background()
+	u := NewUnread(s.Client(), prefix)
+	if err := u.Load(ctx, 1, map[int64]int64{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := u.Set(ctx, 1, 5, 2, 9007199254740993); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []int64{9007199254740992, 9007199254740993, 999} {
+		if err := u.Increment(ctx, 5, id, 1); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if counts, _, _ := u.Get(ctx, 1); counts[5] != 2 {
+		t.Fatalf("messages covered by the recount were counted again: %d", counts[5])
+	}
+	if err := u.Increment(ctx, 5, 9007199254740994, 1); err != nil {
+		t.Fatal(err)
+	}
+	if counts, _, _ := u.Get(ctx, 1); counts[5] != 3 {
+		t.Fatalf("a newer message: %d", counts[5])
+	}
+	if err := u.Set(ctx, 1, 5, 1, 9007199254740992); err != nil {
+		t.Fatal(err)
+	}
+	if err := u.Increment(ctx, 5, 9007199254740993, 1); err != nil {
+		t.Fatal(err)
+	}
+	if counts, _, _ := u.Get(ctx, 1); counts[5] != 1 {
+		t.Fatalf("an older recount lowered the mark: %d", counts[5])
+	}
+}
+
 func TestUnreadConcurrentRebuildsKeepTheFirst(t *testing.T) {
 	s, prefix := testStore(t)
 	ctx := context.Background()
@@ -83,7 +118,7 @@ func TestUnreadConcurrentRebuildsKeepTheFirst(t *testing.T) {
 	if err := u.Load(ctx, 1, map[int64]int64{5: 1}); err != nil {
 		t.Fatal(err)
 	}
-	if err := u.Increment(ctx, 5, 1); err != nil {
+	if err := u.Increment(ctx, 5, 100, 1); err != nil {
 		t.Fatal(err)
 	}
 	// A slower rebuild that read older data must not overwrite the counts.

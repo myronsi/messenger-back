@@ -120,6 +120,7 @@ type MessageRepository interface {
 	// CountAfter counts the messages newer than afterID that viewer can see and did not send, up to limit.
 	// It rebuilds unread counters.
 	CountAfter(ctx context.Context, chatID, viewer, afterID int64, limit int) (int, error)
+	CountUnread(ctx context.Context, chatID, viewer, afterID int64, limit int) (n int, newest int64, err error)
 	// DeleteChat removes every message, reaction, location and hidden marker of the chat. It may take long
 	// for a big chat; when it fails or is cancelled, calling it again continues where it stopped. Call it once
 	// more after DeleteGracePeriod to catch writes that were in flight.

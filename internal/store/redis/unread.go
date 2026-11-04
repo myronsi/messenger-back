@@ -30,10 +30,18 @@ func (u *Unread) key(userID int64) string {
 	return u.prefix + "unread:" + strconv.FormatInt(userID, 10)
 }
 
+const idNotAbove = `
+local function notAbove(id, mark)
+  if not mark then return false end
+  if #id ~= #mark then return #id < #mark end
+  return id <= mark
+end
+`
+
 var (
-	// KEYS[1] hash; ARGV: chat field, by. Increments only a built hash.
-	incrScript = goredis.NewScript(`
+	incrScript = goredis.NewScript(idNotAbove + `
 if redis.call('HEXISTS', KEYS[1], '_built') == 0 then return 0 end
+if notAbove(ARGV[3], redis.call('HGET', KEYS[1], ARGV[1] .. ':upto')) then return 0 end
 redis.call('HINCRBY', KEYS[1], ARGV[1], tonumber(ARGV[2]))
 return 1`)
 
@@ -51,13 +59,13 @@ return 1`)
 
 // Increment adds one unread message in the chat for every user (call it with the members except the
 // sender), in one round trip.
-func (u *Unread) Increment(ctx context.Context, chatID int64, userIDs ...int64) error {
+func (u *Unread) Increment(ctx context.Context, chatID, messageID int64, userIDs ...int64) error {
 	if len(userIDs) == 0 {
 		return nil
 	}
-	field := strconv.FormatInt(chatID, 10)
+	field, id := strconv.FormatInt(chatID, 10), strconv.FormatInt(messageID, 10)
 	_, err := pipelineScript(ctx, u.rdb, incrScript, len(userIDs), func(pipe goredis.Pipeliner, i int) *goredis.Cmd {
-		return incrScript.EvalSha(ctx, pipe, []string{u.key(userIDs[i])}, field, 1)
+		return incrScript.EvalSha(ctx, pipe, []string{u.key(userIDs[i])}, field, 1, id)
 	})
 	if err != nil {
 		return fmt.Errorf("unread increment: %w", err)
@@ -67,30 +75,28 @@ func (u *Unread) Increment(ctx context.Context, chatID int64, userIDs ...int64) 
 
 // Set stores the count of one chat, for example after the user read up to a message that is not the
 // latest. A hash that is not built stays unbuilt.
-func (u *Unread) Set(ctx context.Context, userID, chatID, count int64) error {
+func (u *Unread) Set(ctx context.Context, userID, chatID, count, upTo int64) error {
 	field := strconv.FormatInt(chatID, 10)
-	var err error
-	if count <= 0 {
-		err = u.rdb.HDel(ctx, u.key(userID), field).Err()
-	} else {
-		// Only a built hash: a lone field would make an unbuilt hash look like it had data.
-		err = setIfBuiltScript.Run(ctx, u.rdb, []string{u.key(userID)}, field, count).Err()
-	}
+	err := setScript.Run(ctx, u.rdb, []string{u.key(userID)}, field, max(count, 0), strconv.FormatInt(upTo, 10)).Err()
 	if err != nil {
 		return fmt.Errorf("unread set: %w", err)
 	}
 	return nil
 }
 
-var setIfBuiltScript = goredis.NewScript(`
-if redis.call('HEXISTS', KEYS[1], '_built') == 0 then return 0 end
-redis.call('HSET', KEYS[1], ARGV[1], ARGV[2])
+var setScript = goredis.NewScript(idNotAbove + `
+if redis.call('HEXISTS', KEYS[1], '_built') == 0 then
+  redis.call('HDEL', KEYS[1], ARGV[1])
+  return 0
+end
+if tonumber(ARGV[2]) > 0 then
+  redis.call('HSET', KEYS[1], ARGV[1], ARGV[2])
+else
+  redis.call('HDEL', KEYS[1], ARGV[1])
+end
+local mark = ARGV[1] .. ':upto'
+if not notAbove(ARGV[3], redis.call('HGET', KEYS[1], mark)) then redis.call('HSET', KEYS[1], mark, ARGV[3]) end
 return 1`)
-
-// Reset marks the chat as read for the user.
-func (u *Unread) Reset(ctx context.Context, userID, chatID int64) error {
-	return u.Set(ctx, userID, chatID, 0)
-}
 
 // Forget removes the chat from the counters of the users (the chat was deleted or they left it).
 func (u *Unread) Forget(ctx context.Context, chatID int64, userIDs ...int64) error {
@@ -100,7 +106,7 @@ func (u *Unread) Forget(ctx context.Context, chatID int64, userIDs ...int64) err
 	field := strconv.FormatInt(chatID, 10)
 	pipe := u.rdb.Pipeline()
 	for _, uid := range userIDs {
-		pipe.HDel(ctx, u.key(uid), field)
+		pipe.HDel(ctx, u.key(uid), field, field+":upto")
 	}
 	if _, err := pipe.Exec(ctx); err != nil {
 		return fmt.Errorf("unread forget: %w", err)

@@ -342,6 +342,46 @@ func TestRetryAfterFailedInsertKeepsTheMessageID(t *testing.T) {
 	}
 }
 
+type insertHook struct {
+	scylla.MessageRepository
+	after func(scylla.Message)
+}
+
+func (r *insertHook) Insert(ctx context.Context, m scylla.Message) error {
+	if err := r.MessageRepository.Insert(ctx, m); err != nil {
+		return err
+	}
+	if r.after != nil {
+		r.after(m)
+	}
+	return nil
+}
+
+func TestReadDuringSendCountsTheMessageOnce(t *testing.T) {
+	hook := &insertHook{}
+	f := newFixtureWith(t, func(r scylla.MessageRepository) scylla.MessageRepository {
+		hook.MessageRepository = r
+		return hook
+	})
+	ctx := context.Background()
+	alice, bob := f.user("alice"), f.user("bob")
+	chat, _, _ := f.pg.Chats().CreateDirect(ctx, alice, bob)
+	if err := f.unread.Load(ctx, bob, map[int64]int64{}); err != nil {
+		t.Fatal(err)
+	}
+	first := f.send(chat.ID, alice, "first", "one")
+	hook.after = func(scylla.Message) {
+		hook.after = nil
+		if n, err := f.svc.Read(ctx, bob, chat.ID, first.ID); err != nil || n != 1 {
+			t.Errorf("read while the second message is sent: %d %v", n, err)
+		}
+	}
+	f.send(chat.ID, alice, "second", "two")
+	if counts, _, _ := f.unread.Get(ctx, bob); counts[chat.ID] != 1 {
+		t.Fatalf("bob has %d unread, want 1", counts[chat.ID])
+	}
+}
+
 func TestEditAndDeletePermissions(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
