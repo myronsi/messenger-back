@@ -45,6 +45,8 @@ var RateUpload = redis.Rate{Name: "upload", Rate: 60, Period: time.Minute, Burst
 // RateSearch limits user searches per user.
 var RateSearch = redis.Rate{Name: "user_search", Rate: 60, Period: time.Minute, Burst: 20}
 
+var RateUserLookup = redis.Rate{Name: "user_lookup", Rate: 120, Period: time.Minute, Burst: 60}
+
 // allowN is allow for n events at once, for limiters that can count several (allow once otherwise).
 func allowN(w http.ResponseWriter, r *http.Request, l RateAllower, rate redis.Rate, subject string, n int, log *slog.Logger) bool {
 	nl, ok := l.(interface {

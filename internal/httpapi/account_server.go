@@ -485,14 +485,14 @@ func (a *AccountServer) UnblockUser(w http.ResponseWriter, r *http.Request, user
 // ---------------------------------------------------------------- users
 
 // writeUser renders a user for the viewer, or 404 for a user that does not exist.
-func (a *AccountServer) writeUser(w http.ResponseWriter, r *http.Request, viewer, id int64) {
+func (a *AccountServer) writeUser(w http.ResponseWriter, r *http.Request, viewer, id int64, lookup bool) {
 	views, err := a.o.Directory.ForViewer(r.Context(), viewer, []int64{id})
 	if err != nil {
 		a.internal(w, r, "render user", err)
 		return
 	}
 	v := views[id]
-	if v.IsDeleted {
+	if v.IsDeleted || (lookup && !v.Findable) {
 		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
 		return
 	}
@@ -505,17 +505,23 @@ func (a *AccountServer) GetUser(w http.ResponseWriter, r *http.Request, userID U
 	if !ok {
 		return
 	}
+	if !allow(w, r, a.o.Limiter, RateUserLookup, strconv.FormatInt(p.UserID, 10), a.o.Log) {
+		return
+	}
 	id, ok := parseUserID(w, userID)
 	if !ok {
 		return
 	}
-	a.writeUser(w, r, p.UserID, id)
+	a.writeUser(w, r, p.UserID, id, true)
 }
 
 // GetUserByUsername implements GET /usernames/{username}.
 func (a *AccountServer) GetUserByUsername(w http.ResponseWriter, r *http.Request, username Username, _ GetUserByUsernameParams) {
 	p, ok := principalOr401(w, r)
 	if !ok {
+		return
+	}
+	if !allow(w, r, a.o.Limiter, RateUserLookup, strconv.FormatInt(p.UserID, 10), a.o.Log) {
 		return
 	}
 	u, err := a.o.Store.Users().GetByUsername(r.Context(), username)
@@ -527,7 +533,7 @@ func (a *AccountServer) GetUserByUsername(w http.ResponseWriter, r *http.Request
 		a.internal(w, r, "user by username", err)
 		return
 	}
-	a.writeUser(w, r, p.UserID, u.ID)
+	a.writeUser(w, r, p.UserID, u.ID, true)
 }
 
 // SetContactName implements PUT /users/{id}/contact-name.
@@ -558,7 +564,7 @@ func (a *AccountServer) SetContactName(w http.ResponseWriter, r *http.Request, u
 		a.internal(w, r, "set contact name", err)
 		return
 	}
-	a.writeUser(w, r, p.UserID, target)
+	a.writeUser(w, r, p.UserID, target, false)
 }
 
 // RemoveContactName implements DELETE /users/{id}/contact-name.

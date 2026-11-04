@@ -145,9 +145,40 @@ func TestProfileAndPrivacy(t *testing.T) {
 	if r := e.do(t, request{method: http.MethodPut, path: "/me/privacy/exceptions/avatar_visibility/deny", token: alice.access, body: map[string]any{"user_ids": []string{"999999"}}}); r.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("unknown user in exceptions: %d", r.Code)
 	}
+	aliceID := e.id(t, alice)
+	for _, path := range []string{"/usernames/alice", "/users/" + aliceID} {
+		if r := e.do(t, request{method: http.MethodGet, path: path, token: bob.access}); r.Code != http.StatusNotFound {
+			t.Fatalf("%s while alice hides from search: %d %s", path, r.Code, r.Body)
+		}
+	}
+	if r := e.do(t, request{method: http.MethodGet, path: "/users/" + aliceID, token: alice.access}); r.Code != http.StatusOK {
+		t.Fatalf("alice looks herself up: %d", r.Code)
+	}
+	carol := e.register(t, "carol")
+	carolID, _ := strconv.ParseInt(e.id(t, carol), 10, 64)
+	aliceNum, _ := strconv.ParseInt(aliceID, 10, 64)
+	if _, _, err := e.store.Chats().CreateDirect(context.Background(), aliceNum, carolID); err != nil {
+		t.Fatal(err)
+	}
+	if r := e.do(t, request{method: http.MethodGet, path: "/users/" + aliceID, token: carol.access}); r.Code != http.StatusOK {
+		t.Fatalf("carol shares a chat with alice: %d", r.Code)
+	}
+	limited := false
+	for range 3 * RateUserLookup.Burst {
+		if r := e.do(t, request{method: http.MethodGet, path: "/users/" + aliceID, token: carol.access}); r.Code == http.StatusTooManyRequests {
+			limited = true
+			break
+		}
+	}
+	if !limited {
+		t.Fatal("user lookups are not rate limited")
+	}
+	if r := e.do(t, request{method: http.MethodPut, path: "/me/privacy/exceptions/search_visibility/allow", token: alice.access, body: map[string]any{"user_ids": []string{bobID}}}); r.Code != http.StatusOK {
+		t.Fatalf("search exception: %d %s", r.Code, r.Body)
+	}
 	// Bob sees no bio: alice's profile is visible to nobody.
 	alicePublic := e.do(t, request{method: http.MethodGet, path: "/usernames/alice", token: bob.access})
-	if alicePublic.Code != http.StatusOK || alicePublic.json()["display_name"] != "Alice A." {
+	if alicePublic.Code != http.StatusOK || alicePublic.json()["display_name"] != "Alice A." || alicePublic.json()["bio"] != nil {
 		t.Fatalf("user by name: %d %s", alicePublic.Code, alicePublic.Body)
 	}
 }
