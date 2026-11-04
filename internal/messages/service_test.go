@@ -522,6 +522,16 @@ func TestBlocksCoverEveryAction(t *testing.T) {
 	if len(f.rec.created) != before {
 		t.Fatal("something was delivered")
 	}
+	f.rec.reads = nil
+	if _, err := f.svc.Read(ctx, bob, chat.ID, m.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.Read(ctx, alice, chat.ID, m.ID); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.rec.reads) != 2 || !slices.Equal(f.rec.reads[0], []int64{bob}) || !slices.Equal(f.rec.reads[1], []int64{alice}) {
+		t.Fatalf("read receipts across a block: %v", f.rec.reads)
+	}
 }
 
 func TestStaleReadChangesNothing(t *testing.T) {

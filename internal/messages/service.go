@@ -735,7 +735,7 @@ func (s *Service) Read(ctx context.Context, userID, chatID, messageID int64) (in
 	settings, err := s.d.Store.Social().Privacy(ctx, []int64{userID})
 	if err == nil && settings[userID].ReadReceiptsEnabled {
 		if members, err := s.Members(ctx, chatID); err == nil {
-			recipients = members
+			recipients = s.receiptRecipients(ctx, userID, chatID, members)
 		}
 	}
 	s.d.Notifier.Read(ctx, chatID, userID, messageID, s.now().UTC(), recipients)
@@ -743,6 +743,26 @@ func (s *Service) Read(ctx context.Context, userID, chatID, messageID int64) (in
 		return 0, fmt.Errorf("%w: %w", ErrUnavailable, countErr)
 	}
 	return n, nil
+}
+
+func (s *Service) receiptRecipients(ctx context.Context, reader, chatID int64, members []int64) []int64 {
+	chat, err := s.d.Store.Chats().Get(ctx, chatID)
+	if err != nil {
+		return []int64{reader}
+	}
+	people := append([]int64{reader}, without(members, reader)...)
+	blocks, err := s.d.Store.Social().Blocks(ctx, people, people)
+	if err != nil {
+		return []int64{reader}
+	}
+	out := []int64{reader}
+	for _, m := range people[1:] {
+		if blocks[[2]int64{reader, m}] || (chat.Type == postgres.ChatDirect && blocks[[2]int64{m, reader}]) {
+			continue
+		}
+		out = append(out, m)
+	}
+	return out
 }
 
 // Resend delivers one of the user's stored messages again, to members it was not delivered to as well.

@@ -52,7 +52,7 @@ membership change; the check fails closed when Redis or PostgreSQL cannot answer
 | `edit` | the sender's own text message, not deleted; members who deleted it for themselves get no `edit` |
 | `delete` | `me`: any member; `everyone`: the sender, or the owner, an admin or a moderator of a group |
 | `reaction_add`/`reaction_remove` | member, message not deleted |
-| `read` | member; the read position only moves forward; an older position changes nothing and is not broadcast |
+| `read` | member; the read position only moves forward; an older position changes nothing and is not broadcast; the receipt skips users the reader blocked, and in a direct chat also users who blocked the reader |
 | `resend` | the sender's own message; it goes to the sender's devices and to the members it was hidden from as not delivered, never to those who deleted it for themselves |
 | `typing` | member |
 
