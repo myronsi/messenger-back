@@ -240,6 +240,7 @@ func (g *Gateway) register(c *conn) error {
 				oldest = other
 			}
 		}
+		delete(st.conns, oldest)
 	}
 	g.mu.Unlock()
 	if oldest != nil {

@@ -800,3 +800,69 @@ func TestTooManyConnectionsCloseTheOldest(t *testing.T) {
 		}
 	}
 }
+
+func TestConcurrentConnectionsKeepTheLimit(t *testing.T) {
+	e := newEnv(t)
+	e.maxConns = 2
+	a := e.instance("a")
+	alice := e.user("alice")
+	url := "ws" + strings.TrimPrefix(a.server.URL, "http") + "/api/v2/ws?ticket="
+	closed := make(chan websocket.StatusCode, 4)
+	var wg sync.WaitGroup
+	for range 4 {
+		tk, _ := e.tickets.issue(alice)
+		wg.Go(func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			ws, resp, err := websocket.Dial(ctx, url+tk, nil)
+			if resp != nil && resp.Body != nil {
+				_ = resp.Body.Close()
+			}
+			if err != nil {
+				t.Errorf("dial: %v", err)
+				return
+			}
+			t.Cleanup(func() { _ = ws.Close(websocket.StatusNormalClosure, "") })
+			go func() {
+				for {
+					if _, _, err := ws.Read(context.Background()); err != nil {
+						closed <- websocket.CloseStatus(err)
+						return
+					}
+				}
+			}()
+		})
+	}
+	wg.Wait()
+	for range 2 {
+		select {
+		case code := <-closed:
+			if code != CloseTooManyConnections {
+				t.Fatalf("close code %d", code)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("fewer than two connections were closed")
+		}
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		a.gw.mu.Lock()
+		n := 0
+		if st := a.gw.users[alice]; st != nil {
+			n = len(st.conns)
+		}
+		a.gw.mu.Unlock()
+		if n == 2 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%d connections left, want 2", n)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	select {
+	case code := <-closed:
+		t.Fatalf("a third connection was closed: %d", code)
+	case <-time.After(300 * time.Millisecond):
+	}
+}
