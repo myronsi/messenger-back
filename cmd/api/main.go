@@ -141,7 +141,7 @@ func run() error {
 				TrustedProxies: trustedProxies,
 			}),
 			httpapi.NewMediaServer(httpapi.MediaOptions{
-				Service: mediaSvc, Store: pg, Directory: rt.directory, Limiter: rt.limiter, BasePath: cfg.HTTP.BasePath, Log: log,
+				Service: mediaSvc, Store: pg, Directory: rt.directory, Limiter: rt.limiter, Events: rt.events, BasePath: cfg.HTTP.BasePath, Log: log,
 			}),
 		).WithAccount(httpapi.NewAccountServer(httpapi.AccountOptions{
 			Store: pg, Directory: rt.directory, Deleter: authSvc, AfterDeletion: rt.accountDeleted(storage, log),

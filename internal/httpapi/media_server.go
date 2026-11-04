@@ -21,6 +21,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/myronsi/messenger-back/internal/events"
 	"github.com/myronsi/messenger-back/internal/media"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/redis"
@@ -86,6 +87,7 @@ type MediaOptions struct {
 	Store     MediaStore
 	Directory *users.Directory
 	Limiter   RateAllower
+	Events    EventEmitter
 	BasePath  string
 	Log       *slog.Logger
 }
@@ -371,6 +373,11 @@ func (m *MediaServer) answerMe(w http.ResponseWriter, r *http.Request, userID in
 		m.o.Log.ErrorContext(r.Context(), action, "error", err)
 		WriteProblem(w, http.StatusInternalServerError, ErrorCodeInternalError)
 		return
+	}
+	if m.o.Events != nil {
+		if err := m.o.Events.Emit(context.WithoutCancel(r.Context()), events.Event{Type: events.UserUpdated, UserID: userID, ActorID: userID}); err != nil {
+			m.o.Log.WarnContext(r.Context(), "emit event", "type", events.UserUpdated, "error", err)
+		}
 	}
 	u, err := m.o.Store.Users().Get(r.Context(), userID)
 	if err != nil {
