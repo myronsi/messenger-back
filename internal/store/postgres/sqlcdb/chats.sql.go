@@ -39,7 +39,7 @@ func (q *Queries) AddParticipant(ctx context.Context, arg AddParticipantParams) 
 const deleteChat = `-- name: DeleteChat :execrows
 WITH gone AS (DELETE FROM chats WHERE id = $1 RETURNING id)
 INSERT INTO chat_deletions (chat_id) SELECT id FROM gone
-ON CONFLICT (chat_id) DO UPDATE SET deleted_at = now(), emitted_at = NULL
+ON CONFLICT (chat_id) DO UPDATE SET deleted_at = now(), emitted_at = NULL, messages_done = false, search_done = false
 `
 
 func (q *Queries) DeleteChat(ctx context.Context, id int64) (int64, error) {
@@ -50,12 +50,12 @@ func (q *Queries) DeleteChat(ctx context.Context, id int64) (int64, error) {
 	return result.RowsAffected(), nil
 }
 
-const finishChatDeletion = `-- name: FinishChatDeletion :exec
-DELETE FROM chat_deletions WHERE chat_id = $1
+const deleteFinishedChatDeletion = `-- name: DeleteFinishedChatDeletion :exec
+DELETE FROM chat_deletions WHERE chat_id = $1 AND messages_done AND search_done
 `
 
-func (q *Queries) FinishChatDeletion(ctx context.Context, chatID int64) error {
-	_, err := q.db.Exec(ctx, finishChatDeletion, chatID)
+func (q *Queries) DeleteFinishedChatDeletion(ctx context.Context, chatID int64) error {
+	_, err := q.db.Exec(ctx, deleteFinishedChatDeletion, chatID)
 	return err
 }
 
@@ -486,6 +486,23 @@ func (q *Queries) LockParticipant(ctx context.Context, arg LockParticipantParams
 		&i.LastReadAt,
 	)
 	return i, err
+}
+
+const markChatDeletionDone = `-- name: MarkChatDeletionDone :exec
+UPDATE chat_deletions
+SET messages_done = messages_done OR $1::boolean, search_done = search_done OR $2::boolean
+WHERE chat_id = $3
+`
+
+type MarkChatDeletionDoneParams struct {
+	Messages bool
+	Search   bool
+	ChatID   int64
+}
+
+func (q *Queries) MarkChatDeletionDone(ctx context.Context, arg MarkChatDeletionDoneParams) error {
+	_, err := q.db.Exec(ctx, markChatDeletionDone, arg.Messages, arg.Search, arg.ChatID)
+	return err
 }
 
 const markChatDeletionEmitted = `-- name: MarkChatDeletionEmitted :exec

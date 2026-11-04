@@ -62,7 +62,7 @@ func run() error {
 	defer es.Close()
 	msgs := scylla.NewMessages(sc, cfg.Scylla.Timeout)
 	index := search.NewIndex(es, cfg.Search.Alias, cfg.Search.Replicas)
-	indexer := search.NewIndexer(index, msgs, pg.Attachments(), log)
+	indexer := search.NewIndexer(index, msgs, pg.Attachments(), log).WithDeletions(pg.Chats())
 	if len(os.Args) > 1 && os.Args[1] == "reindex" {
 		if err := index.Ensure(p.Ctx); err != nil {
 			return err

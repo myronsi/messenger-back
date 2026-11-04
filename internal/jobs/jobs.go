@@ -31,7 +31,7 @@ type UnreadForgetter interface {
 // Members tells whether a user is in a chat now (postgres chat repository).
 type Members interface {
 	Participant(ctx context.Context, chatID, userID int64) (postgres.Participant, error)
-	FinishDeletion(ctx context.Context, chatID int64) error
+	MessagesDeleted(ctx context.Context, chatID int64) error
 }
 
 type DeletionStore interface {
@@ -87,7 +87,7 @@ func ChatCleanup(messages ChatDeleter, unread UnreadForgetter, members Members, 
 			if wait := e.At.Add(grace).Sub(now()); wait > 0 {
 				return redis.RetryLater{After: wait}
 			}
-			if err := members.FinishDeletion(ctx, e.ChatID); err != nil {
+			if err := members.MessagesDeleted(ctx, e.ChatID); err != nil {
 				return err
 			}
 			log.InfoContext(ctx, "chat messages deleted", "chat_id", e.ChatID)

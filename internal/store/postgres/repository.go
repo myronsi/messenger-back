@@ -269,7 +269,8 @@ type ChatRepository interface {
 	DeleteGroupAs(ctx context.Context, chatID, actorID int64) (keys []string, members []int64, err error)
 	StaleDeletions(ctx context.Context, olderThan time.Duration, limit int) ([]ChatDeletion, error)
 	MarkDeletionEmitted(ctx context.Context, chatID int64) error
-	FinishDeletion(ctx context.Context, chatID int64) error
+	MessagesDeleted(ctx context.Context, chatID int64) error
+	SearchDropped(ctx context.Context, chatID int64) error
 	// SetGroupAvatarAs sets (or with nil clears) the group's avatar.
 	SetGroupAvatarAs(ctx context.Context, chatID, actorID int64, attachmentID *uuid.UUID) error
 	// InviteAs makes a group invitation for a user who approves invitations (a pending one is reused).

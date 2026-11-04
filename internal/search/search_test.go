@@ -257,3 +257,39 @@ func TestSearchPagesAndRebuild(t *testing.T) {
 		t.Fatalf("indices: %v", names)
 	}
 }
+
+type droppedChats struct {
+	got []int64
+	err error
+}
+
+func (d *droppedChats) SearchDropped(_ context.Context, chatID int64) error {
+	d.got = append(d.got, chatID)
+	return d.err
+}
+
+func TestChatDeletionReportsTheDroppedDocuments(t *testing.T) {
+	e := newEnv(t)
+	dropped := &droppedChats{}
+	e.in.WithDeletions(dropped)
+	alice, bob := e.user("alice"), e.user("bob")
+	chat := e.chat(alice, bob)
+	e.send(chat, alice, "soon gone")
+	if err := e.ix.Refresh(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	entry := redis.Entry{ID: "1-0", Fields: map[string]string{"type": events.ChatDeleted, "chat_id": strconv.FormatInt(chat, 10)}}
+	if err := e.in.Handle(context.Background(), entry); err != nil {
+		t.Fatal(err)
+	}
+	if len(dropped.got) != 1 || dropped.got[0] != chat {
+		t.Fatalf("reported %v", dropped.got)
+	}
+	if hits := e.find(alice, search.Query{Text: "gone"}); len(hits) != 0 {
+		t.Fatalf("documents of the deleted chat: %v", contents(hits))
+	}
+	dropped.err = errors.New("postgres is away")
+	if err := e.in.Handle(context.Background(), entry); err == nil {
+		t.Fatal("a failed report must be retried")
+	}
+}

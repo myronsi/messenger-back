@@ -45,7 +45,7 @@ func (m members) Participant(_ context.Context, chat, user int64) (postgres.Part
 	return postgres.Participant{}, postgres.ErrNotFound
 }
 
-func (m members) FinishDeletion(_ context.Context, chat int64) error {
+func (m members) MessagesDeleted(_ context.Context, chat int64) error {
 	m[[2]int64{chat, -1}] = true
 	return nil
 }

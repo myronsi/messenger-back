@@ -22,7 +22,7 @@ SELECT * FROM chats WHERE id = @id FOR UPDATE;
 -- name: DeleteChat :execrows
 WITH gone AS (DELETE FROM chats WHERE id = @id RETURNING id)
 INSERT INTO chat_deletions (chat_id) SELECT id FROM gone
-ON CONFLICT (chat_id) DO UPDATE SET deleted_at = now(), emitted_at = NULL;
+ON CONFLICT (chat_id) DO UPDATE SET deleted_at = now(), emitted_at = NULL, messages_done = false, search_done = false;
 
 -- name: ListStaleChatDeletions :many
 SELECT chat_id, deleted_at FROM chat_deletions
@@ -33,8 +33,13 @@ LIMIT @max_rows;
 -- name: MarkChatDeletionEmitted :exec
 UPDATE chat_deletions SET emitted_at = now() WHERE chat_id = @chat_id;
 
--- name: FinishChatDeletion :exec
-DELETE FROM chat_deletions WHERE chat_id = @chat_id;
+-- name: MarkChatDeletionDone :exec
+UPDATE chat_deletions
+SET messages_done = messages_done OR @messages::boolean, search_done = search_done OR @search::boolean
+WHERE chat_id = @chat_id;
+
+-- name: DeleteFinishedChatDeletion :exec
+DELETE FROM chat_deletions WHERE chat_id = @chat_id AND messages_done AND search_done;
 
 -- name: ListUserChats :many
 SELECT c.*

@@ -741,7 +741,16 @@ func TestChatDeletionsAreRecorded(t *testing.T) {
 	if err != nil || len(all) != 2 || all[0].ChatID != direct.ID || all[1].ChatID != group.ID {
 		t.Fatalf("recorded deletions: %v %v", all, err)
 	}
-	if err := s.Chats().FinishDeletion(ctx, direct.ID); err != nil {
+	if err := s.Chats().MessagesDeleted(ctx, direct.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Chats().SearchDropped(ctx, group.ID); err != nil {
+		t.Fatal(err)
+	}
+	if left, err := s.Chats().StaleDeletions(ctx, -time.Hour, 10); err != nil || len(left) != 2 {
+		t.Fatalf("one consumer done keeps the rows: %v %v", left, err)
+	}
+	if err := s.Chats().SearchDropped(ctx, direct.ID); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Chats().MarkDeletionEmitted(ctx, group.ID); err != nil {

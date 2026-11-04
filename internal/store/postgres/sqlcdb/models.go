@@ -64,9 +64,11 @@ type Chat struct {
 }
 
 type ChatDeletion struct {
-	ChatID    int64
-	DeletedAt time.Time
-	EmittedAt *time.Time
+	ChatID       int64
+	DeletedAt    time.Time
+	EmittedAt    *time.Time
+	MessagesDone bool
+	SearchDone   bool
 }
 
 type NotificationActivity struct {
