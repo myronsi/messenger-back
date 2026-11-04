@@ -669,7 +669,7 @@ func (s *Service) existingDirect(ctx context.Context, a, b int64) (*int64, error
 func (s *Service) Delete(ctx context.Context, userID, chatID int64) error {
 	e, err := s.d.Store.Chats().Entry(ctx, userID, chatID)
 	if err != nil {
-		return notFoundOr(err)
+		return s.ifGone(ctx, chatID, notFoundOr(err))
 	}
 	if e.Chat.Type != postgres.ChatDirect {
 		return fmt.Errorf("%w: delete or leave a group with the group endpoints", ErrInvalid)

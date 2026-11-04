@@ -78,17 +78,20 @@ type chatEnv struct {
 	events    *chatEvents
 	index     *search.Index
 	cacheDown *atomic.Bool
+	cleared   *atomic.Int32
 }
 
 type flakyMembers struct {
 	*redis.Members
-	down *atomic.Bool
+	down    *atomic.Bool
+	cleared *atomic.Int32
 }
 
 func (m flakyMembers) Invalidate(ctx context.Context, chatIDs ...int64) error {
 	if m.down.Load() {
 		return errors.New("redis is away")
 	}
+	m.cleared.Add(1)
 	return m.Members.Invalidate(ctx, chatIDs...)
 }
 
@@ -161,8 +164,8 @@ func newChatEnvWith(t *testing.T, withSearch bool) *chatEnv {
 	ev := &chatEvents{created: map[int64][]int64{}, updated: map[int64][]int64{}, removed: map[int64][]int64{},
 		groupCreated: map[int64][]int64{}, groupUpdates: map[int64]int{}}
 	tokens := notifications.NewActionTokens("test-secret")
-	cacheDown := new(atomic.Bool)
-	svc := chats.New(chats.Deps{Store: store, Messages: repo, Unread: unread, Members: flakyMembers{members, cacheDown}, Sender: msgs, Directory: dir, Notifier: ev})
+	cacheDown, cleared := new(atomic.Bool), new(atomic.Int32)
+	svc := chats.New(chats.Deps{Store: store, Messages: repo, Unread: unread, Members: flakyMembers{members, cacheDown, cleared}, Sender: msgs, Directory: dir, Notifier: ev})
 	api := NewServer(NewAuthServer(AuthOptions{Service: authSvc, Log: log, BasePath: apiBase, CookieSecure: true}), nil).
 		WithAccount(NewAccountServer(AccountOptions{Store: store, Directory: dir, Deleter: authSvc, BasePath: apiBase, Log: log})).
 		WithChats(NewChatServer(ChatOptions{Service: svc, BasePath: apiBase, Log: log})).
@@ -176,7 +179,7 @@ func newChatEnvWith(t *testing.T, withSearch bool) *chatEnv {
 			API:           api,
 			Authenticator: authSvc,
 		})},
-		store: store, events: ev, index: index, tokens: tokens, cacheDown: cacheDown,
+		store: store, events: ev, index: index, tokens: tokens, cacheDown: cacheDown, cleared: cleared,
 	}
 }
 

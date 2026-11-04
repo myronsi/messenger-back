@@ -56,20 +56,50 @@ func roles(g map[string]any) map[string]string {
 
 func TestRemovalFailsWhileTheMembersCacheIsStale(t *testing.T) {
 	e := newChatEnv(t)
-	owner, bob := e.register(t, "owner"), e.register(t, "bob")
-	bobID := e.uid(t, bob)
-	r := e.do(t, request{method: http.MethodPost, path: "/groups", token: owner.access, body: map[string]any{"name": "Team", "member_ids": []string{bobID}}})
+	owner, bob, carol := e.register(t, "owner"), e.register(t, "bob"), e.register(t, "carol")
+	bobID, carolID := e.uid(t, bob), e.uid(t, carol)
+	r := e.do(t, request{method: http.MethodPost, path: "/groups", token: owner.access, body: map[string]any{"name": "Team", "member_ids": []string{bobID, carolID}}})
 	if r.Code != http.StatusCreated {
 		t.Fatalf("create: %d %s", r.Code, r.Body)
 	}
 	gid := r.json()["id"].(string)
-	e.cacheDown.Store(true)
-	if r := e.do(t, request{method: http.MethodDelete, path: "/groups/" + gid + "/participants/" + bobID, token: owner.access}); r.Code != http.StatusServiceUnavailable {
-		t.Fatalf("removal with a stale cache: %d %s", r.Code, r.Body)
+	if r := e.send(t, bob, gid, "b-1", "hello"); r.Code != http.StatusCreated {
+		t.Fatalf("send: %d %s", r.Code, r.Body)
 	}
-	e.cacheDown.Store(false)
-	if r := e.do(t, request{method: http.MethodGet, path: "/groups/" + gid, token: bob.access}); r.Code != http.StatusNotFound {
-		t.Fatalf("bob was still removed in the database: %d", r.Code)
+	retry := func(name string, do func() reply) {
+		t.Helper()
+		e.cacheDown.Store(true)
+		if r := do(); r.Code != http.StatusServiceUnavailable {
+			t.Fatalf("%s with a stale cache: %d %s", name, r.Code, r.Body)
+		}
+		e.cacheDown.Store(false)
+		before := e.cleared.Load()
+		if r := do(); r.Code != http.StatusNotFound {
+			t.Fatalf("%s retried: %d %s", name, r.Code, r.Body)
+		}
+		if e.cleared.Load() == before {
+			t.Fatalf("%s retried without clearing the cache", name)
+		}
+	}
+	retry("removal", func() reply {
+		return e.do(t, request{method: http.MethodDelete, path: "/groups/" + gid + "/participants/" + bobID, token: owner.access})
+	})
+	if r := e.send(t, bob, gid, "b-2", "still here?"); r.Code != http.StatusNotFound {
+		t.Fatalf("bob sends after the retried removal: %d", r.Code)
+	}
+	retry("leave", func() reply {
+		return e.do(t, request{method: http.MethodPost, path: "/groups/" + gid + "/leave", token: carol.access})
+	})
+	retry("group deletion", func() reply {
+		return e.do(t, request{method: http.MethodDelete, path: "/groups/" + gid, token: owner.access})
+	})
+	direct := e.create(t, owner, bobID, "").json()["id"].(string)
+	retry("chat deletion", func() reply {
+		return e.do(t, request{method: http.MethodDelete, path: "/chats/" + direct, token: owner.access})
+	})
+	before := e.cleared.Load()
+	if r := e.do(t, request{method: http.MethodDelete, path: "/groups/" + gid + "/participants/" + carolID, token: bob.access}); r.Code != http.StatusNotFound || e.cleared.Load() != before {
+		t.Fatalf("an outsider's removal clears nothing: %d", r.Code)
 	}
 }
 

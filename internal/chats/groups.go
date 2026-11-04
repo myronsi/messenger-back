@@ -295,6 +295,23 @@ func (s *Service) membership(ctx context.Context, chatID, actor int64, added, re
 	return stale
 }
 
+func (s *Service) settled(ctx context.Context, chatID int64, result error) error {
+	if err := s.invalidateMembers(context.WithoutCancel(ctx), chatID); err != nil {
+		return err
+	}
+	return result
+}
+
+func (s *Service) ifGone(ctx context.Context, chatID int64, result error) error {
+	if !errors.Is(result, ErrNotFound) {
+		return result
+	}
+	if _, err := s.d.Store.Chats().Get(ctx, chatID); errors.Is(err, postgres.ErrNotFound) {
+		return s.settled(ctx, chatID, result)
+	}
+	return result
+}
+
 func (s *Service) invalidateMembers(ctx context.Context, chatID int64) error {
 	var err error
 	for attempt := range 3 {
@@ -421,7 +438,7 @@ func (s *Service) UpdateGroup(ctx context.Context, userID, chatID int64, name *s
 func (s *Service) DeleteGroup(ctx context.Context, userID, chatID int64) error {
 	keys, members, err := s.d.Store.Chats().DeleteGroupAs(ctx, chatID, userID)
 	if err != nil {
-		return groupError(err)
+		return s.ifGone(ctx, chatID, groupError(err))
 	}
 	return s.removedChat(ctx, chatID, userID, members, keys)
 }
@@ -511,7 +528,13 @@ func (s *Service) RemoveMember(ctx context.Context, userID, chatID, target int64
 		if errors.Is(err, postgres.ErrOwnerMustTransfer) {
 			return fmt.Errorf("%w: the owner cannot be removed", ErrForbidden)
 		}
-		return groupError(err)
+		err = groupError(err)
+		if errors.Is(err, ErrNotFound) {
+			if p, perr := s.d.Store.Chats().Participant(ctx, chatID, userID); perr == nil && (p.Role == postgres.RoleOwner || p.Role == postgres.RoleAdmin) {
+				return s.settled(ctx, chatID, err)
+			}
+		}
+		return err
 	}
 	err := s.membership(ctx, chatID, userID, nil, []int64{target})
 	s.changed(ctx, chatID)
@@ -521,7 +544,11 @@ func (s *Service) RemoveMember(ctx context.Context, userID, chatID, target int64
 // Leave takes the user out of the group; the owner has to transfer ownership first.
 func (s *Service) Leave(ctx context.Context, userID, chatID int64) error {
 	if err := s.d.Store.Chats().RemoveMemberAs(ctx, chatID, userID, userID); err != nil {
-		return groupError(err)
+		err = groupError(err)
+		if errors.Is(err, ErrNotFound) {
+			return s.settled(ctx, chatID, err)
+		}
+		return err
 	}
 	err := s.membership(ctx, chatID, userID, nil, []int64{userID})
 	s.changed(ctx, chatID)
