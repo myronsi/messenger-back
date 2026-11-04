@@ -311,8 +311,16 @@ func (m *MediaServer) GetAttachmentContent(w http.ResponseWriter, r *http.Reques
 		writeUnauthorized(w, ErrorCodeUnauthenticated)
 		return
 	}
-	thumb := params.Variant != nil && *params.Variant == Thumbnail
-	d, err := m.o.Service.Open(r.Context(), p.UserID, id, thumb)
+	variant, suffix := media.VariantOriginal, ""
+	if params.Variant != nil {
+		switch *params.Variant {
+		case Thumbnail:
+			variant, suffix = media.VariantThumbnail, "-thumb"
+		case Display:
+			variant, suffix = media.VariantDisplay, "-display"
+		}
+	}
+	d, err := m.o.Service.Open(r.Context(), p.UserID, id, variant)
 	if errors.Is(err, media.ErrNoAccess) {
 		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
 		return
@@ -322,11 +330,7 @@ func (m *MediaServer) GetAttachmentContent(w http.ResponseWriter, r *http.Reques
 		WriteProblem(w, http.StatusInternalServerError, ErrorCodeInternalError)
 		return
 	}
-	etag := id.String()
-	if thumb {
-		etag += "-thumb"
-	}
-	m.serve(w, r, d, "private, max-age=3600", etag)
+	m.serve(w, r, d, "private, max-age=3600", id.String()+suffix)
 }
 
 // SetMyAvatar implements PUT /me/avatar.
@@ -441,7 +445,7 @@ func (m *MediaServer) GetUserAvatar(w http.ResponseWriter, r *http.Request, user
 		serveDefaultAvatar(w)
 		return
 	}
-	d, err := m.o.Service.OpenUnchecked(r.Context(), *attachment, false)
+	d, err := m.o.Service.OpenUnchecked(r.Context(), *attachment, media.VariantOriginal)
 	if errors.Is(err, media.ErrNoAccess) {
 		serveDefaultAvatar(w)
 		return

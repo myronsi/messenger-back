@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"image"
+	"image/jpeg"
 	"image/png"
 	"math/rand/v2"
 	"mime/multipart"
@@ -211,6 +212,23 @@ func TestUploadAndDownloadOverHTTP(t *testing.T) {
 	}
 	if th := get(bob.access, "?variant=thumbnail"); th.Code != http.StatusOK || th.Header().Get("Content-Type") != "image/jpeg" {
 		t.Fatalf("thumbnail: %d %v", th.Code, th.Header())
+	}
+	if att["display_url"] != nil {
+		t.Fatalf("a 96 px image has a display_url: %v", att["display_url"])
+	}
+	if d := get(bob.access, "?variant=display"); d.Code != http.StatusOK || d.Header().Get("Content-Type") != "image/png" || d.Header().Get("ETag") != `"`+id+`-display"` {
+		t.Fatalf("display of a small image: %d %v", d.Code, d.Header())
+	}
+	var wideBuf bytes.Buffer
+	_ = png.Encode(&wideBuf, image.NewRGBA(image.Rect(0, 0, 2000, 100)))
+	wide := e.upload(t, alice.access, map[string]string{"purpose": "message"}, "wide.png", wideBuf.Bytes()).json()
+	wideURL := apiBase + "/attachments/" + wide["id"].(string) + "/content"
+	if wide["display_url"] != wideURL+"?variant=display" {
+		t.Fatalf("display_url: %v", wide["display_url"])
+	}
+	wd := e.do(t, request{method: http.MethodGet, path: "/attachments/" + wide["id"].(string) + "/content?variant=display", token: alice.access})
+	if cfg, err := jpeg.DecodeConfig(wd.Body); wd.Code != http.StatusOK || err != nil || cfg.Width != media.DisplaySide {
+		t.Fatalf("display copy: %d %v %+v", wd.Code, err, cfg)
 	}
 	if r := get(eve.access, ""); r.Code != http.StatusNotFound {
 		t.Fatalf("outsider: %d", r.Code)

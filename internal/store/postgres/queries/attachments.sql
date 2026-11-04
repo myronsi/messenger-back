@@ -16,11 +16,13 @@ LIMIT @max_rows;
 DELETE FROM attachments WHERE id = @id RETURNING storage_key, thumbnail_key;
 
 -- name: ListAttachmentKeysOfChats :many
--- The stored objects of the chats' v1 attachments: files and thumbnails.
+-- The stored objects of the chats' v1 attachments: files, thumbnails and display copies of images.
 SELECT k::text FROM (
     SELECT storage_key AS k FROM attachments WHERE chat_id = ANY(@chat_ids::bigint[])
     UNION ALL
     SELECT thumbnail_key FROM attachments WHERE chat_id = ANY(@chat_ids::bigint[]) AND thumbnail_key IS NOT NULL
+    UNION ALL
+    SELECT storage_key || '.display.jpg' FROM attachments WHERE chat_id = ANY(@chat_ids::bigint[]) AND width IS NOT NULL
 ) keys
 ORDER BY k;
 

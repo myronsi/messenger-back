@@ -123,6 +123,26 @@ func TestProcessImageStripsMetadataAndRotates(t *testing.T) {
 	}
 }
 
+func TestProcessImageMakesDisplayCopyOfLargeImagesOnly(t *testing.T) {
+	out, err := ProcessImage(pngBytes(t, 1200, 3200), "image/png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := jpeg.DecodeConfig(bytes.NewReader(out.Display))
+	if err != nil || cfg.Width != 600 || cfg.Height != DisplaySide {
+		t.Fatalf("display copy: %+v %v", cfg, err)
+	}
+	if again, err := DisplayImage(out.Data); err != nil || !bytes.Equal(again, out.Display) {
+		t.Fatalf("display copy from the stored image differs: %v", err)
+	}
+	if small, err := ProcessImage(pngBytes(t, DisplaySide, 900), "image/png"); err != nil || small.Display != nil {
+		t.Fatalf("small image: %d bytes, %v", len(small.Display), err)
+	}
+	if NeedsDisplay("image/gif", 4000, 4000) || !NeedsDisplay("image/jpeg", 1601, 10) || NeedsDisplay("application/pdf", 4000, 4000) {
+		t.Fatal("NeedsDisplay")
+	}
+}
+
 func TestProcessImageRefusesBombsAndJunk(t *testing.T) {
 	// A PNG header that claims 100000 x 100000 pixels.
 	ihdr := []byte("IHDR")

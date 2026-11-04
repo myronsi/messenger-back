@@ -35,8 +35,10 @@ func attachmentFrom(a sqlcdb.Attachment) Attachment {
 	}
 }
 
+func DisplayKey(storageKey string) string { return storageKey + ".display.jpg" }
+
 func keysOf(file string, thumb *string) []string {
-	keys := []string{file}
+	keys := []string{file, DisplayKey(file)}
 	if thumb != nil {
 		keys = append(keys, *thumb)
 	}

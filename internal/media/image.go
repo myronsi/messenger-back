@@ -11,6 +11,7 @@ import (
 	"image/jpeg"
 	"image/png"
 	"io"
+	"strings"
 
 	xdraw "golang.org/x/image/draw"
 	_ "golang.org/x/image/webp" // registers the WebP decoder
@@ -21,6 +22,7 @@ const (
 	MaxImagePixels = 40_000_000
 	MaxImageSide   = 16_384
 	ThumbnailSide  = 320
+	DisplaySide    = 1600
 	maxGIFFrames   = 300
 	// maxGIFArea bounds the pixels of all frames together (one byte each once decoded).
 	maxGIFArea = 4 * MaxImagePixels
@@ -36,6 +38,26 @@ type ProcessedImage struct {
 	Width       int
 	Height      int
 	Thumbnail   []byte // JPEG
+	Display     []byte
+}
+
+func NeedsDisplay(contentType string, width, height int) bool {
+	return contentType != "image/gif" && strings.HasPrefix(contentType, "image/") && max(width, height) > DisplaySide
+}
+
+func DisplayImage(data []byte) ([]byte, error) {
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return nil, ErrUnsupported
+	}
+	if cfg.Width <= 0 || cfg.Height <= 0 || cfg.Width > MaxImageSide || cfg.Height > MaxImageSide || cfg.Width*cfg.Height > MaxImagePixels {
+		return nil, ErrImageTooLarge
+	}
+	img, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, ErrUnsupported
+	}
+	return scaled(img, DisplaySide, 82)
 }
 
 // ProcessImage decodes the image, applies the EXIF orientation of a JPEG, and encodes it again: metadata
@@ -74,6 +96,11 @@ func ProcessImage(data []byte, contentType string) (ProcessedImage, error) {
 	out.Data = buf.Bytes()
 	if out.Thumbnail, err = thumbnail(img); err != nil {
 		return ProcessedImage{}, err
+	}
+	if NeedsDisplay(out.ContentType, out.Width, out.Height) {
+		if out.Display, err = scaled(img, DisplaySide, 82); err != nil {
+			return ProcessedImage{}, err
+		}
 	}
 	return out, nil
 }
@@ -170,21 +197,23 @@ func opaque(img image.Image) bool {
 }
 
 // thumbnail scales the image so its longer side is at most ThumbnailSide, on white (JPEG has no alpha).
-func thumbnail(img image.Image) ([]byte, error) {
+func thumbnail(img image.Image) ([]byte, error) { return scaled(img, ThumbnailSide, 80) }
+
+func scaled(img image.Image, side, quality int) ([]byte, error) {
 	b := img.Bounds()
 	w, h := b.Dx(), b.Dy()
-	if w > ThumbnailSide || h > ThumbnailSide {
+	if w > side || h > side {
 		if w >= h {
-			h, w = max(1, h*ThumbnailSide/w), ThumbnailSide
+			h, w = max(1, h*side/w), side
 		} else {
-			w, h = max(1, w*ThumbnailSide/h), ThumbnailSide
+			w, h = max(1, w*side/h), side
 		}
 	}
 	dst := image.NewRGBA(image.Rect(0, 0, w, h))
 	draw.Draw(dst, dst.Bounds(), &image.Uniform{C: color.White}, image.Point{}, draw.Src)
 	xdraw.CatmullRom.Scale(dst, dst.Bounds(), img, b, draw.Over, nil)
 	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, dst, &jpeg.Options{Quality: 80}); err != nil {
+	if err := jpeg.Encode(&buf, dst, &jpeg.Options{Quality: quality}); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil

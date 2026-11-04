@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/myronsi/messenger-back/internal/media"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/scylla"
 	"github.com/myronsi/messenger-back/internal/users"
@@ -87,6 +88,10 @@ func PresentAttachment(a postgres.Attachment, messageType, basePath string) Atta
 	if a.ThumbnailKey != nil {
 		thumb := url + "?variant=thumbnail"
 		out.ThumbnailUrl = &thumb
+	}
+	if media.HasDisplay(a) {
+		display := url + "?variant=display"
+		out.DisplayUrl = &display
 	}
 	if a.Width != nil {
 		w := int(*a.Width)
