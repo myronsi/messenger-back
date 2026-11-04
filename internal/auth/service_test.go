@@ -283,25 +283,48 @@ func TestLoginRateLimit(t *testing.T) {
 	ctx := context.Background()
 	e.register(t, "carol", "correct horse")
 
+	attacker := e.client("10.1.2.3")
 	for range RuleLoginUser.Limit {
-		// Different IPs: only the per-account limit can stop this.
-		ip := netip.AddrFrom4([4]byte{10, 1, byte(rand8()), byte(rand8())})
-		_, err := e.svc.Login(ctx, Client{IP: ip}, "carol", "wrong password")
+		_, err := e.svc.Login(ctx, attacker, "carol", "wrong password")
 		if !errors.Is(err, ErrInvalidCredentials) {
 			t.Fatalf("got %v", err)
 		}
 	}
 	var rl *RateLimitError
-	_, err := e.svc.Login(ctx, e.client("10.9.9.9"), "carol", "correct horse")
+	_, err := e.svc.Login(ctx, attacker, "carol", "correct horse")
 	if !errors.As(err, &rl) || rl.RetryAfter <= 0 {
-		t.Fatalf("the account must be locked after repeated failures, got %v", err)
+		t.Fatalf("the address must be locked for this account after repeated failures, got %v", err)
+	}
+	if _, err := e.svc.Login(ctx, e.client("10.9.9.9"), "carol", "correct horse"); err != nil {
+		t.Fatalf("failures from another address must not lock the owner out: %v", err)
+	}
+
+	for range RuleLoginCap.Limit {
+		if err := e.svc.limiter.Hit(ctx, RuleLoginCap, "carol"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := e.svc.Login(ctx, e.client("10.8.8.8"), "carol", "correct horse"); !errors.As(err, &rl) {
+		t.Fatalf("the per-account cap must stop logins from every address, got %v", err)
 	}
 }
 
-func rand8() int {
-	b := make([]byte, 1)
-	_, _ = rand.Read(b)
-	return int(b[0])
+func TestRateLimitGroupsIPv6By64(t *testing.T) {
+	a := Client{IP: netip.MustParseAddr("2001:db8:1:2:aaaa::1")}
+	b := Client{IP: netip.MustParseAddr("2001:db8:1:2:bbbb::9")}
+	c := Client{IP: netip.MustParseAddr("2001:db8:1:3::1")}
+	if a.ipString() != b.ipString() || a.ipString() != "2001:db8:1:2::/64" {
+		t.Fatalf("one /64 must share a limit: %q %q", a.ipString(), b.ipString())
+	}
+	if a.ipString() == c.ipString() {
+		t.Fatal("different /64 networks must not share a limit")
+	}
+	if got := (Client{IP: netip.MustParseAddr("::ffff:192.0.2.7")}).ipString(); got != "192.0.2.7" {
+		t.Fatalf("mapped IPv4 address: %q", got)
+	}
+	if got := (Client{}).ipString(); got != "unknown" {
+		t.Fatalf("missing address: %q", got)
+	}
 }
 
 func TestRefreshRotationAndReuse(t *testing.T) {

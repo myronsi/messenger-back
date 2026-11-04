@@ -129,7 +129,7 @@ func (s *Service) RecoverWithKey(ctx context.Context, c Client, username, key, n
 	if len(username) > 64 || len(code) > 128 {
 		return nil, ErrRecoveryKey
 	}
-	if _, err := s.allow(ctx, limitCheck{RuleRecoverIP, c.ipString()}, limitCheck{RuleRecoverUsr, username}); err != nil {
+	if _, err := s.allow(ctx, limitCheck{RuleRecoverIP, c.ipString()}, limitCheck{RuleRecoverUsr, c.userKey(username)}, limitCheck{RuleRecoverCap, username}); err != nil {
 		return nil, err
 	}
 	if err := validatePassword(newPassword); err != nil {

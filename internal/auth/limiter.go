@@ -22,11 +22,13 @@ type Rule struct {
 // Login, two-factor and recovery count failures; refresh and ticket requests count every request.
 var (
 	RuleLoginIP    = Rule{"login_ip", 20, 15 * time.Minute}
-	RuleLoginUser  = Rule{"login_user", 8, 15 * time.Minute}
+	RuleLoginUser  = Rule{"login_user_ip", 8, 15 * time.Minute}
+	RuleLoginCap   = Rule{"login_user_all", 100, 15 * time.Minute}
 	RuleTwoFAIP    = Rule{"2fa_ip", 20, 15 * time.Minute}
 	RuleTwoFAUser  = Rule{"2fa_user", 10, 15 * time.Minute}
 	RuleRecoverIP  = Rule{"recover_ip", 10, time.Hour}
-	RuleRecoverUsr = Rule{"recover_user", 5, time.Hour}
+	RuleRecoverUsr = Rule{"recover_user_ip", 5, time.Hour}
+	RuleRecoverCap = Rule{"recover_user_all", 30, time.Hour}
 	RuleResetIP    = Rule{"reset_ip", 20, time.Hour}
 	RuleRefreshIP  = Rule{"refresh_ip", 300, 15 * time.Minute}
 	RuleRegisterIP = Rule{"register_ip", 20, time.Hour}

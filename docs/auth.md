@@ -42,7 +42,7 @@ Login with 2FA returns `two_factor_required` and a `login_challenge`; `POST /aut
 
 ## Rate limiting
 
-Sliding windows in Redis (shared by all API instances), per client IP and per username/user: login (20 per IP, 8 per user per 15 min), 2FA (20 / 10), refresh (300 per IP), registration, password change, recovery and WebSocket tickets. A refused request gets `429` with `Retry-After`. If Redis is unavailable the request is denied: a limiter that fails open is no protection against password guessing.
+Sliding windows in Redis (shared by all API instances), per client IP and per username/user: login (20 per IP, 8 per username and IP, and at most 100 per username from all addresses, per 15 min), 2FA (20 / 10), refresh (300 per IP), registration, password change, recovery (10 per IP, 5 per username and IP, 30 per username, per hour) and WebSocket tickets. Only failures from the same address count towards the per-username limit, so a stranger cannot lock an account; the higher per-username cap stops guessing spread over many addresses. IPv6 clients are counted by /64 network. A refused request gets `429` with `Retry-After`. If Redis is unavailable the request is denied: a limiter that fails open is no protection against password guessing.
 
 The client IP is the TCP peer. `X-Forwarded-For` / `X-Real-IP` are honoured only when the peer matches `TRUSTED_PROXIES` (comma-separated IPs or CIDRs; empty by default, so nothing is trusted). The forwarded chain is read from the right, skipping trusted hops. Set it to your load balancer or ingress range when running behind one; otherwise all clients would share the proxy address and its rate limit. Other peers cannot choose their own address.
 
@@ -71,7 +71,7 @@ New accounts receive a 160-bit base32 `recovery_key` once in the registration re
 
 - `GET /me/recovery-key`: existence, creation time and any security lock deadline; never returns the key or hash.
 - `POST /me/recovery-key`: current password and `code` if 2FA is enabled. Returns a new key once and immediately invalidates the previous key.
-- `POST /auth/recover/key`: username, recovery_key, new_password and code when 2FA is enabled. Unknown users, wrong/consumed keys and missing/wrong second factors all return the same 400 invalid_credentials. Recovery is rate limited by IP and username. A TOTP or unused 2FA backup code is mandatory when enabled.
+- `POST /auth/recover/key`: username, recovery_key, new_password and code when 2FA is enabled. Unknown users, wrong/consumed keys and missing/wrong second factors all return the same 400 invalid_credentials. Recovery is rate limited by IP and by username and IP. A TOTP or unused 2FA backup code is mandatory when enabled.
 
 A reset atomically replaces the password and recovery key, consumes a supplied 2FA backup code, revokes all existing sessions, deletes old recovery tokens and records a password_reset security event. It preserves 2FA. The response sets a new session cookie and returns access_token plus the replacement recovery_key once. Existing WebSocket clients receive a best-effort security_notice and their old sessions close. Pending password/2FA logins are bound to their verified password and cannot create a session after it changes.
 
