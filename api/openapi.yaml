@@ -931,6 +931,9 @@ paths:
       tags: [users]
       operationId: setContactName
       summary: Set your own display name for a user
+      description: |
+        Follows the rules of `GET /users/{user_id}`: a user whose `search_visibility` hides them from you is `404`
+        unless the two of you share a chat, and the calls count against the same per-user limit.
       requestBody:
         required: true
         content:
@@ -947,6 +950,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
     delete:
       tags: [users]
       operationId: removeContactName

@@ -16353,6 +16353,25 @@ func (response SetContactName426ApplicationProblemPlusJSONResponse) VisitSetCont
 	return err
 }
 
+type SetContactName429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response SetContactName429ApplicationProblemPlusJSONResponse) VisitSetContactNameResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type CreateWebSocketTicketRequestObject struct {
 	Params CreateWebSocketTicketParams
 }

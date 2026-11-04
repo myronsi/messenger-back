@@ -38,7 +38,7 @@ The contract's `contacts` means "people you share a chat with" (`shared_chats` i
 
 - `GET /users/{id}` and `GET /usernames/{username}` answer `404` for users that do not exist, and `400` for an id that is not a number.
 - `GET /users?q=` finds users whose username starts with the query or whose display name contains it (case-insensitive; `%`, `_` and `\` are matched literally), ordered by username, paged by the last username. The query needs at least 2 characters. Users with `search_visibility: nobody` and users who blocked the viewer are left out. Searches are rate limited per user.
-- `GET /users/{id}` and `GET /usernames/{username}` answer `404` for a user whose `search_visibility` (with its exceptions) hides them from the viewer, unless the two share a chat; the viewer's own profile is always found. Lookups are rate limited per user (120 per minute, bursts of 60).
+- `GET /users/{id}` and `GET /usernames/{username}` answer `404` for a user whose `search_visibility` (with its exceptions) hides them from the viewer, unless the two share a chat; the viewer's own profile is always found. Lookups are rate limited per user (120 per minute, bursts of 60). `PUT /users/{id}/contact-name` follows the same rules and shares the limit.
 - The username prefix uses the `users_username_prefix_idx` index. The display-name match uses the trigram index `users_display_name_trgm_idx` (`pg_trgm`, migration 000008), which needs 3 characters, so a 2-character query matches usernames only.
 - Full-text search across messages is Elasticsearch (B40).
 

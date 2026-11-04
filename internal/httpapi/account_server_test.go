@@ -151,6 +151,12 @@ func TestProfileAndPrivacy(t *testing.T) {
 			t.Fatalf("%s while alice hides from search: %d %s", path, r.Code, r.Body)
 		}
 	}
+	if r := e.do(t, request{method: http.MethodPut, path: "/users/" + aliceID + "/contact-name", token: bob.access, body: map[string]any{"contact_name": "Al"}}); r.Code != http.StatusNotFound {
+		t.Fatalf("contact name for a hidden user: %d %s", r.Code, r.Body)
+	}
+	if names, err := e.store.Social().ContactNames(context.Background(), mustID(t, bobID), []int64{mustID(t, aliceID)}); err != nil || len(names) != 0 {
+		t.Fatalf("the name was saved for a hidden user: %v %v", names, err)
+	}
 	if r := e.do(t, request{method: http.MethodGet, path: "/users/" + aliceID, token: alice.access}); r.Code != http.StatusOK {
 		t.Fatalf("alice looks herself up: %d", r.Code)
 	}
@@ -180,6 +186,9 @@ func TestProfileAndPrivacy(t *testing.T) {
 	alicePublic := e.do(t, request{method: http.MethodGet, path: "/usernames/alice", token: bob.access})
 	if alicePublic.Code != http.StatusOK || alicePublic.json()["display_name"] != "Alice A." || alicePublic.json()["bio"] != nil {
 		t.Fatalf("user by name: %d %s", alicePublic.Code, alicePublic.Body)
+	}
+	if r := e.do(t, request{method: http.MethodPut, path: "/users/" + aliceID + "/contact-name", token: bob.access, body: map[string]any{"contact_name": "Al"}}); r.Code != http.StatusOK || r.json()["bio"] != nil {
+		t.Fatalf("contact name once alice is findable: %d %s", r.Code, r.Body)
 	}
 }
 

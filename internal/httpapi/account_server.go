@@ -485,14 +485,14 @@ func (a *AccountServer) UnblockUser(w http.ResponseWriter, r *http.Request, user
 // ---------------------------------------------------------------- users
 
 // writeUser renders a user for the viewer, or 404 for a user that does not exist.
-func (a *AccountServer) writeUser(w http.ResponseWriter, r *http.Request, viewer, id int64, lookup bool) {
+func (a *AccountServer) writeUser(w http.ResponseWriter, r *http.Request, viewer, id int64) {
 	views, err := a.o.Directory.ForViewer(r.Context(), viewer, []int64{id})
 	if err != nil {
 		a.internal(w, r, "render user", err)
 		return
 	}
 	v := views[id]
-	if v.IsDeleted || (lookup && !v.Findable) {
+	if v.IsDeleted || !v.Findable {
 		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
 		return
 	}
@@ -512,7 +512,7 @@ func (a *AccountServer) GetUser(w http.ResponseWriter, r *http.Request, userID U
 	if !ok {
 		return
 	}
-	a.writeUser(w, r, p.UserID, id, true)
+	a.writeUser(w, r, p.UserID, id)
 }
 
 // GetUserByUsername implements GET /usernames/{username}.
@@ -533,7 +533,7 @@ func (a *AccountServer) GetUserByUsername(w http.ResponseWriter, r *http.Request
 		a.internal(w, r, "user by username", err)
 		return
 	}
-	a.writeUser(w, r, p.UserID, u.ID, true)
+	a.writeUser(w, r, p.UserID, u.ID)
 }
 
 // SetContactName implements PUT /users/{id}/contact-name.
@@ -555,7 +555,19 @@ func (a *AccountServer) SetContactName(w http.ResponseWriter, r *http.Request, u
 		WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "contact_name", Message: "1 to 64 characters, for another user"})
 		return
 	}
-	err := a.o.Store.Social().SetContactName(r.Context(), p.UserID, target, name)
+	if !allow(w, r, a.o.Limiter, RateUserLookup, strconv.FormatInt(p.UserID, 10), a.o.Log) {
+		return
+	}
+	views, err := a.o.Directory.ForViewer(r.Context(), p.UserID, []int64{target})
+	if err != nil {
+		a.internal(w, r, "render user", err)
+		return
+	}
+	if v := views[target]; v.IsDeleted || !v.Findable {
+		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
+		return
+	}
+	err = a.o.Store.Social().SetContactName(r.Context(), p.UserID, target, name)
 	if errors.Is(err, postgres.ErrNotFound) {
 		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
 		return
@@ -564,7 +576,7 @@ func (a *AccountServer) SetContactName(w http.ResponseWriter, r *http.Request, u
 		a.internal(w, r, "set contact name", err)
 		return
 	}
-	a.writeUser(w, r, p.UserID, target, false)
+	a.writeUser(w, r, p.UserID, target)
 }
 
 // RemoveContactName implements DELETE /users/{id}/contact-name.
