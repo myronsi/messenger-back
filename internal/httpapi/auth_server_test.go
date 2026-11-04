@@ -719,6 +719,24 @@ func TestClientIP(t *testing.T) {
 	if got := clientIP(req, nil); got != netip.MustParseAddr("127.0.0.1") {
 		t.Fatalf("no trusted proxies: got %v", got)
 	}
+
+	defaults, err := (config.Auth{}).TrustedProxyPrefixes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ remote, xff, want string }{
+		{"127.0.0.1:1000", "198.51.100.66, 203.0.113.50", "203.0.113.50"},
+		{"[::1]:1000", "203.0.113.50", "203.0.113.50"},
+		{"203.0.113.9:1000", "198.51.100.66", "203.0.113.9"},
+		{"172.18.0.1:1000", "198.51.100.66", "172.18.0.1"},
+	} {
+		req = httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+		req.RemoteAddr = tc.remote
+		req.Header.Set("X-Forwarded-For", tc.xff)
+		if got := clientIP(req, defaults); got != netip.MustParseAddr(tc.want) {
+			t.Fatalf("default proxies, peer %s, X-Forwarded-For %q: got %v, want %s", tc.remote, tc.xff, got, tc.want)
+		}
+	}
 }
 
 func TestRouteAccess(t *testing.T) {

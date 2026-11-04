@@ -49,7 +49,7 @@ An upload replaces the bundle's files and `migrations/` as a whole: after a roll
 
 1. Install Docker with the Compose plugin. Create a deploy user in the `docker` group and `/opt/messenger-go` owned by it.
 2. Create `/opt/messenger-go/.env` (mode 0600) from `deploy/go/env.example`:
-   - **Staging:** in a checkout of the repository, run `go run deploy/dev/genenv.go deploy/go/env.example /opt/messenger-go/.env` (or copy the result there). It generates the secrets and the bundled stores' passwords. Then set `CORS_ORIGINS` and, if needed, `TRUSTED_PROXIES`.
+   - **Staging:** in a checkout of the repository, run `go run deploy/dev/genenv.go deploy/go/env.example /opt/messenger-go/.env` (or copy the result there). It generates the secrets and the bundled stores' passwords. Then set `CORS_ORIGINS` and `TRUSTED_PROXIES`.
    - **Production:**
      - Take the secrets from the secret manager, never from a file in the repository.
      - Leave out `COMPOSE_PROFILES`.
@@ -57,7 +57,7 @@ An upload replaces the bundle's files and `migrations/` as a whole: after a roll
      - Set `SCYLLA_CONSISTENCY=local_quorum` and `SEARCH_REPLICAS=1`.
      - Create the keyspace with replication factor 3 and the bucket beforehand.
      - With `sslmode=verify-full`, set `BACKUP_DATABASE_URL` to the same URL plus `sslrootcert=system`: `pg_dump` (libpq) does not look in the system's CAs by itself, and without it every deployment stops at the backup.
-3. Point the reverse proxy at `${API_BIND}:${API_PORT}` for `/api/v2` and `/ws`, with WebSocket upgrades. Do not route `/metrics` or the worker's port publicly. Readiness is checked at `API_BIND`, or at `127.0.0.1` when it is `0.0.0.0`.
+3. Point the reverse proxy at `${API_BIND}:${API_PORT}` for `/api/v2` and `/ws`, with WebSocket upgrades. It must append the client address to `X-Forwarded-For`. Set `TRUSTED_PROXIES` to the address the API sees for the proxy: with this stack that is Docker's bridge gateway (for example `172.16.0.0/12`), not `127.0.0.1`. Unset, only loopback is trusted and the API logs a warning at startup. Do not route `/metrics` or the worker's port publicly. Readiness is checked at `API_BIND`, or at `127.0.0.1` when it is `0.0.0.0`.
 4. The bundled stores and the migration steps take their passwords as command-line arguments (`redis-server --requirepass`, `pg_dump` and `migrate` URLs), which other users of the host can see in `ps`. Keep the host to the deploy user and administrators.
 
 ### GitHub

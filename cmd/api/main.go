@@ -6,8 +6,11 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/netip"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gocql/gocql"
@@ -72,6 +75,9 @@ func run() error {
 	trustedProxies, err := cfg.Auth.TrustedProxyPrefixes()
 	if err != nil {
 		return err
+	}
+	if cfg.Env == "production" && !cfg.Auth.ProxiesSet() && !loopbackListener(cfg.HTTP.Addr) {
+		log.Warn("TRUSTED_PROXIES is not set, so only loopback proxies are trusted: clients behind any other proxy share its address and its rate limits", "http_addr", cfg.HTTP.Addr)
 	}
 	var rt *realtimeStack
 	authSvc, err := auth.NewService(pg, rd.Client(), auth.Config{
@@ -197,4 +203,16 @@ func shutdown(log *slog.Logger, cfg config.HTTP, srv *http.Server, router *httpa
 	}
 	log.Info("stopped")
 	return nil
+}
+
+func loopbackListener(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip, err := netip.ParseAddr(host)
+	return err == nil && ip.IsLoopback()
 }
