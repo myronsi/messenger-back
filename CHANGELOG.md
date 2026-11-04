@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.1-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.5.0-alpha.1...v1.5.1-alpha.1) (2026-11-04)
+
+
+### Bug Fixes
+
+* review findings for auth limits, privacy, realtime and reliability ([#153](https://github.com/myronsi/messenger-back/issues/153)) ([a23b3da](https://github.com/myronsi/messenger-back/commit/a23b3dadaa102c539ffb7b4576c56060b39c9332))
+
 ## [1.5.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.4.0-alpha.1...v1.5.0-alpha.1) (2026-11-03)
 
 
