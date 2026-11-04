@@ -24,6 +24,7 @@ import (
 const (
 	DefaultSendBuffer   = 256
 	DefaultPingInterval = 25 * time.Second
+	DefaultMaxUserConns = 10
 	writeTimeout        = 10 * time.Second
 	eventTimeout        = 10 * time.Second
 )
@@ -80,6 +81,7 @@ type Options struct {
 	MinClientAPIVersion string
 	SendBuffer          int
 	PingInterval        time.Duration
+	MaxUserConns        int
 	Log                 *slog.Logger
 }
 
@@ -94,6 +96,7 @@ type Gateway struct {
 
 	mu    sync.Mutex
 	users map[int64]*userState
+	seq   uint64
 
 	// conns counts the running connection handlers, bg the background work they started; shutdown waits for
 	// both, so every socket releases its presence and records last-seen before the stores close.
@@ -118,6 +121,9 @@ func New(o Options) (*Gateway, error) {
 	}
 	if o.PingInterval <= 0 {
 		o.PingInterval = DefaultPingInterval
+	}
+	if o.MaxUserConns <= 0 {
+		o.MaxUserConns = DefaultMaxUserConns
 	}
 	if o.Log == nil {
 		o.Log = slog.New(slog.DiscardHandler)
@@ -224,8 +230,22 @@ func (g *Gateway) register(c *conn) error {
 		st = &userState{conns: map[*conn]struct{}{}, removed: map[int64]bool{}, presence: map[int64]int64{}}
 		g.users[c.userID] = st
 	}
+	g.seq++
+	c.seq = g.seq
 	st.conns[c] = struct{}{}
+	var oldest *conn
+	if len(st.conns) > g.o.MaxUserConns {
+		for other := range st.conns {
+			if oldest == nil || other.seq < oldest.seq {
+				oldest = other
+			}
+		}
+		delete(st.conns, oldest)
+	}
 	g.mu.Unlock()
+	if oldest != nil {
+		go func() { _ = oldest.Close(CloseTooManyConnections, "too many connections") }()
+	}
 
 	ctx, cancel := context.WithTimeout(g.ctx, eventTimeout)
 	defer cancel()

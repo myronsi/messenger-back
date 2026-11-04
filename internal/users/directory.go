@@ -27,6 +27,7 @@ type View struct {
 	IsOnline  bool
 	LastSeen  *time.Time
 	IsDeleted bool
+	Findable  bool
 }
 
 // Visible reports whether a field guarded by a privacy setting with value setting is visible to a viewer,
@@ -48,6 +49,16 @@ func Visible(setting, exception string, sharesChat bool) bool {
 		return true
 	}
 	return false // nobody, and anything unknown
+}
+
+func Findable(setting, exception string) bool {
+	switch exception {
+	case postgres.EffectAllow:
+		return true
+	case postgres.EffectDeny:
+		return false
+	}
+	return setting != postgres.VisibleNobody
 }
 
 // Online tells which users have a connection right now.
@@ -104,6 +115,7 @@ type facts struct {
 func (d *Directory) render(u postgres.User, viewer int64, f facts) View {
 	v := View{ID: u.ID, Username: u.Username, DisplayName: u.DisplayName, ContactName: f.contact}
 	self := u.ID == viewer
+	v.Findable = self || f.shares || Findable(f.settings.SearchVisibility, f.exceptions[postgres.SettingSearch])
 	allowed := func(setting, key string) bool {
 		return self || (!f.blocked && Visible(setting, f.exceptions[key], f.shares))
 	}
@@ -201,7 +213,7 @@ func (d *Directory) ToViewers(ctx context.Context, subject int64, viewers []int6
 	}
 	shared := map[int64]bool{}
 	if !sharesChat {
-		if shared, err = social.SharedChatPartners(ctx, subject, viewers); err != nil {
+		if shared, err = social.SharedChatViewers(ctx, subject, viewers); err != nil {
 			return nil, err
 		}
 	}
@@ -253,7 +265,7 @@ func (d *Directory) PresenceVisibleTo(ctx context.Context, subject int64, viewer
 	}
 	shared := map[int64]bool{}
 	if !sharesChat {
-		if shared, err = social.SharedChatPartners(ctx, subject, viewers); err != nil {
+		if shared, err = social.SharedChatViewers(ctx, subject, viewers); err != nil {
 			return nil, err
 		}
 	}

@@ -62,14 +62,16 @@ type Members interface {
 
 // Unread keeps the unread counters.
 type Unread interface {
-	Increment(ctx context.Context, chatID int64, userIDs ...int64) error
-	Set(ctx context.Context, userID, chatID, count int64) error
+	Increment(ctx context.Context, chatID, messageID int64, userIDs ...int64) error
+	Set(ctx context.Context, userID, chatID, readUpTo int64, unread []int64) error
 }
 
 // Dedup remembers the message of a client_temp_id (per user and chat).
 type Dedup interface {
 	Claim(ctx context.Context, userID, chatID int64, clientTempID string, id int64) (existing int64, claimed bool, err error)
 	Release(ctx context.Context, userID, chatID int64, clientTempID string, id int64) error
+	Fail(ctx context.Context, userID, chatID int64, clientTempID string, id int64) error
+	Resume(ctx context.Context, userID, chatID int64, clientTempID string, id int64) (bool, error)
 }
 
 // Store is the PostgreSQL side.
@@ -302,8 +304,15 @@ func (s *Service) Send(ctx context.Context, r SendRequest) (Sent, error) {
 	if err != nil {
 		return Sent{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
+	resumed := false
 	if !claimed {
-		return s.duplicate(ctx, r, prev)
+		if resumed, err = s.d.Dedup.Resume(ctx, r.SenderID, r.ChatID, r.ClientTempID, prev); err != nil {
+			return Sent{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
+		}
+		if !resumed {
+			return s.duplicate(ctx, r, prev)
+		}
+		id = prev
 	}
 
 	sender := r.SenderID
@@ -314,24 +323,35 @@ func (s *Service) Send(ctx context.Context, r SendRequest) (Sent, error) {
 	if attachment != nil {
 		// Linked before the message is stored, so recipients can download the file as soon as they see it.
 		if err := s.d.Store.Attachments().Link(ctx, uuid.UUID(*attachment), r.ChatID, id); err != nil {
-			if rerr := s.d.Dedup.Release(context.WithoutCancel(ctx), r.SenderID, r.ChatID, r.ClientTempID, id); rerr != nil {
-				s.d.Log.WarnContext(ctx, "release client_temp_id", "error", rerr)
-			}
+			s.abandon(ctx, r, id, resumed)
 			return Sent{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 		}
 	}
-	if err := s.queueNotification(ctx, m, members); err != nil {
-		_ = s.d.Dedup.Release(context.WithoutCancel(ctx), r.SenderID, r.ChatID, r.ClientTempID, id)
-		return Sent{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
+	if !resumed {
+		if err := s.queueNotification(ctx, m, members); err != nil {
+			s.abandon(ctx, r, id, false)
+			return Sent{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
+		}
 	}
 	if err := s.d.Messages.Insert(ctx, m); err != nil {
-		if rerr := s.d.Dedup.Release(context.WithoutCancel(ctx), r.SenderID, r.ChatID, r.ClientTempID, id); rerr != nil {
-			s.d.Log.WarnContext(ctx, "release client_temp_id", "error", rerr)
-		}
+		s.abandon(ctx, r, id, true)
 		return Sent{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
 	s.delivered(ctx, m, members, r.ClientTempID)
 	return Sent{Message: m}, nil
+}
+
+func (s *Service) abandon(ctx context.Context, r SendRequest, id int64, keep bool) {
+	ctx = context.WithoutCancel(ctx)
+	var err error
+	if keep {
+		err = s.d.Dedup.Fail(ctx, r.SenderID, r.ChatID, r.ClientTempID, id)
+	} else {
+		err = s.d.Dedup.Release(ctx, r.SenderID, r.ChatID, r.ClientTempID, id)
+	}
+	if err != nil {
+		s.d.Log.WarnContext(ctx, "release client_temp_id", "error", err)
+	}
 }
 
 // delivered finishes a stored new message: chat order, unread counters, delivery and the event. Failures only
@@ -346,19 +366,18 @@ func (s *Service) delivered(ctx context.Context, m scylla.Message, members []int
 	if m.SenderID != nil {
 		sender = *m.SenderID
 	}
-	if err := s.d.Unread.Increment(ctx, m.ChatID, without(members, sender)...); err != nil {
+	if err := s.d.Unread.Increment(ctx, m.ChatID, m.ID, without(members, sender)...); err != nil {
 		s.d.Log.WarnContext(ctx, "unread increment", "error", err, "chat_id", m.ChatID)
 	}
 	s.d.Notifier.MessageCreated(ctx, m, members, clientTempID)
 	s.emit(ctx, events.Event{Type: events.MessageCreated, ChatID: m.ChatID, MessageID: m.ID, ActorID: sender, At: m.CreatedAt})
 }
 
-// ErrSendInProgress: a send with this client_temp_id is still being stored (or failed). The client retries.
+// ErrSendInProgress: a send with this client_temp_id is still being stored. The client retries.
 var ErrSendInProgress = fmt.Errorf("%w: the first send with this client_temp_id is not stored yet", ErrUnavailable)
 
 // duplicate answers a repeated send with the first message, but only once that message is stored: until then
-// (the first send is still running, or failed and will release its claim) the retry fails as unavailable, so
-// a client never gets an ack for a message that does not exist.
+// the retry fails as unavailable, so a client never gets an ack for a message that does not exist.
 func (s *Service) duplicate(ctx context.Context, r SendRequest, id int64) (Sent, error) {
 	m, err := s.d.Messages.Get(ctx, r.ChatID, id)
 	if err != nil || m.SenderID == nil || *m.SenderID != r.SenderID {
@@ -512,7 +531,10 @@ func (s *Service) Delete(ctx context.Context, userID, chatID, messageID int64, s
 			return err
 		}
 	}
-	return s.deleteChecked(ctx, userID, chatID, messageID, scope)
+	if scope == ScopeEveryone && m.Deleted {
+		return s.unlink(ctx, m)
+	}
+	return s.deleteChecked(ctx, userID, m, scope)
 }
 
 func (s *Service) DeleteMany(ctx context.Context, userID, chatID int64, messageIDs []int64, scope string) error {
@@ -526,17 +548,19 @@ func (s *Service) DeleteMany(ctx context.Context, userID, chatID int64, messageI
 		return err
 	}
 	moderatorChecked := false
+	done := map[int64]bool{}
+	found := make([]scylla.Message, 0, len(messageIDs))
 	for _, messageID := range messageIDs {
 		m, err := s.message(ctx, chatID, messageID)
 		if err != nil {
 			return err
 		}
+		found = append(found, m)
 		if scope == ScopeEveryone {
-			if visible, err := s.Visible(ctx, userID, chatID, messageID); err != nil {
-				return fmt.Errorf("%w: %w", ErrUnavailable, err)
-			} else if !visible {
-				return ErrNotFound
+			if err := s.requireNotHidden(ctx, userID, m); err != nil {
+				return err
 			}
+			done[messageID] = m.Deleted
 		}
 		if scope == ScopeEveryone && !moderatorChecked && (m.SenderID == nil || *m.SenderID != userID) {
 			if err := s.requireModerator(ctx, chatID, userID); err != nil {
@@ -545,15 +569,40 @@ func (s *Service) DeleteMany(ctx context.Context, userID, chatID int64, messageI
 			moderatorChecked = true
 		}
 	}
-	for _, messageID := range messageIDs {
-		if err := s.deleteChecked(ctx, userID, chatID, messageID, scope); err != nil {
+	for _, m := range found {
+		if done[m.ID] {
+			if err := s.unlink(ctx, m); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := s.deleteChecked(ctx, userID, m, scope); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (s *Service) deleteChecked(ctx context.Context, userID, chatID, messageID int64, scope string) error {
+func (s *Service) requireNotHidden(ctx context.Context, userID int64, m scylla.Message) error {
+	hidden, err := s.d.Messages.Hidden(ctx, userID, m.ChatID, m.ID)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrUnavailable, err)
+	}
+	if hidden {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (s *Service) unlink(ctx context.Context, m scylla.Message) error {
+	if err := s.d.Store.Attachments().UnlinkMessage(context.WithoutCancel(ctx), m.ChatID, m.ID); err != nil {
+		return fmt.Errorf("%w: %w", ErrUnavailable, err)
+	}
+	return nil
+}
+
+func (s *Service) deleteChecked(ctx context.Context, userID int64, m scylla.Message, scope string) error {
+	chatID, messageID := m.ChatID, m.ID
 	if scope == ScopeMe {
 		if err := s.d.Messages.Hide(ctx, userID, chatID, messageID, scylla.HiddenDeletedForMe); err != nil {
 			return fmt.Errorf("%w: %w", ErrUnavailable, err)
@@ -571,7 +620,7 @@ func (s *Service) deleteChecked(ctx context.Context, userID, chatID, messageID i
 		s.d.Notifier.MessageDeleted(ctx, chatID, messageID, ScopeEveryone, members)
 	}
 	s.emit(ctx, events.Event{Type: events.MessageDeleted, ChatID: chatID, MessageID: messageID, ActorID: userID})
-	return nil
+	return s.unlink(ctx, m)
 }
 
 func (s *Service) requireModerator(ctx context.Context, chatID, userID int64) error {
@@ -675,20 +724,21 @@ func (s *Service) Read(ctx context.Context, userID, chatID, messageID int64) (in
 		}
 		return n, nil
 	}
-	n, err := s.d.Messages.CountAfter(ctx, chatID, userID, messageID, unreadCap)
+	unread, err := s.d.Messages.UnreadIDs(ctx, chatID, userID, messageID, unreadCap)
+	n := len(unread)
 	countErr := err
 	if err != nil {
 		// The marker moved but the count is unknown: the caller is told to retry (which only recounts), and the
 		// other members still learn about the read below.
 		s.d.Log.WarnContext(ctx, "unread recount", "error", err, "chat_id", chatID)
-	} else if err := s.d.Unread.Set(ctx, userID, chatID, int64(n)); err != nil {
+	} else if err := s.d.Unread.Set(ctx, userID, chatID, messageID, unread); err != nil {
 		s.d.Log.WarnContext(ctx, "unread set", "error", err, "chat_id", chatID)
 	}
 	recipients := []int64{userID}
 	settings, err := s.d.Store.Social().Privacy(ctx, []int64{userID})
 	if err == nil && settings[userID].ReadReceiptsEnabled {
 		if members, err := s.Members(ctx, chatID); err == nil {
-			recipients = members
+			recipients = s.receiptRecipients(ctx, userID, chatID, members)
 		}
 	}
 	s.d.Notifier.Read(ctx, chatID, userID, messageID, s.now().UTC(), recipients)
@@ -696,6 +746,26 @@ func (s *Service) Read(ctx context.Context, userID, chatID, messageID int64) (in
 		return 0, fmt.Errorf("%w: %w", ErrUnavailable, countErr)
 	}
 	return n, nil
+}
+
+func (s *Service) receiptRecipients(ctx context.Context, reader, chatID int64, members []int64) []int64 {
+	chat, err := s.d.Store.Chats().Get(ctx, chatID)
+	if err != nil {
+		return []int64{reader}
+	}
+	people := append([]int64{reader}, without(members, reader)...)
+	blocks, err := s.d.Store.Social().Blocks(ctx, people, people)
+	if err != nil {
+		return []int64{reader}
+	}
+	out := []int64{reader}
+	for _, m := range people[1:] {
+		if blocks[[2]int64{reader, m}] || (chat.Type == postgres.ChatDirect && blocks[[2]int64{m, reader}]) {
+			continue
+		}
+		out = append(out, m)
+	}
+	return out
 }
 
 // Resend delivers one of the user's stored messages again, to members it was not delivered to as well.

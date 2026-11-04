@@ -21,6 +21,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/myronsi/messenger-back/internal/events"
 	"github.com/myronsi/messenger-back/internal/media"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/redis"
@@ -43,6 +44,8 @@ var RateUpload = redis.Rate{Name: "upload", Rate: 60, Period: time.Minute, Burst
 
 // RateSearch limits user searches per user.
 var RateSearch = redis.Rate{Name: "user_search", Rate: 60, Period: time.Minute, Burst: 20}
+
+var RateUserLookup = redis.Rate{Name: "user_lookup", Rate: 120, Period: time.Minute, Burst: 60}
 
 // allowN is allow for n events at once, for limiters that can count several (allow once otherwise).
 func allowN(w http.ResponseWriter, r *http.Request, l RateAllower, rate redis.Rate, subject string, n int, log *slog.Logger) bool {
@@ -86,6 +89,7 @@ type MediaOptions struct {
 	Store     MediaStore
 	Directory *users.Directory
 	Limiter   RateAllower
+	Events    EventEmitter
 	BasePath  string
 	Log       *slog.Logger
 }
@@ -322,7 +326,7 @@ func (m *MediaServer) GetAttachmentContent(w http.ResponseWriter, r *http.Reques
 	if thumb {
 		etag += "-thumb"
 	}
-	m.serve(w, r, d, cacheForever, etag)
+	m.serve(w, r, d, "private, max-age=3600", etag)
 }
 
 // SetMyAvatar implements PUT /me/avatar.
@@ -371,6 +375,11 @@ func (m *MediaServer) answerMe(w http.ResponseWriter, r *http.Request, userID in
 		m.o.Log.ErrorContext(r.Context(), action, "error", err)
 		WriteProblem(w, http.StatusInternalServerError, ErrorCodeInternalError)
 		return
+	}
+	if m.o.Events != nil {
+		if err := m.o.Events.Emit(context.WithoutCancel(r.Context()), events.Event{Type: events.UserUpdated, UserID: userID, ActorID: userID}); err != nil {
+			m.o.Log.WarnContext(r.Context(), "emit event", "type", events.UserUpdated, "error", err)
+		}
 	}
 	u, err := m.o.Store.Users().Get(r.Context(), userID)
 	if err != nil {

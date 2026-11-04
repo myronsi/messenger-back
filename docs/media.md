@@ -73,7 +73,8 @@ The worker deletes uploads that nothing uses (no message link, not an avatar, no
 a day old (`media.UnusedAfter`), first the row and then the objects, every hour. The row is locked first and the
 references are checked in a statement of their own, so a message that links the upload at that moment either
 keeps it (the collector waits for it and sees the link) or fails to send (the collector was first). Deleting
-a chat removes its links, so its files become unused and are collected the same way.
+a chat removes its links, so its files become unused and are collected the same way. Deleting a message for
+everyone removes its link; a forwarded copy has a link of its own and keeps the file.
 
 ## Settings
 

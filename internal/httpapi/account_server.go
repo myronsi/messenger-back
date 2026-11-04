@@ -492,7 +492,7 @@ func (a *AccountServer) writeUser(w http.ResponseWriter, r *http.Request, viewer
 		return
 	}
 	v := views[id]
-	if v.IsDeleted {
+	if v.IsDeleted || !v.Findable {
 		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
 		return
 	}
@@ -503,6 +503,9 @@ func (a *AccountServer) writeUser(w http.ResponseWriter, r *http.Request, viewer
 func (a *AccountServer) GetUser(w http.ResponseWriter, r *http.Request, userID UserId, _ GetUserParams) {
 	p, ok := principalOr401(w, r)
 	if !ok {
+		return
+	}
+	if !allow(w, r, a.o.Limiter, RateUserLookup, strconv.FormatInt(p.UserID, 10), a.o.Log) {
 		return
 	}
 	id, ok := parseUserID(w, userID)
@@ -516,6 +519,9 @@ func (a *AccountServer) GetUser(w http.ResponseWriter, r *http.Request, userID U
 func (a *AccountServer) GetUserByUsername(w http.ResponseWriter, r *http.Request, username Username, _ GetUserByUsernameParams) {
 	p, ok := principalOr401(w, r)
 	if !ok {
+		return
+	}
+	if !allow(w, r, a.o.Limiter, RateUserLookup, strconv.FormatInt(p.UserID, 10), a.o.Log) {
 		return
 	}
 	u, err := a.o.Store.Users().GetByUsername(r.Context(), username)
@@ -549,7 +555,19 @@ func (a *AccountServer) SetContactName(w http.ResponseWriter, r *http.Request, u
 		WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "contact_name", Message: "1 to 64 characters, for another user"})
 		return
 	}
-	err := a.o.Store.Social().SetContactName(r.Context(), p.UserID, target, name)
+	if !allow(w, r, a.o.Limiter, RateUserLookup, strconv.FormatInt(p.UserID, 10), a.o.Log) {
+		return
+	}
+	views, err := a.o.Directory.ForViewer(r.Context(), p.UserID, []int64{target})
+	if err != nil {
+		a.internal(w, r, "render user", err)
+		return
+	}
+	if v := views[target]; v.IsDeleted || !v.Findable {
+		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
+		return
+	}
+	err = a.o.Store.Social().SetContactName(r.Context(), p.UserID, target, name)
 	if errors.Is(err, postgres.ErrNotFound) {
 		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
 		return

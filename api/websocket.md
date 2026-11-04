@@ -14,9 +14,10 @@ The JSON Schemas in `websocket/client/` (client → server) and `websocket/serve
 | Code | Meaning | Client |
 | --- | --- | --- |
 | `1012` | `reconnect`: the server is restarting, or it lost its pub/sub connection and events may be missing | reconnect with backoff, then load what was missed (`after` cursor) |
-| `1013` | the client did not keep up with its events | reconnect, then catch up |
+| `1013` | the client did not keep up with its events, or sent more than 64 events that are not handled yet | reconnect, then catch up |
 | `4401` | invalid ticket, or the session ended (logout, revoked, password changed) | get a new ticket; if that fails, sign in again |
 | `4426` | the client's contract version is no longer served | show the upgrade notice |
+| `4429` | the user opened more than 10 connections on this server; the oldest one is closed | do not reconnect this tab automatically |
 
 ## Envelope
 

@@ -2,6 +2,22 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.10
+
+- `GET /attachments/{attachment_id}/content` is cached for an hour again (`private, max-age=3600`) instead of a
+  year, so a file is not kept in caches long after its message is deleted. Versioned avatar URLs keep the
+  year-long cache.
+- `POST /chats/{chat_id}/messages/delete` with `scope` everyone treats messages that are already deleted for
+  everyone as done (`204` instead of `404`), so a retry after a partial failure deletes the rest.
+- WebSocket: a connection with more than 64 client events waiting to be handled is closed with `1013`.
+- WebSocket: a user has at most 10 connections per server; opening another closes the oldest with the new close
+  code `4429`.
+- `GET /users/{user_id}` and `GET /usernames/{username}` answer `404` for a user whose `search_visibility` hides
+  them from the current user, unless the two share a chat, and are rate limited per user (`429`).
+  `PUT /users/{user_id}/contact-name` follows the same rules and limit.
+- `contacts` (and `shared_chats`) count a direct chat only once the user opened it or read a message in it, so
+  opening an empty chat with someone does not make you their contact. Groups count as before.
+
 ## 2.1.0-alpha.9
 
 - Privacy exceptions apply to every value of avatar, profile and presence visibility, not only to `*_except`:

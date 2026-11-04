@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -80,29 +81,57 @@ func (l *eventLog) types() []string {
 }
 
 type fixture struct {
-	events *eventLog
-	t      *testing.T
-	pg     *postgres.Store
-	svc    *messages.Service
-	unread *redis.Unread
-	rec    *recorder
+	events   *eventLog
+	t        *testing.T
+	pg       *postgres.Store
+	svc      *messages.Service
+	unread   *redis.Unread
+	rec      *recorder
+	linkDown *atomic.Bool
+}
+
+type flakyLinkStore struct {
+	*postgres.Store
+	down *atomic.Bool
+}
+
+func (s flakyLinkStore) Attachments() postgres.AttachmentRepository {
+	return flakyLinks{s.Store.Attachments(), s.down}
+}
+
+type flakyLinks struct {
+	postgres.AttachmentRepository
+	down *atomic.Bool
+}
+
+func (l flakyLinks) UnlinkMessage(ctx context.Context, chatID, messageID int64) error {
+	if l.down.Load() {
+		return errors.New("postgres is away")
+	}
+	return l.AttachmentRepository.UnlinkMessage(ctx, chatID, messageID)
 }
 
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
+	return newFixtureWith(t, func(r scylla.MessageRepository) scylla.MessageRepository { return r })
+}
+
+func newFixtureWith(t *testing.T, wrap func(scylla.MessageRepository) scylla.MessageRepository) *fixture {
+	t.Helper()
 	pg := testenv.Postgres(t)
 	rd, prefix := testenv.Redis(t)
-	repo := scylla.NewMessages(testenv.Scylla(t), 10*time.Second)
+	repo := wrap(scylla.NewMessages(testenv.Scylla(t), 10*time.Second))
 	gen, _ := ids.NewGenerator(1)
 	rec := &recorder{}
 	log := &eventLog{}
 	unread := redis.NewUnread(rd.Client(), prefix)
+	linkDown := new(atomic.Bool)
 	svc := messages.New(messages.Deps{
-		Messages: repo, Store: pg, Members: redis.NewMembers(rd.Client(), prefix, time.Minute), Unread: unread,
+		Messages: repo, Store: flakyLinkStore{pg, linkDown}, Members: redis.NewMembers(rd.Client(), prefix, time.Minute), Unread: unread,
 		Dedup: redis.NewDedup(rd.Client(), prefix, 0), IDs: gen, Notifier: rec, Events: log,
 		QueueNotification: pg.Notifications().Enqueue,
 	})
-	return &fixture{t: t, pg: pg, svc: svc, unread: unread, rec: rec, events: log}
+	return &fixture{t: t, pg: pg, svc: svc, unread: unread, rec: rec, events: log, linkDown: linkDown}
 }
 
 func (f *fixture) user(name string) int64 {
@@ -280,6 +309,158 @@ func TestSendIsIdempotentAndCountsUnread(t *testing.T) {
 	}
 }
 
+type failingInsert struct {
+	scylla.MessageRepository
+	failures atomic.Int32
+	ids      []int64
+}
+
+func (r *failingInsert) Insert(ctx context.Context, m scylla.Message) error {
+	r.ids = append(r.ids, m.ID)
+	if r.failures.Add(-1) >= 0 {
+		return errors.New("scylla is down")
+	}
+	return r.MessageRepository.Insert(ctx, m)
+}
+
+func TestRetryAfterFailedInsertKeepsTheMessageID(t *testing.T) {
+	flaky := &failingInsert{}
+	f := newFixtureWith(t, func(r scylla.MessageRepository) scylla.MessageRepository {
+		flaky.MessageRepository = r
+		return flaky
+	})
+	ctx := context.Background()
+	alice, bob := f.user("alice"), f.user("bob")
+	chat, _, _ := f.pg.Chats().CreateDirect(ctx, alice, bob)
+	if err := f.unread.Load(ctx, bob, map[int64]int64{}); err != nil {
+		t.Fatal(err)
+	}
+	req := messages.SendRequest{ChatID: chat.ID, SenderID: alice, ClientTempID: "flaky", Type: scylla.TypeText, Content: str("hello")}
+	flaky.failures.Store(2)
+	for range 2 {
+		if _, err := f.svc.Send(ctx, req); !errors.Is(err, messages.ErrUnavailable) {
+			t.Fatalf("failed insert: %v", err)
+		}
+	}
+	sent, err := f.svc.Send(ctx, req)
+	if err != nil || sent.Duplicate {
+		t.Fatalf("retry: %+v %v", sent, err)
+	}
+	if len(flaky.ids) != 3 || flaky.ids[1] != flaky.ids[0] || flaky.ids[2] != flaky.ids[0] || sent.Message.ID != flaky.ids[0] {
+		t.Fatalf("every retry must store the first id: %v, sent %d", flaky.ids, sent.Message.ID)
+	}
+	again, err := f.svc.Send(ctx, req)
+	if err != nil || !again.Duplicate || again.Message.ID != sent.Message.ID {
+		t.Fatalf("after the stored retry: %+v %v", again, err)
+	}
+	if counts, _, _ := f.unread.Get(ctx, bob); counts[chat.ID] != 1 {
+		t.Fatalf("bob has %d unread, want 1", counts[chat.ID])
+	}
+	if len(f.rec.created) != 1 {
+		t.Fatalf("%d deliveries, want 1", len(f.rec.created))
+	}
+	page, err := f.svc.History(ctx, bob, scylla.PageQuery{ChatID: chat.ID, Viewer: bob, Limit: 10})
+	if err != nil || len(page.Messages) != 1 {
+		t.Fatalf("history: %d messages, %v", len(page.Messages), err)
+	}
+}
+
+type insertHook struct {
+	scylla.MessageRepository
+	after func(scylla.Message)
+}
+
+func (r *insertHook) Insert(ctx context.Context, m scylla.Message) error {
+	if err := r.MessageRepository.Insert(ctx, m); err != nil {
+		return err
+	}
+	if r.after != nil {
+		r.after(m)
+	}
+	return nil
+}
+
+func TestReadDuringSendCountsTheMessageOnce(t *testing.T) {
+	hook := &insertHook{}
+	f := newFixtureWith(t, func(r scylla.MessageRepository) scylla.MessageRepository {
+		hook.MessageRepository = r
+		return hook
+	})
+	ctx := context.Background()
+	alice, bob := f.user("alice"), f.user("bob")
+	chat, _, _ := f.pg.Chats().CreateDirect(ctx, alice, bob)
+	if err := f.unread.Load(ctx, bob, map[int64]int64{}); err != nil {
+		t.Fatal(err)
+	}
+	first := f.send(chat.ID, alice, "first", "one")
+	hook.after = func(scylla.Message) {
+		hook.after = nil
+		if n, err := f.svc.Read(ctx, bob, chat.ID, first.ID); err != nil || n != 1 {
+			t.Errorf("read while the second message is sent: %d %v", n, err)
+		}
+	}
+	f.send(chat.ID, alice, "second", "two")
+	if counts, _, _ := f.unread.Get(ctx, bob); counts[chat.ID] != 1 {
+		t.Fatalf("bob has %d unread, want 1", counts[chat.ID])
+	}
+}
+
+func TestDeletedFileMessagesFreeTheirFile(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	alice, bob, carol := f.user("alice"), f.user("bob"), f.user("carol")
+	chat, _, _ := f.pg.Chats().CreateDirect(ctx, alice, bob)
+	other, _, _ := f.pg.Chats().CreateDirect(ctx, alice, carol)
+	a, err := f.pg.Attachments().Create(ctx, postgres.NewAttachment{UploaderID: &alice, StorageKey: "attachments/" + uuid.NewString(), MimeType: "image/png", Size: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sent, err := f.svc.Send(ctx, messages.SendRequest{ChatID: chat.ID, SenderID: alice, ClientTempID: uuid.NewString(), Type: scylla.TypeFile, AttachmentID: &a.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	copies, err := f.svc.Forward(ctx, alice, sent.Message.ID, []int64{other.ID})
+	if err != nil || len(copies) != 1 {
+		t.Fatalf("forward: %v %v", copies, err)
+	}
+	unused := func() bool {
+		t.Helper()
+		list, err := f.pg.Attachments().Unreferenced(ctx, time.Now().Add(time.Hour), 100)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return slices.ContainsFunc(list, func(u postgres.UnreferencedAttachment) bool { return u.ID == a.ID })
+	}
+	f.linkDown.Store(true)
+	if err := f.svc.Delete(ctx, alice, chat.ID, sent.Message.ID, messages.ScopeEveryone); !errors.Is(err, messages.ErrUnavailable) {
+		t.Fatalf("a failed unlink must fail the delete: %v", err)
+	}
+	f.linkDown.Store(false)
+	if links, _ := f.pg.Attachments().LinksForViewer(ctx, a.ID, bob); len(links) != 1 {
+		t.Fatalf("links before the retry: %v", links)
+	}
+	if err := f.svc.Delete(ctx, alice, chat.ID, sent.Message.ID, messages.ScopeEveryone); err != nil {
+		t.Fatalf("retry of the delete: %v", err)
+	}
+	if unused() {
+		t.Fatal("the forwarded copy still uses the file")
+	}
+	if links, err := f.pg.Attachments().LinksForViewer(ctx, a.ID, bob); err != nil || len(links) != 0 {
+		t.Fatalf("bob still reaches the file of the deleted message: %v %v", links, err)
+	}
+	f.linkDown.Store(true)
+	if err := f.svc.DeleteMany(ctx, alice, other.ID, []int64{copies[0].ID}, messages.ScopeEveryone); !errors.Is(err, messages.ErrUnavailable) {
+		t.Fatalf("a failed unlink must fail the bulk delete: %v", err)
+	}
+	f.linkDown.Store(false)
+	if err := f.svc.DeleteMany(ctx, alice, other.ID, []int64{copies[0].ID}, messages.ScopeEveryone); err != nil {
+		t.Fatalf("retry of the bulk delete: %v", err)
+	}
+	if !unused() {
+		t.Fatal("the file of deleted messages is never collected")
+	}
+}
+
 func TestEditAndDeletePermissions(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
@@ -376,6 +557,16 @@ func TestBlocksCoverEveryAction(t *testing.T) {
 	}
 	if len(f.rec.created) != before {
 		t.Fatal("something was delivered")
+	}
+	f.rec.reads = nil
+	if _, err := f.svc.Read(ctx, bob, chat.ID, m.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.Read(ctx, alice, chat.ID, m.ID); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.rec.reads) != 2 || !slices.Equal(f.rec.reads[0], []int64{bob}) || !slices.Equal(f.rec.reads[1], []int64{alice}) {
+		t.Fatalf("read receipts across a block: %v", f.rec.reads)
 	}
 }
 

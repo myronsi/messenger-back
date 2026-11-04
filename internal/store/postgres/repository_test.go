@@ -716,6 +716,51 @@ func TestDeleteChatReturnsAttachmentKeys(t *testing.T) {
 	}
 }
 
+func TestChatDeletionsAreRecorded(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	a, b, c := mustUser(t, s, "alice"), mustUser(t, s, "bob"), mustUser(t, s, "carol")
+	direct, _, err := s.Chats().CreateDirect(ctx, a.ID, b.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	group, err := s.Chats().CreateGroup(ctx, NewGroup{OwnerID: c.ID, Name: "g"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Chats().Delete(ctx, direct.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.Chats().DeleteGroupAs(ctx, group.ID, c.ID); err != nil {
+		t.Fatal(err)
+	}
+	if fresh, err := s.Chats().StaleDeletions(ctx, time.Hour, 10); err != nil || len(fresh) != 0 {
+		t.Fatalf("fresh deletions are not stale: %v %v", fresh, err)
+	}
+	all, err := s.Chats().StaleDeletions(ctx, -time.Hour, 10)
+	if err != nil || len(all) != 2 || all[0].ChatID != direct.ID || all[1].ChatID != group.ID {
+		t.Fatalf("recorded deletions: %v %v", all, err)
+	}
+	if err := s.Chats().MessagesDeleted(ctx, direct.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Chats().SearchDropped(ctx, group.ID); err != nil {
+		t.Fatal(err)
+	}
+	if left, err := s.Chats().StaleDeletions(ctx, -time.Hour, 10); err != nil || len(left) != 2 {
+		t.Fatalf("one consumer done keeps the rows: %v %v", left, err)
+	}
+	if err := s.Chats().SearchDropped(ctx, direct.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Chats().MarkDeletionEmitted(ctx, group.ID); err != nil {
+		t.Fatal(err)
+	}
+	if left, err := s.Chats().StaleDeletions(ctx, -time.Hour, 10); err != nil || len(left) != 1 || left[0].ChatID != group.ID {
+		t.Fatalf("after finishing one: %v %v", left, err)
+	}
+}
+
 func TestQueryTimeout(t *testing.T) {
 	s := newTestStore(t)
 	short := newStore(s.Pool(), time.Nanosecond)

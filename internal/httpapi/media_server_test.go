@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 
 	"github.com/myronsi/messenger-back/internal/auth"
 	"github.com/myronsi/messenger-back/internal/config"
+	"github.com/myronsi/messenger-back/internal/events"
 	"github.com/myronsi/messenger-back/internal/media"
 	"github.com/myronsi/messenger-back/internal/notifications"
 	"github.com/myronsi/messenger-back/internal/observability"
@@ -48,6 +50,31 @@ type mediaEnv struct {
 	*authEnv
 	store  *postgres.Store
 	tokens *notifications.ActionTokens
+	events *mediaEvents
+}
+
+type mediaEvents struct {
+	mu  sync.Mutex
+	got []events.Event
+}
+
+func (l *mediaEvents) Emit(_ context.Context, e events.Event) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.got = append(l.got, e)
+	return nil
+}
+
+func (l *mediaEvents) userUpdates(uid int64) int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	n := 0
+	for _, e := range l.got {
+		if e.Type == events.UserUpdated && e.UserID == uid {
+			n++
+		}
+	}
+	return n
 }
 
 func newMediaEnv(t *testing.T) *mediaEnv {
@@ -69,18 +96,19 @@ func newMediaEnv(t *testing.T) *mediaEnv {
 	msvc := media.NewService(media.Options{Storage: disk, Attachments: store.Attachments(), Visibility: rules, Membership: rules,
 		Prober: media.NewProber("/none", "/none"), Limits: media.Limits{Image: 1 << 20, Audio: 1 << 20, Video: 1 << 20, File: 1 << 20, Avatar: 1 << 20}})
 	tokens := notifications.NewActionTokens("test-secret")
+	emitted := &mediaEvents{}
 	r := NewRouter(Options{
 		HTTP:    config.HTTP{BasePath: apiBase, RequestTimeout: 10 * time.Second, ReadinessTimeout: time.Second, MaxBodyBytes: 4096},
 		Log:     log,
 		Metrics: observability.NewMetrics(),
 		API: NewServer(NewAuthServer(AuthOptions{Service: svc, Log: log, BasePath: apiBase, CookieSecure: true}),
 			NewMediaServer(MediaOptions{Service: msvc, Store: store, Directory: users.NewDirectory(store, nil, apiBase),
-				Limiter: redis.NewRateLimiter(rdb, "t"+uuid.NewString()+":"), BasePath: apiBase, Log: log})).
+				Limiter: redis.NewRateLimiter(rdb, "t"+uuid.NewString()+":"), Events: emitted, BasePath: apiBase, Log: log})).
 			WithNotifications(NotificationOptions{Store: store.Notifications(), Tokens: tokens}),
 		Authenticator:  svc,
 		UploadMaxBytes: msvc.Limits().Max(),
 	})
-	return &mediaEnv{authEnv: &authEnv{router: r}, store: store, tokens: tokens}
+	return &mediaEnv{authEnv: &authEnv{router: r}, store: store, tokens: tokens, events: emitted}
 }
 
 func (e *mediaEnv) userID(t *testing.T, s session) int64 {
@@ -172,7 +200,7 @@ func TestUploadAndDownloadOverHTTP(t *testing.T) {
 	}
 	r := get(bob.access, "")
 	if r.Code != http.StatusOK || r.Header().Get("Content-Type") != "image/png" || r.Header().Get("X-Content-Type-Options") != "nosniff" ||
-		r.Header().Get("Content-Security-Policy") == "" || r.Body.Len() == 0 || r.Header().Get("Cache-Control") != cacheForever ||
+		r.Header().Get("Content-Security-Policy") == "" || r.Body.Len() == 0 || r.Header().Get("Cache-Control") != "private, max-age=3600" ||
 		!slices.Contains(r.Header().Values("Vary"), "Authorization") {
 		t.Fatalf("download: %d %v", r.Code, r.Header())
 	}
@@ -422,6 +450,9 @@ func TestDeleteAvatarsOverHTTP(t *testing.T) {
 	}
 
 	first, second, third := setAvatar(alice), setAvatar(alice), setAvatar(alice)
+	if n := e.events.userUpdates(aliceID); n != 3 {
+		t.Fatalf("%d user.updated events after three avatar changes", n)
+	}
 	v := versions()
 	if len(v) != 3 {
 		t.Fatalf("history: %v", v)
@@ -446,6 +477,9 @@ func TestDeleteAvatarsOverHTTP(t *testing.T) {
 	r = remove(alice, v[2])
 	if r.Code != http.StatusOK || current() != nil || r.json()["avatar_url"] != nil || len(versions()) != 0 {
 		t.Fatalf("delete the last avatar: %d %s", r.Code, r.Body)
+	}
+	if n := e.events.userUpdates(aliceID); n != 6 {
+		t.Fatalf("%d user.updated events, want one per avatar change", n)
 	}
 }
 

@@ -26,6 +26,7 @@ client ──ws──► gateway (instance A) ──► messages.Service ──�
 2. `wss://…/api/v2/ws?ticket=…&api_version=…`. The origin must be the API's own or one of `CORS_ORIGINS`.
 3. The ticket is redeemed during the handshake (and the session checked). An invalid ticket gets close code `4401`;
    a client whose `api_version` is below `MIN_CLIENT_API_VERSION` gets `hello` and then `4426`.
+   A user has at most 10 connections per instance; one more closes the user's oldest connection with `4429`.
 4. The first connection of the user on this instance subscribes `user:{id}` and claims presence.
 
 The HTTP server's timeouts do not apply to the upgraded connection (net/http clears the deadlines when the
@@ -37,7 +38,8 @@ borrows one from the pool briefly.
 Every frame is decoded strictly (unknown fields, wrong types and oversized values are refused with
 `validation_failed`, exactly as the JSON Schemas of the contract; a test runs every example through the decoder).
 Frames are limited to 32 KiB. Events of one connection are handled in order, each within 10 s, and answered with
-`ack` or `error` carrying the `client_temp_id`; `typing` is never answered.
+`ack` or `error` carrying the `client_temp_id`; `typing` is never answered. They are handled apart from the reader,
+so pongs are still read while an event is slow; a connection with more than 64 events waiting is closed with `1013`.
 
 Limits per user, across connections and instances (Redis GCRA): 30 messages (and resends) per 10 s with bursts of
 20, 60 other actions per 10 s, one typing indicator per second (excess ones are dropped silently).
@@ -51,7 +53,7 @@ membership change; the check fails closed when Redis or PostgreSQL cannot answer
 | `edit` | the sender's own text message, not deleted; members who deleted it for themselves get no `edit` |
 | `delete` | `me`: any member; `everyone`: the sender, or the owner, an admin or a moderator of a group |
 | `reaction_add`/`reaction_remove` | member, message not deleted |
-| `read` | member; the read position only moves forward; an older position changes nothing and is not broadcast |
+| `read` | member; the read position only moves forward; an older position changes nothing and is not broadcast; the receipt skips users the reader blocked, and in a direct chat also users who blocked the reader |
 | `resend` | the sender's own message; it goes to the sender's devices and to the members it was hidden from as not delivered, never to those who deleted it for themselves |
 | `typing` | member |
 

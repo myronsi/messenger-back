@@ -2,7 +2,10 @@ package postgres
 
 import (
 	"context"
+	"maps"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -107,5 +110,63 @@ func TestAllTimestampsAreTimestamptz(t *testing.T) {
 			t.Fatal(err)
 		}
 		t.Errorf("%s.%s is a TIMESTAMP without time zone", table, col)
+	}
+}
+
+func TestInertPrivacyExceptionsAreDropped(t *testing.T) {
+	dbURL := newDatabase(t)
+	if err := migrate(t, dbURL, ".up.sql"); err != nil {
+		t.Fatal(err)
+	}
+	s, err := New(context.Background(), dbURL, Options{MaxConns: 4, QueryTimeout: 10 * time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(s.Close)
+	ctx := context.Background()
+	owner, defaults, target := mustUser(t, s, "owner"), mustUser(t, s, "defaults"), mustUser(t, s, "target")
+	p := DefaultPrivacy(owner.ID)
+	p.AvatarVisibility, p.ProfileVisibility, p.PresenceVisibility = VisibleEveryoneExcept, VisibleNobodyExcept, VisibleSharedChats
+	if _, err := s.Social().UpdatePrivacy(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	set := func(owner int64, key, effect string) {
+		if err := s.Social().SetException(ctx, PrivacyException{OwnerID: owner, SettingKey: key, TargetID: target.ID, Effect: effect}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	set(owner.ID, SettingAvatar, EffectDeny)
+	set(owner.ID, SettingProfile, EffectAllow)
+	set(owner.ID, SettingPresence, EffectAllow)
+	set(owner.ID, SettingGroupInvites, EffectDeny)
+	set(owner.ID, SettingSearch, EffectAllow)
+	set(defaults.ID, SettingAvatar, EffectDeny)
+	set(defaults.ID, SettingProfile, EffectAllow)
+
+	conn, err := pgx.Connect(ctx, dbURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close(ctx)
+	if err := applyFiles(ctx, conn, []string{filepath.Join(migrationsDir, "000015_drop_inert_privacy_exceptions.up.sql")}); err != nil {
+		t.Fatal(err)
+	}
+	kept := func(owner int64) map[string]string {
+		list, err := s.Social().Exceptions(ctx, owner)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := map[string]string{}
+		for _, e := range list {
+			out[e.SettingKey] = e.Effect
+		}
+		return out
+	}
+	want := map[string]string{SettingAvatar: EffectDeny, SettingProfile: EffectAllow, SettingGroupInvites: EffectDeny, SettingSearch: EffectAllow}
+	if got := kept(owner.ID); !maps.Equal(got, want) {
+		t.Fatalf("owner keeps %v, want %v", got, want)
+	}
+	if got := kept(defaults.ID); len(got) != 0 {
+		t.Fatalf("exceptions under the default settings were inert: %v", got)
 	}
 }

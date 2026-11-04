@@ -28,6 +28,9 @@ ORDER BY k;
 INSERT INTO attachment_links (attachment_id, chat_id, message_id) VALUES (@attachment_id, @chat_id, @message_id)
 ON CONFLICT DO NOTHING;
 
+-- name: UnlinkMessageAttachments :exec
+DELETE FROM attachment_links WHERE chat_id = @chat_id AND message_id = @message_id;
+
 -- name: AttachmentLinksForViewer :many
 -- The messages through which the viewer could reach the attachment: links into chats the viewer is in.
 SELECT l.chat_id, l.message_id

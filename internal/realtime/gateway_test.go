@@ -75,7 +75,9 @@ type env struct {
 	tickets *tickets
 	node    int
 	// ping is the ping (and session re-check) interval of new instances.
-	ping time.Duration
+	ping     time.Duration
+	wrap     func(Limiter) Limiter
+	maxConns int
 }
 
 func newEnv(t *testing.T) *env {
@@ -143,10 +145,14 @@ func (e *env) instance(name string) *instance {
 	})
 	hub := NewHub(log, nil)
 	in.hub = hub
+	var limiter Limiter = redis.NewRateLimiter(rdb, e.prefix)
+	if e.wrap != nil {
+		limiter = e.wrap(limiter)
+	}
 	in.gw, err = New(Options{
 		Auth: e.tickets, Messages: in.svc, Fanout: in.fanout, Bus: bus, Presence: in.presence,
-		Limiter: redis.NewRateLimiter(rdb, e.prefix), LastSeen: e.pg.Users(), Hub: hub,
-		MinClientAPIVersion: "2.0.0-alpha.1", PingInterval: e.ping, Log: log,
+		Limiter: limiter, LastSeen: e.pg.Users(), Hub: hub,
+		MinClientAPIVersion: "2.0.0-alpha.1", PingInterval: e.ping, MaxUserConns: e.maxConns, Log: log,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -720,3 +726,143 @@ func (s *syncBuffer) Write(p []byte) (int, error) {
 	return s.b.Write(p)
 }
 func (s *syncBuffer) String() string { s.mu.Lock(); defer s.mu.Unlock(); return s.b.String() }
+
+type stalledLimiter struct {
+	Limiter
+	release chan struct{}
+}
+
+func (l stalledLimiter) Allow(ctx context.Context, r redis.Rate, subject string) (redis.Result, error) {
+	if r.Name == RateOther.Name {
+		<-l.release
+	}
+	return l.Limiter.Allow(ctx, r, subject)
+}
+
+func TestSlowEventsDoNotStallTheReader(t *testing.T) {
+	e := newEnv(t)
+	stall := stalledLimiter{release: make(chan struct{})}
+	var released sync.Once
+	release := func() { released.Do(func() { close(stall.release) }) }
+	t.Cleanup(release)
+	e.wrap = func(l Limiter) Limiter { stall.Limiter = l; return stall }
+	a := e.instance("a")
+	alice, bob := e.user("alice"), e.user("bob")
+	chat, _, _ := e.pg.Chats().CreateDirect(context.Background(), alice, bob)
+	c := e.online(a, alice)
+	read := map[string]any{"type": "read", "client_temp_id": "r", "chat_id": fmt.Sprint(chat.ID), "data": map[string]any{"message_id": "1"}}
+	c.send(read)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := c.ws.Ping(ctx); err != nil {
+		t.Fatalf("the server must answer pings while an event is handled: %v", err)
+	}
+
+	frame, _ := json.Marshal(read)
+	for range eventQueue + 1 {
+		if c.ws.Write(ctx, websocket.MessageText, frame) != nil {
+			break
+		}
+	}
+	if code := c.closeCode(); code != websocket.StatusTryAgainLater {
+		t.Fatalf("close code %d", code)
+	}
+	release()
+	wctx, wcancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer wcancel()
+	done := make(chan struct{})
+	go func() { a.gw.conns.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-wctx.Done():
+		t.Fatal("the connection's goroutines did not finish after it closed")
+	}
+}
+
+func TestTooManyConnectionsCloseTheOldest(t *testing.T) {
+	e := newEnv(t)
+	e.maxConns = 2
+	a := e.instance("a")
+	alice := e.user("alice")
+	first := e.online(a, alice)
+	second := e.online(a, alice)
+	third := e.online(a, alice)
+	if code := first.closeCode(); code != CloseTooManyConnections {
+		t.Fatalf("close code %d", code)
+	}
+	for _, c := range []*client{second, third} {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		err := c.ws.Ping(ctx)
+		cancel()
+		if err != nil {
+			t.Fatalf("a newer connection was closed: %v", err)
+		}
+	}
+}
+
+func TestConcurrentConnectionsKeepTheLimit(t *testing.T) {
+	e := newEnv(t)
+	e.maxConns = 2
+	a := e.instance("a")
+	alice := e.user("alice")
+	url := "ws" + strings.TrimPrefix(a.server.URL, "http") + "/api/v2/ws?ticket="
+	closed := make(chan websocket.StatusCode, 4)
+	var wg sync.WaitGroup
+	for range 4 {
+		tk, _ := e.tickets.issue(alice)
+		wg.Go(func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			ws, resp, err := websocket.Dial(ctx, url+tk, nil)
+			if resp != nil && resp.Body != nil {
+				_ = resp.Body.Close()
+			}
+			if err != nil {
+				t.Errorf("dial: %v", err)
+				return
+			}
+			t.Cleanup(func() { _ = ws.Close(websocket.StatusNormalClosure, "") })
+			go func() {
+				for {
+					if _, _, err := ws.Read(context.Background()); err != nil {
+						closed <- websocket.CloseStatus(err)
+						return
+					}
+				}
+			}()
+		})
+	}
+	wg.Wait()
+	for range 2 {
+		select {
+		case code := <-closed:
+			if code != CloseTooManyConnections {
+				t.Fatalf("close code %d", code)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("fewer than two connections were closed")
+		}
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		a.gw.mu.Lock()
+		n := 0
+		if st := a.gw.users[alice]; st != nil {
+			n = len(st.conns)
+		}
+		a.gw.mu.Unlock()
+		if n == 2 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%d connections left, want 2", n)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	select {
+	case code := <-closed:
+		t.Fatalf("a third connection was closed: %d", code)
+	case <-time.After(300 * time.Millisecond):
+	}
+}

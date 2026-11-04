@@ -645,7 +645,9 @@ const sharedChatPartners = `-- name: SharedChatPartners :many
 SELECT DISTINCT other.user_id
 FROM participants mine
 JOIN participants other ON other.chat_id = mine.chat_id
+JOIN chats c ON c.id = mine.chat_id
 WHERE mine.user_id = $1 AND other.user_id = ANY($2::BIGINT[])
+  AND (c.type = 'group' OR c.created_by = other.user_id OR other.last_read_message_id IS NOT NULL)
 `
 
 type SharedChatPartnersParams struct {
@@ -653,9 +655,42 @@ type SharedChatPartnersParams struct {
 	UserIds  []int64
 }
 
-// Which of the users share at least one chat with the viewer.
 func (q *Queries) SharedChatPartners(ctx context.Context, arg SharedChatPartnersParams) ([]int64, error) {
 	rows, err := q.db.Query(ctx, sharedChatPartners, arg.ViewerID, arg.UserIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int64{}
+	for rows.Next() {
+		var user_id int64
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const sharedChatViewers = `-- name: SharedChatViewers :many
+SELECT DISTINCT other.user_id
+FROM participants mine
+JOIN participants other ON other.chat_id = mine.chat_id
+JOIN chats c ON c.id = mine.chat_id
+WHERE mine.user_id = $1 AND other.user_id = ANY($2::BIGINT[])
+  AND (c.type = 'group' OR c.created_by = mine.user_id OR mine.last_read_message_id IS NOT NULL)
+`
+
+type SharedChatViewersParams struct {
+	UserID    int64
+	ViewerIds []int64
+}
+
+func (q *Queries) SharedChatViewers(ctx context.Context, arg SharedChatViewersParams) ([]int64, error) {
+	rows, err := q.db.Query(ctx, sharedChatViewers, arg.UserID, arg.ViewerIds)
 	if err != nil {
 		return nil, err
 	}

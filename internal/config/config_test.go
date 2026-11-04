@@ -130,8 +130,11 @@ func TestAuthDefaults(t *testing.T) {
 	if err != nil || len(prefixes) != 3 || prefixes[1].String() != "192.0.2.7/32" || prefixes[2].String() != "::1/128" {
 		t.Fatalf("trusted proxies: %v %v", prefixes, err)
 	}
-	if got, _ := (Auth{}).TrustedProxyPrefixes(); len(got) != 0 {
-		t.Fatalf("no proxies are trusted by default, got %v", got)
+	if got, _ := (Auth{TrustedProxies: []string{" "}}).TrustedProxyPrefixes(); len(got) != 2 || got[0].String() != "127.0.0.0/8" || got[1].String() != "::1/128" {
+		t.Fatalf("only loopback proxies are trusted by default, got %v", got)
+	}
+	if (Auth{}).ProxiesSet() || !cfg.Auth.ProxiesSet() {
+		t.Fatal("ProxiesSet must tell an empty setting from a configured one")
 	}
 }
 

@@ -31,6 +31,32 @@ type UnreadForgetter interface {
 // Members tells whether a user is in a chat now (postgres chat repository).
 type Members interface {
 	Participant(ctx context.Context, chatID, userID int64) (postgres.Participant, error)
+	MessagesDeleted(ctx context.Context, chatID int64) error
+}
+
+type DeletionStore interface {
+	StaleDeletions(ctx context.Context, olderThan time.Duration, limit int) ([]postgres.ChatDeletion, error)
+	MarkDeletionEmitted(ctx context.Context, chatID int64) error
+}
+
+type Emitter interface {
+	Emit(ctx context.Context, e events.Event) error
+}
+
+func ResendChatDeletions(ctx context.Context, store DeletionStore, emit Emitter, olderThan time.Duration, limit int) (int, error) {
+	stale, err := store.StaleDeletions(ctx, olderThan, limit)
+	if err != nil {
+		return 0, err
+	}
+	for i, d := range stale {
+		if err := emit.Emit(ctx, events.Event{Type: events.ChatDeleted, ChatID: d.ChatID, At: d.DeletedAt}); err != nil {
+			return i, err
+		}
+		if err := store.MarkDeletionEmitted(ctx, d.ChatID); err != nil {
+			return i, err
+		}
+	}
+	return len(stale), nil
 }
 
 // ChatCleanup handles events:chats:
@@ -60,6 +86,9 @@ func ChatCleanup(messages ChatDeleter, unread UnreadForgetter, members Members, 
 			}
 			if wait := e.At.Add(grace).Sub(now()); wait > 0 {
 				return redis.RetryLater{After: wait}
+			}
+			if err := members.MessagesDeleted(ctx, e.ChatID); err != nil {
+				return err
 			}
 			log.InfoContext(ctx, "chat messages deleted", "chat_id", e.ChatID)
 		case events.ChatMemberRemoved:

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.9
+  version: 2.1.0-alpha.10
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -807,6 +807,10 @@ paths:
       tags: [users]
       operationId: getUserByUsername
       summary: Profile by username
+      description: |
+        Like `GET /users/{user_id}`: a user whose `search_visibility` hides them from the current user (`nobody`
+        without an `allow` exception, or a `deny` exception) is `404` unless the two share a chat. Lookups are
+        rate limited per user.
       parameters:
         - name: username
           in: path
@@ -822,6 +826,7 @@ paths:
               schema: { $ref: "#/components/schemas/User" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
   /users/{user_id}:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
@@ -831,6 +836,10 @@ paths:
       tags: [users]
       operationId: getUser
       summary: Profile by ID
+      description: |
+        A user whose `search_visibility` hides them from the current user (`nobody` without an `allow` exception,
+        or a `deny` exception) is `404` unless the two share a chat. Your own profile is always found. Lookups are
+        rate limited per user.
       responses:
         "426": { $ref: "#/components/responses/ClientOutdated" }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -841,6 +850,7 @@ paths:
               schema: { $ref: "#/components/schemas/User" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
   /users/{user_id}/avatar:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
@@ -921,6 +931,9 @@ paths:
       tags: [users]
       operationId: setContactName
       summary: Set your own display name for a user
+      description: |
+        Follows the rules of `GET /users/{user_id}`: a user whose `search_visibility` hides them from you is `404`
+        unless the two of you share a chat, and the calls count against the same per-user limit.
       requestBody:
         required: true
         content:
@@ -937,6 +950,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
     delete:
       tags: [users]
       operationId: removeContactName
@@ -1437,7 +1451,8 @@ paths:
       summary: Delete several messages of a chat
       description: |
         Deletes up to 100 messages of the chat with the rules of `DELETE /messages/{message_id}`. Every message
-        is checked first: when one may not be deleted, none is.
+        is checked first: when one may not be deleted, none is. With `scope` everyone, messages that are already
+        deleted for everyone count as done, so a retry after a partial failure finishes the rest.
       requestBody:
         required: true
         content:
@@ -2536,7 +2551,9 @@ components:
           description: A code of the authenticator app, or an unused recovery code.
     Visibility:
       type: string
-      description: Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
+      description: |
+        Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
+        `contacts` are the users you share a group with, or a direct chat that you opened or read in.
       enum: [everyone, contacts, everyone_except, nobody_except, nobody]
     DirectMessagePolicy:
       type: string

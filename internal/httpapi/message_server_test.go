@@ -257,6 +257,9 @@ func TestBulkForwardAndDeleteOverHTTP(t *testing.T) {
 	if got, _ := e.history(t, bob, chat, ""); texts(got)[0] != "<deleted>" || texts(got)[1] != "<deleted>" || texts(got)[2] != "three" {
 		t.Fatalf("after deleting for everyone: %v", texts(got))
 	}
+	if r := remove(alice, "everyone", mine[:2]); r.Code != http.StatusNoContent {
+		t.Fatalf("a retry of a finished bulk delete: %d %s", r.Code, r.Body)
+	}
 	if r := remove(bob, "me", []string{mine[2], bobs}); r.Code != http.StatusNoContent {
 		t.Fatalf("delete for me: %d", r.Code)
 	}

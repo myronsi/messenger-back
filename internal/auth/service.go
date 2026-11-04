@@ -64,8 +64,14 @@ func (c Client) ipString() string {
 	if !c.IP.IsValid() {
 		return "unknown"
 	}
-	return c.IP.String()
+	ip := c.IP.Unmap()
+	if ip.Is6() {
+		return netip.PrefixFrom(ip.WithZone(""), 64).Masked().String()
+	}
+	return ip.String()
 }
+
+func (c Client) userKey(username string) string { return username + "|" + c.ipString() }
 
 func (c Client) ipPtr() *netip.Addr {
 	if !c.IP.IsValid() {
@@ -522,8 +528,8 @@ func (s *Service) Login(ctx context.Context, c Client, username, password string
 	if username == "" || len(username) > 64 || password == "" || len(password) > 1024 {
 		return nil, ErrInvalidCredentials
 	}
-	ipRule, userRule := limitCheck{RuleLoginIP, c.ipString()}, limitCheck{RuleLoginUser, username}
-	attempt, err := s.allow(ctx, ipRule, userRule)
+	userRule := limitCheck{RuleLoginUser, c.userKey(username)}
+	attempt, err := s.allow(ctx, limitCheck{RuleLoginIP, c.ipString()}, userRule, limitCheck{RuleLoginCap, username})
 	if err != nil {
 		return nil, err
 	}
@@ -554,7 +560,7 @@ func (s *Service) Login(ctx context.Context, c Client, username, password string
 		return nil, ErrInvalidCredentials
 	}
 	attempt.release(ctx)
-	s.clear(ctx, RuleLoginUser, username)
+	s.clear(ctx, RuleLoginUser, userRule.subject)
 
 	if rehash {
 		stored, err = s.upgradeHash(ctx, creds.UserID, stored, password)

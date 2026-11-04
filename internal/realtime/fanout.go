@@ -153,7 +153,7 @@ func (f *Fanout) renderMessage(ctx context.Context, m scylla.Message, recipients
 	var senders map[int64]users.View
 	if m.SenderID != nil {
 		var err error
-		if senders, err = f.dir.ToViewers(ctx, *m.SenderID, recipients, true); err != nil {
+		if senders, err = f.dir.ToViewers(ctx, *m.SenderID, recipients, false); err != nil {
 			f.log.WarnContext(ctx, "render sender", "error", err)
 			senders = nil
 		}
@@ -205,7 +205,7 @@ func (f *Fanout) replyOrigins(ctx context.Context, m scylla.Message, recipients 
 	}
 	var senders map[int64]users.View
 	if o.SenderID != nil {
-		if senders, err = f.dir.ToViewers(ctx, *o.SenderID, recipients, true); err != nil {
+		if senders, err = f.dir.ToViewers(ctx, *o.SenderID, recipients, false); err != nil {
 			f.log.WarnContext(ctx, "render reply sender", "error", err)
 		}
 	}
@@ -363,7 +363,7 @@ func (f *Fanout) Presence(ctx context.Context, c redis.Change, lastSeen time.Tim
 		f.log.WarnContext(ctx, "presence watchers", "error", err)
 		return
 	}
-	visible, err := f.dir.PresenceVisibleTo(ctx, c.UserID, watchers, true)
+	visible, err := f.dir.PresenceVisibleTo(ctx, c.UserID, watchers, false)
 	if err != nil {
 		f.log.WarnContext(ctx, "presence visibility", "error", err)
 		return

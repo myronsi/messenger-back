@@ -516,7 +516,7 @@ func (s *Service) permission(ctx context.Context, requester, recipient int64) (a
 	case postgres.VisibleEveryone:
 		return true, false, nil
 	case postgres.VisibleSharedChats:
-		shared, err := social.SharedChatPartners(ctx, recipient, []int64{requester})
+		shared, err := social.SharedChatViewers(ctx, recipient, []int64{requester})
 		return shared[requester], false, err
 	case postgres.WaitApproval:
 		return false, true, nil
@@ -669,7 +669,7 @@ func (s *Service) existingDirect(ctx context.Context, a, b int64) (*int64, error
 func (s *Service) Delete(ctx context.Context, userID, chatID int64) error {
 	e, err := s.d.Store.Chats().Entry(ctx, userID, chatID)
 	if err != nil {
-		return notFoundOr(err)
+		return s.ifGone(ctx, chatID, notFoundOr(err))
 	}
 	if e.Chat.Type != postgres.ChatDirect {
 		return fmt.Errorf("%w: delete or leave a group with the group endpoints", ErrInvalid)
@@ -690,9 +690,7 @@ func (s *Service) Delete(ctx context.Context, userID, chatID int64) error {
 	if err := s.d.Unread.Forget(ctx, chatID, members...); err != nil {
 		s.d.Log.WarnContext(ctx, "forget unread", "error", err)
 	}
-	if err := s.d.Members.Invalidate(ctx, chatID); err != nil {
-		s.d.Log.WarnContext(ctx, "invalidate members", "error", err)
-	}
+	stale := s.invalidateMembers(context.WithoutCancel(ctx), chatID)
 	s.emit(ctx, events.Event{Type: events.ChatDeleted, ChatID: chatID, ActorID: userID, At: time.Now()})
 	if s.d.DeleteFile != nil {
 		for _, k := range keys {
@@ -701,7 +699,7 @@ func (s *Service) Delete(ctx context.Context, userID, chatID int64) error {
 			}
 		}
 	}
-	return nil
+	return stale
 }
 
 // ---------------------------------------------------------------- pins and reading

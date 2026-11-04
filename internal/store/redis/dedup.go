@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	goredis "github.com/redis/go-redis/v9"
@@ -45,11 +46,42 @@ func (d *Dedup) Claim(ctx context.Context, userID, chatID int64, clientTempID st
 	if err != nil {
 		return 0, false, fmt.Errorf("dedup claim: %w", err)
 	}
-	prev, err := strconv.ParseInt(old, 10, 64)
+	prev, err := strconv.ParseInt(strings.TrimPrefix(old, failedMark), 10, 64)
 	if err != nil {
 		return 0, false, fmt.Errorf("dedup claim: corrupt entry")
 	}
 	return prev, false, nil
+}
+
+const failedMark = "f:"
+
+var swapClaimScript = goredis.NewScript(`
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+  redis.call('SET', KEYS[1], ARGV[2], 'KEEPTTL')
+  return 1
+end
+return 0`)
+
+func (d *Dedup) swap(ctx context.Context, userID, chatID int64, clientTempID, from, to string) (bool, error) {
+	n, err := swapClaimScript.Run(ctx, d.rdb, []string{d.key(userID, chatID, clientTempID)}, from, to).Int()
+	return n == 1, err
+}
+
+func (d *Dedup) Fail(ctx context.Context, userID, chatID int64, clientTempID string, id int64) error {
+	v := strconv.FormatInt(id, 10)
+	if _, err := d.swap(ctx, userID, chatID, clientTempID, v, failedMark+v); err != nil {
+		return fmt.Errorf("dedup fail: %w", err)
+	}
+	return nil
+}
+
+func (d *Dedup) Resume(ctx context.Context, userID, chatID int64, clientTempID string, id int64) (bool, error) {
+	v := strconv.FormatInt(id, 10)
+	ok, err := d.swap(ctx, userID, chatID, clientTempID, failedMark+v, v)
+	if err != nil {
+		return false, fmt.Errorf("dedup resume: %w", err)
+	}
+	return ok, nil
 }
 
 // KEYS[1] claim; ARGV[1] id. Deletes the claim only if it still records id.

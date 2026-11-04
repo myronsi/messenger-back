@@ -45,6 +45,11 @@ func (m members) Participant(_ context.Context, chat, user int64) (postgres.Part
 	return postgres.Participant{}, postgres.ErrNotFound
 }
 
+func (m members) MessagesDeleted(_ context.Context, chat int64) error {
+	m[[2]int64{chat, -1}] = true
+	return nil
+}
+
 func entry(e events.Event) redis.Entry {
 	f := map[string]string{}
 	for k, v := range e.Fields() {
@@ -59,22 +64,22 @@ func entry(e events.Event) redis.Entry {
 }
 
 func TestChatDeletedRunsTwice(t *testing.T) {
-	d, f := &deleter{}, &forgetter{}
-	h := ChatCleanup(d, f, members{}, time.Minute, nil)
+	d, f, m := &deleter{}, &forgetter{}, members{}
+	h := ChatCleanup(d, f, m, time.Minute, nil)
 	ctx := context.Background()
 
 	// Fresh deletion: the first pass, then come back after the grace period.
 	err := h(ctx, entry(events.Event{Type: events.ChatDeleted, ChatID: 9, At: time.Now()}))
 	var later redis.RetryLater
-	if !errors.As(err, &later) || later.After <= 0 || later.After > time.Minute {
+	if !errors.As(err, &later) || later.After <= 0 || later.After > time.Minute || m[[2]int64{9, -1}] {
 		t.Fatalf("first pass: %v", err)
 	}
 	// After the grace period: the second pass finishes the entry.
 	if err := h(ctx, entry(events.Event{Type: events.ChatDeleted, ChatID: 9, At: time.Now().Add(-2 * time.Minute)})); err != nil {
 		t.Fatal(err)
 	}
-	if len(d.calls) != 2 || d.calls[0] != 9 {
-		t.Fatalf("deletions: %v", d.calls)
+	if len(d.calls) != 2 || d.calls[0] != 9 || !m[[2]int64{9, -1}] {
+		t.Fatalf("deletions: %v, finished %v", d.calls, m[[2]int64{9, -1}])
 	}
 	// A store failure is a failure (retried with backoff).
 	d.err = errors.New("scylla down")
@@ -106,5 +111,49 @@ func TestMemberRemovedForgetsUnread(t *testing.T) {
 	}
 	if err := h(context.Background(), entry(events.Event{Type: events.ChatMemberAdded, ChatID: 4, UserID: 2})); err != nil {
 		t.Fatal(err)
+	}
+}
+
+type deletions struct {
+	stale   []postgres.ChatDeletion
+	emitted []int64
+}
+
+func (d *deletions) StaleDeletions(context.Context, time.Duration, int) ([]postgres.ChatDeletion, error) {
+	return d.stale, nil
+}
+
+func (d *deletions) MarkDeletionEmitted(_ context.Context, chatID int64) error {
+	d.emitted = append(d.emitted, chatID)
+	return nil
+}
+
+type emitter struct {
+	got []events.Event
+	err error
+}
+
+func (e *emitter) Emit(_ context.Context, ev events.Event) error {
+	if e.err != nil {
+		return e.err
+	}
+	e.got = append(e.got, ev)
+	return nil
+}
+
+func TestLostChatDeletionsAreSentAgain(t *testing.T) {
+	at := time.Now().Add(-time.Hour)
+	store := &deletions{stale: []postgres.ChatDeletion{{ChatID: 7, DeletedAt: at}, {ChatID: 8, DeletedAt: at}}}
+	em := &emitter{}
+	n, err := ResendChatDeletions(context.Background(), store, em, 15*time.Minute, 100)
+	if err != nil || n != 2 || len(em.got) != 2 || em.got[0].Type != events.ChatDeleted || em.got[0].ChatID != 7 || !em.got[0].At.Equal(at) {
+		t.Fatalf("resent %d %v: %+v", n, err, em.got)
+	}
+	if len(store.emitted) != 2 {
+		t.Fatalf("marked %v", store.emitted)
+	}
+	store.emitted, em.err = nil, errors.New("redis down")
+	if _, err := ResendChatDeletions(context.Background(), store, em, 15*time.Minute, 100); err == nil || len(store.emitted) != 0 {
+		t.Fatalf("a failed emit must not be marked: %v %v", err, store.emitted)
 	}
 }

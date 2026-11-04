@@ -69,7 +69,17 @@ type Indexer struct {
 	rebuild   bool // the rebuild alias exists: writes go there too
 	checkedAt time.Time
 	// settle is rebuildSettle, shorter in tests.
-	settle time.Duration
+	settle    time.Duration
+	deletions ChatDeletions
+}
+
+type ChatDeletions interface {
+	SearchDropped(ctx context.Context, chatID int64) error
+}
+
+func (in *Indexer) WithDeletions(d ChatDeletions) *Indexer {
+	in.deletions = d
+	return in
 }
 
 // NewIndexer returns the indexer.
@@ -156,6 +166,9 @@ func (in *Indexer) Handle(ctx context.Context, entry redis.Entry) error {
 		if err != nil {
 			return err
 		}
+	}
+	if e.Type == events.ChatDeleted && e.ChatID != 0 && in.deletions != nil {
+		return in.deletions.SearchDropped(ctx, e.ChatID)
 	}
 	return nil
 }

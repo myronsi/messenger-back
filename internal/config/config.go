@@ -9,6 +9,7 @@ import (
 	"net/netip"
 	"net/url"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -194,12 +195,26 @@ type Auth struct {
 	// PasswordHashConcurrency bounds simultaneous Argon2 hashes (each uses 64 MiB).
 	PasswordHashConcurrency int `env:"PASSWORD_HASH_CONCURRENCY" envDefault:"4"`
 	// TrustedProxies lists the IPs or CIDRs of reverse proxies whose X-Forwarded-For and X-Real-IP headers
-	// are believed when working out the client address (rate limits, session records). Empty trusts none.
+	// are believed when working out the client address (rate limits, session records).
 	TrustedProxies []string `env:"TRUSTED_PROXIES" envSeparator:","`
+}
+
+var loopbackProxies = []netip.Prefix{netip.MustParsePrefix("127.0.0.0/8"), netip.MustParsePrefix("::1/128")}
+
+func (a Auth) ProxiesSet() bool {
+	for _, s := range a.TrustedProxies {
+		if strings.TrimSpace(s) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // TrustedProxyPrefixes parses TrustedProxies; a bare IP is a single-address prefix.
 func (a Auth) TrustedProxyPrefixes() ([]netip.Prefix, error) {
+	if !a.ProxiesSet() {
+		return slices.Clone(loopbackProxies), nil
+	}
 	var out []netip.Prefix
 	for _, s := range a.TrustedProxies {
 		s = strings.TrimSpace(s)

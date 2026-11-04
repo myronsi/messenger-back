@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -292,6 +293,43 @@ func (r chatRepo) MarkRead(ctx context.Context, chatID, userID, messageID int64)
 		return false, mapError(err)
 	}
 	return false, nil
+}
+
+func (r chatRepo) StaleDeletions(ctx context.Context, olderThan time.Duration, limit int) ([]ChatDeletion, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	rows, err := r.s.q.ListStaleChatDeletions(ctx, sqlcdb.ListStaleChatDeletionsParams{Before: time.Now().Add(-olderThan), MaxRows: clampLimit(limit)})
+	if err != nil {
+		return nil, mapError(err)
+	}
+	out := make([]ChatDeletion, len(rows))
+	for i, row := range rows {
+		out[i] = ChatDeletion{ChatID: row.ChatID, DeletedAt: row.DeletedAt}
+	}
+	return out, nil
+}
+
+func (r chatRepo) MarkDeletionEmitted(ctx context.Context, chatID int64) error {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	return mapError(r.s.q.MarkChatDeletionEmitted(ctx, chatID))
+}
+
+func (r chatRepo) MessagesDeleted(ctx context.Context, chatID int64) error {
+	return r.deletionDone(ctx, chatID, true, false)
+}
+
+func (r chatRepo) SearchDropped(ctx context.Context, chatID int64) error {
+	return r.deletionDone(ctx, chatID, false, true)
+}
+
+func (r chatRepo) deletionDone(ctx context.Context, chatID int64, messages, search bool) error {
+	return mapError(r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
+		if err := q.MarkChatDeletionDone(ctx, sqlcdb.MarkChatDeletionDoneParams{ChatID: chatID, Messages: messages, Search: search}); err != nil {
+			return err
+		}
+		return q.DeleteFinishedChatDeletion(ctx, chatID)
+	}))
 }
 
 func (r chatRepo) Delete(ctx context.Context, chatID int64) ([]string, error) {

@@ -190,6 +190,11 @@ type Participant struct {
 	JoinedAt          time.Time
 }
 
+type ChatDeletion struct {
+	ChatID    int64
+	DeletedAt time.Time
+}
+
 // NewGroup describes a group to create.
 type NewGroup struct {
 	OwnerID     int64
@@ -262,6 +267,10 @@ type ChatRepository interface {
 	SetRoleAs(ctx context.Context, chatID, actorID, userID int64, role Role) error
 	// DeleteGroupAs deletes the group (the owner only) and returns its files' keys and its members.
 	DeleteGroupAs(ctx context.Context, chatID, actorID int64) (keys []string, members []int64, err error)
+	StaleDeletions(ctx context.Context, olderThan time.Duration, limit int) ([]ChatDeletion, error)
+	MarkDeletionEmitted(ctx context.Context, chatID int64) error
+	MessagesDeleted(ctx context.Context, chatID int64) error
+	SearchDropped(ctx context.Context, chatID int64) error
 	// SetGroupAvatarAs sets (or with nil clears) the group's avatar.
 	SetGroupAvatarAs(ctx context.Context, chatID, actorID int64, attachmentID *uuid.UUID) error
 	// InviteAs makes a group invitation for a user who approves invitations (a pending one is reused).
@@ -371,6 +380,7 @@ type AttachmentRepository interface {
 	Delete(ctx context.Context, id uuid.UUID) (keys []string, err error)
 	// Link records that a message uses the attachment (idempotent).
 	Link(ctx context.Context, attachmentID uuid.UUID, chatID, messageID int64) error
+	UnlinkMessage(ctx context.Context, chatID, messageID int64) error
 	// LinksForViewer returns the messages using the attachment in chats the viewer is a member of (at most 50).
 	LinksForViewer(ctx context.Context, attachmentID uuid.UUID, viewerID int64) ([]AttachmentLink, error)
 	// ListLinked returns a chat's attachments of the kinds, newest first, linked before `before` (zero: now).

@@ -71,11 +71,20 @@ SELECT * FROM user_contact_names WHERE owner_id = @owner_id AND target_id = ANY(
 SELECT * FROM user_contact_names WHERE owner_id = ANY(@owner_ids::BIGINT[]) AND target_id = @target_id;
 
 -- name: SharedChatPartners :many
--- Which of the users share at least one chat with the viewer.
 SELECT DISTINCT other.user_id
 FROM participants mine
 JOIN participants other ON other.chat_id = mine.chat_id
-WHERE mine.user_id = @viewer_id AND other.user_id = ANY(@user_ids::BIGINT[]);
+JOIN chats c ON c.id = mine.chat_id
+WHERE mine.user_id = @viewer_id AND other.user_id = ANY(@user_ids::BIGINT[])
+  AND (c.type = 'group' OR c.created_by = other.user_id OR other.last_read_message_id IS NOT NULL);
+
+-- name: SharedChatViewers :many
+SELECT DISTINCT other.user_id
+FROM participants mine
+JOIN participants other ON other.chat_id = mine.chat_id
+JOIN chats c ON c.id = mine.chat_id
+WHERE mine.user_id = @user_id AND other.user_id = ANY(@viewer_ids::BIGINT[])
+  AND (c.type = 'group' OR c.created_by = mine.user_id OR mine.last_read_message_id IS NOT NULL);
 
 -- name: ListChatIDsOfUser :many
 SELECT chat_id FROM participants WHERE user_id = @user_id;
