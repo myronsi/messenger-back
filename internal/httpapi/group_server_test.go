@@ -293,6 +293,23 @@ func TestGroupMemberLogs(t *testing.T) {
 		t.Fatalf("system messages are not unread: %v", groups)
 	}
 
+	systemID := ""
+	for _, m := range all {
+		if m["type"] == "system" {
+			systemID = m["id"].(string)
+			break
+		}
+	}
+	reply := e.do(t, request{method: http.MethodPost, path: "/chats/" + gid + "/messages", token: bob.access,
+		body: map[string]any{"client_temp_id": "r-1", "type": "text", "content": "welcome", "reply_to": systemID}})
+	if preview := reply.json()["reply_preview"]; preview != nil && preview.(map[string]any)["content"] != nil {
+		t.Fatalf("a reply quotes the stored system JSON: %v", preview)
+	}
+	replied, _ := e.history(t, bob, gid, "")
+	if preview := replied[len(replied)-1]["reply_preview"].(map[string]any); preview["content"] != nil || preview["type"] != "system" {
+		t.Fatalf("reply preview of a system message: %v", preview)
+	}
+
 	e.do(t, request{method: http.MethodPatch, path: "/groups/" + gid + "/participants/" + bobID, token: owner.access, body: map[string]any{"role": "admin"}})
 	e.do(t, request{method: http.MethodPatch, path: "/groups/" + gid + "/participants/" + bobID, token: owner.access, body: map[string]any{"role": "admin"}})
 	mod := e.do(t, request{method: http.MethodPatch, path: "/groups/" + gid + "/participants/" + bobID, token: owner.access, body: map[string]any{"role": "moderator"}})

@@ -143,9 +143,12 @@ func resolve(base *url.URL, ref string) string {
 		return ""
 	}
 	u, err := base.Parse(ref)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil {
+	if err != nil {
 		return ""
 	}
-	u.Fragment = ""
-	return u.String()
+	normalized, err := Normalize(u.String())
+	if err != nil {
+		return ""
+	}
+	return normalized.String()
 }

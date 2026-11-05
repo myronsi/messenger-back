@@ -45,10 +45,7 @@ const unreadCap = 999
 // when a user's counters are rebuilt.
 const lastMessageWorkers = 16
 
-const (
-	lastMessagePage  = 10
-	lastMessagePages = 5
-)
+const lastMessagePage = 10
 
 // Store is the PostgreSQL side.
 type Store interface {
@@ -357,28 +354,23 @@ func (s *Service) render(ctx context.Context, viewer int64, entries []postgres.C
 }
 
 func (s *Service) lastShown(ctx context.Context, chatID, viewer int64) (*scylla.Message, error) {
-	var newestDeleted *scylla.Message
 	q := scylla.PageQuery{ChatID: chatID, Viewer: viewer, Limit: lastMessagePage}
-	for range lastMessagePages {
+	for {
 		page, err := s.d.Messages.Page(ctx, q)
 		if err != nil {
 			return nil, err
 		}
 		for i := len(page.Messages) - 1; i >= 0; i-- {
-			m := page.Messages[i]
-			if !m.Deleted {
+			if m := page.Messages[i]; !m.Deleted {
 				return &m, nil
-			}
-			if newestDeleted == nil {
-				newestDeleted = &m
 			}
 		}
 		if !page.HasOlder || len(page.Messages) == 0 {
 			return nil, nil
 		}
 		q.Before = page.Messages[0].ID
+		q.Limit = scylla.MaxPage
 	}
-	return newestDeleted, nil
 }
 
 // receiptsFor returns, per direct chat, the peer's receipt for the viewer's own last message: when the peer

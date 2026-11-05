@@ -544,7 +544,7 @@ func TestChatListSkipsMessagesDeletedForEveryone(t *testing.T) {
 	keptID := chat["last_message"].(map[string]any)["id"].(string)
 
 	var ids []string
-	for i := range 12 {
+	for i := range 60 {
 		ids = append(ids, e.send(t, alice, chatID, "t-"+strconv.Itoa(i), "gone "+strconv.Itoa(i)).json()["id"].(string))
 	}
 	deleteForEveryone := func(id string) {

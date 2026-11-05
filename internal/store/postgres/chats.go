@@ -257,6 +257,9 @@ func (r chatRepo) TransferOwnership(ctx context.Context, chatID, fromID, toID in
 		return fmt.Errorf("%w: the new owner must be someone else", ErrInvalid)
 	}
 	return r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
+		if err := lockUsersShared(ctx, q, fromID, toID); err != nil {
+			return err
+		}
 		if err := lockGroup(ctx, q, chatID); err != nil {
 			return err
 		}

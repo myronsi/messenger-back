@@ -149,7 +149,7 @@ func PresentReplyPreview(o ReplyOrigin, basePath string) ReplyPreview {
 		u := PresentUser(*o.Sender)
 		out.Sender = &u
 	}
-	if m.Deleted {
+	if m.Deleted || m.Type == scylla.TypeSystem {
 		return out
 	}
 	if m.Content != nil && *m.Content != "" {

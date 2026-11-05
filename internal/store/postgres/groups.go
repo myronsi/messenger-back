@@ -135,6 +135,9 @@ func (r chatRepo) SetRoleAs(ctx context.Context, chatID, actorID, userID int64, 
 		return ErrInvalid
 	}
 	return mapError(r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
+		if err := lockUsersShared(ctx, q, actorID, userID); err != nil {
+			return err
+		}
 		if err := actingIn(ctx, q, chatID, actorID, managers); err != nil {
 			return err
 		}
@@ -153,6 +156,15 @@ func (r chatRepo) SetRoleAs(ctx context.Context, chatID, actorID, userID int64, 
 		}
 		return addRoleEvent(ctx, q, chatID, actorID, userID, role)
 	}))
+}
+
+func lockUsersShared(ctx context.Context, q *sqlcdb.Queries, a, b int64) error {
+	for _, uid := range []int64{min(a, b), max(a, b)} {
+		if _, err := q.LockUserShared(ctx, uid); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func addRoleEvent(ctx context.Context, q *sqlcdb.Queries, chatID, actorID, userID int64, role Role) error {

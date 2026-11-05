@@ -83,7 +83,7 @@ func newClient(allow func(netip.Addr) bool, anyPort bool) *http.Client {
 		Timeout:   requestTimeout,
 		Transport: transport,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if len(via) >= maxRedirects {
+			if len(via) > maxRedirects {
 				return errors.New("linkpreview: too many redirects")
 			}
 			if req.URL.Scheme != "http" && req.URL.Scheme != "https" {

@@ -170,3 +170,49 @@ func TestDefaultPolicyRefusesInternalAddresses(t *testing.T) {
 		t.Fatalf("ports other than 80 and 443 must be refused: %v hits=%d", err, hits.Load())
 	}
 }
+
+func TestRedirectLimitLongImagesAndTemporaryFailures(t *testing.T) {
+	var flaky atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/hop/"):
+			n := len(strings.TrimPrefix(r.URL.Path, "/hop/"))
+			if n == 0 {
+				w.Header().Set("Content-Type", "text/html")
+				_, _ = w.Write([]byte(`<head><title>Arrived</title></head>`))
+				return
+			}
+			http.Redirect(w, r, "/hop/"+strings.Repeat("x", n-1), http.StatusFound)
+		case r.URL.Path == "/long-image":
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = w.Write([]byte(`<head><title>Long</title><meta property="og:image" content="/img/` + strings.Repeat("a", MaxURLLength) + `.png"></head>`))
+		case r.URL.Path == "/flaky":
+			if flaky.Add(1) == 1 {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				return
+			}
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = w.Write([]byte(`<head><title>Back again</title></head>`))
+		}
+	}))
+	defer srv.Close()
+	cache := &memoryCache{data: map[string]string{}}
+	s := New(Options{Cache: cache, SignKey: []byte("k"), AllowAddr: anyAddr, AnyPort: true})
+	ctx := context.Background()
+
+	if p, err := s.Preview(ctx, srv.URL+"/hop/xxx"); err != nil || p.Title != "Arrived" {
+		t.Fatalf("three redirects must be followed: %+v %v", p, err)
+	}
+	if _, err := s.Preview(ctx, srv.URL+"/hop/xxxx"); !errors.Is(err, ErrNoPreview) {
+		t.Fatalf("four redirects must be refused: %v", err)
+	}
+	if p, err := s.Preview(ctx, srv.URL+"/long-image"); err != nil || p.Title != "Long" || p.Image != nil {
+		t.Fatalf("an image address the proxy would refuse must be dropped: %+v %v", p, err)
+	}
+	if _, err := s.Preview(ctx, srv.URL+"/flaky"); !errors.Is(err, ErrNoPreview) {
+		t.Fatalf("first answer is a 503: %v", err)
+	}
+	if p, err := s.Preview(ctx, srv.URL+"/flaky"); err != nil || p.Title != "Back again" {
+		t.Fatalf("a temporary failure must not be cached: %+v %v", p, err)
+	}
+}

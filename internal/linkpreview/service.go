@@ -35,7 +35,12 @@ var (
 	ErrInvalidURL   = errors.New("linkpreview: invalid url")
 	ErrNoPreview    = errors.New("linkpreview: no preview")
 	ErrBadSignature = errors.New("linkpreview: bad signature")
+	errTemporary    = errors.New("linkpreview: temporary failure")
 )
+
+func temporaryStatus(code int) bool {
+	return code == http.StatusRequestTimeout || code == http.StatusTooManyRequests || code >= http.StatusInternalServerError
+}
 
 var imageTypes = map[string]bool{"image/png": true, "image/jpeg": true, "image/gif": true, "image/webp": true}
 
@@ -112,7 +117,7 @@ func (s *Service) Preview(ctx context.Context, raw string) (Preview, error) {
 		}
 	}
 	p, err := s.fetch(ctx, u)
-	if s.cache != nil {
+	if s.cache != nil && !errors.Is(err, errTemporary) {
 		value, ttl := "", missingTTL
 		if err == nil {
 			body, _ := json.Marshal(p)
@@ -137,9 +142,15 @@ func (s *Service) fetch(ctx context.Context, u *url.URL) (Preview, error) {
 	req.Header.Set("Accept", "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1")
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return Preview{}, err
+		if errors.Is(err, ErrBlockedAddress) {
+			return Preview{}, err
+		}
+		return Preview{}, fmt.Errorf("%w: %w", errTemporary, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
+	if temporaryStatus(resp.StatusCode) {
+		return Preview{}, fmt.Errorf("%w: status %d", errTemporary, resp.StatusCode)
+	}
 	contentType := resp.Header.Get("Content-Type")
 	mediaType, _, _ := mime.ParseMediaType(contentType)
 	if resp.StatusCode != http.StatusOK || (mediaType != "text/html" && mediaType != "application/xhtml+xml") {
