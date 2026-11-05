@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.6.0-alpha.1...v1.7.0-alpha.1) (2026-11-05)
+
+
+### Features
+
+* group member logs, link previews, moderator role and chat list fixes ([#157](https://github.com/myronsi/messenger-back/issues/157)) ([3a360e1](https://github.com/myronsi/messenger-back/commit/3a360e15363645108ddacfbf6a5e6b3c61b42520))
+
 ## [1.6.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.5.1-alpha.1...v1.6.0-alpha.1) (2026-11-04)
 
 
