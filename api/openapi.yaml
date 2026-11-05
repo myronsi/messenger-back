@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.12
+  version: 2.1.0-alpha.13
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -293,56 +293,6 @@ paths:
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "426": { $ref: "#/components/responses/ClientOutdated" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
-  /auth/recover:
-    parameters:
-      - $ref: "#/components/parameters/ClientVersion"
-      - $ref: "#/components/parameters/ClientApiVersion"
-    post:
-      tags: [auth]
-      operationId: startRecovery
-      summary: Start account recovery (temporary)
-      description: Temporary port of the Python recovery flow; it is redesigned in release 1.1.
-      x-temporary: true
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/RecoveryRequest" }
-      responses:
-        "426": { $ref: "#/components/responses/ClientOutdated" }
-        "200":
-          description: Recovery token
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/RecoveryResponse" }
-        "400": { $ref: "#/components/responses/BadRequest" }
-        "404": { $ref: "#/components/responses/NotFound" }
-        "429": { $ref: "#/components/responses/TooManyRequests" }
-  /auth/reset-password:
-    parameters:
-      - $ref: "#/components/parameters/ClientVersion"
-      - $ref: "#/components/parameters/ClientApiVersion"
-    post:
-      tags: [auth]
-      operationId: resetPassword
-      summary: Set a new password with a recovery token (temporary)
-      x-temporary: true
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/ResetPasswordRequest" }
-      responses:
-        "426": { $ref: "#/components/responses/ClientOutdated" }
-        "204":
-          description: Password changed; all sessions are revoked
-        "400": { $ref: "#/components/responses/BadRequest" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "422": { $ref: "#/components/responses/ValidationFailed" }
-        "429": { $ref: "#/components/responses/TooManyRequests" }
-
   /ws/ticket:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
@@ -2120,6 +2070,1164 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
 
+  /auth/recovery-requests:
+    parameters:
+      - &a1
+        $ref: "#/components/parameters/ClientVersion"
+      - &a2
+        $ref: "#/components/parameters/ClientApiVersion"
+    post:
+      tags:
+        - auth
+      operationId: startDeviceRecovery
+      summary: Request approval from a signed-in device
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeviceRecoveryStart"
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceRecoveryResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "426":
+          $ref: "#/components/responses/ClientOutdated"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /auth/recovery-requests/{requestId}:
+    parameters:
+      - *a1
+      - *a2
+      - &a3
+        name: requestId
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 32
+          maxLength: 128
+          pattern: ^[A-Za-z0-9_-]+$
+        description: Secret one-time recovery request capability. Never log or persist
+          it in browser storage.
+    get:
+      tags:
+        - auth
+      operationId: deviceRecoveryStatus
+      summary: Poll the status of a secret recovery request
+      security: []
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceRecoveryStatus"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "426":
+          $ref: "#/components/responses/ClientOutdated"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /auth/recovery-requests/{requestId}/approve:
+    parameters:
+      - *a1
+      - *a2
+      - *a3
+    post:
+      tags:
+        - auth
+      operationId: approveDeviceRecovery
+      summary: Approve a recovery request using number matching and the second factor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeviceRecoveryApproval"
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceRecoveryStatus"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "426":
+          $ref: "#/components/responses/ClientOutdated"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /auth/recovery-requests/{requestId}/deny:
+    parameters:
+      - *a1
+      - *a2
+      - *a3
+    post:
+      tags:
+        - auth
+      operationId: denyDeviceRecovery
+      summary: Deny an unexpected recovery request
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceRecoveryStatus"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "426":
+          $ref: "#/components/responses/ClientOutdated"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /auth/recovery-requests/{requestId}/complete:
+    parameters:
+      - *a1
+      - *a2
+      - *a3
+    post:
+      tags:
+        - auth
+      operationId: completeDeviceRecovery
+      summary: Consume an approved request and reset the password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeviceRecoveryComplete"
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegisterResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "426":
+          $ref: "#/components/responses/ClientOutdated"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /auth/passkeys/register/options:
+    parameters: &a1
+      - &a2
+        $ref: "#/components/parameters/ClientVersion"
+      - &a3
+        $ref: "#/components/parameters/ClientApiVersion"
+    post:
+      tags:
+        - auth
+      operationId: passkeyRegistrationOptions
+      summary: Begin passkey registration after password and second-factor verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasskeyRegistration"
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PasskeyOptions"
+        "400":
+          description: Bad request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Invalid input
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "426":
+          description: Client outdated
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Rate limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Passkeys are not configured
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /auth/passkeys/register/verify:
+    parameters: *a1
+    post:
+      tags:
+        - auth
+      operationId: verifyPasskeyRegistration
+      summary: Verify and store a passkey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasskeyVerification"
+      responses:
+        "204":
+          description: Success
+        "400":
+          description: Bad request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Invalid input
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "426":
+          description: Client outdated
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Rate limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Passkeys are not configured
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /auth/passkeys:
+    parameters: *a1
+    get:
+      tags:
+        - auth
+      operationId: listPasskeys
+      summary: List the account passkeys
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PasskeyPage"
+        "400":
+          description: Bad request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Invalid input
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "426":
+          description: Client outdated
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Rate limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Passkeys are not configured
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /auth/passkeys/{passkeyId}:
+    parameters:
+      - *a2
+      - *a3
+      - name: passkeyId
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+          pattern: ^[A-Za-z0-9_-]+$
+    patch:
+      tags:
+        - auth
+      operationId: renamePasskey
+      summary: Rename a passkey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasskeyRename"
+      responses:
+        "204":
+          description: Success
+        "400":
+          description: Bad request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Invalid input
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "426":
+          description: Client outdated
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Rate limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Passkeys are not configured
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    delete:
+      tags:
+        - auth
+      operationId: removePasskey
+      summary: Remove a passkey; the last credential requires the password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasskeyRemoval"
+      responses:
+        "204":
+          description: Success
+        "400":
+          description: Bad request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Invalid input
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "426":
+          description: Client outdated
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Rate limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Passkeys are not configured
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /auth/passkeys/login/options:
+    parameters: *a1
+    post:
+      tags:
+        - auth
+      operationId: passkeyLoginOptions
+      summary: Begin discoverable passkey sign-in
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasskeyLoginOptions"
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PasskeyOptions"
+        "400":
+          description: Bad request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Invalid input
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "426":
+          description: Client outdated
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Rate limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Passkeys are not configured
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /auth/passkeys/login/verify:
+    parameters: *a1
+    post:
+      tags:
+        - auth
+      operationId: verifyPasskeyLogin
+      summary: Verify a passkey and create a session
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasskeyVerification"
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "400":
+          description: Bad request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Invalid input
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "426":
+          description: Client outdated
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Rate limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Passkeys are not configured
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
+  /me/recovery-status:
+    parameters: &a1
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    get:
+      tags:
+        - auth
+      operationId: getRecoveryOverview
+      summary: List recovery methods and their current setup status
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecoveryOverview"
+        "400":
+          description: Invalid recovery credentials
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Security delay or conflicting state
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Invalid input
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "426":
+          description: Client outdated
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Rate limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Email recovery is not configured
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /me/email:
+    parameters: *a1
+    get:
+      tags:
+        - auth
+      operationId: getRecoveryEmail
+      summary: Get private recovery email status
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecoveryEmailStatus"
+        "400":
+          description: Invalid recovery credentials
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Security delay or conflicting state
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Invalid input
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "426":
+          description: Client outdated
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Rate limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Email recovery is not configured
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    put:
+      tags:
+        - auth
+      operationId: setRecoveryEmail
+      summary: Set or resend a private recovery email for verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetRecoveryEmail"
+      responses:
+        "204":
+          description: Success
+        "400":
+          description: Invalid recovery credentials
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Security delay or conflicting state
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Invalid input
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "426":
+          description: Client outdated
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Rate limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Email recovery is not configured
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    delete:
+      tags:
+        - auth
+      operationId: removeRecoveryEmail
+      summary: Remove the recovery email after password verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RemoveRecoveryEmail"
+      responses:
+        "204":
+          description: Success
+        "400":
+          description: Invalid recovery credentials
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Security delay or conflicting state
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Invalid input
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "426":
+          description: Client outdated
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Rate limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Email recovery is not configured
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /auth/email/verify:
+    parameters: *a1
+    post:
+      tags:
+        - auth
+      operationId: verifyRecoveryEmail
+      summary: Consume a one-time email verification token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyRecoveryEmail"
+      responses:
+        "204":
+          description: Success
+        "400":
+          description: Invalid recovery credentials
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Security delay or conflicting state
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Invalid input
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "426":
+          description: Client outdated
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Rate limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Email recovery is not configured
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /auth/password-reset/request:
+    parameters: *a1
+    post:
+      tags:
+        - auth
+      operationId: requestEmailReset
+      summary: Queue a recovery email without revealing whether an account exists
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmailResetRequest"
+      responses:
+        "202":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailResetAccepted"
+        "400":
+          description: Invalid recovery credentials
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Security delay or conflicting state
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Invalid input
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "426":
+          description: Client outdated
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Rate limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Email recovery is not configured
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /auth/password-reset/confirm:
+    parameters: *a1
+    post:
+      tags:
+        - auth
+      operationId: confirmEmailReset
+      summary: Reset a password using a one-time email token and the current second
+        factor
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmailResetConfirmation"
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegisterResponse"
+        "400":
+          description: Invalid recovery credentials
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Security delay or conflicting state
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: Invalid input
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "426":
+          description: Client outdated
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Rate limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Email recovery is not configured
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -2515,15 +3623,15 @@ components:
               id: { $ref: "#/components/schemas/Id" }
               type: { type: string }
               created_at: { type: string, format: date-time }
+              user_agent: { type: [string, "null"], maxLength: 512 }
     RegisterResponse:
       allOf:
         - $ref: "#/components/schemas/TokenResponse"
         - type: object
-          description: Recovery parts of the temporary recovery flow (redesigned in release 1.1).
+          description: The one-time recovery key shown after registration.
           properties:
             recovery_key: { type: string, description: Shown once; only a keyed hash is stored }
-            device_part: { type: string }
-            qr_part: { type: string }
+            username: { $ref: "#/components/schemas/Username" }
     TwoFactorChallenge:
       type: object
       required: [two_factor_required, login_challenge]
@@ -2534,24 +3642,6 @@ components:
       oneOf:
         - $ref: "#/components/schemas/TokenResponse"
         - $ref: "#/components/schemas/TwoFactorChallenge"
-    RecoveryRequest:
-      type: object
-      required: [username]
-      properties:
-        username: { $ref: "#/components/schemas/Username" }
-        device_part: { type: string }
-        qr_part: { type: string }
-    RecoveryResponse:
-      type: object
-      required: [recovery_token]
-      properties:
-        recovery_token: { type: string }
-    ResetPasswordRequest:
-      type: object
-      required: [recovery_token, new_password]
-      properties:
-        recovery_token: { type: string }
-        new_password: { type: string, minLength: 8, maxLength: 128, writeOnly: true }
     WebSocketTicket:
       type: object
       required: [ticket, expires_in]
@@ -3249,3 +4339,246 @@ components:
           type: [string, "null"]
           description: First message of a direct-message request
         created_at: { $ref: "#/components/schemas/Timestamp" }
+
+    DeviceRecoveryStart:
+      type: object
+      required:
+        - username
+      properties:
+        username:
+          $ref: "#/components/schemas/Username"
+    DeviceRecoveryResult:
+      type: object
+      required:
+        - request_id
+        - match_number
+        - expires_at
+      properties:
+        request_id:
+          type: string
+          minLength: 32
+          maxLength: 128
+          pattern: ^[A-Za-z0-9_-]+$
+        match_number:
+          type: integer
+          minimum: 10
+          maximum: 99
+        expires_at:
+          type: string
+          format: date-time
+    DeviceRecoveryStatus:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum:
+            - pending
+            - approved
+            - denied
+            - used
+            - expired
+    DeviceRecoveryApproval:
+      type: object
+      required:
+        - match_number
+      properties:
+        match_number:
+          type: integer
+          minimum: 10
+          maximum: 99
+        code:
+          type: string
+          maxLength: 128
+    DeviceRecoveryComplete:
+      type: object
+      required:
+        - new_password
+      properties:
+        new_password:
+          type: string
+          minLength: 8
+          maxLength: 128
+          writeOnly: true
+
+    PasskeyOptions:
+      type: object
+      required:
+        - challenge_id
+        - public_key
+      properties:
+        challenge_id: &a1
+          type: string
+          minLength: 32
+          maxLength: 128
+        public_key: &a2
+          type: object
+          additionalProperties: true
+    PasskeyRegistration:
+      type: object
+      required:
+        - password
+        - name
+      properties:
+        password: &a4
+          type: string
+          maxLength: 128
+          writeOnly: true
+        code:
+          type: string
+          maxLength: 128
+        name: &a3
+          type: string
+          minLength: 1
+          maxLength: 64
+    PasskeyVerification:
+      type: object
+      required:
+        - challenge_id
+        - credential
+      properties:
+        challenge_id: *a1
+        credential: *a2
+    PasskeyLoginOptions:
+      type: object
+      required: []
+      properties:
+        username:
+          $ref: "#/components/schemas/Username"
+    PasskeyRename:
+      type: object
+      required:
+        - name
+      properties:
+        name: *a3
+    PasskeyRemoval:
+      type: object
+      required: []
+      properties:
+        password: *a4
+    Passkey:
+      type: object
+      required:
+        - id
+        - name
+        - created_at
+        - last_used_at
+      properties:
+        id:
+          type: string
+        name: *a3
+        created_at:
+          type: string
+          format: date-time
+        last_used_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+    PasskeyPage:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Passkey"
+
+    RecoveryEmailStatus:
+      type: object
+      required:
+        - address
+        - state
+        - enabled
+      properties:
+        address:
+          type: string
+        state:
+          type: string
+          enum:
+            - not_added
+            - pending
+            - verified
+        enabled:
+          type: boolean
+    RecoveryOverview:
+      type: object
+      required:
+        - recovery_key
+        - other_devices
+        - passkeys
+        - passkeys_enabled
+        - email
+      properties:
+        recovery_key:
+          $ref: "#/components/schemas/RecoveryKeyStatus"
+        other_devices:
+          type: integer
+          minimum: 0
+        passkeys:
+          type: integer
+          minimum: 0
+        passkeys_enabled:
+          type: boolean
+        email:
+          $ref: "#/components/schemas/RecoveryEmailStatus"
+    SetRecoveryEmail:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password: &a1
+          type: string
+          minLength: 8
+          maxLength: 128
+          writeOnly: true
+        code: &a2
+          type: string
+          maxLength: 128
+    RemoveRecoveryEmail:
+      type: object
+      required:
+        - password
+      properties:
+        password: *a1
+        code: *a2
+    VerifyRecoveryEmail:
+      type: object
+      required:
+        - token
+      properties:
+        token: &a3
+          type: string
+          minLength: 32
+          maxLength: 128
+    EmailResetRequest:
+      type: object
+      required:
+        - username_or_email
+      properties:
+        username_or_email:
+          type: string
+          maxLength: 254
+    EmailResetConfirmation:
+      type: object
+      required:
+        - token
+        - new_password
+      properties:
+        token: *a3
+        new_password: *a1
+        code: *a2
+    EmailResetAccepted:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string

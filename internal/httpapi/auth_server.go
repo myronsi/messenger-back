@@ -114,6 +114,8 @@ func (a *AuthServer) fail(w http.ResponseWriter, r *http.Request, err error, wit
 		credStatus = http.StatusForbidden
 	}
 	switch {
+	case errors.Is(err, auth.ErrPasskeysUnavailable), errors.Is(err, auth.ErrRecoveryEmailUnavailable):
+		WriteProblem(w, http.StatusServiceUnavailable, ErrorCodeInternalError)
 	case errors.Is(err, auth.ErrRecoveryKey):
 		WriteProblem(w, http.StatusBadRequest, ErrorCodeInvalidCredentials)
 	case errors.Is(err, auth.ErrRecoveryLocked):
@@ -312,28 +314,6 @@ func (a *AuthServer) Logout(w http.ResponseWriter, r *http.Request, _ LogoutPara
 		return
 	}
 	a.clearRefreshCookie(w)
-	w.WriteHeader(http.StatusNoContent)
-}
-
-type resetBody struct {
-	RecoveryToken string `json:"recovery_token"`
-	NewPassword   string `json:"new_password"`
-}
-
-// ResetPassword implements POST /auth/reset-password.
-func (a *AuthServer) ResetPassword(w http.ResponseWriter, r *http.Request, _ ResetPasswordParams) {
-	var body resetBody
-	if !decode(w, r, &body) {
-		return
-	}
-	if body.RecoveryToken == "" {
-		WriteProblem(w, http.StatusBadRequest, ErrorCodeInvalidRequest)
-		return
-	}
-	if err := a.svc.ResetPassword(r.Context(), a.clientOf(r), body.RecoveryToken, body.NewPassword); err != nil {
-		a.fail(w, r, err, false)
-		return
-	}
 	w.WriteHeader(http.StatusNoContent)
 }
 

@@ -307,6 +307,11 @@ func (f *Fanout) CloseSessions(ctx context.Context, sessions []uuid.UUID) {
 	f.closeSessions(ctx, sessions, nil)
 }
 
+// NotifyUser sends account events only to the owning user's authenticated tabs.
+func (f *Fanout) NotifyUser(ctx context.Context, uid int64, kind string, data any) {
+	f.same(ctx, kind, 0, data, []int64{uid})
+}
+
 // CloseSessionsWithNotice sends the reset notice and revocation in one ordered
 // control message, so a gateway can flush the notice before closing each socket.
 func (f *Fanout) CloseSessionsWithNotice(ctx context.Context, sessions []uuid.UUID) {

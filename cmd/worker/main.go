@@ -84,6 +84,11 @@ func run() error {
 		wg.Wait()
 	}()
 	wg.Go(func() { maintain(bg, log, pg, maintenanceEvery) })
+	mailWorker, err := recoveryMailWorker(cfg, pg, rd.Client(), log)
+	if err != nil {
+		return err
+	}
+	wg.Go(func() { mailWorker(bg) })
 	pushSender, err := notifications.NewSender(cfg.Notifications)
 	if err != nil {
 		return err

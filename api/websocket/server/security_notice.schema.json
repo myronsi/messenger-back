@@ -25,7 +25,29 @@
       ],
       "properties": {
         "type": {
-          "const": "password_reset"
+          "type": "string",
+          "enum": [
+            "password_reset",
+            "password_changed",
+            "recovery_key_changed",
+            "2fa_enabled",
+            "2fa_disabled",
+            "passkey_added",
+            "passkey_removed",
+            "recovery_email_changed",
+            "recovery_email_removed",
+            "passkey_counter_warning",
+            "login",
+            "passkey_login"
+          ]
+        },
+        "user_agent": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
         }
       }
     }

@@ -71,6 +71,15 @@ type ChatDeletion struct {
 	SearchDone   bool
 }
 
+type EmailToken struct {
+	TokenHash string
+	UserID    int64
+	Address   string
+	Purpose   string
+	ExpiresAt time.Time
+	UsedAt    *time.Time
+}
+
 type GroupRoleEvent struct {
 	ID        int64
 	ChatID    int64
@@ -134,6 +143,36 @@ type Participant struct {
 	LastReadAt        *time.Time
 }
 
+type RecoveryEmail struct {
+	UserID     int64
+	Address    string
+	VerifiedAt *time.Time
+	CreatedAt  time.Time
+}
+
+type RecoveryMailQueue struct {
+	ID            int64
+	Kind          string
+	PayloadSealed string
+	Attempts      int32
+	AvailableAt   time.Time
+	CreatedAt     time.Time
+}
+
+type RecoveryRequest struct {
+	IDHash            string
+	UserID            int64
+	MatchNumber       int16
+	Choices           []byte
+	Status            string
+	UserAgent         string
+	IpHint            string
+	ApprovedBySession *uuid.UUID
+	ApprovedProof     []byte
+	CreatedAt         time.Time
+	ExpiresAt         time.Time
+}
+
 type RecoveryToken struct {
 	JtiHash   string
 	UserID    int64
@@ -190,6 +229,15 @@ type UserContactName struct {
 	UpdatedAt   time.Time
 }
 
+type UserPasskey struct {
+	CredentialID []byte
+	UserID       int64
+	Credential   string
+	Name         string
+	CreatedAt    time.Time
+	LastUsedAt   *time.Time
+}
+
 type UserPrivacyException struct {
 	OwnerID      int64
 	SettingKey   string
@@ -215,13 +263,6 @@ type UserRecoveryKey struct {
 	CreatedAt time.Time
 }
 
-type UserRecoveryShare struct {
-	UserID                 int64
-	EncryptedCloudPart     *string
-	Salt                   []byte
-	VerificationCiphertext *string
-}
-
 type UserSecurityEvent struct {
 	ID        int64
 	UserID    int64
@@ -233,13 +274,14 @@ type UserSecurityEvent struct {
 }
 
 type UserSecuritySetting struct {
-	UserID                 int64
-	SessionDurationDays    int32
-	TwoFactorEnabled       bool
-	TwoFactorSecret        *string
-	PendingTwoFactorSecret *string
-	UpdatedAt              time.Time
-	RecoveryLockedUntil    *time.Time
+	UserID                       int64
+	SessionDurationDays          int32
+	TwoFactorEnabled             bool
+	TwoFactorSecret              *string
+	PendingTwoFactorSecret       *string
+	UpdatedAt                    time.Time
+	RecoveryLockedUntil          *time.Time
+	RecoveryRequestsBlockedUntil *time.Time
 }
 
 type UserSession struct {
@@ -258,4 +300,19 @@ type UserSessionRotatedToken struct {
 	TokenHash string
 	SessionID uuid.UUID
 	RotatedAt time.Time
+}
+
+type UserWebauthnHandle struct {
+	UserID int64
+	Handle []byte
+}
+
+type WebauthnChallenge struct {
+	IDHash    string
+	UserID    *int64
+	SessionID *uuid.UUID
+	Purpose   string
+	Payload   []byte
+	Name      string
+	ExpiresAt time.Time
 }

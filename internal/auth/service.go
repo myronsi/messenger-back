@@ -17,6 +17,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/google/uuid"
 
 	"github.com/myronsi/messenger-back/internal/store/postgres"
@@ -29,13 +30,19 @@ type Store interface {
 	SecuritySettings() postgres.SecuritySettingsRepository
 	RecoveryTokens() postgres.RecoveryTokenRepository
 	RecoveryKeys() postgres.RecoveryKeyRepository
+	RecoveryRequests() postgres.RecoveryRequestRepository
+	Passkeys() postgres.PasskeyRepository
+	RecoveryEmails() postgres.RecoveryEmailRepository
 	SecurityEvents() postgres.SecurityEventRepository
 }
 
 // Config configures the service. Secrets come from the environment; none of them is ever logged.
 type Config struct {
-	JWTSecret     []byte
-	EncryptionKey []byte
+	RecoveryMailEnabled bool
+	RecoveryWebURL      string
+	Passkeys            *webauthn.WebAuthn
+	JWTSecret           []byte
+	EncryptionKey       []byte
 	// RecoveryPepper keys the hash of recovery tokens, so a database leak does not yield usable tokens.
 	RecoveryPepper []byte
 	// SessionCacheTTL is how long "this session is active" is cached in Redis (default 30s). A revoked
@@ -50,8 +57,11 @@ type Config struct {
 	Namespace string
 	// OnRevoked is told about every revoked session, so open WebSockets of those sessions can be closed.
 	// Optional; it must not block.
-	OnRevoked  func(ctx context.Context, sessionIDs []uuid.UUID)
-	OnRecovery func(ctx context.Context, sessionIDs []uuid.UUID)
+	OnRevoked              func(ctx context.Context, sessionIDs []uuid.UUID)
+	OnRecovery             func(ctx context.Context, sessionIDs []uuid.UUID)
+	OnRecoveryRequest      func(context.Context, int64, RecoveryRequestNotice)
+	OnSecurityEvent        func(context.Context, int64, string, Client)
+	RecoveryApprovalMaxAge time.Duration
 }
 
 // Client describes who is calling, for rate limits and the security log.
@@ -192,23 +202,29 @@ var usernameRE = regexp.MustCompile(`^[A-Za-z0-9_]{3,32}$`)
 
 // Service implements the authentication use cases.
 type Service struct {
-	store   Store
-	log     *slog.Logger
-	hasher  *Hasher
-	tokens  *Tokens
-	sealer  *Sealer
-	pepper  []byte
-	limiter *Limiter
-	chal    *Challenges
-	replay  *TOTPReplay
-	cache   *SessionCache
-	tickets *Tickets
-	grace   time.Duration
-	now     func() time.Time
+	recoveryMailEnabled bool
+	recoveryWebURL      string
+	passkeys            *webauthn.WebAuthn
+	store               Store
+	log                 *slog.Logger
+	hasher              *Hasher
+	tokens              *Tokens
+	sealer              *Sealer
+	pepper              []byte
+	limiter             *Limiter
+	chal                *Challenges
+	replay              *TOTPReplay
+	cache               *SessionCache
+	tickets             *Tickets
+	grace               time.Duration
+	now                 func() time.Time
 	// onRevoked is Config.OnRevoked.
-	onRevoked  func(ctx context.Context, sessionIDs []uuid.UUID)
-	onRecovery func(ctx context.Context, sessionIDs []uuid.UUID)
-	dummy      func() (string, error)
+	onRevoked              func(ctx context.Context, sessionIDs []uuid.UUID)
+	onRecovery             func(ctx context.Context, sessionIDs []uuid.UUID)
+	onRecoveryRequest      func(context.Context, int64, RecoveryRequestNotice)
+	onSecurityEvent        func(context.Context, int64, string, Client)
+	recoveryApprovalMaxAge time.Duration
+	dummy                  func() (string, error)
 }
 
 // NewService wires the service.
@@ -236,26 +252,35 @@ func NewService(store Store, rdb Redis, cfg Config, log *slog.Logger) (*Service,
 	if cfg.HashConcurrency <= 0 {
 		cfg.HashConcurrency = 4
 	}
+	if cfg.RecoveryApprovalMaxAge <= 0 {
+		cfg.RecoveryApprovalMaxAge = 30 * 24 * time.Hour
+	}
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
 	s := &Service{
-		store:   store,
-		log:     log,
-		hasher:  NewHasher(cfg.HashConcurrency),
-		tokens:  tokens,
-		sealer:  sealer,
-		pepper:  cfg.RecoveryPepper,
-		limiter: NewLimiter(rdb, cfg.Namespace),
-		chal:    NewChallenges(rdb, cfg.Namespace),
-		replay:  NewTOTPReplay(rdb, cfg.Namespace),
-		cache:   NewSessionCache(rdb, cfg.Namespace, cfg.SessionCacheTTL),
-		tickets: NewTickets(rdb, cfg.Namespace),
-		grace:   cfg.RefreshReuseGrace,
-		now:     time.Now,
+		recoveryMailEnabled: cfg.RecoveryMailEnabled,
+		recoveryWebURL:      cfg.RecoveryWebURL,
+		passkeys:            cfg.Passkeys,
+		store:               store,
+		log:                 log,
+		hasher:              NewHasher(cfg.HashConcurrency),
+		tokens:              tokens,
+		sealer:              sealer,
+		pepper:              cfg.RecoveryPepper,
+		limiter:             NewLimiter(rdb, cfg.Namespace),
+		chal:                NewChallenges(rdb, cfg.Namespace),
+		replay:              NewTOTPReplay(rdb, cfg.Namespace),
+		cache:               NewSessionCache(rdb, cfg.Namespace, cfg.SessionCacheTTL),
+		tickets:             NewTickets(rdb, cfg.Namespace),
+		grace:               cfg.RefreshReuseGrace,
+		now:                 time.Now,
 
-		onRevoked:  cfg.OnRevoked,
-		onRecovery: cfg.OnRecovery,
+		onRevoked:              cfg.OnRevoked,
+		onRecovery:             cfg.OnRecovery,
+		onRecoveryRequest:      cfg.OnRecoveryRequest,
+		onSecurityEvent:        cfg.OnSecurityEvent,
+		recoveryApprovalMaxAge: cfg.RecoveryApprovalMaxAge,
 	}
 	s.dummy = sync.OnceValues(func() (string, error) { return s.hasher.dummyHash(context.Background()) })
 	return s, nil
@@ -286,6 +311,9 @@ func (s *Service) event(ctx context.Context, uid int64, typ string, c Client, de
 		UserID: uid, Type: typ, IP: c.ipPtr(), UserAgent: c.agentPtr(), Details: raw,
 	}); err != nil {
 		s.log.WarnContext(ctx, "security event not recorded", "event", typ, "user_id", uid, "err", err)
+	} else if s.onSecurityEvent != nil {
+		c.UserAgent = cleanUserAgent(c.UserAgent)
+		s.onSecurityEvent(ctx, uid, typ, c)
 	}
 }
 
@@ -432,7 +460,7 @@ func (s *Service) startSession(ctx context.Context, u postgres.User, c Client, f
 	return s.startSessionWithRecoveryCode(ctx, u, c, proof, "")
 }
 
-func (s *Service) startSessionWithRecoveryCode(ctx context.Context, u postgres.User, c Client, proof, recoveryCodeHash string) (*TokenSet, error) {
+func (s *Service) startSessionWithRecoveryCode(ctx context.Context, u postgres.User, c Client, proof, recoveryCodeHash string, passkeyProof ...*postgres.PasskeyLoginProof) (*TokenSet, error) {
 	settings, err := s.store.SecuritySettings().Get(ctx, u.ID)
 	if err != nil {
 		return nil, err
@@ -441,7 +469,12 @@ func (s *Service) startSessionWithRecoveryCode(ctx context.Context, u postgres.U
 	if err != nil {
 		return nil, err
 	}
+	var passkey *postgres.PasskeyLoginProof
+	if len(passkeyProof) > 0 {
+		passkey = passkeyProof[0]
+	}
 	sess, err := s.store.Sessions().Create(ctx, postgres.NewSession{
+		Passkey:             passkey,
 		PasswordFingerprint: proof, RecoveryCodeHash: recoveryCodeHash, UserID: u.ID, RefreshTokenHash: hash, UserAgent: c.agentPtr(), IP: c.ipPtr(),
 		ExpiresAt: s.now().Add(time.Duration(settings.SessionDurationDays) * 24 * time.Hour),
 	})
@@ -1141,48 +1174,6 @@ func (s *Service) DisableTwoFactor(ctx context.Context, c Client, p Principal, p
 	s.clear(ctx, RuleTwoFAUser, rule.subject)
 	s.event(ctx, p.UserID, "2fa_disabled", c, nil)
 	return nil
-}
-
-// ---------------------------------------------------------------- recovery (temporary)
-
-// IssueRecoveryToken creates a single-use token that lets the user set a new password. The flow that
-// proves who the user is (MSGC-69) calls this; it is not reachable from the API yet.
-func (s *Service) IssueRecoveryToken(ctx context.Context, userID int64) (string, error) {
-	token, err := randomToken(32)
-	if err != nil {
-		return "", err
-	}
-	if err := s.store.RecoveryTokens().Issue(ctx, userID, s.recoveryHash(token), s.now().Add(RecoveryTokenTTL)); err != nil {
-		return "", err
-	}
-	return token, nil
-}
-
-// ResetPassword spends a recovery token to set a new password and revoke all sessions.
-func (s *Service) ResetPassword(ctx context.Context, c Client, token, newPassword string) error {
-	if err := s.take(ctx, RuleResetIP, c.ipString()); err != nil {
-		return err
-	}
-	if n := len(token); n < 16 || n > 256 {
-		return ErrInvalidRecovery
-	}
-	if err := validatePassword(newPassword); err != nil {
-		return err
-	}
-	hash, err := s.hasher.Hash(ctx, newPassword)
-	if err != nil {
-		return err
-	}
-	res, err := s.store.RecoveryTokens().ResetPassword(ctx, s.recoveryHash(token), hash)
-	if errors.Is(err, postgres.ErrNotFound) {
-		return ErrInvalidRecovery
-	}
-	if err != nil {
-		return err
-	}
-	cacheErr := s.revokeInCache(ctx, res.RevokedSessions...)
-	s.event(ctx, res.UserID, "password_reset", c, map[string]any{"sessions_revoked": len(res.RevokedSessions)})
-	return cacheErr
 }
 
 // ---------------------------------------------------------------- WebSocket tickets

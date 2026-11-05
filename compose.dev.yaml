@@ -25,6 +25,15 @@ x-go-app: &go-app
     JWT_SECRET: ${JWT_SECRET:?required}
     ENCRYPTION_KEY: ${ENCRYPTION_KEY:?required}
     RECOVERY_PEPPER: ${RECOVERY_PEPPER:?required}
+    RP_ID: ${RP_ID:-localhost}
+    RP_ORIGINS: ${RP_ORIGINS:-http://localhost:5173}
+    SMTP_HOST: ${SMTP_HOST:-}
+    SMTP_PORT: ${SMTP_PORT:-587}
+    SMTP_USERNAME: ${SMTP_USERNAME:-}
+    SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+    SMTP_FROM: ${SMTP_FROM:-}
+    SMTP_TLS_MODE: ${SMTP_TLS_MODE:-starttls}
+    RECOVERY_WEB_URL: ${RECOVERY_WEB_URL:-http://localhost:5173}
     DATABASE_URL: postgres://${POSTGRES_USER:-messenger}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-messenger}?sslmode=disable
     REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
     SCYLLA_HOSTS: scylla

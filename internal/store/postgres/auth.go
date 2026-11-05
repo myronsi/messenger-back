@@ -44,6 +44,15 @@ func (r sessionRepo) Create(ctx context.Context, n NewSession) (Session, error) 
 				return ErrNotFound
 			}
 		}
+		if n.Passkey != nil {
+			changed, err := q.UpdatePasskeyForLogin(ctx, sqlcdb.UpdatePasskeyForLoginParams{CredentialID: n.Passkey.ID, UserID: n.UserID, ExpectedCredential: n.Passkey.ExpectedCredential, Credential: n.Passkey.Credential})
+			if err != nil {
+				return err
+			}
+			if changed != 1 {
+				return ErrConflict
+			}
+		}
 		row, err := q.CreateSession(ctx, sqlcdb.CreateSessionParams{UserID: n.UserID, RefreshTokenHash: n.RefreshTokenHash, UserAgent: n.UserAgent, IpAddress: n.IP, ExpiresAt: n.ExpiresAt})
 		out = sessionFrom(row)
 		return err

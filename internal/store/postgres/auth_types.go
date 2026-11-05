@@ -30,6 +30,7 @@ func (s Session) Active(now time.Time) bool {
 
 // NewSession describes a session to create. RefreshTokenHash is the SHA-256 (hex) of the refresh token.
 type NewSession struct {
+	Passkey             *PasskeyLoginProof
 	PasswordFingerprint string
 	RecoveryCodeHash    string
 	UserID              int64

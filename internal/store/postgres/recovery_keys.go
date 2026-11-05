@@ -150,26 +150,8 @@ func (r recoveryKeyRepo) Reset(ctx context.Context, uid int64, expectedHash stri
 		if err := consumeRecoveryFactor(ctx, tx, uid, proof.BackupCodeHash); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, "UPDATE users SET password_hash=$2 WHERE id=$1", uid, passwordHash); err != nil {
-			return err
-		}
-		if _, err := tx.Exec(ctx, "UPDATE user_recovery_keys SET key_hash=$2,created_at=now() WHERE user_id=$1", uid, newKeyHash); err != nil {
-			return err
-		}
-		if _, err := tx.Exec(ctx, "UPDATE user_security_settings SET recovery_locked_until=now()+interval '24 hours' WHERE user_id=$1", uid); err != nil {
-			return err
-		}
-		if _, err := tx.Exec(ctx, "DELETE FROM recovery_tokens WHERE user_id=$1", uid); err != nil {
-			return err
-		}
-		ids, err := sqlcdb.New(tx).RevokeAllSessions(ctx, uid)
-		if err != nil {
-			return err
-		}
-		if _, err = tx.Exec(ctx, `INSERT INTO user_security_events(user_id,event_type,details) VALUES($1,'password_reset','{"method":"recovery_key"}'::jsonb)`, uid); err != nil {
-			return err
-		}
-		out = PasswordReset{UserID: uid, RevokedSessions: ids}
+		var err error
+		out, err = finishRecovery(ctx, tx, uid, passwordHash, newKeyHash, "recovery_key")
 		return err
 	})
 	return out, err

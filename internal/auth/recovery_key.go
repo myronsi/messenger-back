@@ -178,19 +178,7 @@ func (s *Service) RecoverWithKey(ctx context.Context, c Client, username, key, n
 	if err != nil {
 		return nil, err
 	}
-	notify := s.onRevoked
-	if s.onRecovery != nil {
-		notify = s.onRecovery
-	}
-	if err = s.revokeInCacheWithNotifier(ctx, notify, reset.RevokedSessions...); err != nil {
-		return nil, err
-	}
-	tokens, err := s.startSession(ctx, u, c, digest(passwordHash))
-	if err != nil {
-		return nil, err
-	}
-	tokens.RecoveryKey = replacement
-	return tokens, nil
+	return s.recoveredSession(ctx, c, reset, passwordHash, replacement)
 }
 
 func (s *Service) SecurityEvents(ctx context.Context, p Principal) ([]postgres.SecurityEvent, error) {
