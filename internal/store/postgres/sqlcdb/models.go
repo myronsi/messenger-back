@@ -71,6 +71,15 @@ type ChatDeletion struct {
 	SearchDone   bool
 }
 
+type GroupRoleEvent struct {
+	ID        int64
+	ChatID    int64
+	ActorID   *int64
+	TargetID  int64
+	Role      string
+	CreatedAt time.Time
+}
+
 type NotificationActivity struct {
 	DeviceID    uuid.UUID
 	SessionID   uuid.UUID

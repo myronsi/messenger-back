@@ -328,7 +328,9 @@ func (r *Messages) UnreadIDs(ctx context.Context, chatID, viewer, afterID int64,
 			return nil, err
 		}
 	}
-	keep := func(m Message) bool { return !m.Deleted && (m.SenderID == nil || *m.SenderID != viewer) }
+	keep := func(m Message) bool {
+		return !m.Deleted && m.Type != TypeSystem && (m.SenderID == nil || *m.SenderID != viewer)
+	}
 	msgs, _, err := r.run(ctx, sess, scan{chatID: chatID, viewer: viewer, bound: afterID, start: start, need: limit, keep: keep})
 	if err != nil {
 		return nil, err

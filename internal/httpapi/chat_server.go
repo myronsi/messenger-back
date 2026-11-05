@@ -44,6 +44,8 @@ func PresentRole(r postgres.Role) GroupRole {
 		return GroupRoleOwner
 	case postgres.RoleAdmin:
 		return GroupRoleAdmin
+	case postgres.RoleModerator:
+		return GroupRoleModerator
 	}
 	return GroupRoleMember
 }

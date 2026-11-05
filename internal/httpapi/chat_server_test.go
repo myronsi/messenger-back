@@ -6,6 +6,7 @@ import (
 	"errors"
 	"math/rand/v2"
 	"net/http"
+	"net/netip"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,6 +21,7 @@ import (
 	"github.com/myronsi/messenger-back/internal/config"
 	"github.com/myronsi/messenger-back/internal/events"
 	"github.com/myronsi/messenger-back/internal/ids"
+	"github.com/myronsi/messenger-back/internal/linkpreview"
 	"github.com/myronsi/messenger-back/internal/messages"
 	"github.com/myronsi/messenger-back/internal/notifications"
 	"github.com/myronsi/messenger-back/internal/observability"
@@ -170,7 +172,11 @@ func newChatEnvWith(t *testing.T, withSearch bool) *chatEnv {
 		WithAccount(NewAccountServer(AccountOptions{Store: store, Directory: dir, Deleter: authSvc, BasePath: apiBase, Log: log})).
 		WithChats(NewChatServer(ChatOptions{Service: svc, BasePath: apiBase, Log: log})).
 		WithMessages(NewMessageServer(MessageOptions{Service: msgs, Store: store, Directory: dir, BasePath: apiBase, Log: log, Searcher: searcher(index, msgs, store, repo)})).
-		WithNotifications(NotificationOptions{Store: store.Notifications(), Tokens: tokens})
+		WithNotifications(NotificationOptions{Store: store.Notifications(), Tokens: tokens}).
+		WithLinkPreviews(NewLinkPreviewServer(LinkPreviewOptions{
+			Service:  linkpreview.New(linkpreview.Options{SignKey: []byte("test-key"), AllowAddr: func(netip.Addr) bool { return true }, AnyPort: true}),
+			BasePath: apiBase, Log: log,
+		}))
 	return &chatEnv{
 		authEnv: &authEnv{router: NewRouter(Options{
 			HTTP:          config.HTTP{BasePath: apiBase, RequestTimeout: 10 * time.Second, ReadinessTimeout: time.Second, MaxBodyBytes: 4096},
@@ -527,5 +533,42 @@ func TestCrossingRequestsAndBadCursors(t *testing.T) {
 		if r := e.do(t, request{method: http.MethodGet, path: path, token: ann.access}); r.Code != http.StatusBadRequest {
 			t.Fatalf("%s: %d", path, r.Code)
 		}
+	}
+}
+
+func TestChatListSkipsMessagesDeletedForEveryone(t *testing.T) {
+	e := newChatEnv(t)
+	alice, bob := e.register(t, "alice"), e.register(t, "bob")
+	chat := e.create(t, alice, e.uid(t, bob), "keep me").json()
+	chatID := chat["id"].(string)
+	keptID := chat["last_message"].(map[string]any)["id"].(string)
+
+	var ids []string
+	for i := range 12 {
+		ids = append(ids, e.send(t, alice, chatID, "t-"+strconv.Itoa(i), "gone "+strconv.Itoa(i)).json()["id"].(string))
+	}
+	deleteForEveryone := func(id string) {
+		t.Helper()
+		if r := e.do(t, request{method: http.MethodDelete, path: "/messages/" + id + "?scope=everyone", token: alice.access}); r.Code != http.StatusNoContent {
+			t.Fatalf("delete for everyone: %d %s", r.Code, r.Body)
+		}
+	}
+	for _, id := range ids {
+		deleteForEveryone(id)
+	}
+
+	for _, s := range []session{alice, bob} {
+		list := items(t, e.do(t, request{method: http.MethodGet, path: "/chats", token: s.access}))
+		if len(list) != 1 || list[0]["last_message"].(map[string]any)["content"] != "keep me" {
+			t.Fatalf("last message in the list: %v", list)
+		}
+	}
+	if got := e.do(t, request{method: http.MethodGet, path: "/chats/" + chatID, token: bob.access}).json(); got["last_message"].(map[string]any)["id"] != keptID {
+		t.Fatalf("last message of the chat: %v", got["last_message"])
+	}
+
+	deleteForEveryone(keptID)
+	if got := e.do(t, request{method: http.MethodGet, path: "/chats/" + chatID, token: alice.access}).json(); got["last_message"] != nil {
+		t.Fatalf("a chat with only deleted messages has no last message: %v", got["last_message"])
 	}
 }

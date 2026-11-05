@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -246,4 +247,85 @@ func mustID(t *testing.T, s string) int64 {
 		t.Fatal(err)
 	}
 	return id
+}
+
+func TestGroupMemberLogs(t *testing.T) {
+	e := newChatEnv(t)
+	owner, bob, carol, erin, outsider := e.register(t, "owner"), e.register(t, "bob"), e.register(t, "carol"), e.register(t, "erin"), e.register(t, "outsider")
+	bobID, carolID, erinID := e.uid(t, bob), e.uid(t, carol), e.uid(t, erin)
+	e.do(t, request{method: http.MethodPatch, path: "/me/privacy", token: carol.access, body: map[string]any{"group_invites": "wait_approval"}})
+
+	gid := e.do(t, request{method: http.MethodPost, path: "/groups", token: owner.access, body: map[string]any{"name": "Team", "member_ids": []string{bobID, carolID}}}).json()["id"].(string)
+	inbox := items(t, e.do(t, request{method: http.MethodGet, path: "/requests", token: carol.access}))
+	e.do(t, request{method: http.MethodPost, path: "/requests/" + inbox[0]["id"].(string) + "/approve", token: carol.access})
+	e.do(t, request{method: http.MethodPost, path: "/groups/" + gid + "/participants", token: owner.access, body: map[string]any{"user_id": erinID}})
+	e.do(t, request{method: http.MethodDelete, path: "/groups/" + gid + "/participants/" + erinID, token: owner.access})
+	if r := e.do(t, request{method: http.MethodPost, path: "/groups/" + gid + "/leave", token: carol.access}); r.Code != http.StatusNoContent {
+		t.Fatalf("leave: %d %s", r.Code, r.Body)
+	}
+
+	all, _ := e.history(t, bob, gid, "")
+	var logged []map[string]any
+	for _, m := range all {
+		if m["type"] == "system" {
+			if m["content"] != nil || m["sender"] != nil {
+				t.Fatalf("system message with content or sender: %v", m)
+			}
+			logged = append(logged, m["system_event"].(map[string]any))
+		}
+	}
+	kinds := []string{}
+	for _, ev := range logged {
+		kinds = append(kinds, ev["kind"].(string))
+	}
+	want := []string{"group_created", "member_joined", "member_added", "member_removed", "member_left"}
+	if strings.Join(kinds, ",") != strings.Join(want, ",") {
+		t.Fatalf("logged kinds: %v", kinds)
+	}
+	if added := logged[2]; added["actor_name"] != "Display owner" || added["target_id"] != erinID || added["target_name"] != "Display erin" {
+		t.Fatalf("member_added: %v", added)
+	}
+	if left := logged[4]; left["actor_id"] != carolID || left["target_id"] != nil {
+		t.Fatalf("member_left: %v", left)
+	}
+	groups := items(t, e.do(t, request{method: http.MethodGet, path: "/groups", token: bob.access}))
+	if len(groups) != 1 || groups[0]["unread_count"].(float64) != 0 || groups[0]["last_message"].(map[string]any)["type"] != "system" {
+		t.Fatalf("system messages are not unread: %v", groups)
+	}
+
+	e.do(t, request{method: http.MethodPatch, path: "/groups/" + gid + "/participants/" + bobID, token: owner.access, body: map[string]any{"role": "admin"}})
+	e.do(t, request{method: http.MethodPatch, path: "/groups/" + gid + "/participants/" + bobID, token: owner.access, body: map[string]any{"role": "admin"}})
+	mod := e.do(t, request{method: http.MethodPatch, path: "/groups/" + gid + "/participants/" + bobID, token: owner.access, body: map[string]any{"role": "moderator"}})
+	if mod.Code != http.StatusOK || roles(mod.json())["bob"] != "moderator" {
+		t.Fatalf("make moderator: %d %s", mod.Code, mod.Body)
+	}
+	ownerMsg := e.send(t, owner, gid, "o-1", "moderate me").json()["id"].(string)
+	if r := e.do(t, request{method: http.MethodDelete, path: "/messages/" + ownerMsg + "?scope=everyone", token: bob.access}); r.Code != http.StatusNoContent {
+		t.Fatalf("moderator deletes for everyone: %d %s", r.Code, r.Body)
+	}
+	if r := e.do(t, request{method: http.MethodPost, path: "/groups/" + gid + "/participants", token: bob.access, body: map[string]any{"user_id": erinID}}); r.Code != http.StatusForbidden {
+		t.Fatalf("moderator adds members: %d", r.Code)
+	}
+	e.do(t, request{method: http.MethodPatch, path: "/groups/" + gid + "/participants/" + bobID, token: owner.access, body: map[string]any{"role": "member"}})
+	if r := e.do(t, request{method: http.MethodPost, path: "/groups/" + gid + "/transfer-owner", token: owner.access, body: map[string]any{"user_id": bobID}}); r.Code != http.StatusOK {
+		t.Fatalf("transfer: %d %s", r.Code, r.Body)
+	}
+	r := e.do(t, request{method: http.MethodGet, path: "/groups/" + gid + "/role-log", token: bob.access})
+	if r.Code != http.StatusOK {
+		t.Fatalf("role log: %d %s", r.Code, r.Body)
+	}
+	log := items(t, r)
+	got := []string{}
+	for _, it := range log {
+		got = append(got, it["actor"].(map[string]any)["username"].(string)+">"+it["target"].(map[string]any)["username"].(string)+":"+it["role"].(string))
+		if it["created_at"] == nil {
+			t.Fatalf("role event without time: %v", it)
+		}
+	}
+	if strings.Join(got, " ") != "owner>bob:owner owner>bob:member owner>bob:moderator owner>bob:admin" {
+		t.Fatalf("role log: %v", got)
+	}
+	if r := e.do(t, request{method: http.MethodGet, path: "/groups/" + gid + "/role-log", token: outsider.access}); r.Code != http.StatusNotFound {
+		t.Fatalf("role log for an outsider: %d", r.Code)
+	}
 }

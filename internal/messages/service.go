@@ -513,8 +513,8 @@ const (
 	ScopeEveryone = "everyone"
 )
 
-// Delete deletes a message for the user only, or for everyone: the sender may, and in a group the owner,
-// admins and moderators may delete any message.
+// Delete deletes a message for the user only, or for everyone: the sender may, either side of a direct chat
+// may, and in a group the owner, admins and moderators may delete any message.
 func (s *Service) Delete(ctx context.Context, userID, chatID, messageID int64, scope string) error {
 	if scope != ScopeMe && scope != ScopeEveryone {
 		return invalid("scope must be me or everyone")
@@ -527,7 +527,7 @@ func (s *Service) Delete(ctx context.Context, userID, chatID, messageID int64, s
 		return err
 	}
 	if scope == ScopeEveryone && (m.SenderID == nil || *m.SenderID != userID) {
-		if err := s.requireModerator(ctx, chatID, userID); err != nil {
+		if err := s.requireMayDeleteOthers(ctx, chatID, userID); err != nil {
 			return err
 		}
 	}
@@ -547,7 +547,7 @@ func (s *Service) DeleteMany(ctx context.Context, userID, chatID int64, messageI
 	if err := s.requireMember(ctx, chatID, userID); err != nil {
 		return err
 	}
-	moderatorChecked := false
+	othersChecked := false
 	done := map[int64]bool{}
 	found := make([]scylla.Message, 0, len(messageIDs))
 	for _, messageID := range messageIDs {
@@ -562,11 +562,11 @@ func (s *Service) DeleteMany(ctx context.Context, userID, chatID int64, messageI
 			}
 			done[messageID] = m.Deleted
 		}
-		if scope == ScopeEveryone && !moderatorChecked && (m.SenderID == nil || *m.SenderID != userID) {
-			if err := s.requireModerator(ctx, chatID, userID); err != nil {
+		if scope == ScopeEveryone && !othersChecked && (m.SenderID == nil || *m.SenderID != userID) {
+			if err := s.requireMayDeleteOthers(ctx, chatID, userID); err != nil {
 				return err
 			}
-			moderatorChecked = true
+			othersChecked = true
 		}
 	}
 	for _, m := range found {
@@ -623,7 +623,7 @@ func (s *Service) deleteChecked(ctx context.Context, userID int64, m scylla.Mess
 	return s.unlink(ctx, m)
 }
 
-func (s *Service) requireModerator(ctx context.Context, chatID, userID int64) error {
+func (s *Service) requireMayDeleteOthers(ctx context.Context, chatID, userID int64) error {
 	p, err := s.d.Store.Chats().Participant(ctx, chatID, userID)
 	if errors.Is(err, postgres.ErrNotFound) {
 		return ErrNotFound
@@ -631,15 +631,16 @@ func (s *Service) requireModerator(ctx context.Context, chatID, userID int64) er
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
+	chat, err := s.d.Store.Chats().Get(ctx, chatID)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrUnavailable, err)
+	}
+	if chat.Type == postgres.ChatDirect {
+		return nil
+	}
 	switch p.Role {
 	case postgres.RoleOwner, postgres.RoleAdmin, postgres.RoleModerator:
-		chat, err := s.d.Store.Chats().Get(ctx, chatID)
-		if err != nil {
-			return fmt.Errorf("%w: %w", ErrUnavailable, err)
-		}
-		if chat.Type == postgres.ChatGroup {
-			return nil
-		}
+		return nil
 	}
 	return ErrForbidden
 }

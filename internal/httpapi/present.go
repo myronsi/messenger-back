@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/myronsi/messenger-back/internal/media"
+	"github.com/myronsi/messenger-back/internal/messages"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/scylla"
 	"github.com/myronsi/messenger-back/internal/users"
@@ -201,6 +202,20 @@ func PresentMessage(m scylla.Message, p MessageParts) Message {
 	if p.ClientTempID != "" {
 		id := p.ClientTempID
 		out.ClientTempId = &id
+	}
+	if e, ok := messages.ParseSystemEvent(m); ok {
+		out.Content = nil
+		out.SystemEvent = presentSystemEvent(e)
+	}
+	return out
+}
+
+func presentSystemEvent(e messages.SystemEvent) *SystemEvent {
+	out := &SystemEvent{Kind: SystemEventKind(e.Kind), ActorId: formatIDPtr(e.ActorID), ActorName: e.ActorName}
+	if e.TargetID != nil {
+		out.TargetId = formatIDPtr(e.TargetID)
+		name := e.TargetName
+		out.TargetName = &name
 	}
 	return out
 }

@@ -120,11 +120,8 @@ func TestMessagesOverHTTP(t *testing.T) {
 	if b, _ := e.history(t, bob, chat, ""); len(b) != 4 {
 		t.Fatalf("bob still sees the hidden message: %v", texts(b))
 	}
-	if r := e.do(t, request{method: http.MethodDelete, path: "/messages/" + id1 + "?scope=everyone", token: bob.access}); r.Code != http.StatusForbidden {
-		t.Fatalf("delete someone else's message in a direct chat: %d", r.Code)
-	}
-	if r := e.do(t, request{method: http.MethodDelete, path: "/messages/" + id1 + "?scope=everyone", token: alice.access}); r.Code != http.StatusNoContent {
-		t.Fatalf("delete for everyone: %d", r.Code)
+	if r := e.do(t, request{method: http.MethodDelete, path: "/messages/" + id1 + "?scope=everyone", token: bob.access}); r.Code != http.StatusNoContent {
+		t.Fatalf("delete the other side's message for both in a direct chat: %d %s", r.Code, r.Body)
 	}
 	if a, _ := e.history(t, alice, chat, ""); a[0]["is_deleted"] != true || a[0]["content"] != nil {
 		t.Fatalf("tombstone: %v", a[0])
@@ -245,8 +242,8 @@ func TestBulkForwardAndDeleteOverHTTP(t *testing.T) {
 		t.Fatalf("forward from a chat carol is not in: %d", r.Code)
 	}
 
-	if r := remove(bob, "everyone", []string{mine[0], bobs}); r.Code != http.StatusForbidden {
-		t.Fatalf("bob deletes alice's message for everyone: %d", r.Code)
+	if r := remove(bob, "everyone", []string{bobs, "999999999999"}); r.Code != http.StatusNotFound {
+		t.Fatalf("bulk delete with an unknown message: %d", r.Code)
 	}
 	if got, _ := e.history(t, alice, chat, ""); texts(got)[3] != "from bob" {
 		t.Fatalf("a refused bulk delete changed something: %v", texts(got))

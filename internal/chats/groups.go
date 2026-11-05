@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/myronsi/messenger-back/internal/events"
+	"github.com/myronsi/messenger-back/internal/messages"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/users"
 )
@@ -386,7 +387,36 @@ func (s *Service) CreateGroup(ctx context.Context, owner int64, name string, des
 		s.invite(ctx, chat.ID, owner, uid)
 	}
 	s.changed(ctx, chat.ID, append([]int64{owner}, direct...)...)
+	s.logMembers(ctx, chat.ID, messages.SystemGroupCreated, owner)
 	return s.group(ctx, owner, chat.ID)
+}
+
+func (s *Service) logMembers(ctx context.Context, chatID int64, kind string, actor int64, targets ...int64) {
+	found, err := s.d.Store.Users().GetMany(ctx, append([]int64{actor}, targets...))
+	if err != nil {
+		s.d.Log.WarnContext(ctx, "member log names", "error", err, "chat_id", chatID)
+	}
+	name := func(id int64) string {
+		if u, ok := found[id]; ok {
+			if u.DisplayName != "" {
+				return u.DisplayName
+			}
+			return u.Username
+		}
+		return ""
+	}
+	entries := []messages.SystemEvent{}
+	if len(targets) == 0 {
+		entries = append(entries, messages.SystemEvent{Kind: kind, ActorID: &actor, ActorName: name(actor)})
+	}
+	for _, target := range targets {
+		entries = append(entries, messages.SystemEvent{Kind: kind, ActorID: &actor, ActorName: name(actor), TargetID: &target, TargetName: name(target)})
+	}
+	for _, e := range entries {
+		if _, err := s.d.Sender.SendSystem(ctx, chatID, e); err != nil {
+			s.d.Log.WarnContext(ctx, "member log", "error", err, "chat_id", chatID, "kind", kind)
+		}
+	}
 }
 
 // invite makes an invitation and tells the invitee. Failures are logged: the group exists either way.
@@ -509,6 +539,7 @@ func (s *Service) AddMember(ctx context.Context, userID, chatID, target int64) (
 		}
 		_ = s.membership(ctx, chatID, userID, []int64{target}, nil)
 		s.changed(ctx, chatID, target)
+		s.logMembers(ctx, chatID, messages.SystemMemberAdded, userID, target)
 	default:
 		return GroupView{}, ErrForbidden
 	}
@@ -538,6 +569,7 @@ func (s *Service) RemoveMember(ctx context.Context, userID, chatID, target int64
 	}
 	err := s.membership(ctx, chatID, userID, nil, []int64{target})
 	s.changed(ctx, chatID)
+	s.logMembers(ctx, chatID, messages.SystemMemberRemoved, userID, target)
 	return err
 }
 
@@ -552,13 +584,14 @@ func (s *Service) Leave(ctx context.Context, userID, chatID int64) error {
 	}
 	err := s.membership(ctx, chatID, userID, nil, []int64{userID})
 	s.changed(ctx, chatID)
+	s.logMembers(ctx, chatID, messages.SystemMemberLeft, userID)
 	return err
 }
 
-// SetRole makes a member an admin or a member again.
+// SetRole makes a member an admin, a moderator or a member again.
 func (s *Service) SetRole(ctx context.Context, userID, chatID, target int64, role postgres.Role) (GroupView, error) {
-	if role != postgres.RoleAdmin && role != postgres.RoleMember {
-		return GroupView{}, fmt.Errorf("%w: role must be admin or member", ErrInvalid)
+	if role != postgres.RoleAdmin && role != postgres.RoleModerator && role != postgres.RoleMember {
+		return GroupView{}, fmt.Errorf("%w: role must be admin, moderator or member", ErrInvalid)
 	}
 	if err := s.d.Store.Chats().SetRoleAs(ctx, chatID, userID, target, role); err != nil {
 		if errors.Is(err, postgres.ErrOwnerMustTransfer) {
@@ -601,8 +634,47 @@ func (s *Service) approveInvite(ctx context.Context, userID, requestID int64) (V
 	if joined {
 		_ = s.membership(ctx, *req.ChatID, req.RequesterID, []int64{userID}, nil)
 		s.changed(ctx, *req.ChatID, userID)
+		s.logMembers(ctx, *req.ChatID, messages.SystemMemberJoined, userID)
 	}
 	return s.Get(ctx, userID, *req.ChatID)
+}
+
+const roleLogLimit = 100
+
+type RoleEntry struct {
+	Event  postgres.RoleEvent
+	Actor  *users.View
+	Target users.View
+}
+
+func (s *Service) RoleLog(ctx context.Context, userID, chatID int64) ([]RoleEntry, error) {
+	if err := s.requireGroupMember(ctx, userID, chatID); err != nil {
+		return nil, err
+	}
+	evs, err := s.d.Store.Chats().RoleEvents(ctx, chatID, roleLogLimit)
+	if err != nil {
+		return nil, unavailable(err)
+	}
+	ids := []int64{}
+	for _, e := range evs {
+		ids = append(ids, e.TargetID)
+		if e.ActorID != nil {
+			ids = append(ids, *e.ActorID)
+		}
+	}
+	people, err := s.d.Directory.ForViewer(ctx, userID, dedupe(ids))
+	if err != nil {
+		return nil, unavailable(err)
+	}
+	out := make([]RoleEntry, len(evs))
+	for i, e := range evs {
+		out[i] = RoleEntry{Event: e, Target: people[e.TargetID]}
+		if e.ActorID != nil {
+			actor := people[*e.ActorID]
+			out[i].Actor = &actor
+		}
+	}
+	return out, nil
 }
 
 // requireGroupMember fails with ErrNotFound unless the user is in the group.

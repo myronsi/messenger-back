@@ -274,7 +274,10 @@ func (r chatRepo) TransferOwnership(ctx context.Context, chatID, fromID, toID in
 		if err := setRole(ctx, q, chatID, fromID, RoleAdmin); err != nil {
 			return err
 		}
-		return setRole(ctx, q, chatID, toID, RoleOwner)
+		if err := setRole(ctx, q, chatID, toID, RoleOwner); err != nil {
+			return err
+		}
+		return addRoleEvent(ctx, q, chatID, fromID, toID, RoleOwner)
 	})
 }
 
