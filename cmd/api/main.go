@@ -21,6 +21,7 @@ import (
 	"github.com/myronsi/messenger-back/internal/chats"
 	"github.com/myronsi/messenger-back/internal/config"
 	"github.com/myronsi/messenger-back/internal/httpapi"
+	"github.com/myronsi/messenger-back/internal/linkpreview"
 	"github.com/myronsi/messenger-back/internal/media"
 	"github.com/myronsi/messenger-back/internal/notifications"
 	"github.com/myronsi/messenger-back/internal/search"
@@ -155,6 +156,11 @@ func run() error {
 		})).WithMessages(httpapi.NewMessageServer(httpapi.MessageOptions{
 			Service: rt.messages, Store: pg, Directory: rt.directory, Limiter: rt.limiter, BasePath: cfg.HTTP.BasePath, Log: log,
 			Searcher: search.NewSearcher(search.NewIndex(es, cfg.Search.Alias, cfg.Search.Replicas), searchAccess{rt.messages, pg}, rt.store),
+		})).WithLinkPreviews(httpapi.NewLinkPreviewServer(httpapi.LinkPreviewOptions{
+			Service: linkpreview.New(linkpreview.Options{
+				Cache: linkpreview.NewRedisCache(rd.Client()), SignKey: linkpreview.DeriveKey(cfg.JWTSecret.Reveal()),
+			}),
+			Limiter: rt.limiter, BasePath: cfg.HTTP.BasePath, Log: log,
 		})).WithNotifications(httpapi.NotificationOptions{Store: pg.Notifications(), Config: cfg.Notifications, Tokens: notifications.NewActionTokens(cfg.Notifications.VAPIDPrivate.Reveal())}).WithMeta(httpapi.MetaInfo{
 			BackendVersion: version.Backend, Commit: os.Getenv("APP_COMMIT"), MinClientAPIVersion: cfg.Realtime.MinClientAPIVersion,
 		}),

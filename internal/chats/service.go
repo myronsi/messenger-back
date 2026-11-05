@@ -45,6 +45,8 @@ const unreadCap = 999
 // when a user's counters are rebuilt.
 const lastMessageWorkers = 16
 
+const lastMessagePage = 10
+
 // Store is the PostgreSQL side.
 type Store interface {
 	Chats() postgres.ChatRepository
@@ -76,6 +78,7 @@ type Members interface {
 type Sender interface {
 	Send(ctx context.Context, r messages.SendRequest) (messages.Sent, error)
 	Read(ctx context.Context, userID, chatID, messageID int64) (int, error)
+	SendSystem(ctx context.Context, chatID int64, e messages.SystemEvent) (scylla.Message, error)
 }
 
 // Notifier delivers chat list changes to the users' sockets (realtime.Fanout).
@@ -295,17 +298,14 @@ func (s *Service) render(ctx context.Context, viewer int64, entries []postgres.C
 		wg.Go(func() {
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			page, err := s.d.Messages.Page(ctx, scylla.PageQuery{ChatID: e.Chat.ID, Viewer: viewer, Limit: 1})
+			m, err := s.lastShown(ctx, e.Chat.ID, viewer)
 			if err != nil {
 				mu.Lock()
 				firstErr = err
 				mu.Unlock()
 				return
 			}
-			if len(page.Messages) > 0 {
-				m := page.Messages[len(page.Messages)-1]
-				lasts[i] = &m
-			}
+			lasts[i] = m
 		})
 	}
 	wg.Wait()
@@ -351,6 +351,26 @@ func (s *Service) render(ctx context.Context, viewer int64, entries []postgres.C
 		views[i].Last = last
 	}
 	return views, nil
+}
+
+func (s *Service) lastShown(ctx context.Context, chatID, viewer int64) (*scylla.Message, error) {
+	q := scylla.PageQuery{ChatID: chatID, Viewer: viewer, Limit: lastMessagePage}
+	for {
+		page, err := s.d.Messages.Page(ctx, q)
+		if err != nil {
+			return nil, err
+		}
+		for i := len(page.Messages) - 1; i >= 0; i-- {
+			if m := page.Messages[i]; !m.Deleted {
+				return &m, nil
+			}
+		}
+		if !page.HasOlder || len(page.Messages) == 0 {
+			return nil, nil
+		}
+		q.Before = page.Messages[0].ID
+		q.Limit = scylla.MaxPage
+	}
 }
 
 // receiptsFor returns, per direct chat, the peer's receipt for the viewer's own last message: when the peer

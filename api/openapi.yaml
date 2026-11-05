@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.11
+  version: 2.1.0-alpha.12
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -1356,7 +1356,8 @@ paths:
       summary: Delete a message
       description: |
         `scope=me` hides it for the current user only (any message). `scope=everyone` removes
-        it for all participants (own messages, and any message for group admins).
+        it for all participants: own messages, any message of a direct chat (either side), and any message
+        for group owners, admins and moderators.
       parameters:
         - name: scope
           in: query
@@ -1829,6 +1830,89 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
+  /groups/{chat_id}/role-log:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ChatId"
+    get:
+      tags: [groups]
+      operationId: getGroupRoleLog
+      summary: Role changes of the group's members
+      description: Who made whom an admin or a member, or transferred ownership, and when. Members only.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Role changes
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GroupRoleLog" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /link-preview:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    get:
+      tags: [messages]
+      operationId: getLinkPreview
+      summary: Preview of a web page for a link in a message
+      description: |
+        Reads the page's Open Graph data (`og:title`, `og:description`, `og:site_name`, `og:image`; falling back to
+        `<title>`, `description` and `twitter:image`). Only public `http`/`https` addresses on ports 80 and 443
+        are fetched. Answers are cached for a day (a page without a preview for an hour). `image.url` points to
+        `GET /link-preview/image`, so clients never load third-party images directly. `404` when the page has
+        no preview or cannot be fetched.
+      parameters:
+        - name: url
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 2048 }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: The preview
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LinkPreview" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /link-preview/image:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    get:
+      tags: [messages]
+      operationId: getLinkPreviewImage
+      summary: The image of a link preview, through the server
+      description: |
+        Use the `image.url` of a link preview as it is; `sig` proves the server made it. PNG, JPEG, GIF and WebP
+        up to 5 MB, sent with `X-Content-Type-Options: nosniff`.
+      parameters:
+        - name: url
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 2048 }
+        - name: sig
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 64 }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Image content
+          content:
+            image/*:
+              schema: { type: string, format: binary }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
 
   /me/notifications:
     get:
@@ -2833,7 +2917,51 @@ components:
             - $ref: "#/components/schemas/Timestamp"
             - type: "null"
         is_deleted: { type: boolean }
+        system_event:
+          $ref: "#/components/schemas/SystemEvent"
         client_temp_id: { $ref: "#/components/schemas/ClientTempId" }
+    LinkPreview:
+      type: object
+      required: [url, title, description, site_name, image]
+      properties:
+        url:
+          type: string
+          description: The page after redirects
+        title: { type: [string, "null"], maxLength: 300 }
+        description: { type: [string, "null"], maxLength: 500 }
+        site_name: { type: [string, "null"], maxLength: 100 }
+        image:
+          oneOf:
+            - $ref: "#/components/schemas/LinkPreviewImage"
+            - type: "null"
+    LinkPreviewImage:
+      type: object
+      required: [url, width, height]
+      properties:
+        url:
+          type: string
+          description: "`GET /link-preview/image` with the signed address of the page's image"
+        width: { type: [integer, "null"], minimum: 1 }
+        height: { type: [integer, "null"], minimum: 1 }
+    SystemEventKind:
+      type: string
+      enum: [group_created, member_added, member_joined, member_removed, member_left]
+    SystemEvent:
+      type: object
+      description: |
+        What a `system` message records; set on system messages only, whose `content` is then `null`. The names
+        are the display names at the time of the event. `target` fields are set for `member_added` and
+        `member_removed`.
+      required: [kind, actor_id, actor_name]
+      properties:
+        kind: { $ref: "#/components/schemas/SystemEventKind" }
+        actor_id:
+          oneOf:
+            - $ref: "#/components/schemas/Id"
+            - type: "null"
+        actor_name: { type: string }
+        target_id: { $ref: "#/components/schemas/Id" }
+        target_name: { type: string }
     MessagePage:
       type: object
       required: [items, next_cursor, prev_cursor]
@@ -2967,7 +3095,30 @@ components:
       enum: [direct, group]
     GroupRole:
       type: string
-      enum: [owner, admin, member]
+      description: A moderator may delete other members' messages; owners and admins also manage the group.
+      enum: [owner, admin, moderator, member]
+    GroupRoleEvent:
+      type: object
+      description: A member got a new role; `owner` means the actor transferred ownership to them.
+      required: [id, actor, target, role, created_at]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        actor:
+          description: "`null` when the account is gone."
+          oneOf:
+            - $ref: "#/components/schemas/User"
+            - type: "null"
+        target: { $ref: "#/components/schemas/User" }
+        role: { $ref: "#/components/schemas/GroupRole" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+    GroupRoleLog:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          description: Newest first, at most 100
+          items: { $ref: "#/components/schemas/GroupRoleEvent" }
     Chat:
       type: object
       required:
@@ -3069,7 +3220,7 @@ components:
       properties:
         role:
           type: string
-          enum: [admin, member]
+          enum: [admin, moderator, member]
     TransferOwnerRequest:
       type: object
       required: [user_id]

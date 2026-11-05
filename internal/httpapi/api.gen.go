@@ -244,9 +244,10 @@ func (e GroupInvitePolicy) Valid() bool {
 
 // Defines values for GroupRole.
 const (
-	GroupRoleAdmin  GroupRole = "admin"
-	GroupRoleMember GroupRole = "member"
-	GroupRoleOwner  GroupRole = "owner"
+	GroupRoleAdmin     GroupRole = "admin"
+	GroupRoleMember    GroupRole = "member"
+	GroupRoleModerator GroupRole = "moderator"
+	GroupRoleOwner     GroupRole = "owner"
 )
 
 // Valid indicates whether the value is a known member of the GroupRole enum.
@@ -255,6 +256,8 @@ func (e GroupRole) Valid() bool {
 	case GroupRoleAdmin:
 		return true
 	case GroupRoleMember:
+		return true
+	case GroupRoleModerator:
 		return true
 	case GroupRoleOwner:
 		return true
@@ -404,6 +407,33 @@ func (e SendMessageRequestType) Valid() bool {
 	}
 }
 
+// Defines values for SystemEventKind.
+const (
+	GroupCreated  SystemEventKind = "group_created"
+	MemberAdded   SystemEventKind = "member_added"
+	MemberJoined  SystemEventKind = "member_joined"
+	MemberLeft    SystemEventKind = "member_left"
+	MemberRemoved SystemEventKind = "member_removed"
+)
+
+// Valid indicates whether the value is a known member of the SystemEventKind enum.
+func (e SystemEventKind) Valid() bool {
+	switch e {
+	case GroupCreated:
+		return true
+	case MemberAdded:
+		return true
+	case MemberJoined:
+		return true
+	case MemberLeft:
+		return true
+	case MemberRemoved:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TokenResponseTokenType.
 const (
 	TokenResponseTokenTypeBearer TokenResponseTokenType = "Bearer"
@@ -436,8 +466,9 @@ func (e TwoFactorChallengeTwoFactorRequired) Valid() bool {
 
 // Defines values for UpdateRoleRequestRole.
 const (
-	UpdateRoleRequestRoleAdmin  UpdateRoleRequestRole = "admin"
-	UpdateRoleRequestRoleMember UpdateRoleRequestRole = "member"
+	UpdateRoleRequestRoleAdmin     UpdateRoleRequestRole = "admin"
+	UpdateRoleRequestRoleMember    UpdateRoleRequestRole = "member"
+	UpdateRoleRequestRoleModerator UpdateRoleRequestRole = "moderator"
 )
 
 // Valid indicates whether the value is a known member of the UpdateRoleRequestRole enum.
@@ -446,6 +477,8 @@ func (e UpdateRoleRequestRole) Valid() bool {
 	case UpdateRoleRequestRoleAdmin:
 		return true
 	case UpdateRoleRequestRoleMember:
+		return true
+	case UpdateRoleRequestRoleModerator:
 		return true
 	default:
 		return false
@@ -765,8 +798,10 @@ type Group struct {
 	// Examples: 7217400317439950848
 	Id      Id            `json:"id"`
 	Members []GroupMember `json:"members"`
-	MyRole  GroupRole     `json:"my_role"`
-	Name    string        `json:"name"`
+
+	// MyRole A moderator may delete other members' messages; owners and admins also manage the group.
+	MyRole GroupRole `json:"my_role"`
+	Name   string    `json:"name"`
 
 	// OwnerId Decimal ID as a string (Snowflake IDs exceed 2^53).
 	//
@@ -780,19 +815,65 @@ type GroupInvitePolicy string
 // GroupMember defines model for GroupMember.
 type GroupMember struct {
 	JoinedAt Timestamp `json:"joined_at"`
-	Role     GroupRole `json:"role"`
+
+	// Role A moderator may delete other members' messages; owners and admins also manage the group.
+	Role GroupRole `json:"role"`
 
 	// User A user as visible to the requesting user; hidden fields are `null`.
 	User User `json:"user"`
 }
 
-// GroupRole defines model for GroupRole.
+// GroupRole A moderator may delete other members' messages; owners and admins also manage the group.
 type GroupRole string
+
+// GroupRoleEvent A member got a new role; `owner` means the actor transferred ownership to them.
+type GroupRoleEvent struct {
+	// Actor `null` when the account is gone.
+	Actor     *User     `json:"actor"`
+	CreatedAt Timestamp `json:"created_at"`
+
+	// Id Decimal ID as a string (Snowflake IDs exceed 2^53).
+	//
+	// Examples: 7217400317439950848
+	Id Id `json:"id"`
+
+	// Role A moderator may delete other members' messages; owners and admins also manage the group.
+	Role GroupRole `json:"role"`
+
+	// Target A user as visible to the requesting user; hidden fields are `null`.
+	Target User `json:"target"`
+}
+
+// GroupRoleLog defines model for GroupRoleLog.
+type GroupRoleLog struct {
+	// Items Newest first, at most 100
+	Items []GroupRoleEvent `json:"items"`
+}
 
 // Id Decimal ID as a string (Snowflake IDs exceed 2^53).
 //
 // Examples: 7217400317439950848
 type Id = string
+
+// LinkPreview defines model for LinkPreview.
+type LinkPreview struct {
+	Description *string           `json:"description"`
+	Image       *LinkPreviewImage `json:"image"`
+	SiteName    *string           `json:"site_name"`
+	Title       *string           `json:"title"`
+
+	// Url The page after redirects
+	Url string `json:"url"`
+}
+
+// LinkPreviewImage defines model for LinkPreviewImage.
+type LinkPreviewImage struct {
+	Height *int `json:"height"`
+
+	// Url `GET /link-preview/image` with the signed address of the page's image
+	Url   string `json:"url"`
+	Width *int   `json:"width"`
+}
 
 // LoginRequest defines model for LoginRequest.
 type LoginRequest struct {
@@ -871,8 +952,13 @@ type Message struct {
 	ReplyTo      *Id           `json:"reply_to"`
 
 	// Sender `null` for system messages.
-	Sender *User       `json:"sender"`
-	Type   MessageType `json:"type"`
+	Sender *User `json:"sender"`
+
+	// SystemEvent What a `system` message records; set on system messages only, whose `content` is then `null`. The names
+	// are the display names at the time of the event. `target` fields are set for `member_added` and
+	// `member_removed`.
+	SystemEvent *SystemEvent `json:"system_event,omitempty"`
+	Type        MessageType  `json:"type"`
 }
 
 // MessagePage defines model for MessagePage.
@@ -1206,6 +1292,24 @@ type SetAvatarRequest struct {
 	// Examples: 5f0c8a64-2f2b-4c7e-9d0e-6b1f3a2c4d5e
 	AttachmentId AttachmentRef `json:"attachment_id"`
 }
+
+// SystemEvent What a `system` message records; set on system messages only, whose `content` is then `null`. The names
+// are the display names at the time of the event. `target` fields are set for `member_added` and
+// `member_removed`.
+type SystemEvent struct {
+	ActorId   *Id             `json:"actor_id"`
+	ActorName string          `json:"actor_name"`
+	Kind      SystemEventKind `json:"kind"`
+
+	// TargetId Decimal ID as a string (Snowflake IDs exceed 2^53).
+	//
+	// Examples: 7217400317439950848
+	TargetId   *Id     `json:"target_id,omitempty"`
+	TargetName *string `json:"target_name,omitempty"`
+}
+
+// SystemEventKind defines model for SystemEventKind.
+type SystemEventKind string
 
 // Timestamp defines model for Timestamp.
 type Timestamp = time.Time
@@ -1779,8 +1883,40 @@ type UpdateGroupParticipantRoleParams struct {
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
 }
 
+// GetGroupRoleLogParams defines parameters for GetGroupRoleLog.
+type GetGroupRoleLogParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
 // TransferGroupOwnershipParams defines parameters for TransferGroupOwnership.
 type TransferGroupOwnershipParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// GetLinkPreviewParams defines parameters for GetLinkPreview.
+type GetLinkPreviewParams struct {
+	Url string `form:"url" json:"url"`
+
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// GetLinkPreviewImageParams defines parameters for GetLinkPreviewImage.
+type GetLinkPreviewImageParams struct {
+	Url string `form:"url" json:"url"`
+	Sig string `form:"sig" json:"sig"`
+
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
@@ -2645,9 +2781,18 @@ type ServerInterface interface {
 	// UpdateGroupParticipantRole Change a participant's role
 	// (PATCH /groups/{chat_id}/participants/{user_id})
 	UpdateGroupParticipantRole(w http.ResponseWriter, r *http.Request, chatId ChatId, userId UserId, params UpdateGroupParticipantRoleParams)
+	// GetGroupRoleLog Role changes of the group's members
+	// (GET /groups/{chat_id}/role-log)
+	GetGroupRoleLog(w http.ResponseWriter, r *http.Request, chatId ChatId, params GetGroupRoleLogParams)
 	// TransferGroupOwnership Make another member the owner
 	// (POST /groups/{chat_id}/transfer-owner)
 	TransferGroupOwnership(w http.ResponseWriter, r *http.Request, chatId ChatId, params TransferGroupOwnershipParams)
+	// GetLinkPreview Preview of a web page for a link in a message
+	// (GET /link-preview)
+	GetLinkPreview(w http.ResponseWriter, r *http.Request, params GetLinkPreviewParams)
+	// GetLinkPreviewImage The image of a link preview, through the server
+	// (GET /link-preview/image)
+	GetLinkPreviewImage(w http.ResponseWriter, r *http.Request, params GetLinkPreviewImageParams)
 	// DeleteMe Delete the account
 	// (DELETE /me)
 	DeleteMe(w http.ResponseWriter, r *http.Request, params DeleteMeParams)
@@ -5196,6 +5341,75 @@ func (siw *ServerInterfaceWrapper) UpdateGroupParticipantRole(w http.ResponseWri
 	handler.ServeHTTP(w, r)
 }
 
+// GetGroupRoleLog operation middleware
+func (siw *ServerInterfaceWrapper) GetGroupRoleLog(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetGroupRoleLogParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetGroupRoleLog(w, r, chatId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // TransferGroupOwnership operation middleware
 func (siw *ServerInterfaceWrapper) TransferGroupOwnership(w http.ResponseWriter, r *http.Request) {
 
@@ -5256,6 +5470,165 @@ func (siw *ServerInterfaceWrapper) TransferGroupOwnership(w http.ResponseWriter,
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.TransferGroupOwnership(w, r, chatId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetLinkPreview operation middleware
+func (siw *ServerInterfaceWrapper) GetLinkPreview(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetLinkPreviewParams
+
+	// ------------- Required query parameter "url" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "url", r.URL.Query(), &params.Url, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "url"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "url", Err: err})
+		}
+		return
+	}
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetLinkPreview(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetLinkPreviewImage operation middleware
+func (siw *ServerInterfaceWrapper) GetLinkPreviewImage(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetLinkPreviewImageParams
+
+	// ------------- Required query parameter "url" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "url", r.URL.Query(), &params.Url, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "url"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "url", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "sig" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "sig", r.URL.Query(), &params.Sig, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sig"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sig", Err: err})
+		}
+		return
+	}
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetLinkPreviewImage(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -8311,6 +8684,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/groups/{chat_id}/participants/{user_id}", wrapper.UpdateGroupParticipantRole)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/groups/{chat_id}/transfer-owner", wrapper.TransferGroupOwnership)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/groups/{chat_id}/leave", wrapper.LeaveGroup)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/groups/{chat_id}/role-log", wrapper.GetGroupRoleLog)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/link-preview", wrapper.GetLinkPreview)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/link-preview/image", wrapper.GetLinkPreviewImage)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/notifications", wrapper.GetNotificationSettings)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/me/notifications", wrapper.UpdateNotificationSettings)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/notifications/avatar/{token}", wrapper.GetNotificationAvatar)
@@ -11997,6 +12373,93 @@ func (response UpdateGroupParticipantRole426ApplicationProblemPlusJSONResponse) 
 	return err
 }
 
+type GetGroupRoleLogRequestObject struct {
+	ChatId ChatId `json:"chat_id"`
+	Params GetGroupRoleLogParams
+}
+
+type GetGroupRoleLogResponseObject interface {
+	VisitGetGroupRoleLogResponse(w http.ResponseWriter) error
+}
+
+type GetGroupRoleLog200JSONResponse GroupRoleLog
+
+func (response GetGroupRoleLog200JSONResponse) VisitGetGroupRoleLogResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetGroupRoleLog400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response GetGroupRoleLog400ApplicationProblemPlusJSONResponse) VisitGetGroupRoleLogResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetGroupRoleLog401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response GetGroupRoleLog401ApplicationProblemPlusJSONResponse) VisitGetGroupRoleLogResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetGroupRoleLog404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetGroupRoleLog404ApplicationProblemPlusJSONResponse) VisitGetGroupRoleLogResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetGroupRoleLog426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetGroupRoleLog426ApplicationProblemPlusJSONResponse) VisitGetGroupRoleLogResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type TransferGroupOwnershipRequestObject struct {
 	ChatId ChatId `json:"chat_id"`
 	Params TransferGroupOwnershipParams
@@ -12113,6 +12576,255 @@ func (response TransferGroupOwnership426ApplicationProblemPlusJSONResponse) Visi
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetLinkPreviewRequestObject struct {
+	Params GetLinkPreviewParams
+}
+
+type GetLinkPreviewResponseObject interface {
+	VisitGetLinkPreviewResponse(w http.ResponseWriter) error
+}
+
+type GetLinkPreview200JSONResponse LinkPreview
+
+func (response GetLinkPreview200JSONResponse) VisitGetLinkPreviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetLinkPreview400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response GetLinkPreview400ApplicationProblemPlusJSONResponse) VisitGetLinkPreviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetLinkPreview401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response GetLinkPreview401ApplicationProblemPlusJSONResponse) VisitGetLinkPreviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetLinkPreview404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetLinkPreview404ApplicationProblemPlusJSONResponse) VisitGetLinkPreviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetLinkPreview422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response GetLinkPreview422ApplicationProblemPlusJSONResponse) VisitGetLinkPreviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetLinkPreview426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetLinkPreview426ApplicationProblemPlusJSONResponse) VisitGetLinkPreviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetLinkPreview429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response GetLinkPreview429ApplicationProblemPlusJSONResponse) VisitGetLinkPreviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetLinkPreviewImageRequestObject struct {
+	Params GetLinkPreviewImageParams
+}
+
+type GetLinkPreviewImageResponseObject interface {
+	VisitGetLinkPreviewImageResponse(w http.ResponseWriter) error
+}
+
+type GetLinkPreviewImage200ImageResponse struct {
+	Body          io.Reader
+	ContentType   string
+	ContentLength int64
+}
+
+func (response GetLinkPreviewImage200ImageResponse) VisitGetLinkPreviewImageResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", response.ContentType)
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type GetLinkPreviewImage400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response GetLinkPreviewImage400ApplicationProblemPlusJSONResponse) VisitGetLinkPreviewImageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetLinkPreviewImage401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response GetLinkPreviewImage401ApplicationProblemPlusJSONResponse) VisitGetLinkPreviewImageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetLinkPreviewImage403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response GetLinkPreviewImage403ApplicationProblemPlusJSONResponse) VisitGetLinkPreviewImageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetLinkPreviewImage404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetLinkPreviewImage404ApplicationProblemPlusJSONResponse) VisitGetLinkPreviewImageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetLinkPreviewImage426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetLinkPreviewImage426ApplicationProblemPlusJSONResponse) VisitGetLinkPreviewImageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetLinkPreviewImage429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response GetLinkPreviewImage429ApplicationProblemPlusJSONResponse) VisitGetLinkPreviewImageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -16573,9 +17285,18 @@ type StrictServerInterface interface {
 	// UpdateGroupParticipantRole Change a participant's role
 	// (PATCH /groups/{chat_id}/participants/{user_id})
 	UpdateGroupParticipantRole(ctx context.Context, request UpdateGroupParticipantRoleRequestObject) (UpdateGroupParticipantRoleResponseObject, error)
+	// GetGroupRoleLog Role changes of the group's members
+	// (GET /groups/{chat_id}/role-log)
+	GetGroupRoleLog(ctx context.Context, request GetGroupRoleLogRequestObject) (GetGroupRoleLogResponseObject, error)
 	// TransferGroupOwnership Make another member the owner
 	// (POST /groups/{chat_id}/transfer-owner)
 	TransferGroupOwnership(ctx context.Context, request TransferGroupOwnershipRequestObject) (TransferGroupOwnershipResponseObject, error)
+	// GetLinkPreview Preview of a web page for a link in a message
+	// (GET /link-preview)
+	GetLinkPreview(ctx context.Context, request GetLinkPreviewRequestObject) (GetLinkPreviewResponseObject, error)
+	// GetLinkPreviewImage The image of a link preview, through the server
+	// (GET /link-preview/image)
+	GetLinkPreviewImage(ctx context.Context, request GetLinkPreviewImageRequestObject) (GetLinkPreviewImageResponseObject, error)
 	// DeleteMe Delete the account
 	// (DELETE /me)
 	DeleteMe(ctx context.Context, request DeleteMeRequestObject) (DeleteMeResponseObject, error)
@@ -17787,6 +18508,33 @@ func (sh *strictHandler) UpdateGroupParticipantRole(w http.ResponseWriter, r *ht
 	}
 }
 
+// GetGroupRoleLog operation middleware
+func (sh *strictHandler) GetGroupRoleLog(w http.ResponseWriter, r *http.Request, chatId ChatId, params GetGroupRoleLogParams) {
+	var request GetGroupRoleLogRequestObject
+
+	request.ChatId = chatId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetGroupRoleLog(ctx, request.(GetGroupRoleLogRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetGroupRoleLog")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetGroupRoleLogResponseObject); ok {
+		if err := validResponse.VisitGetGroupRoleLogResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // TransferGroupOwnership operation middleware
 func (sh *strictHandler) TransferGroupOwnership(w http.ResponseWriter, r *http.Request, chatId ChatId, params TransferGroupOwnershipParams) {
 	var request TransferGroupOwnershipRequestObject
@@ -17814,6 +18562,58 @@ func (sh *strictHandler) TransferGroupOwnership(w http.ResponseWriter, r *http.R
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(TransferGroupOwnershipResponseObject); ok {
 		if err := validResponse.VisitTransferGroupOwnershipResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetLinkPreview operation middleware
+func (sh *strictHandler) GetLinkPreview(w http.ResponseWriter, r *http.Request, params GetLinkPreviewParams) {
+	var request GetLinkPreviewRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetLinkPreview(ctx, request.(GetLinkPreviewRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetLinkPreview")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetLinkPreviewResponseObject); ok {
+		if err := validResponse.VisitGetLinkPreviewResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetLinkPreviewImage operation middleware
+func (sh *strictHandler) GetLinkPreviewImage(w http.ResponseWriter, r *http.Request, params GetLinkPreviewImageParams) {
+	var request GetLinkPreviewImageRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetLinkPreviewImage(ctx, request.(GetLinkPreviewImageRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetLinkPreviewImage")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetLinkPreviewImageResponseObject); ok {
+		if err := validResponse.VisitGetLinkPreviewImageResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

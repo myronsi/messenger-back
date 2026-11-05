@@ -253,7 +253,7 @@ func (c *ChatServer) UpdateGroupParticipantRole(w http.ResponseWriter, r *http.R
 		return
 	}
 	if !body.Role.Valid() {
-		WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "role", Message: "admin or member"})
+		WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "role", Message: "admin, moderator or member"})
 		return
 	}
 	g, err := c.o.Service.SetRole(r.Context(), p.UserID, id, target, postgres.Role(body.Role))
@@ -280,6 +280,32 @@ func (c *ChatServer) TransferGroupOwnership(w http.ResponseWriter, r *http.Reque
 	}
 	g, err := c.o.Service.TransferOwnership(r.Context(), p.UserID, id, target)
 	c.writeGroup(w, r, http.StatusOK, g, err, "transfer ownership")
+}
+
+func (c *ChatServer) GetGroupRoleLog(w http.ResponseWriter, r *http.Request, chatID ChatId, _ GetGroupRoleLogParams) {
+	p, ok := principalOr401(w, r)
+	if !ok {
+		return
+	}
+	id, ok := parseID(w, "chat_id", chatID)
+	if !ok {
+		return
+	}
+	entries, err := c.o.Service.RoleLog(r.Context(), p.UserID, id)
+	if err != nil {
+		serviceError(w, r, c.o.Log, "group role log", err)
+		return
+	}
+	out := GroupRoleLog{Items: make([]GroupRoleEvent, len(entries))}
+	for i, e := range entries {
+		out.Items[i] = GroupRoleEvent{Id: FormatID(e.Event.ID), Target: PresentUser(e.Target), Role: PresentRole(e.Event.Role), CreatedAt: utc(e.Event.CreatedAt)}
+		if e.Actor != nil {
+			actor := PresentUser(*e.Actor)
+			out.Items[i].Actor = &actor
+		}
+	}
+	noStore(w)
+	writeJSONStatus(w, http.StatusOK, out)
 }
 
 // LeaveGroup implements POST /groups/{id}/leave.

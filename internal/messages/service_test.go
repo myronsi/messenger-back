@@ -507,12 +507,15 @@ func TestEditAndDeletePermissions(t *testing.T) {
 	if err := f.svc.Delete(ctx, owner, group.ID, m.ID, "all"); !errors.Is(err, messages.ErrInvalid) {
 		t.Fatalf("bad scope: %v", err)
 	}
-	// In a direct chat nobody moderates.
+	// In a direct chat either side may delete any message for both.
 	a, b := f.user("anna"), f.user("bert")
 	direct, _, _ := f.pg.Chats().CreateDirect(ctx, a, b)
 	dm := f.send(direct.ID, a, "c", "hi")
-	if err := f.svc.Delete(ctx, b, direct.ID, dm.ID, messages.ScopeEveryone); !errors.Is(err, messages.ErrForbidden) {
+	if err := f.svc.Delete(ctx, b, direct.ID, dm.ID, messages.ScopeEveryone); err != nil {
 		t.Fatalf("deleting the other's direct message: %v", err)
+	}
+	if _, err := f.svc.Edit(ctx, a, direct.ID, dm.ID, "back"); !errors.Is(err, messages.ErrNotFound) {
+		t.Fatalf("edit after the other side deleted it: %v", err)
 	}
 }
 

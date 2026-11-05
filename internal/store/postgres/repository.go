@@ -190,6 +190,16 @@ type Participant struct {
 	JoinedAt          time.Time
 }
 
+// RoleEvent is a change of a group member's role. ActorID is nil when the actor's account is gone.
+type RoleEvent struct {
+	ID        int64
+	ChatID    int64
+	ActorID   *int64
+	TargetID  int64
+	Role      Role
+	CreatedAt time.Time
+}
+
 type ChatDeletion struct {
 	ChatID    int64
 	DeletedAt time.Time
@@ -275,6 +285,8 @@ type ChatRepository interface {
 	SetGroupAvatarAs(ctx context.Context, chatID, actorID int64, attachmentID *uuid.UUID) error
 	// InviteAs makes a group invitation for a user who approves invitations (a pending one is reused).
 	InviteAs(ctx context.Context, chatID, actorID, userID int64) (req ApprovalRequest, created bool, err error)
+	// RoleEvents returns the role changes of a group, newest first. limit is capped at 500.
+	RoleEvents(ctx context.Context, chatID int64, limit int) ([]RoleEvent, error)
 }
 
 // ApprovalRepository keeps the approval requests.

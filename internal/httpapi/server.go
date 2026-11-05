@@ -11,12 +11,31 @@ type Server struct {
 	account       *AccountServer
 	chats         *ChatServer
 	messages      *MessageServer
+	linkPreviews  *LinkPreviewServer
 	meta          MetaInfo
 	notifications *NotificationOptions
 }
 
 // WithMessages adds history, sending, editing, deleting and forwarding over HTTP, and the media lists.
 func (s *Server) WithMessages(m *MessageServer) *Server { s.messages = m; return s }
+
+func (s *Server) WithLinkPreviews(l *LinkPreviewServer) *Server { s.linkPreviews = l; return s }
+
+func (s *Server) GetLinkPreview(w http.ResponseWriter, r *http.Request, params GetLinkPreviewParams) {
+	if s.linkPreviews == nil {
+		s.AuthServer.GetLinkPreview(w, r, params)
+		return
+	}
+	s.linkPreviews.GetLinkPreview(w, r, params)
+}
+
+func (s *Server) GetLinkPreviewImage(w http.ResponseWriter, r *http.Request, params GetLinkPreviewImageParams) {
+	if s.linkPreviews == nil {
+		s.AuthServer.GetLinkPreviewImage(w, r, params)
+		return
+	}
+	s.linkPreviews.GetLinkPreviewImage(w, r, params)
+}
 
 // WithChats adds the chat list, direct chat, pin, read and request endpoints.
 func (s *Server) WithChats(c *ChatServer) *Server { s.chats = c; return s }
@@ -419,6 +438,14 @@ func (s *Server) SetGroupAvatar(w http.ResponseWriter, r *http.Request, chatID C
 		return
 	}
 	s.chats.SetGroupAvatar(w, r, chatID, params)
+}
+
+func (s *Server) GetGroupRoleLog(w http.ResponseWriter, r *http.Request, chatID ChatId, params GetGroupRoleLogParams) {
+	if s.chats == nil {
+		s.AuthServer.GetGroupRoleLog(w, r, chatID, params)
+		return
+	}
+	s.chats.GetGroupRoleLog(w, r, chatID, params)
 }
 
 // LeaveGroup delegates to the group endpoints.

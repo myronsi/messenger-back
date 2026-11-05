@@ -10,6 +10,28 @@ import (
 	"time"
 )
 
+const addGroupRoleEvent = `-- name: AddGroupRoleEvent :exec
+INSERT INTO group_role_events (chat_id, actor_id, target_id, role)
+VALUES ($1, $2, $3, $4)
+`
+
+type AddGroupRoleEventParams struct {
+	ChatID   int64
+	ActorID  *int64
+	TargetID int64
+	Role     string
+}
+
+func (q *Queries) AddGroupRoleEvent(ctx context.Context, arg AddGroupRoleEventParams) error {
+	_, err := q.db.Exec(ctx, addGroupRoleEvent,
+		arg.ChatID,
+		arg.ActorID,
+		arg.TargetID,
+		arg.Role,
+	)
+	return err
+}
+
 const closeGroupInvites = `-- name: CloseGroupInvites :execrows
 UPDATE approval_requests SET status = 'approved', responded_at = now()
 WHERE chat_id = $1 AND recipient_id = $2 AND type = 'group_invite' AND status = 'pending'
@@ -73,6 +95,46 @@ func (q *Queries) CreateGroupInvite(ctx context.Context, arg CreateGroupInvitePa
 		&i.Created,
 	)
 	return i, err
+}
+
+const listGroupRoleEvents = `-- name: ListGroupRoleEvents :many
+SELECT id, chat_id, actor_id, target_id, role, created_at
+FROM group_role_events
+WHERE chat_id = $1
+ORDER BY id DESC
+LIMIT $2
+`
+
+type ListGroupRoleEventsParams struct {
+	ChatID  int64
+	MaxRows int32
+}
+
+func (q *Queries) ListGroupRoleEvents(ctx context.Context, arg ListGroupRoleEventsParams) ([]GroupRoleEvent, error) {
+	rows, err := q.db.Query(ctx, listGroupRoleEvents, arg.ChatID, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GroupRoleEvent{}
+	for rows.Next() {
+		var i GroupRoleEvent
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChatID,
+			&i.ActorID,
+			&i.TargetID,
+			&i.Role,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updateGroupInfo = `-- name: UpdateGroupInfo :one

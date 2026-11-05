@@ -113,6 +113,18 @@ func (Unimplemented) SetGroupAvatar(w http.ResponseWriter, r *http.Request, chat
 	notImplemented(w, r)
 }
 
+func (Unimplemented) GetLinkPreview(w http.ResponseWriter, r *http.Request, params GetLinkPreviewParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) GetLinkPreviewImage(w http.ResponseWriter, r *http.Request, params GetLinkPreviewImageParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) GetGroupRoleLog(w http.ResponseWriter, r *http.Request, chatId ChatId, params GetGroupRoleLogParams) {
+	notImplemented(w, r)
+}
+
 func (Unimplemented) LeaveGroup(w http.ResponseWriter, r *http.Request, chatId ChatId, params LeaveGroupParams) {
 	notImplemented(w, r)
 }

@@ -19,3 +19,14 @@ RETURNING *, (xmax = 0) AS created;
 -- The user is in the group now: their pending invitations to it are settled.
 UPDATE approval_requests SET status = 'approved', responded_at = now()
 WHERE chat_id = @chat_id AND recipient_id = @recipient_id AND type = 'group_invite' AND status = 'pending';
+
+-- name: AddGroupRoleEvent :exec
+INSERT INTO group_role_events (chat_id, actor_id, target_id, role)
+VALUES (@chat_id, @actor_id, @target_id, @role);
+
+-- name: ListGroupRoleEvents :many
+SELECT id, chat_id, actor_id, target_id, role, created_at
+FROM group_role_events
+WHERE chat_id = @chat_id
+ORDER BY id DESC
+LIMIT @max_rows;

@@ -2,6 +2,22 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.12
+
+- `GET /link-preview?url=` returns the Open Graph preview of a public web page (`title`, `description`,
+  `site_name`, `image`), cached for a day. `image.url` points to `GET /link-preview/image`, which streams the
+  picture through the server (PNG, JPEG, GIF or WebP up to 5 MB) with a signature, so clients never load
+  third-party images directly. Only public `http`/`https` addresses on ports 80 and 443 are fetched.
+- Messages have an optional `system_event` (`kind`, `actor_id`, `actor_name`, `target_id`, `target_name`) on
+  `system` messages, whose `content` is then `null`. Groups write them when a group is created and when members
+  are added, join, are removed or leave. System messages do not count as unread.
+- `GET /groups/{chat_id}/role-log` lists who changed whose role and when, newest first (members only).
+- `GroupRole` and `UpdateRoleRequest` have `moderator` again: moderators may delete other members' messages.
+- In a direct chat either side may delete any message for everyone (`DELETE /messages/{message_id}?scope=everyone`
+  and `POST /chats/{chat_id}/messages/delete`).
+- The last message of a chat (`GET /chats`, `GET /chats/{chat_id}`) skips messages deleted for everyone and is the
+  newest message that still has content.
+
 ## 2.1.0-alpha.11
 
 - Attachments have `display_url`: a JPEG of at most 1600 px (`GET /attachments/{attachment_id}/content?variant=display`)
