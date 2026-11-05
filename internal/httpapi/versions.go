@@ -19,6 +19,21 @@ const (
 // maxTrackedVersions bounds the label values of the per-version request metric.
 const maxTrackedVersions = 50
 
+// clientVersionForLog keeps arbitrary header content out of access logs. Unlike
+// metric labels, valid release and build identifiers remain useful in logs.
+func clientVersionForLog(raw string) string {
+	if raw == "" {
+		return "none"
+	}
+	if len(raw) > 64 {
+		return "invalid"
+	}
+	if _, err := version.Parse(raw); err != nil {
+		return "invalid"
+	}
+	return strings.TrimSpace(raw)
+}
+
 // VersionCounter counts requests per client contract version (the metric).
 type VersionCounter interface {
 	ClientAPIRequest(apiVersion string)

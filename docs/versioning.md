@@ -22,6 +22,8 @@ Clients send `X-Client-Version` and `X-Client-Api-Version`. The current Go versi
 - Exempts the API `/meta` and `/ws` endpoints and `/healthz`, `/readyz`, `/metrics` from version gating. Keep operational endpoints behind the deployment's access controls.
 - Reports contract/minimum versions through WebSocket `hello`, because browser WebSocket requests cannot set these headers.
 
+HTTP access logs include `client_version` and `client_api_version`, including for rejected requests. Only valid version values up to 64 bytes are recorded; missing headers appear as `none`, and malformed or oversized values as `invalid`. Other request headers remain excluded from logs. The `messenger_client_api_requests_total` metric tracks client contract versions with bounded labels.
+
 `/api/v2/meta` returns `backend_version`, `commit`, `api_version`, and `min_client_api_version`, with a 60-second public cache lifetime. The retired Python `/version` endpoint is not the current metadata interface. A newer backend contract alone does not mean the browser has a new frontend build; frontend `version.json` identifies that separately.
 
 ## Release lineage and migration
