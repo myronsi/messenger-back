@@ -40,6 +40,9 @@ Contract changes only. The backend changelog is `CHANGELOG.md` in the repository
   answer `404` for an unknown, expired or already decided request and `403 forbidden` for an idle or old session.
 - `POST /auth/passkeys/register/verify` answers `400 invalid_request` instead of `401 unauthenticated` for an
   expired or used registration challenge, so clients do not treat it as a lost session.
+- A completed password recovery (key, device approval or email) removes every passkey and, except for an email
+  recovery, the recovery email. The `password_reset` security event details gain `passkeys_removed` and
+  `recovery_email_removed`.
 
 ## 2.1.0-alpha.12
 

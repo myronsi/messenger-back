@@ -176,11 +176,26 @@ func finishRecovery(ctx context.Context, tx pgx.Tx, uid int64, password, key, me
 	if _, err := tx.Exec(ctx, `UPDATE recovery_requests SET status='denied' WHERE user_id=$1 AND status IN ('pending','approved')`, uid); err != nil {
 		return out, err
 	}
+	passkeys, err := tx.Exec(ctx, `DELETE FROM user_passkeys WHERE user_id=$1`, uid)
+	if err != nil {
+		return out, err
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM webauthn_challenges WHERE user_id=$1`, uid); err != nil {
+		return out, err
+	}
+	var email int64
+	if method != "email" {
+		tag, err := tx.Exec(ctx, `DELETE FROM recovery_emails WHERE user_id=$1`, uid)
+		if err != nil {
+			return out, err
+		}
+		email = tag.RowsAffected()
+	}
 	ids, err := sqlcdb.New(tx).RevokeAllSessions(ctx, uid)
 	if err != nil {
 		return out, err
 	}
-	details, err := json.Marshal(map[string]string{"method": method})
+	details, err := json.Marshal(map[string]any{"method": method, "passkeys_removed": passkeys.RowsAffected(), "recovery_email_removed": email > 0})
 	if err != nil {
 		return out, err
 	}

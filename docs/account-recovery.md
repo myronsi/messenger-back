@@ -7,7 +7,9 @@ An account does not need an email address. Recovery endpoints do not restore ret
 
 A recovery key is shown once when created or rotated. Only its keyed hash is stored. Successful key,
 device or email recovery rotates the key, changes the password, revokes every previous session and
-invalidates outstanding email tokens and device approvals. The response creates a fresh session and
+invalidates outstanding email tokens and device approvals. It also removes every passkey and, unless the
+recovery itself used the email, the recovery email, so nothing an attacker added can sign in or reset the
+password again; the 24-hour delay would otherwise keep the owner from removing them. The response creates a fresh session and
 returns the replacement key once. Recovery method changes are blocked for 24 hours after a reset.
 Enabled two-factor authentication still requires a current code or unused backup code. A request without
 a code answers `401` `two_factor_required` once the other credentials are proven, without consuming them; see

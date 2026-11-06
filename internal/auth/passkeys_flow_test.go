@@ -276,3 +276,63 @@ func mustDecode(t *testing.T, id string) []byte {
 	}
 	return raw
 }
+
+func TestRecoveryRemovesPasskeysAndOtherRecoveryEmail(t *testing.T) {
+	for _, method := range []string{"key", "email"} {
+		t.Run(method, func(t *testing.T) {
+			e := newEnv(t)
+			ctx := context.Background()
+			c := e.client("10.0.4.1")
+			owner := e.register(t, "recovery_cleanup", "correct horse")
+			var err error
+			e.svc.passkeys, err = NewPasskeys("localhost", []string{softOrigin})
+			if err != nil {
+				t.Fatal(err)
+			}
+			device := newSoftAuthenticator(t)
+			options, err := e.svc.BeginPasskeyRegistration(ctx, c, principal(owner), "correct horse", "", "Planted key")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = e.svc.FinishPasskeyRegistration(ctx, c, principal(owner), options.ChallengeID, device.register(options)); err != nil {
+				t.Fatal(err)
+			}
+			var handle []byte
+			if err = e.store.Pool().QueryRow(ctx, `SELECT handle FROM user_webauthn_handles WHERE user_id=$1`, owner.User.ID).Scan(&handle); err != nil {
+				t.Fatal(err)
+			}
+			enableEmail(t, e, owner, "")
+			var recovered *TokenSet
+			if method == "key" {
+				recovered, err = e.svc.RecoverWithKey(ctx, c, owner.User.Username, owner.RecoveryKey, "brand new password", "")
+			} else {
+				if err = e.svc.RequestEmailReset(ctx, c, owner.User.Username); err != nil {
+					t.Fatal(err)
+				}
+				_, token := recoveryMailToken(t, e)
+				recovered, err = e.svc.ResetWithEmail(ctx, c, token, "brand new password", "")
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if keys, err := e.svc.ListPasskeys(ctx, principal(recovered)); err != nil || len(keys) != 0 {
+				t.Fatal("a passkey survived account recovery", keys, err)
+			}
+			login, err := e.svc.BeginPasskeyLogin(ctx, c, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			device.count = 1
+			if _, err = e.svc.FinishPasskeyLogin(ctx, c, login.ChallengeID, device.assert(login, handle)); !errors.Is(err, ErrInvalidCredentials) {
+				t.Fatal("a removed passkey still signs in", err)
+			}
+			status, err := e.svc.RecoveryEmailStatus(ctx, principal(recovered))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if want := map[string]string{"key": "not_added", "email": "verified"}[method]; status.State != want {
+				t.Fatal("recovery email state after recovery", method, status.State)
+			}
+		})
+	}
+}
