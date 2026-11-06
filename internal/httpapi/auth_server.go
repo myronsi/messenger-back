@@ -120,7 +120,7 @@ func (a *AuthServer) fail(w http.ResponseWriter, r *http.Request, err error, wit
 		WriteProblem(w, http.StatusServiceUnavailable, ErrorCodeInternalError)
 	case errors.Is(err, auth.ErrTwoFactorRequired):
 		WriteProblem(w, http.StatusUnauthorized, ErrorCodeTwoFactorRequired)
-	case errors.Is(err, auth.ErrQRLoginNotFound):
+	case errors.Is(err, auth.ErrQRLoginNotFound), errors.Is(err, auth.ErrRecoveryRequestNotFound):
 		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
 	case errors.Is(err, auth.ErrQRLoginDecided):
 		WriteProblem(w, http.StatusConflict, ErrorCodeConflict)
@@ -142,6 +142,8 @@ func (a *AuthServer) fail(w http.ResponseWriter, r *http.Request, err error, wit
 		WriteProblem(w, credStatus, ErrorCodeInvalidCredentials)
 	case errors.Is(err, auth.ErrInvalidTwoFactorCode):
 		WriteProblem(w, credStatus, ErrorCodeInvalidTwoFactorCode)
+	case withSession && errors.Is(err, auth.ErrInvalidChallenge):
+		WriteProblem(w, http.StatusBadRequest, ErrorCodeInvalidRequest)
 	case errors.Is(err, auth.ErrInvalidChallenge), errors.Is(err, auth.ErrInvalidRefreshToken), errors.Is(err, auth.ErrRefreshSuperseded),
 		errors.Is(err, auth.ErrInvalidRecovery), errors.Is(err, auth.ErrUnauthenticated), errors.Is(err, auth.ErrInvalidToken):
 		WriteProblem(w, http.StatusUnauthorized, ErrorCodeUnauthenticated)

@@ -128,25 +128,11 @@ func (s *Service) BeginPasskeyRegistration(ctx context.Context, c Client, p Prin
 	if s.passkeys == nil {
 		return PasskeyOptions{}, ErrPasskeysUnavailable
 	}
-	if err := s.recoveryChangesAllowed(ctx, p.UserID); err != nil {
-		return PasskeyOptions{}, err
-	}
 	name, err := validPasskeyName(name)
 	if err != nil {
 		return PasskeyOptions{}, err
 	}
-	if err = s.take(ctx, RuleTwoFAUser, fmt.Sprint(p.UserID)); err != nil {
-		return PasskeyOptions{}, err
-	}
-	hash, err := s.verifyPassword(ctx, p.UserID, password)
-	if err != nil {
-		return PasskeyOptions{}, err
-	}
-	st, err := s.store.SecuritySettings().Get(ctx, p.UserID)
-	if err != nil {
-		return PasskeyOptions{}, err
-	}
-	backup, err := s.recoveryFactor(ctx, p.UserID, st, code)
+	proof, err := s.recoveryChangeProof(ctx, p, password, code)
 	if err != nil {
 		return PasskeyOptions{}, err
 	}
@@ -167,7 +153,6 @@ func (s *Service) BeginPasskeyRegistration(ctx context.Context, c Client, p Prin
 	if err != nil {
 		return PasskeyOptions{}, err
 	}
-	proof := postgres.RecoveryProof{PasswordHash: hash, TwoFactorEnabled: st.TwoFactorEnabled, TwoFactorSecret: st.TwoFactorSecret, BackupCodeHash: backup}
 	payload, err := json.Marshal(passkeyCeremony{Session: *session, Proof: proof})
 	if err != nil {
 		return PasskeyOptions{}, err

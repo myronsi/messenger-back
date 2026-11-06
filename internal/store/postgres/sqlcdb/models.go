@@ -186,6 +186,14 @@ type RecoveryRequest struct {
 	CreatedAt         time.Time
 	ExpiresAt         time.Time
 	Location          []byte
+	ApprovalHash      *string
+}
+
+type RecoveryToken struct {
+	JtiHash   string
+	UserID    int64
+	ExpiresAt time.Time
+	UsedAt    *time.Time
 }
 
 type User struct {

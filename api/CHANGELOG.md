@@ -33,6 +33,13 @@ Contract changes only. The backend changelog is `CHANGELOG.md` in the repository
   location) and `qr_login` (the new device signed in). The new `security_alert` WebSocket event
   carries informational notices (sign-ins, password, 2FA, passkey and recovery changes, `qr_login_approved`);
   `security_notice` stays limited to `password_reset`, so released clients that sign out on it keep working.
+- `request_id` of the `recovery_request` WebSocket event is now an approval handle that differs from the
+  requester's capability. `POST /auth/recovery-requests/{requestId}/approve` and `/deny` take this handle; status
+  polling and `/complete` keep taking the requester's capability, so a signed-in device that receives the event can
+  no longer poll or complete the request. `DeviceRecoveryApproval` has a new required `password`. Approve and deny
+  answer `404` for an unknown, expired or already decided request and `403 forbidden` for an idle or old session.
+- `POST /auth/passkeys/register/verify` answers `400 invalid_request` instead of `401 unauthenticated` for an
+  expired or used registration challenge, so clients do not treat it as a lost session.
 
 ## 2.1.0-alpha.12
 

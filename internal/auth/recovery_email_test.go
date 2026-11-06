@@ -243,3 +243,59 @@ func TestRecoveryEmailResetLimitedPerAccountAndRotatesTokens(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestRecoveryEmailRetryDoesNotSpendResetLimit(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	owner := e.register(t, "email_reset_retry", "correct horse")
+	enableEmail(t, e, owner, "")
+	if err := e.svc.RequestEmailReset(ctx, e.client("10.0.2.1"), owner.User.Username); err != nil {
+		t.Fatal(err)
+	}
+	for range RuleEmailResetUser.Limit + 1 {
+		job, err := e.store.RecoveryEmails().Claim(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = e.svc.processRecoveryMail(ctx, job, func(context.Context, string, string, string) error { return errors.New("smtp down") })
+		if err == nil {
+			t.Fatal("a failed send was reported as delivered")
+		}
+		if err = e.store.RecoveryEmails().FinishJob(ctx, job.ID, false, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, token := recoveryMailToken(t, e); token == "" {
+		t.Fatal("retries after a mail server failure used up the reset limit")
+	}
+}
+
+func TestRecoveryEmailChangeRejectsUsedBackupCodeAndLimitsGuesses(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	c := e.client("10.0.3.1")
+	owner := e.register(t, "email_backup_code", "correct horse")
+	_, codes := e.enableTwoFactor(t, owner, "correct horse")
+	e.svc.recoveryMailEnabled = true
+	e.svc.recoveryWebURL = "http://localhost:4173"
+	if err := e.svc.SetRecoveryEmail(ctx, c, principal(owner), "owner@example.test", "correct horse", codes[0]); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.svc.RemoveRecoveryEmail(ctx, c, principal(owner), "correct horse", codes[0]); !errors.Is(err, ErrRecoveryKey) {
+		t.Fatal("a used backup code was not reported as an invalid code", err)
+	}
+	var limited *RateLimitError
+	for i := range RuleTwoFAUser.Limit + 1 {
+		err := e.svc.RemoveRecoveryEmail(ctx, c, principal(owner), "correct horse", "000000")
+		if errors.As(err, &limited) {
+			if i == 0 {
+				t.Fatal("limited before any wrong code")
+			}
+			return
+		}
+		if !errors.Is(err, ErrRecoveryKey) {
+			t.Fatal(err)
+		}
+	}
+	t.Fatal("wrong second-factor codes are not limited")
+}

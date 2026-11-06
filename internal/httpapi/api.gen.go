@@ -879,6 +879,7 @@ type DeleteMessagesRequestScope string
 type DeviceRecoveryApproval struct {
 	Code        *string `json:"code,omitempty"`
 	MatchNumber int     `json:"match_number"`
+	Password    string  `json:"password"`
 }
 
 // DeviceRecoveryComplete defines model for DeviceRecoveryComplete.
@@ -3392,7 +3393,7 @@ type ServerInterface interface {
 	// DeviceRecoveryStatus Poll the status of a secret recovery request
 	// (GET /auth/recovery-requests/{requestId})
 	DeviceRecoveryStatus(w http.ResponseWriter, r *http.Request, requestId string, params DeviceRecoveryStatusParams)
-	// ApproveDeviceRecovery Approve a recovery request using number matching and the second factor
+	// ApproveDeviceRecovery Approve a recovery request using number matching, the password and the second factor
 	// (POST /auth/recovery-requests/{requestId}/approve)
 	ApproveDeviceRecovery(w http.ResponseWriter, r *http.Request, requestId string, params ApproveDeviceRecoveryParams)
 	// CompleteDeviceRecovery Consume an approved request and reset the password
@@ -13845,6 +13846,22 @@ func (response ApproveDeviceRecovery403ApplicationProblemPlusJSONResponse) Visit
 	return err
 }
 
+type ApproveDeviceRecovery404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response ApproveDeviceRecovery404ApplicationProblemPlusJSONResponse) VisitApproveDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ApproveDeviceRecovery409ApplicationProblemPlusJSONResponse struct {
 	ConflictApplicationProblemPlusJSONResponse
 }
@@ -14118,6 +14135,22 @@ func (response DenyDeviceRecovery403ApplicationProblemPlusJSONResponse) VisitDen
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DenyDeviceRecovery404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response DenyDeviceRecovery404ApplicationProblemPlusJSONResponse) VisitDenyDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -22370,7 +22403,7 @@ type StrictServerInterface interface {
 	// DeviceRecoveryStatus Poll the status of a secret recovery request
 	// (GET /auth/recovery-requests/{requestId})
 	DeviceRecoveryStatus(ctx context.Context, request DeviceRecoveryStatusRequestObject) (DeviceRecoveryStatusResponseObject, error)
-	// ApproveDeviceRecovery Approve a recovery request using number matching and the second factor
+	// ApproveDeviceRecovery Approve a recovery request using number matching, the password and the second factor
 	// (POST /auth/recovery-requests/{requestId}/approve)
 	ApproveDeviceRecovery(ctx context.Context, request ApproveDeviceRecoveryRequestObject) (ApproveDeviceRecoveryResponseObject, error)
 	// CompleteDeviceRecovery Consume an approved request and reset the password

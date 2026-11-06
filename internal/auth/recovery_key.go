@@ -83,6 +83,13 @@ func (s *Service) recoveryFactor(ctx context.Context, uid int64, st postgres.Sec
 	}
 	if IsRecoveryCode(code) {
 		hash := HashRecoveryCode(code)
+		ok, err := s.store.SecuritySettings().HasRecoveryCode(ctx, uid, hash)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return nil, ErrRecoveryKey
+		}
 		return &hash, nil
 	}
 	ok, _, err := s.checkSecondFactor(ctx, uid, st, code)
@@ -95,27 +102,24 @@ func (s *Service) recoveryFactor(ctx context.Context, uid int64, st postgres.Sec
 	return nil, nil
 }
 
+func (s *Service) limitedRecoveryFactor(ctx context.Context, uid int64, st postgres.SecuritySettings, code string) (*string, error) {
+	attempt, err := s.allow(ctx, limitCheck{RuleTwoFAUser, fmt.Sprint(uid)})
+	if err != nil {
+		return nil, err
+	}
+	backup, err := s.recoveryFactor(ctx, uid, st, code)
+	if !errors.Is(err, ErrRecoveryKey) {
+		attempt.release(ctx)
+	}
+	return backup, err
+}
+
 func (s *Service) ReplaceRecoveryKey(ctx context.Context, c Client, p Principal, password, code string) (string, error) {
-	if err := s.recoveryChangesAllowed(ctx, p.UserID); err != nil {
-		return "", err
-	}
-	if err := s.take(ctx, RuleTwoFAUser, fmt.Sprint(p.UserID)); err != nil {
-		return "", err
-	}
-	hash, err := s.verifyPassword(ctx, p.UserID, password)
-	if err != nil {
-		return "", err
-	}
-	st, err := s.store.SecuritySettings().Get(ctx, p.UserID)
-	if err != nil {
-		return "", err
-	}
-	backup, err := s.recoveryFactor(ctx, p.UserID, st, code)
+	proof, err := s.recoveryChangeProof(ctx, p, password, code)
 	if err != nil {
 		return "", err
 	}
 	key, keyHash := s.newRecoveryKey()
-	proof := postgres.RecoveryProof{PasswordHash: hash, TwoFactorEnabled: st.TwoFactorEnabled, TwoFactorSecret: st.TwoFactorSecret, BackupCodeHash: backup}
 	if err = s.store.RecoveryKeys().Replace(ctx, p.UserID, proof, keyHash); err != nil {
 		if errors.Is(err, postgres.ErrNotFound) || errors.Is(err, postgres.ErrConflict) {
 			return "", ErrRecoveryKey

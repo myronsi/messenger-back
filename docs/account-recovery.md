@@ -14,7 +14,10 @@ a code answers `401` `two_factor_required` once the other credentials are proven
 [Missing second factor on other operations](auth.md#missing-second-factor-on-other-operations).
 
 Device requests expire after ten minutes. An eligible logged-in session must select the matching
-number from three choices; the requesting browser displays that number. A wrong number or denial
+number from three choices and confirm with the account password and any enabled second factor; the
+requesting browser displays that number. The `recovery_request` event carries a separate approval handle,
+so signed-in devices can approve or deny but cannot poll or complete the request: only the requesting
+browser holds that capability. A wrong number or denial
 blocks new requests for fifteen minutes. At most three active requests are allowed. Completion checks
 the approving session again, including revocation, inactivity and its pinned security credentials.
 Request capabilities are random and only keyed hashes are persisted. Unknown accounts, blocked accounts
@@ -70,11 +73,14 @@ worker maintenance. Security activity records contain method/device metadata, ne
 Migration 18 removes `user_recovery_shares`; the preceding application already uses recovery keys.
 Its down migration restores the empty table shape, not historical secrets. Retain verified database
 backups under the deployment retention policy if historical restoration is required. Migrations 19
-and 20 add device requests, passkeys and email. Migration 21 drops the unused legacy `recovery_tokens`
-table; its down migration restores the empty table shape. Keep new tables during an application-only rollback;
+and 20 add device requests, passkeys and email. Migration 21 keeps the unused legacy `recovery_tokens`
+table, because earlier releases still write it and must keep working after a rollback; a later release drops
+it. Keep new tables during an application-only rollback;
 running their down migrations deletes the newly registered methods. Removed `/auth/recover` and
 `/auth/reset-password` endpoints are absent from the contract and routing. Update clients before
 enforcing a minimum contract version that excludes older clients.
 
 Migration 22 replaces the network hint of recovery requests (`ip_hint`) with a `location` snapshot and adds
 `location` to sessions and security events; its down migration restores the empty column shapes.
+
+Migration 24 adds the approval handle (`approval_hash`) of device recovery requests.

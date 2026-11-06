@@ -16,7 +16,7 @@ users, chats and their participants, attachment metadata and the security log.
 | --- | --- |
 | `000001_users` | `users`, `user_recovery_shares` (dropped by `000018_retire_recovery_shares`) |
 | `000002_user_settings` | `user_avatar_history`, `user_privacy_settings`, `user_privacy_exceptions`, `user_blocks`, `user_contact_names` |
-| `000003_auth` | `user_security_settings`, `user_sessions`, `recovery_tokens` (dropped by `000021_drop_recovery_tokens`), `two_factor_challenges`, `user_2fa_recovery_codes`, `user_security_events` |
+| `000003_auth` | `user_security_settings`, `user_sessions`, `recovery_tokens` (unused, kept for rollbacks), `two_factor_challenges`, `user_2fa_recovery_codes`, `user_security_events` |
 | `000004_chats` | `chats`, `participants`, `user_chat_pins`, `approval_requests` |
 | `000005_attachments` | `attachments` |
 | `000006_session_rotation` | `user_session_rotated_tokens` (every replaced refresh hash, for reuse detection and the parallel-refresh grace window; pruned by the worker) with indexes for age-based cleanup of it and of revoked sessions; drops `two_factor_challenges`, login challenges live in Redis |

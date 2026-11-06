@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/hmac"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -193,11 +192,8 @@ func (s *Service) ApproveQRLogin(ctx context.Context, c Client, p Principal, id,
 	if st.TwoFactorEnabled && strings.TrimSpace(code) == "" {
 		return ErrTwoFactorRequired
 	}
-	if err = s.take(ctx, RuleTwoFAUser, fmt.Sprint(p.UserID)); err != nil {
-		return err
-	}
 	proof := postgres.RecoveryProof{PasswordHash: credentials.PasswordHash, TwoFactorEnabled: st.TwoFactorEnabled, TwoFactorSecret: st.TwoFactorSecret}
-	if proof.BackupCodeHash, err = s.recoveryFactor(ctx, p.UserID, st, code); err != nil {
+	if proof.BackupCodeHash, err = s.limitedRecoveryFactor(ctx, p.UserID, st, code); err != nil {
 		return err
 	}
 	if _, err = s.store.QRLogins().Approve(ctx, r.IDHash, p.UserID, p.SessionID, proof, s.recoveryApprovalMaxAge); err != nil {

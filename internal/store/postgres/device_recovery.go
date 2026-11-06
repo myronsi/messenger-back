@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,19 +14,21 @@ import (
 )
 
 type DeviceRecovery struct {
-	Hash, Status, UserAgent string
-	Location                *geoip.Location
-	UserID                  int64
-	Match                   int
-	Choices                 []int
-	ExpiresAt               time.Time
-	ApprovedBy              *uuid.UUID
-	Proof                   RecoveryProof
+	Hash, ApprovalHash string
+	Status, UserAgent  string
+	Location           *geoip.Location
+	UserID             int64
+	Match              int
+	Choices            []int
+	ExpiresAt          time.Time
+	ApprovedBy         *uuid.UUID
+	Proof              RecoveryProof
 }
 
 type RecoveryRequestRepository interface {
 	Create(context.Context, DeviceRecovery) (bool, error)
 	Get(context.Context, string) (DeviceRecovery, error)
+	GetForApproval(context.Context, string) (DeviceRecovery, error)
 	Decide(context.Context, string, int64, uuid.UUID, int, RecoveryProof, time.Duration, bool) (string, error)
 	Complete(context.Context, DeviceRecovery, string, string, time.Duration) (PasswordReset, error)
 }
@@ -58,7 +61,7 @@ func (r recoveryRequestRepo) Create(ctx context.Context, request DeviceRecovery)
 		if err != nil {
 			return err
 		}
-		_, err = tx.Exec(ctx, `INSERT INTO recovery_requests(id_hash,user_id,match_number,choices,user_agent,location,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7)`, request.Hash, owner, request.Match, choices, request.UserAgent, encodeLocation(request.Location), request.ExpiresAt)
+		_, err = tx.Exec(ctx, `INSERT INTO recovery_requests(id_hash,approval_hash,user_id,match_number,choices,user_agent,location,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, request.Hash, request.ApprovalHash, owner, request.Match, choices, request.UserAgent, encodeLocation(request.Location), request.ExpiresAt)
 		created = err == nil && genuine
 		return err
 	})
@@ -68,7 +71,7 @@ func (r recoveryRequestRepo) Create(ctx context.Context, request DeviceRecovery)
 func scanDeviceRecovery(row pgx.Row) (DeviceRecovery, error) {
 	var out DeviceRecovery
 	var choices, proof, location []byte
-	err := row.Scan(&out.Hash, &out.UserID, &out.Match, &out.Status, &out.UserAgent, &location, &choices, &out.ExpiresAt, &out.ApprovedBy, &proof)
+	err := row.Scan(&out.Hash, &out.ApprovalHash, &out.UserID, &out.Match, &out.Status, &out.UserAgent, &location, &choices, &out.ExpiresAt, &out.ApprovedBy, &proof)
 	if err != nil {
 		return out, mapError(err)
 	}
@@ -82,12 +85,18 @@ func scanDeviceRecovery(row pgx.Row) (DeviceRecovery, error) {
 	return out, err
 }
 
-const recoveryRequestColumns = `id_hash,COALESCE(user_id,0),match_number,status,user_agent,location,choices,expires_at,approved_by_session,approved_proof`
+const recoveryRequestColumns = `id_hash,COALESCE(approval_hash,''),COALESCE(user_id,0),match_number,status,user_agent,location,choices,expires_at,approved_by_session,approved_proof`
 
 func (r recoveryRequestRepo) Get(ctx context.Context, hash string) (DeviceRecovery, error) {
 	ctx, cancel := r.s.call(ctx)
 	defer cancel()
 	return scanDeviceRecovery(r.s.pool.QueryRow(ctx, `SELECT `+recoveryRequestColumns+` FROM recovery_requests WHERE id_hash=$1`, hash))
+}
+
+func (r recoveryRequestRepo) GetForApproval(ctx context.Context, hash string) (DeviceRecovery, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	return scanDeviceRecovery(r.s.pool.QueryRow(ctx, `SELECT `+recoveryRequestColumns+` FROM recovery_requests WHERE approval_hash=$1`, hash))
 }
 
 func recentRecoverySession(ctx context.Context, tx rowQuerier, uid int64, sid uuid.UUID, maxAge time.Duration) error {
@@ -109,6 +118,9 @@ func (r recoveryRequestRepo) Decide(ctx context.Context, hash string, uid int64,
 			return err
 		}
 		if err := recentRecoverySession(ctx, tx, uid, sid, maxAge); err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return ErrStaleApproval
+			}
 			return err
 		}
 		request, err := scanDeviceRecovery(tx.QueryRow(ctx, `SELECT `+recoveryRequestColumns+` FROM recovery_requests WHERE id_hash=$1 AND user_id=$2 FOR UPDATE`, hash, uid))
@@ -125,12 +137,16 @@ func (r recoveryRequestRepo) Decide(ctx context.Context, hash string, uid int64,
 			}
 		} else {
 			if err = consumeRecoveryFactor(ctx, tx, uid, proof.BackupCodeHash); err != nil {
+				if errors.Is(err, ErrNotFound) {
+					return ErrInvalid
+				}
 				return err
 			}
 			status = "approved"
 		}
-		proof.BackupCodeHash = nil
-		encoded, err := json.Marshal(proof)
+		pinned := proof
+		pinned.BackupCodeHash = nil
+		encoded, err := json.Marshal(pinned)
 		if err != nil {
 			return err
 		}

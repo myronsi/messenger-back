@@ -31,6 +31,7 @@
       ],
       "properties": {
         "request_id": {
+          "description": "Approval handle for POST /auth/recovery-requests/{requestId}/approve and /deny. It is not the requester's capability.",
           "type": "string",
           "minLength": 32,
           "maxLength": 128,

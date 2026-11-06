@@ -2155,12 +2155,22 @@ paths:
     parameters:
       - *a1
       - *a2
-      - *a3
+      - &a4
+        name: requestId
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 32
+          maxLength: 128
+          pattern: ^[A-Za-z0-9_-]+$
+        description: Approval handle from the recovery_request event. It is different from the
+          requester's capability and cannot poll or complete the request.
     post:
       tags:
         - auth
       operationId: approveDeviceRecovery
-      summary: Approve a recovery request using number matching and the second factor
+      summary: Approve a recovery request using number matching, the password and the second factor
       requestBody:
         required: true
         content:
@@ -2179,6 +2189,8 @@ paths:
         "401": { $ref: "#/components/responses/TwoFactorRequired" }
         "403":
           $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
         "422":
@@ -2191,7 +2203,7 @@ paths:
     parameters:
       - *a1
       - *a2
-      - *a3
+      - *a4
     post:
       tags:
         - auth
@@ -2210,6 +2222,8 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
         "422":
@@ -4552,11 +4566,15 @@ components:
       type: object
       required:
         - match_number
+        - password
       properties:
         match_number:
           type: integer
           minimum: 10
           maximum: 99
+        password:
+          type: string
+          maxLength: 1024
         code:
           type: string
           maxLength: 128

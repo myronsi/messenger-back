@@ -73,23 +73,25 @@ func TestDeviceRecoveryApprovalAsksForMissingSecondFactor(t *testing.T) {
 	other := e.register(t, "tfr_device_other", "correct horse")
 	_, codes := e.enableTwoFactor(t, owner, "correct horse")
 	e.enableTwoFactor(t, other, "correct horse")
+	approval := ""
+	e.svc.onRecoveryRequest = func(_ context.Context, _ int64, n RecoveryRequestNotice) { approval = n.ID }
 	r, err := e.svc.StartDeviceRecovery(ctx, c, owner.User.Username)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = e.svc.DecideDeviceRecovery(ctx, c, principal(other), r.ID, r.Match, "", false); !errors.Is(err, ErrRecoveryKey) {
+	if _, err = e.svc.DecideDeviceRecovery(ctx, c, principal(other), approval, r.Match, "correct horse", "", false); !errors.Is(err, ErrRecoveryRequestNotFound) {
 		t.Fatal("foreign session revealed the second factor", err)
 	}
-	if _, err = e.svc.DecideDeviceRecovery(ctx, c, principal(owner), r.ID, r.Match, "", false); !errors.Is(err, ErrTwoFactorRequired) {
+	if _, err = e.svc.DecideDeviceRecovery(ctx, c, principal(owner), approval, r.Match, "correct horse", "", false); !errors.Is(err, ErrTwoFactorRequired) {
 		t.Fatal("missing code", err)
 	}
 	if status, err := e.svc.DeviceRecoveryStatus(ctx, c, r.ID); err != nil || status != "pending" {
 		t.Fatal("two_factor_required changed the request", status, err)
 	}
-	if _, err = e.svc.DecideDeviceRecovery(ctx, c, principal(owner), r.ID, r.Match, "000000", false); !errors.Is(err, ErrRecoveryKey) {
+	if _, err = e.svc.DecideDeviceRecovery(ctx, c, principal(owner), approval, r.Match, "correct horse", "000000", false); !errors.Is(err, ErrRecoveryKey) {
 		t.Fatal("wrong code", err)
 	}
-	if status, err := e.svc.DecideDeviceRecovery(ctx, c, principal(owner), r.ID, r.Match, codes[0], false); err != nil || status != "approved" {
+	if status, err := e.svc.DecideDeviceRecovery(ctx, c, principal(owner), approval, r.Match, "correct horse", codes[0], false); err != nil || status != "approved" {
 		t.Fatal("request not usable after two_factor_required", status, err)
 	}
 	if _, err = e.svc.CompleteDeviceRecovery(ctx, c, r.ID, "brand new password"); err != nil {
@@ -103,6 +105,8 @@ func TestDeviceRecoveryWrongNumberStillDeniesWithTwoFactor(t *testing.T) {
 	c := e.client("10.0.0.124")
 	owner := e.register(t, "tfr_device_wrong", "correct horse")
 	e.enableTwoFactor(t, owner, "correct horse")
+	approval := ""
+	e.svc.onRecoveryRequest = func(_ context.Context, _ int64, n RecoveryRequestNotice) { approval = n.ID }
 	r, err := e.svc.StartDeviceRecovery(ctx, c, owner.User.Username)
 	if err != nil {
 		t.Fatal(err)
@@ -111,7 +115,7 @@ func TestDeviceRecoveryWrongNumberStillDeniesWithTwoFactor(t *testing.T) {
 	if wrong == r.Match {
 		wrong = 11
 	}
-	if status, err := e.svc.DecideDeviceRecovery(ctx, c, principal(owner), r.ID, wrong, "", false); err != nil || status != "denied" {
+	if status, err := e.svc.DecideDeviceRecovery(ctx, c, principal(owner), approval, wrong, "", "", false); err != nil || status != "denied" {
 		t.Fatal("wrong number must deny, not ask for a code", status, err)
 	}
 }

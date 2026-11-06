@@ -4,13 +4,14 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
-	"fmt"
 	"math/big"
 	"time"
 
 	"github.com/myronsi/messenger-back/internal/geoip"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 )
+
+var ErrRecoveryRequestNotFound = errors.New("recovery request not found or no longer pending")
 
 type RecoveryRequestResult struct {
 	ID        string    `json:"request_id"`
@@ -67,9 +68,13 @@ func (s *Service) StartDeviceRecovery(ctx context.Context, c Client, username st
 	if err != nil {
 		return RecoveryRequestResult{}, err
 	}
+	approval, err := randomToken(32)
+	if err != nil {
+		return RecoveryRequestResult{}, err
+	}
 	result := RecoveryRequestResult{ID: id, Match: choices[index.Int64()], ExpiresAt: s.now().Add(10 * time.Minute)}
 	location := s.geo.Lookup(c.IP)
-	request := postgres.DeviceRecovery{Hash: s.recoveryHash(id), Match: result.Match, Choices: choices, UserAgent: cleanUserAgent(c.UserAgent), Location: location, ExpiresAt: result.ExpiresAt}
+	request := postgres.DeviceRecovery{Hash: s.recoveryHash(id), ApprovalHash: s.recoveryHash(approval), Match: result.Match, Choices: choices, UserAgent: cleanUserAgent(c.UserAgent), Location: location, ExpiresAt: result.ExpiresAt}
 	u, err := s.store.Users().GetByUsername(ctx, username)
 	if err != nil && !errors.Is(err, postgres.ErrNotFound) {
 		return result, err
@@ -82,7 +87,7 @@ func (s *Service) StartDeviceRecovery(ctx context.Context, c Client, username st
 		return result, err
 	}
 	if created && s.onRecoveryRequest != nil {
-		s.onRecoveryRequest(ctx, u.ID, RecoveryRequestNotice{ID: id, Choices: choices, UserAgent: request.UserAgent, Location: location, ExpiresAt: result.ExpiresAt})
+		s.onRecoveryRequest(ctx, u.ID, RecoveryRequestNotice{ID: approval, Choices: choices, UserAgent: request.UserAgent, Location: location, ExpiresAt: result.ExpiresAt})
 	}
 	return result, nil
 }
@@ -107,21 +112,14 @@ func (s *Service) DeviceRecoveryStatus(ctx context.Context, c Client, id string)
 	return r.Status, nil
 }
 
-func (s *Service) DecideDeviceRecovery(ctx context.Context, c Client, p Principal, id string, match int, code string, deny bool) (string, error) {
+func (s *Service) DecideDeviceRecovery(ctx context.Context, c Client, p Principal, id string, match int, password, code string, deny bool) (string, error) {
 	if len(id) < 32 || len(id) > 128 || len(code) > 128 {
-		return "", ErrRecoveryKey
+		return "", ErrRecoveryRequestNotFound
 	}
-	if err := s.take(ctx, RuleTwoFAUser, fmt.Sprint(p.UserID)); err != nil {
-		return "", err
+	r, err := s.store.RecoveryRequests().GetForApproval(ctx, s.recoveryHash(id))
+	if errors.Is(err, postgres.ErrNotFound) || err == nil && (r.UserID != p.UserID || r.Status != "pending" || !r.ExpiresAt.After(s.now())) {
+		return "", ErrRecoveryRequestNotFound
 	}
-	r, err := s.store.RecoveryRequests().Get(ctx, s.recoveryHash(id))
-	if errors.Is(err, postgres.ErrNotFound) || err == nil && r.UserID != p.UserID {
-		return "", ErrRecoveryKey
-	}
-	if err != nil {
-		return "", err
-	}
-	credentials, err := s.store.Users().CredentialsByID(ctx, p.UserID)
 	if err != nil {
 		return "", err
 	}
@@ -129,18 +127,26 @@ func (s *Service) DecideDeviceRecovery(ctx context.Context, c Client, p Principa
 	if err != nil {
 		return "", err
 	}
-	proof := postgres.RecoveryProof{PasswordHash: credentials.PasswordHash, TwoFactorEnabled: st.TwoFactorEnabled, TwoFactorSecret: st.TwoFactorSecret}
+	proof := postgres.RecoveryProof{TwoFactorEnabled: st.TwoFactorEnabled, TwoFactorSecret: st.TwoFactorSecret}
 	if !deny && r.Match == match {
-		proof.BackupCodeHash, err = s.recoveryFactor(ctx, p.UserID, st, code)
-		if err != nil {
+		if proof.PasswordHash, err = s.verifyPassword(ctx, p.UserID, password); err != nil {
+			return "", err
+		}
+		if proof.BackupCodeHash, err = s.limitedRecoveryFactor(ctx, p.UserID, st, code); err != nil {
 			return "", err
 		}
 	}
 	status, err := s.store.RecoveryRequests().Decide(ctx, r.Hash, p.UserID, p.SessionID, match, proof, s.recoveryApprovalMaxAge, deny)
-	if errors.Is(err, postgres.ErrNotFound) || errors.Is(err, postgres.ErrConflict) {
+	switch {
+	case errors.Is(err, postgres.ErrNotFound):
+		return "", ErrRecoveryRequestNotFound
+	case errors.Is(err, postgres.ErrStaleApproval):
+		return "", ErrApprovalSessionStale
+	case errors.Is(err, postgres.ErrInvalid):
 		return "", ErrRecoveryKey
-	}
-	if err == nil {
+	case errors.Is(err, postgres.ErrConflict):
+		return "", ErrConflict
+	case err == nil:
 		s.event(ctx, p.UserID, "recovery_request_"+status, c, nil)
 	}
 	return status, err

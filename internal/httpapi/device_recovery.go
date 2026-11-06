@@ -38,13 +38,14 @@ func (a *AuthServer) ApproveDeviceRecovery(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	var body struct {
-		Match int    `json:"match_number"`
-		Code  string `json:"code"`
+		Match    int    `json:"match_number"`
+		Password string `json:"password"`
+		Code     string `json:"code"`
 	}
 	if !decode(w, r, &body) {
 		return
 	}
-	status, err := a.svc.DecideDeviceRecovery(r.Context(), a.clientOf(r), p, requestId, body.Match, body.Code, false)
+	status, err := a.svc.DecideDeviceRecovery(r.Context(), a.clientOf(r), p, requestId, body.Match, body.Password, body.Code, false)
 	if err != nil {
 		a.fail(w, r, err, true)
 		return
@@ -58,7 +59,7 @@ func (a *AuthServer) DenyDeviceRecovery(w http.ResponseWriter, r *http.Request, 
 	if !ok {
 		return
 	}
-	status, err := a.svc.DecideDeviceRecovery(r.Context(), a.clientOf(r), p, requestId, 0, "", true)
+	status, err := a.svc.DecideDeviceRecovery(r.Context(), a.clientOf(r), p, requestId, 0, "", "", true)
 	if err != nil {
 		a.fail(w, r, err, true)
 		return

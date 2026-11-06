@@ -63,7 +63,7 @@ func (s *Service) recoveryChangeProof(ctx context.Context, p Principal, password
 	if err != nil {
 		return postgres.RecoveryProof{}, err
 	}
-	backup, err := s.recoveryFactor(ctx, p.UserID, st, code)
+	backup, err := s.limitedRecoveryFactor(ctx, p.UserID, st, code)
 	return postgres.RecoveryProof{PasswordHash: hash, TwoFactorEnabled: st.TwoFactorEnabled, TwoFactorSecret: st.TwoFactorSecret, BackupCodeHash: backup}, err
 }
 func (s *Service) SetRecoveryEmail(ctx context.Context, c Client, p Principal, address, password, code string) error {
@@ -85,10 +85,7 @@ func (s *Service) SetRecoveryEmail(ctx context.Context, c Client, p Principal, a
 	if err != nil {
 		return err
 	}
-	err = s.store.RecoveryEmails().Set(ctx, p.UserID, proof, address, payload)
-	if errors.Is(err, postgres.ErrConflict) {
-		return ErrConflict
-	}
+	err = recoveryChangeError(s.store.RecoveryEmails().Set(ctx, p.UserID, proof, address, payload))
 	if err == nil {
 		s.event(ctx, p.UserID, "recovery_email_changed", c, nil)
 	}
@@ -99,9 +96,18 @@ func (s *Service) RemoveRecoveryEmail(ctx context.Context, c Client, p Principal
 	if err != nil {
 		return err
 	}
-	err = s.store.RecoveryEmails().Remove(ctx, p.UserID, proof)
+	err = recoveryChangeError(s.store.RecoveryEmails().Remove(ctx, p.UserID, proof))
 	if err == nil {
 		s.event(ctx, p.UserID, "recovery_email_removed", c, nil)
+	}
+	return err
+}
+func recoveryChangeError(err error) error {
+	switch {
+	case errors.Is(err, postgres.ErrConflict):
+		return ErrConflict
+	case errors.Is(err, postgres.ErrNotFound):
+		return ErrRecoveryKey
 	}
 	return err
 }
@@ -251,7 +257,7 @@ func (s *Service) processRecoveryMail(ctx context.Context, job postgres.Recovery
 	if err != nil {
 		return err
 	}
-	if job.Kind == "password_reset" {
+	if job.Kind == "password_reset" && job.Attempts <= 1 {
 		var limited *RateLimitError
 		if err = s.take(ctx, RuleEmailResetUser, fmt.Sprint(email.UserID)); errors.As(err, &limited) {
 			return nil
