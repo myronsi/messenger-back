@@ -30,8 +30,9 @@ Contract changes only. The backend changelog is `CHANGELOG.md` in the repository
   unknown requests answer `expired`. Unknown, expired or used requests answer `404` to the signed-in operations,
   already decided ones `409`.
 - New security event types `qr_login_approved`, `qr_login_denied` (both with the new device's user agent and
-  location) and `qr_login` (the new device signed in). The `security_notice` WebSocket event has the new `type`
-  `qr_login_approved`.
+  location) and `qr_login` (the new device signed in). The new `security_alert` WebSocket event
+  carries informational notices (sign-ins, password, 2FA, passkey and recovery changes, `qr_login_approved`);
+  `security_notice` stays limited to `password_reset`, so released clients that sign out on it keep working.
 
 ## 2.1.0-alpha.12
 

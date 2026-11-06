@@ -98,7 +98,7 @@ func run() error {
 			}
 			switch kind {
 			case "password_changed", "recovery_key_changed", "2fa_enabled", "2fa_disabled", "passkey_added", "passkey_removed", "recovery_email_changed", "recovery_email_removed", "passkey_counter_warning", "login", "passkey_login", "qr_login_approved":
-				rt.fanout.NotifyUser(ctx, uid, "security_notice", map[string]any{"type": kind, "user_agent": client.UserAgent, "created_at": time.Now().UTC()})
+				rt.fanout.NotifyUser(ctx, uid, "security_alert", map[string]any{"type": kind, "user_agent": client.UserAgent, "created_at": time.Now().UTC()})
 			}
 		},
 		JWTSecret:              []byte(cfg.JWTSecret.Reveal()),
