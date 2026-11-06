@@ -380,6 +380,87 @@ func (e NotificationMuteRequestDuration) Valid() bool {
 	}
 }
 
+// Defines values for QrLoginPollResult0Status.
+const (
+	QrLoginPollResult0StatusDenied  QrLoginPollResult0Status = "denied"
+	QrLoginPollResult0StatusExpired QrLoginPollResult0Status = "expired"
+	QrLoginPollResult0StatusPending QrLoginPollResult0Status = "pending"
+	QrLoginPollResult0StatusScanned QrLoginPollResult0Status = "scanned"
+)
+
+// Valid indicates whether the value is a known member of the QrLoginPollResult0Status enum.
+func (e QrLoginPollResult0Status) Valid() bool {
+	switch e {
+	case QrLoginPollResult0StatusDenied:
+		return true
+	case QrLoginPollResult0StatusExpired:
+		return true
+	case QrLoginPollResult0StatusPending:
+		return true
+	case QrLoginPollResult0StatusScanned:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for QrLoginPollResult1Status.
+const (
+	QrLoginPollResult1StatusApproved QrLoginPollResult1Status = "approved"
+)
+
+// Valid indicates whether the value is a known member of the QrLoginPollResult1Status enum.
+func (e QrLoginPollResult1Status) Valid() bool {
+	switch e {
+	case QrLoginPollResult1StatusApproved:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for QrLoginPollResult1TokenType.
+const (
+	QrLoginPollResult1TokenTypeBearer QrLoginPollResult1TokenType = "Bearer"
+)
+
+// Valid indicates whether the value is a known member of the QrLoginPollResult1TokenType enum.
+func (e QrLoginPollResult1TokenType) Valid() bool {
+	switch e {
+	case QrLoginPollResult1TokenTypeBearer:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for QrLoginStatus.
+const (
+	QrLoginStatusApproved QrLoginStatus = "approved"
+	QrLoginStatusDenied   QrLoginStatus = "denied"
+	QrLoginStatusExpired  QrLoginStatus = "expired"
+	QrLoginStatusPending  QrLoginStatus = "pending"
+	QrLoginStatusScanned  QrLoginStatus = "scanned"
+)
+
+// Valid indicates whether the value is a known member of the QrLoginStatus enum.
+func (e QrLoginStatus) Valid() bool {
+	switch e {
+	case QrLoginStatusApproved:
+		return true
+	case QrLoginStatusDenied:
+		return true
+	case QrLoginStatusExpired:
+		return true
+	case QrLoginStatusPending:
+		return true
+	case QrLoginStatusScanned:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RecoveryEmailStatusState.
 const (
 	RecoveryEmailStatusStateNotAdded RecoveryEmailStatusState = "not_added"
@@ -831,7 +912,7 @@ type DirectMessagePolicy string
 // DisableTwoFactorRequest defines model for DisableTwoFactorRequest.
 type DisableTwoFactorRequest struct {
 	// Code A code of the authenticator app, or an unused recovery code.
-	Code     string  `json:"code"`
+	Code     *string `json:"code,omitempty"`
 	Password *string `json:"password,omitempty"`
 }
 
@@ -969,6 +1050,20 @@ type LinkPreviewImage struct {
 	// Url `GET /link-preview/image` with the signed address of the page's image
 	Url   string `json:"url"`
 	Width *int   `json:"width"`
+}
+
+// Location Approximate location of a client address, looked up in an offline GeoIP database (IP geolocation by
+// DB-IP, https://db-ip.com, CC BY 4.0). The address itself is never exposed. Each field is `null` when the
+// database does not know it; clients localise the country name from `country_code`.
+type Location struct {
+	// City City name in English
+	City *string `json:"city"`
+
+	// Country Country name in English
+	Country *string `json:"country"`
+
+	// CountryCode ISO 3166-1 alpha-2 country code
+	CountryCode *string `json:"country_code"`
 }
 
 // LoginRequest defines model for LoginRequest.
@@ -1262,6 +1357,79 @@ type Problem struct {
 	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
+// QrLoginApproval defines model for QrLoginApproval.
+type QrLoginApproval struct {
+	// Code An authenticator code or an unused recovery code; required when two-factor is on.
+	Code *string `json:"code,omitempty"`
+}
+
+// QrLoginPollRequest defines model for QrLoginPollRequest.
+type QrLoginPollRequest struct {
+	PollToken *string `json:"poll_token,omitempty"`
+}
+
+// QrLoginPollResult defines model for QrLoginPollResult.
+type QrLoginPollResult struct {
+	union json.RawMessage
+}
+
+// QrLoginPollResult0 defines model for QrLoginPollResult.0.
+type QrLoginPollResult0 struct {
+	Status QrLoginPollResult0Status `json:"status"`
+}
+
+// QrLoginPollResult0Status defines model for QrLoginPollResult.0.Status.
+type QrLoginPollResult0Status string
+
+// QrLoginPollResult1 defines model for QrLoginPollResult.1.
+type QrLoginPollResult1 struct {
+	AccessToken string `json:"access_token"`
+
+	// ExpiresIn Seconds until the access token expires
+	ExpiresIn int                         `json:"expires_in"`
+	Status    QrLoginPollResult1Status    `json:"status"`
+	TokenType QrLoginPollResult1TokenType `json:"token_type"`
+}
+
+// QrLoginPollResult1Status defines model for QrLoginPollResult.1.Status.
+type QrLoginPollResult1Status string
+
+// QrLoginPollResult1TokenType defines model for QrLoginPollResult.1.TokenType.
+type QrLoginPollResult1TokenType string
+
+// QrLoginRequest defines model for QrLoginRequest.
+type QrLoginRequest struct {
+	CreatedAt Timestamp `json:"created_at"`
+
+	// Device User agent of the device that asks to sign in; `null` when it sent none.
+	Device    *string   `json:"device"`
+	ExpiresAt Timestamp `json:"expires_at"`
+
+	// Location Approximate location of the device that asks to sign in; `null` when unknown.
+	Location  *Location `json:"location"`
+	RequestId string    `json:"request_id"`
+
+	// Status `pending` until a signed-in device opens the request, `scanned` once it did, then `approved` or `denied`.
+	// `expired` when the request timed out or was used (only in poll answers).
+	Status QrLoginStatus `json:"status"`
+}
+
+// QrLoginStart defines model for QrLoginStart.
+type QrLoginStart struct {
+	ExpiresAt Timestamp `json:"expires_at"`
+
+	// PollToken Secret of the requesting device; only a keyed hash is stored.
+	PollToken string `json:"poll_token"`
+	RequestId string `json:"request_id"`
+
+	// Url `<RECOVERY_WEB_URL>/qr/<request_id>`, the content of the QR code.
+	Url string `json:"url"`
+}
+
+// QrLoginStatus `pending` until a signed-in device opens the request, `scanned` once it did, then `approved` or `denied`.
+// `expired` when the request timed out or was used (only in poll answers).
+type QrLoginStatus string
+
 // Reaction defines model for Reaction.
 type Reaction struct {
 	Emoji string `json:"emoji"`
@@ -1396,9 +1564,12 @@ type SecurityEventPage struct {
 		// Id Decimal ID as a string (Snowflake IDs exceed 2^53).
 		//
 		// Examples: 7217400317439950848
-		Id        Id      `json:"id"`
-		Type      string  `json:"type"`
-		UserAgent *string `json:"user_agent,omitempty"`
+		Id Id `json:"id"`
+
+		// Location Approximate location of the client when the event happened; `null` when unknown.
+		Location  *Location `json:"location"`
+		Type      string    `json:"type"`
+		UserAgent *string   `json:"user_agent,omitempty"`
 	} `json:"items"`
 }
 
@@ -1433,6 +1604,9 @@ type Session struct {
 	Id         openapi_types.UUID `json:"id"`
 	IsCurrent  bool               `json:"is_current"`
 	LastUsedAt Timestamp          `json:"last_used_at"`
+
+	// Location Approximate location of the device when it signed in or last refreshed its token; `null` when unknown.
+	Location *Location `json:"location"`
 }
 
 // SetAvatarRequest defines model for SetAvatarRequest.
@@ -1657,6 +1831,9 @@ type Limit = int
 // Examples: 7217400317439950848
 type MessageId = Id
 
+// QrLoginRequestId defines model for QrLoginRequestId.
+type QrLoginRequestId = string
+
 // RequestId Decimal ID as a string (Snowflake IDs exceed 2^53).
 //
 // Examples: 7217400317439950848
@@ -1690,6 +1867,9 @@ type PayloadTooLarge = Problem
 
 // TooManyRequests RFC 9457 problem details. `426 Upgrade Required` (`client_outdated`) uses the same format.
 type TooManyRequests = Problem
+
+// TwoFactorRequired RFC 9457 problem details. `426 Upgrade Required` (`client_outdated`) uses the same format.
+type TwoFactorRequired = Problem
 
 // Unauthorized RFC 9457 problem details. `426 Upgrade Required` (`client_outdated`) uses the same format.
 type Unauthorized = Problem
@@ -1836,6 +2016,51 @@ type ConfirmEmailResetParams struct {
 
 // RequestEmailResetParams defines parameters for RequestEmailReset.
 type RequestEmailResetParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// CreateQrLoginParams defines parameters for CreateQrLogin.
+type CreateQrLoginParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// GetQrLoginParams defines parameters for GetQrLogin.
+type GetQrLoginParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// ApproveQrLoginParams defines parameters for ApproveQrLogin.
+type ApproveQrLoginParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// DenyQrLoginParams defines parameters for DenyQrLogin.
+type DenyQrLoginParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// PollQrLoginParams defines parameters for PollQrLogin.
+type PollQrLoginParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
@@ -2678,6 +2903,12 @@ type ConfirmEmailResetJSONRequestBody = EmailResetConfirmation
 // RequestEmailResetJSONRequestBody defines body for RequestEmailReset for application/json ContentType.
 type RequestEmailResetJSONRequestBody = EmailResetRequest
 
+// ApproveQrLoginJSONRequestBody defines body for ApproveQrLogin for application/json ContentType.
+type ApproveQrLoginJSONRequestBody = QrLoginApproval
+
+// PollQrLoginJSONRequestBody defines body for PollQrLogin for application/json ContentType.
+type PollQrLoginJSONRequestBody = QrLoginPollRequest
+
 // RecoverWithKeyJSONRequestBody defines body for RecoverWithKey for application/json ContentType.
 type RecoverWithKeyJSONRequestBody = RecoverWithKeyRequest
 
@@ -3028,6 +3259,68 @@ func (t *LoginResponse) UnmarshalJSON(b []byte) error {
 	return err
 }
 
+// AsQrLoginPollResult0 returns the union data inside the QrLoginPollResult as a QrLoginPollResult0
+func (t QrLoginPollResult) AsQrLoginPollResult0() (QrLoginPollResult0, error) {
+	var body QrLoginPollResult0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromQrLoginPollResult0 overwrites any union data inside the QrLoginPollResult as the provided QrLoginPollResult0
+func (t *QrLoginPollResult) FromQrLoginPollResult0(v QrLoginPollResult0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeQrLoginPollResult0 performs a merge with any union data inside the QrLoginPollResult, using the provided QrLoginPollResult0
+func (t *QrLoginPollResult) MergeQrLoginPollResult0(v QrLoginPollResult0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsQrLoginPollResult1 returns the union data inside the QrLoginPollResult as a QrLoginPollResult1
+func (t QrLoginPollResult) AsQrLoginPollResult1() (QrLoginPollResult1, error) {
+	var body QrLoginPollResult1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromQrLoginPollResult1 overwrites any union data inside the QrLoginPollResult as the provided QrLoginPollResult1
+func (t *QrLoginPollResult) FromQrLoginPollResult1(v QrLoginPollResult1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeQrLoginPollResult1 performs a merge with any union data inside the QrLoginPollResult, using the provided QrLoginPollResult1
+func (t *QrLoginPollResult) MergeQrLoginPollResult1(v QrLoginPollResult1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t QrLoginPollResult) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *QrLoginPollResult) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// UploadAttachment Upload a file, image, audio or voice message
@@ -3075,6 +3368,21 @@ type ServerInterface interface {
 	// RequestEmailReset Queue a recovery email without revealing whether an account exists
 	// (POST /auth/password-reset/request)
 	RequestEmailReset(w http.ResponseWriter, r *http.Request, params RequestEmailResetParams)
+	// CreateQrLogin Start a sign-in with a QR code
+	// (POST /auth/qr-login)
+	CreateQrLogin(w http.ResponseWriter, r *http.Request, params CreateQrLoginParams)
+	// GetQrLogin Show who asks to sign in with a QR code
+	// (GET /auth/qr-login/{requestId})
+	GetQrLogin(w http.ResponseWriter, r *http.Request, requestId QrLoginRequestId, params GetQrLoginParams)
+	// ApproveQrLogin Sign the device of a QR code into this account
+	// (POST /auth/qr-login/{requestId}/approve)
+	ApproveQrLogin(w http.ResponseWriter, r *http.Request, requestId QrLoginRequestId, params ApproveQrLoginParams)
+	// DenyQrLogin Refuse a QR sign-in
+	// (POST /auth/qr-login/{requestId}/deny)
+	DenyQrLogin(w http.ResponseWriter, r *http.Request, requestId QrLoginRequestId, params DenyQrLoginParams)
+	// PollQrLogin Poll a QR sign-in and receive the session once approved
+	// (POST /auth/qr-login/{requestId}/poll)
+	PollQrLogin(w http.ResponseWriter, r *http.Request, requestId QrLoginRequestId, params PollQrLoginParams)
 	// RecoverWithKey Reset password with a single-use recovery key
 	// (POST /auth/recover/key)
 	RecoverWithKey(w http.ResponseWriter, r *http.Request, params RecoverWithKeyParams)
@@ -4275,6 +4583,342 @@ func (siw *ServerInterfaceWrapper) RequestEmailReset(w http.ResponseWriter, r *h
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RequestEmailReset(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateQrLogin operation middleware
+func (siw *ServerInterfaceWrapper) CreateQrLogin(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateQrLoginParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateQrLogin(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetQrLogin operation middleware
+func (siw *ServerInterfaceWrapper) GetQrLogin(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "requestId" -------------
+	var requestId QrLoginRequestId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "requestId", r.PathValue("requestId"), &requestId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "requestId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetQrLoginParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetQrLogin(w, r, requestId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ApproveQrLogin operation middleware
+func (siw *ServerInterfaceWrapper) ApproveQrLogin(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "requestId" -------------
+	var requestId QrLoginRequestId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "requestId", r.PathValue("requestId"), &requestId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "requestId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ApproveQrLoginParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ApproveQrLogin(w, r, requestId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DenyQrLogin operation middleware
+func (siw *ServerInterfaceWrapper) DenyQrLogin(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "requestId" -------------
+	var requestId QrLoginRequestId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "requestId", r.PathValue("requestId"), &requestId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "requestId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DenyQrLoginParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DenyQrLogin(w, r, requestId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PollQrLogin operation middleware
+func (siw *ServerInterfaceWrapper) PollQrLogin(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "requestId" -------------
+	var requestId QrLoginRequestId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "requestId", r.PathValue("requestId"), &requestId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "requestId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PollQrLoginParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PollQrLogin(w, r, requestId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -10174,6 +10818,11 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/recovery-requests/{requestId}/approve", wrapper.ApproveDeviceRecovery)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/recovery-requests/{requestId}/deny", wrapper.DenyDeviceRecovery)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/recovery-requests/{requestId}/complete", wrapper.CompleteDeviceRecovery)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/qr-login", wrapper.CreateQrLogin)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/auth/qr-login/{requestId}", wrapper.GetQrLogin)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/qr-login/{requestId}/poll", wrapper.PollQrLogin)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/qr-login/{requestId}/approve", wrapper.ApproveQrLogin)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/qr-login/{requestId}/deny", wrapper.DenyQrLogin)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/passkeys/register/options", wrapper.PasskeyRegistrationOptions)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/passkeys/register/verify", wrapper.VerifyPasskeyRegistration)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/auth/passkeys", wrapper.ListPasskeys)
@@ -10212,6 +10861,8 @@ type TooManyRequestsApplicationProblemPlusJSONResponse struct {
 
 	Headers TooManyRequestsResponseHeaders
 }
+
+type TwoFactorRequiredApplicationProblemPlusJSONResponse Problem
 
 type UnauthorizedApplicationProblemPlusJSONResponse Problem
 
@@ -11378,7 +12029,9 @@ func (response PasskeyRegistrationOptions400ApplicationProblemPlusJSONResponse) 
 	return err
 }
 
-type PasskeyRegistrationOptions401ApplicationProblemPlusJSONResponse Problem
+type PasskeyRegistrationOptions401ApplicationProblemPlusJSONResponse struct {
+	TwoFactorRequiredApplicationProblemPlusJSONResponse
+}
 
 func (response PasskeyRegistrationOptions401ApplicationProblemPlusJSONResponse) VisitPasskeyRegistrationOptionsResponse(w http.ResponseWriter) error {
 
@@ -11958,7 +12611,9 @@ func (response ConfirmEmailReset400ApplicationProblemPlusJSONResponse) VisitConf
 	return err
 }
 
-type ConfirmEmailReset401ApplicationProblemPlusJSONResponse Problem
+type ConfirmEmailReset401ApplicationProblemPlusJSONResponse struct {
+	TwoFactorRequiredApplicationProblemPlusJSONResponse
+}
 
 func (response ConfirmEmailReset401ApplicationProblemPlusJSONResponse) VisitConfirmEmailResetResponse(w http.ResponseWriter) error {
 
@@ -12191,6 +12846,519 @@ func (response RequestEmailReset503ApplicationProblemPlusJSONResponse) VisitRequ
 	return err
 }
 
+type CreateQrLoginRequestObject struct {
+	Params CreateQrLoginParams
+}
+
+type CreateQrLoginResponseObject interface {
+	VisitCreateQrLoginResponse(w http.ResponseWriter) error
+}
+
+type CreateQrLogin201JSONResponse QrLoginStart
+
+func (response CreateQrLogin201JSONResponse) VisitCreateQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateQrLogin400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response CreateQrLogin400ApplicationProblemPlusJSONResponse) VisitCreateQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateQrLogin426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response CreateQrLogin426ApplicationProblemPlusJSONResponse) VisitCreateQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateQrLogin429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response CreateQrLogin429ApplicationProblemPlusJSONResponse) VisitCreateQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetQrLoginRequestObject struct {
+	RequestId QrLoginRequestId `json:"requestId"`
+	Params    GetQrLoginParams
+}
+
+type GetQrLoginResponseObject interface {
+	VisitGetQrLoginResponse(w http.ResponseWriter) error
+}
+
+type GetQrLogin200JSONResponse QrLoginRequest
+
+func (response GetQrLogin200JSONResponse) VisitGetQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetQrLogin400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response GetQrLogin400ApplicationProblemPlusJSONResponse) VisitGetQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetQrLogin401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response GetQrLogin401ApplicationProblemPlusJSONResponse) VisitGetQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetQrLogin404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetQrLogin404ApplicationProblemPlusJSONResponse) VisitGetQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetQrLogin426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetQrLogin426ApplicationProblemPlusJSONResponse) VisitGetQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetQrLogin429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response GetQrLogin429ApplicationProblemPlusJSONResponse) VisitGetQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApproveQrLoginRequestObject struct {
+	RequestId QrLoginRequestId `json:"requestId"`
+	Params    ApproveQrLoginParams
+	Body      *ApproveQrLoginJSONRequestBody
+}
+
+type ApproveQrLoginResponseObject interface {
+	VisitApproveQrLoginResponse(w http.ResponseWriter) error
+}
+
+type ApproveQrLogin204Response struct {
+}
+
+func (response ApproveQrLogin204Response) VisitApproveQrLoginResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type ApproveQrLogin400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response ApproveQrLogin400ApplicationProblemPlusJSONResponse) VisitApproveQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApproveQrLogin401ApplicationProblemPlusJSONResponse struct {
+	TwoFactorRequiredApplicationProblemPlusJSONResponse
+}
+
+func (response ApproveQrLogin401ApplicationProblemPlusJSONResponse) VisitApproveQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApproveQrLogin403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response ApproveQrLogin403ApplicationProblemPlusJSONResponse) VisitApproveQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApproveQrLogin404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response ApproveQrLogin404ApplicationProblemPlusJSONResponse) VisitApproveQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApproveQrLogin409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response ApproveQrLogin409ApplicationProblemPlusJSONResponse) VisitApproveQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApproveQrLogin426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response ApproveQrLogin426ApplicationProblemPlusJSONResponse) VisitApproveQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApproveQrLogin429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response ApproveQrLogin429ApplicationProblemPlusJSONResponse) VisitApproveQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DenyQrLoginRequestObject struct {
+	RequestId QrLoginRequestId `json:"requestId"`
+	Params    DenyQrLoginParams
+}
+
+type DenyQrLoginResponseObject interface {
+	VisitDenyQrLoginResponse(w http.ResponseWriter) error
+}
+
+type DenyQrLogin204Response struct {
+}
+
+func (response DenyQrLogin204Response) VisitDenyQrLoginResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DenyQrLogin400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response DenyQrLogin400ApplicationProblemPlusJSONResponse) VisitDenyQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DenyQrLogin401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response DenyQrLogin401ApplicationProblemPlusJSONResponse) VisitDenyQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DenyQrLogin404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response DenyQrLogin404ApplicationProblemPlusJSONResponse) VisitDenyQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DenyQrLogin409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response DenyQrLogin409ApplicationProblemPlusJSONResponse) VisitDenyQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DenyQrLogin426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response DenyQrLogin426ApplicationProblemPlusJSONResponse) VisitDenyQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DenyQrLogin429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response DenyQrLogin429ApplicationProblemPlusJSONResponse) VisitDenyQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PollQrLoginRequestObject struct {
+	RequestId QrLoginRequestId `json:"requestId"`
+	Params    PollQrLoginParams
+	Body      *PollQrLoginJSONRequestBody
+}
+
+type PollQrLoginResponseObject interface {
+	VisitPollQrLoginResponse(w http.ResponseWriter) error
+}
+
+type PollQrLogin200ResponseHeaders struct {
+	SetCookie *string
+}
+
+type PollQrLogin200JSONResponse struct {
+	Body    QrLoginPollResult
+	Headers PollQrLogin200ResponseHeaders
+}
+
+func (response PollQrLogin200JSONResponse) VisitPollQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.SetCookie != nil {
+		w.Header().Set("Set-Cookie", fmt.Sprint(*response.Headers.SetCookie))
+	}
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PollQrLogin400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response PollQrLogin400ApplicationProblemPlusJSONResponse) VisitPollQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PollQrLogin426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response PollQrLogin426ApplicationProblemPlusJSONResponse) VisitPollQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PollQrLogin429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response PollQrLogin429ApplicationProblemPlusJSONResponse) VisitPollQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type RecoverWithKeyRequestObject struct {
 	Params RecoverWithKeyParams
 	Body   *RecoverWithKeyJSONRequestBody
@@ -12231,7 +13399,7 @@ func (response RecoverWithKey400ApplicationProblemPlusJSONResponse) VisitRecover
 }
 
 type RecoverWithKey401ApplicationProblemPlusJSONResponse struct {
-	UnauthorizedApplicationProblemPlusJSONResponse
+	TwoFactorRequiredApplicationProblemPlusJSONResponse
 }
 
 func (response RecoverWithKey401ApplicationProblemPlusJSONResponse) VisitRecoverWithKeyResponse(w http.ResponseWriter) error {
@@ -12646,7 +13814,7 @@ func (response ApproveDeviceRecovery400ApplicationProblemPlusJSONResponse) Visit
 }
 
 type ApproveDeviceRecovery401ApplicationProblemPlusJSONResponse struct {
-	UnauthorizedApplicationProblemPlusJSONResponse
+	TwoFactorRequiredApplicationProblemPlusJSONResponse
 }
 
 func (response ApproveDeviceRecovery401ApplicationProblemPlusJSONResponse) VisitApproveDeviceRecoveryResponse(w http.ResponseWriter) error {
@@ -16646,7 +17814,7 @@ func (response DisableTwoFactor400ApplicationProblemPlusJSONResponse) VisitDisab
 }
 
 type DisableTwoFactor401ApplicationProblemPlusJSONResponse struct {
-	UnauthorizedApplicationProblemPlusJSONResponse
+	TwoFactorRequiredApplicationProblemPlusJSONResponse
 }
 
 func (response DisableTwoFactor401ApplicationProblemPlusJSONResponse) VisitDisableTwoFactorResponse(w http.ResponseWriter) error {
@@ -17268,7 +18436,9 @@ func (response RemoveRecoveryEmail400ApplicationProblemPlusJSONResponse) VisitRe
 	return err
 }
 
-type RemoveRecoveryEmail401ApplicationProblemPlusJSONResponse Problem
+type RemoveRecoveryEmail401ApplicationProblemPlusJSONResponse struct {
+	TwoFactorRequiredApplicationProblemPlusJSONResponse
+}
 
 func (response RemoveRecoveryEmail401ApplicationProblemPlusJSONResponse) VisitRemoveRecoveryEmailResponse(w http.ResponseWriter) error {
 
@@ -17531,7 +18701,9 @@ func (response SetRecoveryEmail400ApplicationProblemPlusJSONResponse) VisitSetRe
 	return err
 }
 
-type SetRecoveryEmail401ApplicationProblemPlusJSONResponse Problem
+type SetRecoveryEmail401ApplicationProblemPlusJSONResponse struct {
+	TwoFactorRequiredApplicationProblemPlusJSONResponse
+}
 
 func (response SetRecoveryEmail401ApplicationProblemPlusJSONResponse) VisitSetRecoveryEmailResponse(w http.ResponseWriter) error {
 
@@ -18596,7 +19768,7 @@ func (response ReplaceRecoveryKey400ApplicationProblemPlusJSONResponse) VisitRep
 }
 
 type ReplaceRecoveryKey401ApplicationProblemPlusJSONResponse struct {
-	UnauthorizedApplicationProblemPlusJSONResponse
+	TwoFactorRequiredApplicationProblemPlusJSONResponse
 }
 
 func (response ReplaceRecoveryKey401ApplicationProblemPlusJSONResponse) VisitReplaceRecoveryKeyResponse(w http.ResponseWriter) error {
@@ -21174,6 +22346,21 @@ type StrictServerInterface interface {
 	// RequestEmailReset Queue a recovery email without revealing whether an account exists
 	// (POST /auth/password-reset/request)
 	RequestEmailReset(ctx context.Context, request RequestEmailResetRequestObject) (RequestEmailResetResponseObject, error)
+	// CreateQrLogin Start a sign-in with a QR code
+	// (POST /auth/qr-login)
+	CreateQrLogin(ctx context.Context, request CreateQrLoginRequestObject) (CreateQrLoginResponseObject, error)
+	// GetQrLogin Show who asks to sign in with a QR code
+	// (GET /auth/qr-login/{requestId})
+	GetQrLogin(ctx context.Context, request GetQrLoginRequestObject) (GetQrLoginResponseObject, error)
+	// ApproveQrLogin Sign the device of a QR code into this account
+	// (POST /auth/qr-login/{requestId}/approve)
+	ApproveQrLogin(ctx context.Context, request ApproveQrLoginRequestObject) (ApproveQrLoginResponseObject, error)
+	// DenyQrLogin Refuse a QR sign-in
+	// (POST /auth/qr-login/{requestId}/deny)
+	DenyQrLogin(ctx context.Context, request DenyQrLoginRequestObject) (DenyQrLoginResponseObject, error)
+	// PollQrLogin Poll a QR sign-in and receive the session once approved
+	// (POST /auth/qr-login/{requestId}/poll)
+	PollQrLogin(ctx context.Context, request PollQrLoginRequestObject) (PollQrLoginResponseObject, error)
 	// RecoverWithKey Reset password with a single-use recovery key
 	// (POST /auth/recover/key)
 	RecoverWithKey(ctx context.Context, request RecoverWithKeyRequestObject) (RecoverWithKeyResponseObject, error)
@@ -21943,6 +23130,157 @@ func (sh *strictHandler) RequestEmailReset(w http.ResponseWriter, r *http.Reques
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(RequestEmailResetResponseObject); ok {
 		if err := validResponse.VisitRequestEmailResetResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateQrLogin operation middleware
+func (sh *strictHandler) CreateQrLogin(w http.ResponseWriter, r *http.Request, params CreateQrLoginParams) {
+	var request CreateQrLoginRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateQrLogin(ctx, request.(CreateQrLoginRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateQrLogin")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateQrLoginResponseObject); ok {
+		if err := validResponse.VisitCreateQrLoginResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetQrLogin operation middleware
+func (sh *strictHandler) GetQrLogin(w http.ResponseWriter, r *http.Request, requestId QrLoginRequestId, params GetQrLoginParams) {
+	var request GetQrLoginRequestObject
+
+	request.RequestId = requestId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetQrLogin(ctx, request.(GetQrLoginRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetQrLogin")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetQrLoginResponseObject); ok {
+		if err := validResponse.VisitGetQrLoginResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ApproveQrLogin operation middleware
+func (sh *strictHandler) ApproveQrLogin(w http.ResponseWriter, r *http.Request, requestId QrLoginRequestId, params ApproveQrLoginParams) {
+	var request ApproveQrLoginRequestObject
+
+	request.RequestId = requestId
+	request.Params = params
+
+	var body ApproveQrLoginJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+			return
+		}
+	} else {
+		request.Body = &body
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ApproveQrLogin(ctx, request.(ApproveQrLoginRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ApproveQrLogin")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ApproveQrLoginResponseObject); ok {
+		if err := validResponse.VisitApproveQrLoginResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DenyQrLogin operation middleware
+func (sh *strictHandler) DenyQrLogin(w http.ResponseWriter, r *http.Request, requestId QrLoginRequestId, params DenyQrLoginParams) {
+	var request DenyQrLoginRequestObject
+
+	request.RequestId = requestId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DenyQrLogin(ctx, request.(DenyQrLoginRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DenyQrLogin")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DenyQrLoginResponseObject); ok {
+		if err := validResponse.VisitDenyQrLoginResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PollQrLogin operation middleware
+func (sh *strictHandler) PollQrLogin(w http.ResponseWriter, r *http.Request, requestId QrLoginRequestId, params PollQrLoginParams) {
+	var request PollQrLoginRequestObject
+
+	request.RequestId = requestId
+	request.Params = params
+
+	var body PollQrLoginJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PollQrLogin(ctx, request.(PollQrLoginRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PollQrLogin")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PollQrLoginResponseObject); ok {
+		if err := validResponse.VisitPollQrLoginResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

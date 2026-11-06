@@ -11,7 +11,7 @@ import (
 )
 
 const listSecurityEvents = `-- name: ListSecurityEvents :many
-SELECT id, user_id, event_type, ip_address, user_agent, details, created_at
+SELECT id, user_id, event_type, ip_address, user_agent, details, created_at, location
 FROM user_security_events
 WHERE user_id = $1 AND ($2::bigint IS NULL OR id < $2::bigint)
 ORDER BY id DESC
@@ -42,6 +42,7 @@ func (q *Queries) ListSecurityEvents(ctx context.Context, arg ListSecurityEvents
 			&i.UserAgent,
 			&i.Details,
 			&i.CreatedAt,
+			&i.Location,
 		); err != nil {
 			return nil, err
 		}
@@ -54,9 +55,9 @@ func (q *Queries) ListSecurityEvents(ctx context.Context, arg ListSecurityEvents
 }
 
 const recordSecurityEvent = `-- name: RecordSecurityEvent :one
-INSERT INTO user_security_events (user_id, event_type, ip_address, user_agent, details)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, user_id, event_type, ip_address, user_agent, details, created_at
+INSERT INTO user_security_events (user_id, event_type, ip_address, user_agent, location, details)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, user_id, event_type, ip_address, user_agent, details, created_at, location
 `
 
 type RecordSecurityEventParams struct {
@@ -64,6 +65,7 @@ type RecordSecurityEventParams struct {
 	EventType string
 	IpAddress *netip.Addr
 	UserAgent *string
+	Location  []byte
 	Details   []byte
 }
 
@@ -73,6 +75,7 @@ func (q *Queries) RecordSecurityEvent(ctx context.Context, arg RecordSecurityEve
 		arg.EventType,
 		arg.IpAddress,
 		arg.UserAgent,
+		arg.Location,
 		arg.Details,
 	)
 	var i UserSecurityEvent
@@ -84,6 +87,7 @@ func (q *Queries) RecordSecurityEvent(ctx context.Context, arg RecordSecurityEve
 		&i.UserAgent,
 		&i.Details,
 		&i.CreatedAt,
+		&i.Location,
 	)
 	return i, err
 }

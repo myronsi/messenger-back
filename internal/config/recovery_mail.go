@@ -19,7 +19,10 @@ type RecoveryMail struct {
 
 func (m RecoveryMail) validate() []string {
 	if m.Host == "" {
-		return nil
+		if m.WebURL == "" {
+			return nil
+		}
+		return validateWebURL(m.WebURL)
 	}
 	var out []string
 	if strings.ContainsAny(m.Host, "/\r\n ") || m.Port < 1 || m.Port > 65535 {
@@ -36,17 +39,20 @@ func (m RecoveryMail) validate() []string {
 	if m.TLSMode != "starttls" && m.TLSMode != "tls" && (m.TLSMode != "plain" || !local) {
 		out = append(out, "SMTP_TLS_MODE must be starttls or tls (plain is allowed only for a local test server)")
 	}
-	u, err := url.Parse(m.WebURL)
+	return append(out, validateWebURL(m.WebURL)...)
+}
+
+func validateWebURL(raw string) []string {
+	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "" && u.Path != "/" {
-		out = append(out, "RECOVERY_WEB_URL must be a frontend origin")
-	} else {
-		localWeb := u.Hostname() == "localhost"
-		if ip := net.ParseIP(u.Hostname()); ip != nil && ip.IsLoopback() {
-			localWeb = true
-		}
-		if u.Scheme != "https" && (u.Scheme != "http" || !localWeb) {
-			out = append(out, "RECOVERY_WEB_URL must use HTTPS except for local testing")
-		}
+		return []string{"RECOVERY_WEB_URL must be a frontend origin"}
 	}
-	return out
+	localWeb := u.Hostname() == "localhost"
+	if ip := net.ParseIP(u.Hostname()); ip != nil && ip.IsLoopback() {
+		localWeb = true
+	}
+	if u.Scheme != "https" && (u.Scheme != "http" || !localWeb) {
+		return []string{"RECOVERY_WEB_URL must use HTTPS except for local testing"}
+	}
+	return nil
 }

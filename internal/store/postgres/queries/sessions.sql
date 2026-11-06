@@ -1,6 +1,6 @@
 -- name: CreateSession :one
-INSERT INTO user_sessions (user_id, refresh_token_hash, user_agent, ip_address, expires_at)
-VALUES (@user_id, @refresh_token_hash, @user_agent, @ip_address, @expires_at)
+INSERT INTO user_sessions (user_id, refresh_token_hash, user_agent, ip_address, location, expires_at)
+VALUES (@user_id, @refresh_token_hash, @user_agent, @ip_address, @location, @expires_at)
 RETURNING *;
 
 -- name: GetSession :one
@@ -27,7 +27,8 @@ SET refresh_token_hash = @new_hash,
     last_active_at     = now(),
     expires_at         = @expires_at,
     user_agent         = COALESCE(sqlc.narg('user_agent')::text, user_agent),
-    ip_address         = COALESCE(sqlc.narg('ip_address')::inet, ip_address)
+    ip_address         = COALESCE(sqlc.narg('ip_address')::inet, ip_address),
+    location           = CASE WHEN sqlc.narg('ip_address')::inet IS NULL THEN location ELSE sqlc.narg('location')::jsonb END
 WHERE id = @id
 RETURNING *;
 

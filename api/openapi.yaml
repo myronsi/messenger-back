@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.13
+  version: 2.1.0-alpha.14
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -223,7 +223,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/RegisterResponse" }
         "400": { $ref: "#/components/responses/BadRequest" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
+        "401": { $ref: "#/components/responses/TwoFactorRequired" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
@@ -266,7 +266,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/RecoveryKeyResult" }
         "400": { $ref: "#/components/responses/BadRequest" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
+        "401": { $ref: "#/components/responses/TwoFactorRequired" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
@@ -587,7 +587,7 @@ paths:
       tags: [me]
       operationId: disableTwoFactor
       summary: Turn two-factor off
-      description: "A wrong password or code answers `403` (`invalid_credentials` or `invalid_two_factor_code`); `409` when two-factor is off."
+      description: "A wrong password or code answers `403` (`invalid_credentials` or `invalid_two_factor_code`); a correct password without `code` answers `401` with `code: two_factor_required`; `409` when two-factor is off."
       requestBody:
         required: true
         content:
@@ -598,7 +598,7 @@ paths:
         "204":
           description: Two-factor authentication disabled
         "400": { $ref: "#/components/responses/BadRequest" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
+        "401": { $ref: "#/components/responses/TwoFactorRequired" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
@@ -2176,8 +2176,7 @@ paths:
                 $ref: "#/components/schemas/DeviceRecoveryStatus"
         "400":
           $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
+        "401": { $ref: "#/components/responses/TwoFactorRequired" }
         "403":
           $ref: "#/components/responses/Forbidden"
         "409":
@@ -2258,6 +2257,155 @@ paths:
         "429":
           $ref: "#/components/responses/TooManyRequests"
 
+  /auth/qr-login:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    post:
+      tags: [auth]
+      operationId: createQrLogin
+      summary: Start a sign-in with a QR code
+      description: |
+        Called by a device that is not signed in. Show `url` as a QR code and poll
+        `POST /auth/qr-login/{requestId}/poll` with `poll_token` until the status is final. The request expires
+        after 2 minutes. Keep `poll_token` in memory only; it is the secret that receives the session.
+      security: []
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QrLoginStart" }
+              example:
+                request_id: 3q2-7wEAAAD9W8b0kZ3lYfHk6gF1n9cQmR2pVx4sTtU
+                poll_token: Z8mJ1vQe9cT0yR4uB7nK2wX5aH3sD6fG1jL8pM0oN4q
+                url: https://messenger.example.com/qr/3q2-7wEAAAD9W8b0kZ3lYfHk6gF1n9cQmR2pVx4sTtU
+                expires_at: "2026-11-06T12:02:00Z"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /auth/qr-login/{requestId}:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/QrLoginRequestId"
+    get:
+      tags: [auth]
+      operationId: getQrLogin
+      summary: Show who asks to sign in with a QR code
+      description: |
+        Called by a signed-in device after it opened the link of the QR code. The first call moves the request from
+        `pending` to `scanned` and binds it to the caller: other accounts get `404` from then on. Show `device` and
+        `location` and let the user confirm that the sign-in is their own before approving. Unknown, expired and
+        used requests answer `404`.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QrLoginRequest" }
+              example:
+                request_id: 3q2-7wEAAAD9W8b0kZ3lYfHk6gF1n9cQmR2pVx4sTtU
+                status: scanned
+                device: Mozilla/5.0 (Windows NT 10.0; Win64; x64) Firefox/140.0
+                location: { city: Berlin, country_code: DE, country: Germany }
+                created_at: "2026-11-06T12:00:00Z"
+                expires_at: "2026-11-06T12:02:00Z"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /auth/qr-login/{requestId}/poll:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/QrLoginRequestId"
+    post:
+      tags: [auth]
+      operationId: pollQrLogin
+      summary: Poll a QR sign-in and receive the session once approved
+      description: |
+        Called by the device that created the request, about once per second (at most 120 polls per 2 minutes per
+        client address). While the request is open the answer is `pending` or `scanned`. The first poll after
+        approval signs the device in exactly like a successful `POST /auth/login`: it sets the refresh cookie and
+        returns `status: approved` with the token fields. Later polls, unknown requests, a wrong `poll_token` and
+        expired requests all answer `expired`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QrLoginPollRequest" }
+      responses:
+        "200":
+          description: The current status, plus the session when it was just approved
+          headers:
+            Set-Cookie: { $ref: "#/components/headers/RefreshCookie" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QrLoginPollResult" }
+              examples:
+                waiting:
+                  value: { status: scanned }
+                approved:
+                  value:
+                    status: approved
+                    access_token: eyJhbGciOiJIUzI1NiJ9.e30.signature
+                    token_type: Bearer
+                    expires_in: 900
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /auth/qr-login/{requestId}/approve:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/QrLoginRequestId"
+    post:
+      tags: [auth]
+      operationId: approveQrLogin
+      summary: Sign the device of a QR code into this account
+      description: |
+        Single use. The request must be `pending` or `scanned`, not expired and not bound to another account
+        (`404` otherwise; `409` when it was already approved or denied). The calling session must be active and
+        used within `RECOVERY_APPROVAL_MAX_AGE` (`403 forbidden` otherwise). With two-factor on, send `code` (an
+        authenticator code or an unused recovery code); without it the answer is `401 two_factor_required` and the
+        request stays approvable. A wrong code answers `400 invalid_credentials`. The body may be omitted.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QrLoginApproval" }
+            example: { code: "123456" }
+      responses:
+        "204": { description: Approved; the new device receives its session on its next poll }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/TwoFactorRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /auth/qr-login/{requestId}/deny:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/QrLoginRequestId"
+    post:
+      tags: [auth]
+      operationId: denyQrLogin
+      summary: Refuse a QR sign-in
+      description: The new device then polls `denied`. Same `404` and `409` rules as approving.
+      responses:
+        "204": { description: Denied }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
   /auth/passkeys/register/options:
     parameters: &a1
       - &a2
@@ -2288,12 +2436,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-        "401":
-          description: Unauthorized
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/Problem"
+        "401": { $ref: "#/components/responses/TwoFactorRequired" }
         "403":
           description: Forbidden
           content:
@@ -2919,12 +3062,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-        "401":
-          description: Unauthorized
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/Problem"
+        "401": { $ref: "#/components/responses/TwoFactorRequired" }
         "403":
           description: Forbidden
           content:
@@ -2981,12 +3119,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-        "401":
-          description: Unauthorized
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/Problem"
+        "401": { $ref: "#/components/responses/TwoFactorRequired" }
         "403":
           description: Forbidden
           content:
@@ -3185,12 +3318,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-        "401":
-          description: Unauthorized
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/Problem"
+        "401": { $ref: "#/components/responses/TwoFactorRequired" }
         "403":
           description: Forbidden
           content:
@@ -3247,6 +3375,12 @@ components:
       schema: { type: string }
 
   parameters:
+    QrLoginRequestId:
+      name: requestId
+      in: path
+      required: true
+      description: ID of a QR sign-in request, from the QR code link `/qr/<request_id>`.
+      schema: { type: string, minLength: 32, maxLength: 128, pattern: "^[A-Za-z0-9_-]+$" }
     Limit:
       name: limit
       in: query
@@ -3314,6 +3448,17 @@ components:
           schema: { $ref: "#/components/schemas/Problem" }
     Unauthorized:
       description: Missing, invalid or expired credentials
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    TwoFactorRequired:
+      description: |
+        Missing, invalid or expired credentials, or `code: two_factor_required`. `two_factor_required` means every
+        other credential in the request was valid, the account has two-factor on, and no `code` was sent. Nothing
+        single-use (recovery key, email token, recovery request) was consumed: send the same request again with
+        `code`. Invalid other credentials get the usual error of the operation instead, whatever the two-factor
+        state, and a wrong `code` keeps its usual error. On operations that need an access token this 401 does not
+        mean the session is lost; tell the two apart by `code`.
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
@@ -3618,12 +3763,17 @@ components:
           type: array
           items:
             type: object
-            required: [id, type, created_at]
+            required: [id, type, created_at, location]
             properties:
               id: { $ref: "#/components/schemas/Id" }
               type: { type: string }
               created_at: { type: string, format: date-time }
               user_agent: { type: [string, "null"], maxLength: 512 }
+              location:
+                description: Approximate location of the client when the event happened; `null` when unknown.
+                oneOf:
+                  - $ref: "#/components/schemas/Location"
+                  - type: "null"
     RegisterResponse:
       allOf:
         - $ref: "#/components/schemas/TokenResponse"
@@ -3688,7 +3838,7 @@ components:
         session_duration_days: { type: integer, minimum: 1, maximum: 365 }
     Session:
       type: object
-      required: [id, created_at, last_used_at, is_current]
+      required: [id, created_at, last_used_at, is_current, location]
       properties:
         id: { type: string, format: uuid }
         device:
@@ -3698,6 +3848,25 @@ components:
         last_used_at: { $ref: "#/components/schemas/Timestamp" }
         expires_at: { $ref: "#/components/schemas/Timestamp" }
         is_current: { type: boolean }
+        location:
+          description: Approximate location of the device when it signed in or last refreshed its token; `null` when unknown.
+          oneOf:
+            - $ref: "#/components/schemas/Location"
+            - type: "null"
+    Location:
+      type: object
+      description: |
+        Approximate location of a client address, looked up in an offline GeoIP database (IP geolocation by
+        DB-IP, https://db-ip.com, CC BY 4.0). The address itself is never exposed. Each field is `null` when the
+        database does not know it; clients localise the country name from `country_code`.
+      required: [city, country_code, country]
+      properties:
+        city: { type: [string, "null"], description: City name in English }
+        country_code:
+          type: [string, "null"]
+          pattern: "^[A-Z]{2}$"
+          description: ISO 3166-1 alpha-2 country code
+        country: { type: [string, "null"], description: Country name in English }
     TwoFactorSetup:
       type: object
       required: [secret, otpauth_uri]
@@ -3719,7 +3888,7 @@ components:
           description: One-time codes for signing in without the authenticator app. Shown only once.
     DisableTwoFactorRequest:
       type: object
-      required: [password, code]
+      required: [password]
       properties:
         password: { type: string, maxLength: 128, writeOnly: true }
         code:
@@ -4401,6 +4570,75 @@ components:
           minLength: 8
           maxLength: 128
           writeOnly: true
+
+    QrLoginStatus:
+      type: string
+      description: |
+        `pending` until a signed-in device opens the request, `scanned` once it did, then `approved` or `denied`.
+        `expired` when the request timed out or was used (only in poll answers).
+      enum: [pending, scanned, approved, denied, expired]
+    QrLoginStart:
+      type: object
+      required: [request_id, poll_token, url, expires_at]
+      properties:
+        request_id:
+          type: string
+          minLength: 32
+          maxLength: 128
+          pattern: ^[A-Za-z0-9_-]+$
+        poll_token:
+          type: string
+          minLength: 32
+          maxLength: 128
+          pattern: ^[A-Za-z0-9_-]+$
+          description: Secret of the requesting device; only a keyed hash is stored.
+        url:
+          type: string
+          description: "`<RECOVERY_WEB_URL>/qr/<request_id>`, the content of the QR code."
+        expires_at: { $ref: "#/components/schemas/Timestamp" }
+    QrLoginRequest:
+      type: object
+      required: [request_id, status, device, location, created_at, expires_at]
+      properties:
+        request_id: { type: string }
+        status: { $ref: "#/components/schemas/QrLoginStatus" }
+        device:
+          type: [string, "null"]
+          maxLength: 512
+          description: User agent of the device that asks to sign in; `null` when it sent none.
+        location:
+          description: Approximate location of the device that asks to sign in; `null` when unknown.
+          oneOf:
+            - $ref: "#/components/schemas/Location"
+            - type: "null"
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        expires_at: { $ref: "#/components/schemas/Timestamp" }
+    QrLoginPollRequest:
+      type: object
+      required: [poll_token]
+      properties:
+        poll_token: { type: string, maxLength: 128, writeOnly: true }
+    QrLoginPollResult:
+      oneOf:
+        - type: object
+          required: [status]
+          properties:
+            status:
+              type: string
+              enum: [pending, scanned, denied, expired]
+        - allOf:
+            - $ref: "#/components/schemas/TokenResponse"
+            - type: object
+              required: [status]
+              properties:
+                status: { type: string, const: approved }
+    QrLoginApproval:
+      type: object
+      properties:
+        code:
+          type: string
+          maxLength: 128
+          description: An authenticator code or an unused recovery code; required when two-factor is on.
 
     PasskeyOptions:
       type: object

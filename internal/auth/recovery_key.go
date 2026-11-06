@@ -71,10 +71,15 @@ func (s *Service) RecoveryKeyStatus(ctx context.Context, p Principal) (RecoveryK
 
 // recoveryFactor leaves backup-code consumption to the password/key transaction.
 // The sealed secret is compared again under lock so concurrent 2FA changes cannot
-// downgrade the proof. TOTP replay claims are deliberately fail-closed.
+// downgrade the proof. TOTP replay claims are deliberately fail-closed. Callers
+// verify every other credential first: a missing code answers ErrTwoFactorRequired,
+// which reveals that two-factor is on, and must come before any single-use proof is consumed.
 func (s *Service) recoveryFactor(ctx context.Context, uid int64, st postgres.SecuritySettings, code string) (*string, error) {
 	if !st.TwoFactorEnabled {
 		return nil, nil
+	}
+	if strings.TrimSpace(code) == "" {
+		return nil, ErrTwoFactorRequired
 	}
 	if IsRecoveryCode(code) {
 		hash := HashRecoveryCode(code)
@@ -122,8 +127,9 @@ func (s *Service) ReplaceRecoveryKey(ctx context.Context, c Client, p Principal,
 }
 
 // RecoverWithKey has one public failure for unknown accounts, malformed/used keys
-// and absent/wrong second factors. A replacement key is issued atomically with
-// the reset so a lost response never leaves a consumed key usable by an attacker.
+// and wrong second factors. Only after a valid key does a missing second factor
+// answer ErrTwoFactorRequired, and the key stays unused. A replacement key is issued
+// atomically with the reset so a lost response never leaves a consumed key usable by an attacker.
 func (s *Service) RecoverWithKey(ctx context.Context, c Client, username, key, newPassword, code string) (*TokenSet, error) {
 	username = normalizeUsername(username)
 	if len(username) > 64 || len(code) > 128 {

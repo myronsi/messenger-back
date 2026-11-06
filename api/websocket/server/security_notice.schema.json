@@ -38,7 +38,8 @@
             "recovery_email_removed",
             "passkey_counter_warning",
             "login",
-            "passkey_login"
+            "passkey_login",
+            "qr_login_approved"
           ]
         },
         "user_agent": {

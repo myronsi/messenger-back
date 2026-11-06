@@ -6,9 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"net/netip"
 	"time"
 
+	"github.com/myronsi/messenger-back/internal/geoip"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 )
 
@@ -19,11 +19,11 @@ type RecoveryRequestResult struct {
 }
 
 type RecoveryRequestNotice struct {
-	ID        string    `json:"request_id"`
-	UserAgent string    `json:"user_agent"`
-	IPHint    string    `json:"ip_hint"`
-	Choices   []int     `json:"choices"`
-	ExpiresAt time.Time `json:"expires_at"`
+	ID        string          `json:"request_id"`
+	UserAgent string          `json:"user_agent"`
+	Location  *geoip.Location `json:"location"`
+	Choices   []int           `json:"choices"`
+	ExpiresAt time.Time       `json:"expires_at"`
 }
 
 func recoveryNumbers() ([]int, error) {
@@ -68,15 +68,8 @@ func (s *Service) StartDeviceRecovery(ctx context.Context, c Client, username st
 		return RecoveryRequestResult{}, err
 	}
 	result := RecoveryRequestResult{ID: id, Match: choices[index.Int64()], ExpiresAt: s.now().Add(10 * time.Minute)}
-	hint := "Unknown network"
-	if c.IP.IsValid() {
-		bits := 24
-		if c.IP.Is6() {
-			bits = 48
-		}
-		hint = netip.PrefixFrom(c.IP.Unmap(), bits).Masked().String()
-	}
-	request := postgres.DeviceRecovery{Hash: s.recoveryHash(id), Match: result.Match, Choices: choices, UserAgent: cleanUserAgent(c.UserAgent), IPHint: hint, ExpiresAt: result.ExpiresAt}
+	location := s.geo.Lookup(c.IP)
+	request := postgres.DeviceRecovery{Hash: s.recoveryHash(id), Match: result.Match, Choices: choices, UserAgent: cleanUserAgent(c.UserAgent), Location: location, ExpiresAt: result.ExpiresAt}
 	u, err := s.store.Users().GetByUsername(ctx, username)
 	if err != nil && !errors.Is(err, postgres.ErrNotFound) {
 		return result, err
@@ -89,7 +82,7 @@ func (s *Service) StartDeviceRecovery(ctx context.Context, c Client, username st
 		return result, err
 	}
 	if created && s.onRecoveryRequest != nil {
-		s.onRecoveryRequest(ctx, u.ID, RecoveryRequestNotice{ID: id, Choices: choices, UserAgent: request.UserAgent, IPHint: hint, ExpiresAt: result.ExpiresAt})
+		s.onRecoveryRequest(ctx, u.ID, RecoveryRequestNotice{ID: id, Choices: choices, UserAgent: request.UserAgent, Location: location, ExpiresAt: result.ExpiresAt})
 	}
 	return result, nil
 }

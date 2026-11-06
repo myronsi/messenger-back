@@ -3,6 +3,9 @@ package httpapi
 import (
 	"net/http"
 	"testing"
+	"time"
+
+	"github.com/pquerna/otp/totp"
 )
 
 func TestRecoveryKeyOverHTTP(t *testing.T) {
@@ -56,5 +59,57 @@ func TestRecoveryKeyOverHTTP(t *testing.T) {
 	unauth := e.do(t, request{method: http.MethodGet, path: "/me/recovery-key"})
 	if unauth.Code != 401 {
 		t.Fatal("key metadata must require authentication")
+	}
+}
+
+func TestTwoFactorRequiredOverHTTP(t *testing.T) {
+	e := newAuthEnv(t, 0, nil)
+	registered := e.post(t, "/auth/register", map[string]any{"username": "tfr_http", "display_name": "TFR HTTP", "password": password})
+	if registered.Code != 201 {
+		t.Fatalf("registration status %d", registered.Code)
+	}
+	key := registered.json()["recovery_key"].(string)
+	token := registered.json()["access_token"].(string)
+	authed := func(path string, body any) reply {
+		return e.do(t, request{method: http.MethodPost, path: path, token: token, body: body})
+	}
+	setup := authed("/me/2fa/setup", map[string]any{"password": password})
+	if setup.Code != http.StatusOK {
+		t.Fatalf("setup: %d %s", setup.Code, setup.Body)
+	}
+	code, err := totp.GenerateCode(setup.json()["secret"].(string), time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	confirm := authed("/me/2fa/confirm", map[string]any{"code": code})
+	if confirm.Code != http.StatusOK {
+		t.Fatalf("confirm: %d %s", confirm.Code, confirm.Body)
+	}
+	codes := confirm.json()["recovery_codes"].([]any)
+
+	if rec := authed("/me/recovery-key", map[string]any{"password": "wrong password"}); rec.Code != http.StatusForbidden || rec.code() != "invalid_credentials" {
+		t.Fatalf("wrong password without code: %d %s", rec.Code, rec.Body)
+	}
+	if rec := authed("/me/recovery-key", map[string]any{"password": password}); rec.Code != http.StatusUnauthorized || rec.code() != "two_factor_required" {
+		t.Fatalf("missing code: %d %s", rec.Code, rec.Body)
+	}
+	if rec := e.do(t, request{method: http.MethodGet, path: "/me", token: token}); rec.Code != http.StatusOK {
+		t.Fatal("two_factor_required ended the session")
+	}
+	if rec := authed("/me/recovery-key", map[string]any{"password": password, "code": "000000"}); rec.Code != http.StatusBadRequest || rec.code() != "invalid_credentials" {
+		t.Fatalf("wrong code: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := e.post(t, "/auth/recover/key", map[string]any{"username": "tfr_http", "recovery_key": "bad", "new_password": "new password"}); rec.Code != http.StatusBadRequest || rec.code() != "invalid_credentials" {
+		t.Fatalf("invalid key without code: %d %s", rec.Code, rec.Body)
+	}
+	if rec := e.post(t, "/auth/recover/key", map[string]any{"username": "tfr_http", "recovery_key": key, "new_password": "new password"}); rec.Code != http.StatusUnauthorized || rec.code() != "two_factor_required" {
+		t.Fatalf("missing code: %d %s", rec.Code, rec.Body)
+	}
+	if rec := e.post(t, "/auth/recover/key", map[string]any{"username": "tfr_http", "recovery_key": key, "new_password": "new password", "code": "000000"}); rec.Code != http.StatusBadRequest || rec.code() != "invalid_credentials" {
+		t.Fatalf("wrong code: %d %s", rec.Code, rec.Body)
+	}
+	if rec := e.post(t, "/auth/recover/key", map[string]any{"username": "tfr_http", "recovery_key": key, "new_password": "new password", "code": codes[0]}); rec.Code != http.StatusOK {
+		t.Fatalf("key not usable after two_factor_required: %d %s", rec.Code, rec.Body)
 	}
 }

@@ -25,6 +25,7 @@ Every merge publishes Go snapshot images `go-master` and `go-sha-<sha>`. Release
 | `deploy.sh` | the deployment (below) |
 | `env.example` | every setting the stack needs, documented |
 | `migrations/`, `migrate.sh`, `object-storage/` | what the one-shot steps run |
+| `geoip/` | `update-dbip.sh`, which the `geoip-init` step runs to download the DB-IP Lite city database ([GeoIP](geoip.md)) |
 
 An upload replaces the bundle's files and `migrations/` as a whole: after a rollback, no later release's migrations are left on disk. It never touches what only the server has: `.env`, `.env.notifications`, `backups/` and `reports/`.
 
@@ -39,7 +40,7 @@ An upload replaces the bundle's files and `migrations/` as a whole: after a roll
 1. **Checks:** stops at once, changing nothing, if `.env` is missing or the disk is too full. Then it pulls the image; a failed pull also leaves the deployment as it was.
 2. **Stores:** with the bundled stores, it starts them and creates the ScyllaDB keyspace and the bucket.
 3. **Backup:** writes a `pg_dump` (custom format) of `DATABASE_URL` to `backups/` and keeps the last 10. If the dump fails, nothing is migrated or deployed.
-4. **Migrations:** runs the PostgreSQL and ScyllaDB migrations. If one fails, the running version stays. A database that is already newer than the release (a rollback) is left as it is.
+4. **Migrations:** runs the PostgreSQL and ScyllaDB migrations. If one fails, the running version stays. A database that is already newer than the release (a rollback) is left as it is. Then `geoip-init` downloads the DB-IP Lite city database into the `geoip-data` volume when it is missing. A failed download only means sessions and security events have no location; the deployment continues.
 5. **Start:** starts `api` and `worker` on the new image, then waits for `/readyz` (every store) and the worker's `/healthz`.
 6. **Rollback:** if they do not get ready, starts the previous image again and fails. Migrations are not rolled back, so they must also work with the previous version: add first, remove a release later.
 

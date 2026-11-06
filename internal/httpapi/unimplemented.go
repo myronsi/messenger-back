@@ -69,6 +69,22 @@ func (Unimplemented) CompleteDeviceRecovery(w http.ResponseWriter, r *http.Reque
 	notImplemented(w, r)
 }
 
+func (Unimplemented) CreateQrLogin(w http.ResponseWriter, r *http.Request, _ CreateQrLoginParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) GetQrLogin(w http.ResponseWriter, r *http.Request, _ string, _ GetQrLoginParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) PollQrLogin(w http.ResponseWriter, r *http.Request, _ string, _ PollQrLoginParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) ApproveQrLogin(w http.ResponseWriter, r *http.Request, _ string, _ ApproveQrLoginParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) DenyQrLogin(w http.ResponseWriter, r *http.Request, _ string, _ DenyQrLoginParams) {
+	notImplemented(w, r)
+}
+
 func (Unimplemented) UploadAttachment(w http.ResponseWriter, r *http.Request, params UploadAttachmentParams) {
 	notImplemented(w, r)
 }

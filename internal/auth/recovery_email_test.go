@@ -139,7 +139,7 @@ func TestRecoveryEmailExpiryAndSecondFactor(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, token := recoveryMailToken(t, e)
-	if _, err := e.svc.ResetWithEmail(ctx, c, token, "brand new password", ""); !errors.Is(err, ErrRecoveryKey) {
+	if _, err := e.svc.ResetWithEmail(ctx, c, token, "brand new password", ""); !errors.Is(err, ErrTwoFactorRequired) {
 		t.Fatal("second factor bypassed", err)
 	}
 	if _, err := e.store.Pool().Exec(ctx, `UPDATE email_tokens SET expires_at=now()-interval '1 second' WHERE token_hash=$1`, e.svc.recoveryHash(token)); err != nil {

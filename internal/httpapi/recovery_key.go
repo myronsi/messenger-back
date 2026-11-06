@@ -72,7 +72,7 @@ func (a *AuthServer) ListSecurityEvents(w http.ResponseWriter, r *http.Request, 
 	}
 	items := make([]map[string]any, 0, len(events))
 	for _, e := range events {
-		items = append(items, map[string]any{"id": strconv.FormatInt(e.ID, 10), "type": e.Type, "created_at": e.CreatedAt, "user_agent": e.UserAgent})
+		items = append(items, map[string]any{"id": strconv.FormatInt(e.ID, 10), "type": e.Type, "created_at": e.CreatedAt, "user_agent": e.UserAgent, "location": apiLocation(e.Location)})
 	}
 	noStore(w)
 	writeJSONStatus(w, http.StatusOK, map[string]any{"items": items})

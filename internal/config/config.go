@@ -70,6 +70,7 @@ type Config struct {
 	Tracing       Tracing
 	Notifications Notifications
 	RecoveryMail  RecoveryMail
+	GeoIPDBPath   string `env:"GEOIP_DB_PATH"`
 
 	// WorkerAddr is where the worker serves /healthz and /metrics.
 	WorkerAddr string `env:"WORKER_ADDR" envDefault:":8081"`

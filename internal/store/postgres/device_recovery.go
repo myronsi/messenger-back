@@ -8,17 +8,19 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/myronsi/messenger-back/internal/geoip"
 	"github.com/myronsi/messenger-back/internal/store/postgres/sqlcdb"
 )
 
 type DeviceRecovery struct {
-	Hash, Status, UserAgent, IPHint string
-	UserID                          int64
-	Match                           int
-	Choices                         []int
-	ExpiresAt                       time.Time
-	ApprovedBy                      *uuid.UUID
-	Proof                           RecoveryProof
+	Hash, Status, UserAgent string
+	Location                *geoip.Location
+	UserID                  int64
+	Match                   int
+	Choices                 []int
+	ExpiresAt               time.Time
+	ApprovedBy              *uuid.UUID
+	Proof                   RecoveryProof
 }
 
 type RecoveryRequestRepository interface {
@@ -56,7 +58,7 @@ func (r recoveryRequestRepo) Create(ctx context.Context, request DeviceRecovery)
 		if err != nil {
 			return err
 		}
-		_, err = tx.Exec(ctx, `INSERT INTO recovery_requests(id_hash,user_id,match_number,choices,user_agent,ip_hint,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7)`, request.Hash, owner, request.Match, choices, request.UserAgent, request.IPHint, request.ExpiresAt)
+		_, err = tx.Exec(ctx, `INSERT INTO recovery_requests(id_hash,user_id,match_number,choices,user_agent,location,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7)`, request.Hash, owner, request.Match, choices, request.UserAgent, encodeLocation(request.Location), request.ExpiresAt)
 		created = err == nil && genuine
 		return err
 	})
@@ -65,11 +67,12 @@ func (r recoveryRequestRepo) Create(ctx context.Context, request DeviceRecovery)
 
 func scanDeviceRecovery(row pgx.Row) (DeviceRecovery, error) {
 	var out DeviceRecovery
-	var choices, proof []byte
-	err := row.Scan(&out.Hash, &out.UserID, &out.Match, &out.Status, &out.UserAgent, &out.IPHint, &choices, &out.ExpiresAt, &out.ApprovedBy, &proof)
+	var choices, proof, location []byte
+	err := row.Scan(&out.Hash, &out.UserID, &out.Match, &out.Status, &out.UserAgent, &location, &choices, &out.ExpiresAt, &out.ApprovedBy, &proof)
 	if err != nil {
 		return out, mapError(err)
 	}
+	out.Location = decodeLocation(location)
 	if err = json.Unmarshal(choices, &out.Choices); err != nil {
 		return out, err
 	}
@@ -79,7 +82,7 @@ func scanDeviceRecovery(row pgx.Row) (DeviceRecovery, error) {
 	return out, err
 }
 
-const recoveryRequestColumns = `id_hash,COALESCE(user_id,0),match_number,status,user_agent,ip_hint,choices,expires_at,approved_by_session,approved_proof`
+const recoveryRequestColumns = `id_hash,COALESCE(user_id,0),match_number,status,user_agent,location,choices,expires_at,approved_by_session,approved_proof`
 
 func (r recoveryRequestRepo) Get(ctx context.Context, hash string) (DeviceRecovery, error) {
 	ctx, cancel := r.s.call(ctx)
@@ -87,7 +90,7 @@ func (r recoveryRequestRepo) Get(ctx context.Context, hash string) (DeviceRecove
 	return scanDeviceRecovery(r.s.pool.QueryRow(ctx, `SELECT `+recoveryRequestColumns+` FROM recovery_requests WHERE id_hash=$1`, hash))
 }
 
-func recentRecoverySession(ctx context.Context, tx pgx.Tx, uid int64, sid uuid.UUID, maxAge time.Duration) error {
+func recentRecoverySession(ctx context.Context, tx rowQuerier, uid int64, sid uuid.UUID, maxAge time.Duration) error {
 	var active bool
 	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM user_sessions WHERE id=$1 AND user_id=$2 AND revoked_at IS NULL AND expires_at>now() AND last_active_at>now()-($3*interval '1 second'))`, sid, uid, maxAge.Seconds()).Scan(&active)
 	if err != nil {

@@ -143,6 +143,21 @@ type Participant struct {
 	LastReadAt        *time.Time
 }
 
+type QrLoginRequest struct {
+	IDHash              string
+	PollHash            string
+	Status              string
+	UserAgent           *string
+	Location            []byte
+	ScannedBy           *int64
+	ApprovedBy          *int64
+	ApprovedSession     *uuid.UUID
+	PasswordFingerprint *string
+	CreatedAt           time.Time
+	ExpiresAt           time.Time
+	UsedAt              *time.Time
+}
+
 type RecoveryEmail struct {
 	UserID     int64
 	Address    string
@@ -166,11 +181,11 @@ type RecoveryRequest struct {
 	Choices           []byte
 	Status            string
 	UserAgent         string
-	IpHint            string
 	ApprovedBySession *uuid.UUID
 	ApprovedProof     []byte
 	CreatedAt         time.Time
 	ExpiresAt         time.Time
+	Location          []byte
 }
 
 type User struct {
@@ -264,6 +279,7 @@ type UserSecurityEvent struct {
 	UserAgent *string
 	Details   []byte
 	CreatedAt time.Time
+	Location  []byte
 }
 
 type UserSecuritySetting struct {
@@ -287,6 +303,7 @@ type UserSession struct {
 	LastActiveAt     time.Time
 	ExpiresAt        time.Time
 	RevokedAt        *time.Time
+	Location         []byte
 }
 
 type UserSessionRotatedToken struct {

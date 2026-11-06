@@ -25,7 +25,7 @@
       "required": [
         "request_id",
         "user_agent",
-        "ip_hint",
+        "location",
         "choices",
         "expires_at"
       ],
@@ -39,8 +39,15 @@
         "user_agent": {
           "type": "string"
         },
-        "ip_hint": {
-          "type": "string"
+        "location": {
+          "oneOf": [
+            {
+              "$ref": "../../openapi.yaml#/components/schemas/Location"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "choices": {
           "type": "array",

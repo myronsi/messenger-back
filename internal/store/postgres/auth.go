@@ -15,7 +15,7 @@ import (
 
 func sessionFrom(s sqlcdb.UserSession) Session {
 	return Session{
-		ID: s.ID, UserID: s.UserID, UserAgent: s.UserAgent, IP: s.IpAddress,
+		ID: s.ID, UserID: s.UserID, UserAgent: s.UserAgent, IP: s.IpAddress, Location: decodeLocation(s.Location),
 		CreatedAt: s.CreatedAt, LastActiveAt: s.LastActiveAt, ExpiresAt: s.ExpiresAt, RevokedAt: s.RevokedAt,
 	}
 }
@@ -53,7 +53,7 @@ func (r sessionRepo) Create(ctx context.Context, n NewSession) (Session, error) 
 				return ErrConflict
 			}
 		}
-		row, err := q.CreateSession(ctx, sqlcdb.CreateSessionParams{UserID: n.UserID, RefreshTokenHash: n.RefreshTokenHash, UserAgent: n.UserAgent, IpAddress: n.IP, ExpiresAt: n.ExpiresAt})
+		row, err := q.CreateSession(ctx, sqlcdb.CreateSessionParams{UserID: n.UserID, RefreshTokenHash: n.RefreshTokenHash, UserAgent: n.UserAgent, IpAddress: n.IP, Location: encodeLocation(n.Location), ExpiresAt: n.ExpiresAt})
 		out = sessionFrom(row)
 		return err
 	})
@@ -78,7 +78,7 @@ func (r sessionRepo) Rotate(ctx context.Context, req RotateRequest) (RotateResul
 				return err
 			}
 			next, err := q.RotateSession(ctx, sqlcdb.RotateSessionParams{
-				ID: cur.ID, NewHash: req.NewHash, ExpiresAt: req.NewExpiresAt(days), UserAgent: req.UserAgent, IpAddress: req.IP,
+				ID: cur.ID, NewHash: req.NewHash, ExpiresAt: req.NewExpiresAt(days), UserAgent: req.UserAgent, IpAddress: req.IP, Location: encodeLocation(req.Location),
 			})
 			if err != nil {
 				return err

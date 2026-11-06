@@ -7,6 +7,7 @@ import "context"
 func (s *Store) PurgeRecovery(ctx context.Context) (int64, error) {
 	queries := []string{
 		`DELETE FROM recovery_requests WHERE id_hash IN (SELECT id_hash FROM recovery_requests WHERE expires_at <= now() ORDER BY expires_at LIMIT 1000)`,
+		`DELETE FROM qr_login_requests WHERE id_hash IN (SELECT id_hash FROM qr_login_requests WHERE expires_at <= now() ORDER BY expires_at LIMIT 1000)`,
 		`DELETE FROM webauthn_challenges WHERE id_hash IN (SELECT id_hash FROM webauthn_challenges WHERE expires_at <= now() ORDER BY expires_at LIMIT 1000)`,
 		`DELETE FROM email_tokens WHERE token_hash IN (SELECT token_hash FROM email_tokens WHERE expires_at <= now() ORDER BY expires_at LIMIT 1000)`,
 		`DELETE FROM recovery_mail_queue WHERE id IN (SELECT id FROM recovery_mail_queue WHERE created_at <= now()-interval '1 day' ORDER BY created_at LIMIT 1000)`,

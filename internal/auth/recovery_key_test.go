@@ -101,10 +101,11 @@ func TestRecoveryKeyRequiresSecondFactor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, code := range []string{"", "000000"} {
-		if _, err := e.svc.RecoverWithKey(ctx, c, "recover_bob", old.RecoveryKey, "new password", code); !errors.Is(err, ErrRecoveryKey) {
-			t.Fatalf("2FA bypass: %v", err)
-		}
+	if _, err := e.svc.RecoverWithKey(ctx, c, "recover_bob", old.RecoveryKey, "new password", ""); !errors.Is(err, ErrTwoFactorRequired) {
+		t.Fatalf("2FA bypass: %v", err)
+	}
+	if _, err := e.svc.RecoverWithKey(ctx, c, "recover_bob", old.RecoveryKey, "new password", "000000"); !errors.Is(err, ErrRecoveryKey) {
+		t.Fatalf("2FA bypass: %v", err)
 	}
 	next, err := e.svc.RecoverWithKey(ctx, c, "recover_bob", old.RecoveryKey, "new password", codes[0])
 	if err != nil {

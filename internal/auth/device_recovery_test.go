@@ -129,7 +129,7 @@ func TestDeviceRecoveryRequiresSecondFactor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = e.svc.DecideDeviceRecovery(ctx, c, principal(owner), r.ID, r.Match, "", false); !errors.Is(err, ErrRecoveryKey) {
+	if _, err = e.svc.DecideDeviceRecovery(ctx, c, principal(owner), r.ID, r.Match, "", false); !errors.Is(err, ErrTwoFactorRequired) {
 		t.Fatal("2FA bypassed", err)
 	}
 	if _, err = e.svc.DecideDeviceRecovery(ctx, c, principal(owner), r.ID, r.Match, codes[0], false); err != nil {

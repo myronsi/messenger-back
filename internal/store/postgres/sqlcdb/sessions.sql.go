@@ -14,9 +14,9 @@ import (
 )
 
 const createSession = `-- name: CreateSession :one
-INSERT INTO user_sessions (user_id, refresh_token_hash, user_agent, ip_address, expires_at)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at
+INSERT INTO user_sessions (user_id, refresh_token_hash, user_agent, ip_address, location, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at, location
 `
 
 type CreateSessionParams struct {
@@ -24,6 +24,7 @@ type CreateSessionParams struct {
 	RefreshTokenHash string
 	UserAgent        *string
 	IpAddress        *netip.Addr
+	Location         []byte
 	ExpiresAt        time.Time
 }
 
@@ -33,6 +34,7 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (U
 		arg.RefreshTokenHash,
 		arg.UserAgent,
 		arg.IpAddress,
+		arg.Location,
 		arg.ExpiresAt,
 	)
 	var i UserSession
@@ -46,6 +48,7 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (U
 		&i.LastActiveAt,
 		&i.ExpiresAt,
 		&i.RevokedAt,
+		&i.Location,
 	)
 	return i, err
 }
@@ -110,7 +113,7 @@ func (q *Queries) GetRotatedToken(ctx context.Context, hash string) (GetRotatedT
 }
 
 const getSession = `-- name: GetSession :one
-SELECT id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at FROM user_sessions WHERE id = $1
+SELECT id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at, location FROM user_sessions WHERE id = $1
 `
 
 func (q *Queries) GetSession(ctx context.Context, id uuid.UUID) (UserSession, error) {
@@ -126,12 +129,13 @@ func (q *Queries) GetSession(ctx context.Context, id uuid.UUID) (UserSession, er
 		&i.LastActiveAt,
 		&i.ExpiresAt,
 		&i.RevokedAt,
+		&i.Location,
 	)
 	return i, err
 }
 
 const getSessionByRefreshHash = `-- name: GetSessionByRefreshHash :one
-SELECT id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at FROM user_sessions WHERE refresh_token_hash = $1
+SELECT id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at, location FROM user_sessions WHERE refresh_token_hash = $1
 `
 
 func (q *Queries) GetSessionByRefreshHash(ctx context.Context, hash string) (UserSession, error) {
@@ -147,12 +151,13 @@ func (q *Queries) GetSessionByRefreshHash(ctx context.Context, hash string) (Use
 		&i.LastActiveAt,
 		&i.ExpiresAt,
 		&i.RevokedAt,
+		&i.Location,
 	)
 	return i, err
 }
 
 const listActiveSessions = `-- name: ListActiveSessions :many
-SELECT id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at FROM user_sessions
+SELECT id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at, location FROM user_sessions
 WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > now()
 ORDER BY last_active_at DESC, created_at DESC
 `
@@ -176,6 +181,7 @@ func (q *Queries) ListActiveSessions(ctx context.Context, userID int64) ([]UserS
 			&i.LastActiveAt,
 			&i.ExpiresAt,
 			&i.RevokedAt,
+			&i.Location,
 		); err != nil {
 			return nil, err
 		}
@@ -188,7 +194,7 @@ func (q *Queries) ListActiveSessions(ctx context.Context, userID int64) ([]UserS
 }
 
 const lockSession = `-- name: LockSession :one
-SELECT id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at FROM user_sessions WHERE id = $1 FOR UPDATE
+SELECT id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at, location FROM user_sessions WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) LockSession(ctx context.Context, id uuid.UUID) (UserSession, error) {
@@ -204,12 +210,13 @@ func (q *Queries) LockSession(ctx context.Context, id uuid.UUID) (UserSession, e
 		&i.LastActiveAt,
 		&i.ExpiresAt,
 		&i.RevokedAt,
+		&i.Location,
 	)
 	return i, err
 }
 
 const lockSessionByRefreshHash = `-- name: LockSessionByRefreshHash :one
-SELECT id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at FROM user_sessions WHERE refresh_token_hash = $1 FOR UPDATE
+SELECT id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at, location FROM user_sessions WHERE refresh_token_hash = $1 FOR UPDATE
 `
 
 func (q *Queries) LockSessionByRefreshHash(ctx context.Context, hash string) (UserSession, error) {
@@ -225,6 +232,7 @@ func (q *Queries) LockSessionByRefreshHash(ctx context.Context, hash string) (Us
 		&i.LastActiveAt,
 		&i.ExpiresAt,
 		&i.RevokedAt,
+		&i.Location,
 	)
 	return i, err
 }
@@ -359,9 +367,10 @@ SET refresh_token_hash = $1,
     last_active_at     = now(),
     expires_at         = $2,
     user_agent         = COALESCE($3::text, user_agent),
-    ip_address         = COALESCE($4::inet, ip_address)
-WHERE id = $5
-RETURNING id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at
+    ip_address         = COALESCE($4::inet, ip_address),
+    location           = CASE WHEN $4::inet IS NULL THEN location ELSE $5::jsonb END
+WHERE id = $6
+RETURNING id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at, location
 `
 
 type RotateSessionParams struct {
@@ -369,6 +378,7 @@ type RotateSessionParams struct {
 	ExpiresAt time.Time
 	UserAgent *string
 	IpAddress *netip.Addr
+	Location  []byte
 	ID        uuid.UUID
 }
 
@@ -378,6 +388,7 @@ func (q *Queries) RotateSession(ctx context.Context, arg RotateSessionParams) (U
 		arg.ExpiresAt,
 		arg.UserAgent,
 		arg.IpAddress,
+		arg.Location,
 		arg.ID,
 	)
 	var i UserSession
@@ -391,6 +402,7 @@ func (q *Queries) RotateSession(ctx context.Context, arg RotateSessionParams) (U
 		&i.LastActiveAt,
 		&i.ExpiresAt,
 		&i.RevokedAt,
+		&i.Location,
 	)
 	return i, err
 }

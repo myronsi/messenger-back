@@ -20,6 +20,7 @@ import (
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/google/uuid"
 
+	"github.com/myronsi/messenger-back/internal/geoip"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 )
 
@@ -30,6 +31,7 @@ type Store interface {
 	SecuritySettings() postgres.SecuritySettingsRepository
 	RecoveryKeys() postgres.RecoveryKeyRepository
 	RecoveryRequests() postgres.RecoveryRequestRepository
+	QRLogins() postgres.QRLoginRepository
 	Passkeys() postgres.PasskeyRepository
 	RecoveryEmails() postgres.RecoveryEmailRepository
 	SecurityEvents() postgres.SecurityEventRepository
@@ -61,6 +63,7 @@ type Config struct {
 	OnRecoveryRequest      func(context.Context, int64, RecoveryRequestNotice)
 	OnSecurityEvent        func(context.Context, int64, string, Client)
 	RecoveryApprovalMaxAge time.Duration
+	GeoIP                  *geoip.Locator
 }
 
 // Client describes who is calling, for rate limits and the security log.
@@ -120,6 +123,7 @@ func cleanUserAgent(ua string) string {
 var (
 	ErrInvalidCredentials   = errors.New("invalid credentials")
 	ErrInvalidTwoFactorCode = errors.New("invalid two-factor code")
+	ErrTwoFactorRequired    = errors.New("two-factor code required")
 	ErrInvalidChallenge     = errors.New("invalid or expired login challenge")
 	ErrInvalidRefreshToken  = errors.New("invalid refresh token")
 	// ErrRevocationIncomplete means sessions were revoked in PostgreSQL but the cache could not be told, so
@@ -221,6 +225,7 @@ type Service struct {
 	onSecurityEvent        func(context.Context, int64, string, Client)
 	recoveryApprovalMaxAge time.Duration
 	dummy                  func() (string, error)
+	geo                    *geoip.Locator
 }
 
 // NewService wires the service.
@@ -277,6 +282,7 @@ func NewService(store Store, rdb Redis, cfg Config, log *slog.Logger) (*Service,
 		onRecoveryRequest:      cfg.OnRecoveryRequest,
 		onSecurityEvent:        cfg.OnSecurityEvent,
 		recoveryApprovalMaxAge: cfg.RecoveryApprovalMaxAge,
+		geo:                    cfg.GeoIP,
 	}
 	s.dummy = sync.OnceValues(func() (string, error) { return s.hasher.dummyHash(context.Background()) })
 	return s, nil
@@ -296,6 +302,11 @@ func (s *Service) recoveryHash(token string) string {
 }
 
 func (s *Service) event(ctx context.Context, uid int64, typ string, c Client, details map[string]any) {
+	c.UserAgent = cleanUserAgent(c.UserAgent)
+	s.recordEvent(ctx, uid, typ, c, c.ipPtr(), c.agentPtr(), s.geo.Lookup(c.IP), details)
+}
+
+func (s *Service) recordEvent(ctx context.Context, uid int64, typ string, notice Client, ip *netip.Addr, agent *string, location *geoip.Location, details map[string]any) {
 	var raw json.RawMessage
 	if len(details) > 0 {
 		raw, _ = json.Marshal(details)
@@ -304,12 +315,11 @@ func (s *Service) event(ctx context.Context, uid int64, typ string, c Client, de
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
 	defer cancel()
 	if _, err := s.store.SecurityEvents().Record(ctx, postgres.NewSecurityEvent{
-		UserID: uid, Type: typ, IP: c.ipPtr(), UserAgent: c.agentPtr(), Details: raw,
+		UserID: uid, Type: typ, IP: ip, UserAgent: agent, Location: location, Details: raw,
 	}); err != nil {
 		s.log.WarnContext(ctx, "security event not recorded", "event", typ, "user_id", uid, "err", err)
 	} else if s.onSecurityEvent != nil {
-		c.UserAgent = cleanUserAgent(c.UserAgent)
-		s.onSecurityEvent(ctx, uid, typ, c)
+		s.onSecurityEvent(ctx, uid, typ, notice)
 	}
 }
 
@@ -471,7 +481,7 @@ func (s *Service) startSessionWithRecoveryCode(ctx context.Context, u postgres.U
 	}
 	sess, err := s.store.Sessions().Create(ctx, postgres.NewSession{
 		Passkey:             passkey,
-		PasswordFingerprint: proof, RecoveryCodeHash: recoveryCodeHash, UserID: u.ID, RefreshTokenHash: hash, UserAgent: c.agentPtr(), IP: c.ipPtr(),
+		PasswordFingerprint: proof, RecoveryCodeHash: recoveryCodeHash, UserID: u.ID, RefreshTokenHash: hash, UserAgent: c.agentPtr(), IP: c.ipPtr(), Location: s.geo.Lookup(c.IP),
 		ExpiresAt: s.now().Add(time.Duration(settings.SessionDurationDays) * 24 * time.Hour),
 	})
 	if errors.Is(err, postgres.ErrConflict) {
@@ -785,6 +795,7 @@ func (s *Service) Refresh(ctx context.Context, c Client, refreshToken string) (*
 		NewExpiresAt:  func(days int) time.Time { return s.now().Add(time.Duration(days) * 24 * time.Hour) },
 		UserAgent:     c.agentPtr(),
 		IP:            c.ipPtr(),
+		Location:      s.geo.Lookup(c.IP),
 		ReuseGrace:    s.grace,
 	})
 	if err != nil {
@@ -1136,7 +1147,8 @@ func (s *Service) ConfirmTwoFactor(ctx context.Context, c Client, p Principal, c
 	return codes, nil
 }
 
-// DisableTwoFactor turns two-factor off; it needs the password and a code.
+// DisableTwoFactor turns two-factor off; it needs the password and a code. A correct password without a code
+// answers ErrTwoFactorRequired.
 func (s *Service) DisableTwoFactor(ctx context.Context, c Client, p Principal, password, code string) error {
 	if err := s.recoveryChangesAllowed(ctx, p.UserID); err != nil {
 		return err
@@ -1155,6 +1167,9 @@ func (s *Service) DisableTwoFactor(ctx context.Context, c Client, p Principal, p
 	}
 	if !st.TwoFactorEnabled {
 		return ErrTwoFactorNotEnabled
+	}
+	if strings.TrimSpace(code) == "" {
+		return ErrTwoFactorRequired
 	}
 	ok, _, err := s.checkSecondFactor(ctx, p.UserID, st, code)
 	if err != nil {

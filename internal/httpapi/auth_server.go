@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/myronsi/messenger-back/internal/auth"
+	"github.com/myronsi/messenger-back/internal/geoip"
 )
 
 // RefreshCookieName is the name of the refresh token cookie (the same as in the Python backend, so
@@ -103,7 +104,8 @@ func writeJSONStatus(w http.ResponseWriter, status int, v any) {
 
 // fail maps a service error to a problem. withSession is true on operations that need an access token:
 // a wrong password or code there must not be a 401, because clients treat 401 as a lost session and
-// would refresh or sign the user out.
+// would refresh or sign the user out. The one exception is a missing second factor: it is always a 401
+// with code two_factor_required, which clients must tell apart from a lost session by its code.
 func (a *AuthServer) fail(w http.ResponseWriter, r *http.Request, err error, withSession bool) {
 	var (
 		limited *auth.RateLimitError
@@ -116,6 +118,14 @@ func (a *AuthServer) fail(w http.ResponseWriter, r *http.Request, err error, wit
 	switch {
 	case errors.Is(err, auth.ErrPasskeysUnavailable), errors.Is(err, auth.ErrRecoveryEmailUnavailable):
 		WriteProblem(w, http.StatusServiceUnavailable, ErrorCodeInternalError)
+	case errors.Is(err, auth.ErrTwoFactorRequired):
+		WriteProblem(w, http.StatusUnauthorized, ErrorCodeTwoFactorRequired)
+	case errors.Is(err, auth.ErrQRLoginNotFound):
+		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
+	case errors.Is(err, auth.ErrQRLoginDecided):
+		WriteProblem(w, http.StatusConflict, ErrorCodeConflict)
+	case errors.Is(err, auth.ErrApprovalSessionStale):
+		WriteProblem(w, http.StatusForbidden, ErrorCodeForbidden)
 	case errors.Is(err, auth.ErrRecoveryKey):
 		WriteProblem(w, http.StatusBadRequest, ErrorCodeInvalidCredentials)
 	case errors.Is(err, auth.ErrRecoveryLocked):
@@ -387,10 +397,18 @@ func (a *AuthServer) ListSessions(w http.ResponseWriter, r *http.Request, _ List
 			LastUsedAt: s.LastActiveAt,
 			ExpiresAt:  &exp,
 			IsCurrent:  s.Current,
+			Location:   apiLocation(s.Location),
 		})
 	}
 	noStore(w)
 	writeJSONStatus(w, http.StatusOK, ListSessions200JSONResponse{Items: out})
+}
+
+func apiLocation(l *geoip.Location) *Location {
+	if l == nil {
+		return nil
+	}
+	return &Location{City: l.City, CountryCode: l.CountryCode, Country: l.Country}
 }
 
 // RevokeSession implements DELETE /me/sessions/{session_id}.

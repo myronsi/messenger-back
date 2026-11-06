@@ -9,7 +9,9 @@ A recovery key is shown once when created or rotated. Only its keyed hash is sto
 device or email recovery rotates the key, changes the password, revokes every previous session and
 invalidates outstanding email tokens and device approvals. The response creates a fresh session and
 returns the replacement key once. Recovery method changes are blocked for 24 hours after a reset.
-Enabled two-factor authentication still requires a current code or unused backup code.
+Enabled two-factor authentication still requires a current code or unused backup code. A request without
+a code answers `401` `two_factor_required` once the other credentials are proven, without consuming them; see
+[Missing second factor on other operations](auth.md#missing-second-factor-on-other-operations).
 
 Device requests expire after ten minutes. An eligible logged-in session must select the matching
 number from three choices; the requesting browser displays that number. A wrong number or denial
@@ -20,6 +22,10 @@ and requests over the cap store an ownerless decoy request with the same expiry 
 queries, so the start response and status polling are identical: `pending` until expiry, then
 `expired`. A decoy never notifies anyone; approving or completing it fails like a request that was
 never approved.
+
+The approving device sees the requester's sanitised user agent and approximate location (city and country
+from the offline DB-IP Lite database, `null` when unknown; see [GeoIP](geoip.md)), never its IP address
+or network. IP geolocation by [DB-IP](https://db-ip.com).
 
 ## Passkeys
 
@@ -69,3 +75,6 @@ table; its down migration restores the empty table shape. Keep new tables during
 running their down migrations deletes the newly registered methods. Removed `/auth/recover` and
 `/auth/reset-password` endpoints are absent from the contract and routing. Update clients before
 enforcing a minimum contract version that excludes older clients.
+
+Migration 22 replaces the network hint of recovery requests (`ip_hint`) with a `location` snapshot and adds
+`location` to sessions and security events; its down migration restores the empty column shapes.

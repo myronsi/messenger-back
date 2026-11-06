@@ -36,6 +36,8 @@ var (
 	RuleEmailResetUser = Rule{"email_reset_user", 3, time.Hour}
 	RuleResetIP        = Rule{"reset_ip", 20, time.Hour}
 	RuleRecoveryPoll   = Rule{"recovery_poll_ip", 120, time.Minute}
+	RuleQRLoginIP      = Rule{"qr_login_ip", 10, 10 * time.Minute}
+	RuleQRLoginPollIP  = Rule{"qr_login_poll_ip", 120, 2 * time.Minute}
 	RuleEmailVerify    = Rule{"email_verify_ip", 20, 15 * time.Minute}
 	RuleEmailAccount   = Rule{"email_account", 5, time.Hour}
 	RuleEmailAddress   = Rule{"email_address", 5, time.Hour}

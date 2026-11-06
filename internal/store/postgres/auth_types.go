@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/myronsi/messenger-back/internal/geoip"
 )
 
 // DefaultSessionDays is the session lifetime of an account that never changed the setting.
@@ -17,6 +19,7 @@ type Session struct {
 	UserID       int64
 	UserAgent    *string
 	IP           *netip.Addr
+	Location     *geoip.Location
 	CreatedAt    time.Time
 	LastActiveAt time.Time
 	ExpiresAt    time.Time
@@ -37,6 +40,7 @@ type NewSession struct {
 	RefreshTokenHash    string
 	UserAgent           *string
 	IP                  *netip.Addr
+	Location            *geoip.Location
 	ExpiresAt           time.Time
 }
 
@@ -63,6 +67,7 @@ type RotateRequest struct {
 	NewExpiresAt  func(sessionDays int) time.Time
 	UserAgent     *string
 	IP            *netip.Addr
+	Location      *geoip.Location
 	// ReuseGrace is how long after a rotation the previous token is answered with RotateStale instead
 	// of being treated as theft.
 	ReuseGrace time.Duration

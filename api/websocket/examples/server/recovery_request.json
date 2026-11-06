@@ -5,7 +5,7 @@
   "data": {
     "request_id": "z8uFZt0xFYtjm_iO3vI9xFYxsy7xM4K5uM1g1s8YbYI",
     "user_agent": "Chrome on Windows",
-    "ip_hint": "192.0.2.0/24",
+    "location": { "city": "Berlin", "country_code": "DE", "country": "Germany" },
     "choices": [17, 42, 85],
     "expires_at": "2026-11-05T20:00:00Z"
   }
