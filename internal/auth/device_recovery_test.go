@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -204,5 +205,62 @@ func TestDeviceRecoveryUnknownAndPendingCap(t *testing.T) {
 		if status, err := e.svc.DeviceRecoveryStatus(ctx, c, id); err != nil || status != "expired" {
 			t.Fatal("expiry differs between real and decoy requests", status, err)
 		}
+	}
+}
+
+func TestDeviceRecoveryCancelFreesSlotAndStoresNoSecrets(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	c := e.client("10.0.0.95")
+	owner := e.register(t, "device_cancel", "correct horse")
+	e.enableTwoFactor(t, owner, "correct horse")
+	notices := 0
+	approval := ""
+	e.svc.onRecoveryRequest = func(_ context.Context, _ int64, n RecoveryRequestNotice) { notices++; approval = n.ID }
+	var requests []RecoveryRequestResult
+	for range 3 {
+		r, err := e.svc.StartDeviceRecovery(ctx, c, owner.User.Username)
+		if err != nil {
+			t.Fatal(err)
+		}
+		requests = append(requests, r)
+	}
+	if err := e.svc.CancelDeviceRecovery(ctx, c, requests[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.svc.CancelDeviceRecovery(ctx, c, NewRecoveryKey()+NewRecoveryKey()); err != nil {
+		t.Fatal("cancelling an unknown request is distinguishable", err)
+	}
+	if status, err := e.svc.DeviceRecoveryStatus(ctx, c, requests[0].ID); err != nil || status != "denied" {
+		t.Fatal("cancelled request still pending", status, err)
+	}
+	if _, err := e.svc.StartDeviceRecovery(ctx, c, owner.User.Username); err != nil || notices != 4 {
+		t.Fatal("a cancelled request still counted towards the cap", notices, err)
+	}
+	var blocked bool
+	if err := e.store.Pool().QueryRow(ctx, `SELECT COALESCE(recovery_requests_blocked_until>now(),false) FROM user_security_settings WHERE user_id=$1`, owner.User.ID).Scan(&blocked); err != nil || blocked {
+		t.Fatal("cancelling blocked new requests", blocked, err)
+	}
+	wrong := 10
+	if wrong == requests[1].Match {
+		wrong = 11
+	}
+	if _, err := e.svc.DecideDeviceRecovery(ctx, c, principal(owner), approval, wrong, "", "", true); err != nil {
+		t.Fatal(err)
+	}
+	var proof string
+	if err := e.store.Pool().QueryRow(ctx, `SELECT approved_proof::text FROM recovery_requests WHERE approval_hash=$1`, e.svc.recoveryHash(approval)).Scan(&proof); err != nil {
+		t.Fatal(err)
+	}
+	credentials, err := e.store.Users().CredentialsByID(ctx, owner.User.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings, err := e.store.SecuritySettings().Get(ctx, owner.User.ID)
+	if err != nil || settings.TwoFactorSecret == nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(proof, credentials.PasswordHash) || strings.Contains(proof, *settings.TwoFactorSecret) {
+		t.Fatal("the stored proof contains the password hash or the second-factor secret")
 	}
 }

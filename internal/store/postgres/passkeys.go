@@ -36,7 +36,7 @@ type PasskeyRepository interface {
 	Get(context.Context, []byte) (Passkey, error)
 	Challenge(context.Context, WebAuthnChallenge) error
 	TakeChallenge(context.Context, string, string, *int64, *uuid.UUID) (WebAuthnChallenge, error)
-	Add(context.Context, Passkey, uuid.UUID, RecoveryProof) error
+	Add(context.Context, Passkey, uuid.UUID, PinnedProof, *string) error
 	Rename(context.Context, int64, []byte, string) error
 	Delete(context.Context, int64, []byte, string) error
 }
@@ -99,9 +99,9 @@ func (r passkeyRepo) TakeChallenge(ctx context.Context, hash, purpose string, ui
 	err := r.s.pool.QueryRow(ctx, `DELETE FROM webauthn_challenges WHERE id_hash=$1 AND purpose=$2 AND user_id IS NOT DISTINCT FROM $3::bigint AND session_id IS NOT DISTINCT FROM $4::uuid AND expires_at>now() RETURNING id_hash,user_id,session_id,purpose,payload,name,expires_at`, hash, purpose, uid, sid).Scan(&out.Hash, &out.UserID, &out.SessionID, &out.Purpose, &out.Payload, &out.Name, &out.ExpiresAt)
 	return out, mapError(err)
 }
-func (r passkeyRepo) Add(ctx context.Context, key Passkey, sid uuid.UUID, proof RecoveryProof) error {
+func (r passkeyRepo) Add(ctx context.Context, key Passkey, sid uuid.UUID, proof PinnedProof, backupCodeHash *string) error {
 	return mapError(r.s.inRawTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
-		locked, err := lockRecoveryState(ctx, tx, key.UserID, proof)
+		locked, err := lockPinnedState(ctx, tx, key.UserID, proof)
 		if err != nil {
 			return err
 		}
@@ -122,7 +122,7 @@ func (r passkeyRepo) Add(ctx context.Context, key Passkey, sid uuid.UUID, proof 
 		if count >= 50 {
 			return ErrConflict
 		}
-		if err = consumeRecoveryFactor(ctx, tx, key.UserID, proof.BackupCodeHash); err != nil {
+		if err = consumeRecoveryFactor(ctx, tx, key.UserID, backupCodeHash); err != nil {
 			return err
 		}
 		_, err = tx.Exec(ctx, `INSERT INTO user_passkeys(credential_id,user_id,credential,name) VALUES($1,$2,$3,$4)`, key.ID, key.UserID, key.Credential, key.Name)

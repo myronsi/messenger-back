@@ -2105,6 +2105,15 @@ type ApproveDeviceRecoveryParams struct {
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
 }
 
+// CancelDeviceRecoveryParams defines parameters for CancelDeviceRecovery.
+type CancelDeviceRecoveryParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
 // CompleteDeviceRecoveryParams defines parameters for CompleteDeviceRecovery.
 type CompleteDeviceRecoveryParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
@@ -3396,6 +3405,9 @@ type ServerInterface interface {
 	// ApproveDeviceRecovery Approve a recovery request using number matching, the password and the second factor
 	// (POST /auth/recovery-requests/{requestId}/approve)
 	ApproveDeviceRecovery(w http.ResponseWriter, r *http.Request, requestId string, params ApproveDeviceRecoveryParams)
+	// CancelDeviceRecovery Withdraw a pending recovery request from the requesting browser
+	// (POST /auth/recovery-requests/{requestId}/cancel)
+	CancelDeviceRecovery(w http.ResponseWriter, r *http.Request, requestId string, params CancelDeviceRecoveryParams)
 	// CompleteDeviceRecovery Consume an approved request and reset the password
 	// (POST /auth/recovery-requests/{requestId}/complete)
 	CompleteDeviceRecovery(w http.ResponseWriter, r *http.Request, requestId string, params CompleteDeviceRecoveryParams)
@@ -5178,6 +5190,75 @@ func (siw *ServerInterfaceWrapper) ApproveDeviceRecovery(w http.ResponseWriter, 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ApproveDeviceRecovery(w, r, requestId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CancelDeviceRecovery operation middleware
+func (siw *ServerInterfaceWrapper) CancelDeviceRecovery(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "requestId" -------------
+	var requestId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "requestId", r.PathValue("requestId"), &requestId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "requestId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CancelDeviceRecoveryParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CancelDeviceRecovery(w, r, requestId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -10819,6 +10900,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/recovery-requests/{requestId}/approve", wrapper.ApproveDeviceRecovery)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/recovery-requests/{requestId}/deny", wrapper.DenyDeviceRecovery)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/recovery-requests/{requestId}/complete", wrapper.CompleteDeviceRecovery)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/recovery-requests/{requestId}/cancel", wrapper.CancelDeviceRecovery)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/qr-login", wrapper.CreateQrLogin)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/auth/qr-login/{requestId}", wrapper.GetQrLogin)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/qr-login/{requestId}/poll", wrapper.PollQrLogin)
@@ -12642,6 +12724,22 @@ func (response ConfirmEmailReset403ApplicationProblemPlusJSONResponse) VisitConf
 	return err
 }
 
+type ConfirmEmailReset404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response ConfirmEmailReset404ApplicationProblemPlusJSONResponse) VisitConfirmEmailResetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ConfirmEmailReset409ApplicationProblemPlusJSONResponse Problem
 
 func (response ConfirmEmailReset409ApplicationProblemPlusJSONResponse) VisitConfirmEmailResetResponse(w http.ResponseWriter) error {
@@ -13915,6 +14013,74 @@ type ApproveDeviceRecovery429ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response ApproveDeviceRecovery429ApplicationProblemPlusJSONResponse) VisitApproveDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelDeviceRecoveryRequestObject struct {
+	RequestId string `json:"requestId"`
+	Params    CancelDeviceRecoveryParams
+}
+
+type CancelDeviceRecoveryResponseObject interface {
+	VisitCancelDeviceRecoveryResponse(w http.ResponseWriter) error
+}
+
+type CancelDeviceRecovery204Response struct {
+}
+
+func (response CancelDeviceRecovery204Response) VisitCancelDeviceRecoveryResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type CancelDeviceRecovery400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response CancelDeviceRecovery400ApplicationProblemPlusJSONResponse) VisitCancelDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelDeviceRecovery426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response CancelDeviceRecovery426ApplicationProblemPlusJSONResponse) VisitCancelDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelDeviceRecovery429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response CancelDeviceRecovery429ApplicationProblemPlusJSONResponse) VisitCancelDeviceRecoveryResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -22406,6 +22572,9 @@ type StrictServerInterface interface {
 	// ApproveDeviceRecovery Approve a recovery request using number matching, the password and the second factor
 	// (POST /auth/recovery-requests/{requestId}/approve)
 	ApproveDeviceRecovery(ctx context.Context, request ApproveDeviceRecoveryRequestObject) (ApproveDeviceRecoveryResponseObject, error)
+	// CancelDeviceRecovery Withdraw a pending recovery request from the requesting browser
+	// (POST /auth/recovery-requests/{requestId}/cancel)
+	CancelDeviceRecovery(ctx context.Context, request CancelDeviceRecoveryRequestObject) (CancelDeviceRecoveryResponseObject, error)
 	// CompleteDeviceRecovery Consume an approved request and reset the password
 	// (POST /auth/recovery-requests/{requestId}/complete)
 	CompleteDeviceRecovery(ctx context.Context, request CompleteDeviceRecoveryRequestObject) (CompleteDeviceRecoveryResponseObject, error)
@@ -23441,6 +23610,33 @@ func (sh *strictHandler) ApproveDeviceRecovery(w http.ResponseWriter, r *http.Re
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ApproveDeviceRecoveryResponseObject); ok {
 		if err := validResponse.VisitApproveDeviceRecoveryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CancelDeviceRecovery operation middleware
+func (sh *strictHandler) CancelDeviceRecovery(w http.ResponseWriter, r *http.Request, requestId string, params CancelDeviceRecoveryParams) {
+	var request CancelDeviceRecoveryRequestObject
+
+	request.RequestId = requestId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CancelDeviceRecovery(ctx, request.(CancelDeviceRecoveryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CancelDeviceRecovery")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CancelDeviceRecoveryResponseObject); ok {
+		if err := validResponse.VisitCancelDeviceRecoveryResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

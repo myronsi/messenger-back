@@ -22,13 +22,14 @@ type DeviceRecovery struct {
 	Choices            []int
 	ExpiresAt          time.Time
 	ApprovedBy         *uuid.UUID
-	Proof              RecoveryProof
+	Proof              PinnedProof
 }
 
 type RecoveryRequestRepository interface {
 	Create(context.Context, DeviceRecovery) (bool, error)
 	Get(context.Context, string) (DeviceRecovery, error)
 	GetForApproval(context.Context, string) (DeviceRecovery, error)
+	Cancel(context.Context, string) error
 	Decide(context.Context, string, int64, uuid.UUID, int, RecoveryProof, time.Duration, bool) (string, error)
 	Complete(context.Context, DeviceRecovery, string, string, time.Duration) (PasswordReset, error)
 }
@@ -93,6 +94,13 @@ func (r recoveryRequestRepo) Get(ctx context.Context, hash string) (DeviceRecove
 	return scanDeviceRecovery(r.s.pool.QueryRow(ctx, `SELECT `+recoveryRequestColumns+` FROM recovery_requests WHERE id_hash=$1`, hash))
 }
 
+func (r recoveryRequestRepo) Cancel(ctx context.Context, hash string) error {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	_, err := r.s.pool.Exec(ctx, `UPDATE recovery_requests SET status='denied' WHERE id_hash=$1 AND status='pending'`, hash)
+	return mapError(err)
+}
+
 func (r recoveryRequestRepo) GetForApproval(ctx context.Context, hash string) (DeviceRecovery, error) {
 	ctx, cancel := r.s.call(ctx)
 	defer cancel()
@@ -144,9 +152,7 @@ func (r recoveryRequestRepo) Decide(ctx context.Context, hash string, uid int64,
 			}
 			status = "approved"
 		}
-		pinned := proof
-		pinned.BackupCodeHash = nil
-		encoded, err := json.Marshal(pinned)
+		encoded, err := json.Marshal(proof.Pin())
 		if err != nil {
 			return err
 		}
@@ -206,7 +212,7 @@ func finishRecovery(ctx context.Context, tx pgx.Tx, uid int64, password, key, me
 func (r recoveryRequestRepo) Complete(ctx context.Context, request DeviceRecovery, password, key string, maxAge time.Duration) (PasswordReset, error) {
 	var out PasswordReset
 	err := r.s.inRawTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
-		if _, err := lockRecoveryState(ctx, tx, request.UserID, request.Proof); err != nil {
+		if _, err := lockPinnedState(ctx, tx, request.UserID, request.Proof); err != nil {
 			return err
 		}
 		current, err := scanDeviceRecovery(tx.QueryRow(ctx, `SELECT `+recoveryRequestColumns+` FROM recovery_requests WHERE id_hash=$1 FOR UPDATE`, request.Hash))

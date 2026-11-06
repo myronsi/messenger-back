@@ -20,7 +20,8 @@ number from three choices and confirm with the account password and any enabled 
 requesting browser displays that number. The `recovery_request` event carries a separate approval handle,
 so signed-in devices can approve or deny but cannot poll or complete the request: only the requesting
 browser holds that capability. A wrong number or denial
-blocks new requests for fifteen minutes. At most three active requests are allowed. Completion checks
+blocks new requests for fifteen minutes. At most three active requests are allowed; the requesting browser
+can withdraw its own pending request, which frees its place without blocking anything. Completion checks
 the approving session again, including revocation, inactivity and its pinned security credentials.
 Request capabilities are random and only keyed hashes are persisted. Unknown accounts, blocked accounts
 and requests over the cap store an ownerless decoy request with the same expiry and run the same

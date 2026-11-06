@@ -47,6 +47,7 @@ var routeAccess = map[string]access{
 	"POST /auth/recovery-requests":                      accessPublic,
 	"GET /auth/recovery-requests/{requestId}":           accessPublic,
 	"POST /auth/recovery-requests/{requestId}/complete": accessPublic,
+	"POST /auth/recovery-requests/{requestId}/cancel":   accessPublic,
 	"POST /auth/qr-login":                               accessPublic,
 	"POST /auth/qr-login/{requestId}/poll":              accessPublic,
 	"GET /meta":                                         accessPublic,

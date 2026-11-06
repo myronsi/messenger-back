@@ -236,7 +236,7 @@ func TestPasskeyConcurrentDeletesKeepLastPasskey(t *testing.T) {
 	}
 	ids := []string{"AQID", "BAUG"}
 	for i, raw := range [][]byte{{1, 2, 3}, {4, 5, 6}} {
-		if err = e.store.Passkeys().Add(ctx, postgres.Passkey{ID: raw, UserID: owner.User.ID, Credential: "sealed-test-placeholder", Name: ids[i]}, owner.SessionID, proof); err != nil {
+		if err = e.store.Passkeys().Add(ctx, postgres.Passkey{ID: raw, UserID: owner.User.ID, Credential: "sealed-test-placeholder", Name: ids[i]}, owner.SessionID, proof.Pin(), proof.BackupCodeHash); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -262,7 +262,7 @@ func TestPasskeyConcurrentDeletesKeepLastPasskey(t *testing.T) {
 		if errs[0] != nil {
 			removed = ids[1]
 		}
-		if err = e.store.Passkeys().Add(ctx, postgres.Passkey{ID: mustDecode(t, removed), UserID: owner.User.ID, Credential: "sealed-test-placeholder", Name: removed}, owner.SessionID, proof); err != nil {
+		if err = e.store.Passkeys().Add(ctx, postgres.Passkey{ID: mustDecode(t, removed), UserID: owner.User.ID, Credential: "sealed-test-placeholder", Name: removed}, owner.SessionID, proof.Pin(), proof.BackupCodeHash); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -69,6 +69,10 @@ func (Unimplemented) CompleteDeviceRecovery(w http.ResponseWriter, r *http.Reque
 	notImplemented(w, r)
 }
 
+func (Unimplemented) CancelDeviceRecovery(w http.ResponseWriter, r *http.Request, requestId string, params CancelDeviceRecoveryParams) {
+	notImplemented(w, r)
+}
+
 func (Unimplemented) CreateQrLogin(w http.ResponseWriter, r *http.Request, _ CreateQrLoginParams) {
 	notImplemented(w, r)
 }

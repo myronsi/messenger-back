@@ -152,6 +152,16 @@ func (s *Service) DecideDeviceRecovery(ctx context.Context, c Client, p Principa
 	return status, err
 }
 
+func (s *Service) CancelDeviceRecovery(ctx context.Context, c Client, id string) error {
+	if err := s.take(ctx, RuleRecoveryPoll, c.ipString()); err != nil {
+		return err
+	}
+	if len(id) < 32 || len(id) > 128 {
+		return nil
+	}
+	return s.store.RecoveryRequests().Cancel(ctx, s.recoveryHash(id))
+}
+
 func (s *Service) CompleteDeviceRecovery(ctx context.Context, c Client, id, password string) (*TokenSet, error) {
 	if err := s.take(ctx, RuleResetIP, c.ipString()); err != nil {
 		return nil, err

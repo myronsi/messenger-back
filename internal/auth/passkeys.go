@@ -102,7 +102,8 @@ func (s *Service) sealCredential(uid int64, key *webauthn.Credential) (string, e
 
 type passkeyCeremony struct {
 	Session  webauthn.SessionData
-	Proof    postgres.RecoveryProof
+	Proof    postgres.PinnedProof
+	Backup   *string
 	Username string
 }
 type PasskeyOptions struct {
@@ -153,7 +154,7 @@ func (s *Service) BeginPasskeyRegistration(ctx context.Context, c Client, p Prin
 	if err != nil {
 		return PasskeyOptions{}, err
 	}
-	payload, err := json.Marshal(passkeyCeremony{Session: *session, Proof: proof})
+	payload, err := json.Marshal(passkeyCeremony{Session: *session, Proof: proof.Pin(), Backup: proof.BackupCodeHash})
 	if err != nil {
 		return PasskeyOptions{}, err
 	}
@@ -198,7 +199,7 @@ func (s *Service) FinishPasskeyRegistration(ctx context.Context, c Client, p Pri
 	if err != nil {
 		return err
 	}
-	err = s.store.Passkeys().Add(ctx, postgres.Passkey{ID: credential.ID, UserID: p.UserID, Credential: sealed, Name: challenge.Name}, p.SessionID, ceremony.Proof)
+	err = s.store.Passkeys().Add(ctx, postgres.Passkey{ID: credential.ID, UserID: p.UserID, Credential: sealed, Name: challenge.Name}, p.SessionID, ceremony.Proof, ceremony.Backup)
 	if errors.Is(err, postgres.ErrConflict) || errors.Is(err, postgres.ErrNotFound) {
 		return ErrInvalidCredentials
 	}

@@ -37,6 +37,7 @@
             "recovery_email_removed",
             "passkey_counter_warning",
             "login",
+            "login_2fa",
             "passkey_login",
             "qr_login_approved"
           ]
@@ -48,6 +49,11 @@
         "created_at": {
           "type": "string",
           "format": "date-time"
+        },
+        "session_id": {
+          "description": "The session that made the change, when a signed-in session made it. Clients skip alerts for their own session.",
+          "type": "string",
+          "format": "uuid"
         }
       }
     }

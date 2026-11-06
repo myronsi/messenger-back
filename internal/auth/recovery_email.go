@@ -12,7 +12,10 @@ import (
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 )
 
-var ErrRecoveryEmailUnavailable = errors.New("recovery email is not configured")
+var (
+	ErrRecoveryEmailUnavailable = errors.New("recovery email is not configured")
+	ErrRecoveryLinkInvalid      = errors.New("recovery link is invalid, expired or used")
+)
 
 type RecoveryEmailStatus struct {
 	Address string `json:"address"`
@@ -127,7 +130,7 @@ func (s *Service) RequestEmailReset(ctx context.Context, c Client, identifier st
 	if len(identifier) > 254 {
 		identifier = ""
 	}
-	if _, err := s.allow(ctx, limitCheck{RuleRecoverIP, c.ipString()}, limitCheck{RuleEmailAddress, identifier}); err != nil {
+	if _, err := s.allow(ctx, limitCheck{RuleRecoverIP, c.ipString()}, limitCheck{RuleEmailResetAddress, identifier}); err != nil {
 		return err
 	}
 	if !s.recoveryMailEnabled {
@@ -156,7 +159,10 @@ func (s *Service) ResetWithEmail(ctx context.Context, c Client, token, password,
 	if err := s.take(ctx, RuleResetIP, c.ipString()); err != nil {
 		return nil, err
 	}
-	if len(token) < 32 || len(token) > 128 || len(code) > 128 {
+	if len(token) < 32 || len(token) > 128 {
+		return nil, ErrRecoveryLinkInvalid
+	}
+	if len(code) > 128 {
 		return nil, ErrRecoveryKey
 	}
 	if err := validatePassword(password); err != nil {
@@ -164,7 +170,7 @@ func (s *Service) ResetWithEmail(ctx context.Context, c Client, token, password,
 	}
 	email, err := s.store.RecoveryEmails().Token(ctx, s.recoveryHash(token), "password_reset")
 	if errors.Is(err, postgres.ErrNotFound) {
-		return nil, ErrRecoveryKey
+		return nil, ErrRecoveryLinkInvalid
 	}
 	if err != nil {
 		return nil, err
@@ -191,7 +197,10 @@ func (s *Service) ResetWithEmail(ctx context.Context, c Client, token, password,
 	key, keyHash := s.newRecoveryKey()
 	proof := postgres.RecoveryProof{PasswordHash: credentials.PasswordHash, TwoFactorEnabled: st.TwoFactorEnabled, TwoFactorSecret: st.TwoFactorSecret, BackupCodeHash: backup}
 	reset, err := s.store.RecoveryEmails().Reset(ctx, email.UserID, s.recoveryHash(token), proof, hash, keyHash)
-	if errors.Is(err, postgres.ErrConflict) || errors.Is(err, postgres.ErrNotFound) {
+	if errors.Is(err, postgres.ErrNotFound) {
+		return nil, ErrRecoveryLinkInvalid
+	}
+	if errors.Is(err, postgres.ErrConflict) {
 		return nil, ErrRecoveryKey
 	}
 	if err != nil {

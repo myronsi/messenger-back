@@ -51,7 +51,7 @@ func TestResetWithEmailAsksForMissingSecondFactor(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, token := recoveryMailToken(t, e)
-	if _, err := e.svc.ResetWithEmail(ctx, c, NewRecoveryKey()+NewRecoveryKey(), "brand new password", ""); !errors.Is(err, ErrRecoveryKey) {
+	if _, err := e.svc.ResetWithEmail(ctx, c, NewRecoveryKey()+NewRecoveryKey(), "brand new password", ""); !errors.Is(err, ErrRecoveryLinkInvalid) {
 		t.Fatal("invalid token revealed the second factor", err)
 	}
 	if _, err := e.svc.ResetWithEmail(ctx, c, token, "brand new password", ""); !errors.Is(err, ErrTwoFactorRequired) {

@@ -2270,6 +2270,28 @@ paths:
           $ref: "#/components/responses/ClientOutdated"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /auth/recovery-requests/{requestId}/cancel:
+    parameters:
+      - *a1
+      - *a2
+      - *a3
+    post:
+      tags:
+        - auth
+      operationId: cancelDeviceRecovery
+      summary: Withdraw a pending recovery request from the requesting browser
+      description: Ends a pending request so it no longer counts towards the limit of three active requests. It
+        answers 204 for every capability, including unknown, decided and expired ones.
+      security: []
+      responses:
+        "204":
+          description: Cancelled or nothing to cancel
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "426":
+          $ref: "#/components/responses/ClientOutdated"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
   /auth/qr-login:
     parameters:
@@ -3339,6 +3361,8 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "409":
           description: Security delay or conflicting state
           content:

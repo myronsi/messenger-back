@@ -26,25 +26,26 @@ var (
 	RuleLoginCap  = Rule{"login_user_all", 100, 15 * time.Minute}
 	// Opening a login page may start conditional WebAuthn. These anonymous option
 	// requests must never consume the password failure budget.
-	RulePasskeyBegin   = Rule{"passkey_options_ip", 30, time.Minute}
-	RulePasskeyLoginIP = Rule{"passkey_login_ip", 20, 15 * time.Minute}
-	RuleTwoFAIP        = Rule{"2fa_ip", 20, 15 * time.Minute}
-	RuleTwoFAUser      = Rule{"2fa_user", 10, 15 * time.Minute}
-	RuleRecoverIP      = Rule{"recover_ip", 10, time.Hour}
-	RuleRecoverUsr     = Rule{"recover_user_ip", 5, time.Hour}
-	RuleRecoverCap     = Rule{"recover_user_all", 30, time.Hour}
-	RuleEmailResetUser = Rule{"email_reset_user", 3, time.Hour}
-	RuleResetIP        = Rule{"reset_ip", 20, time.Hour}
-	RuleRecoveryPoll   = Rule{"recovery_poll_ip", 120, time.Minute}
-	RuleQRLoginIP      = Rule{"qr_login_ip", 10, 10 * time.Minute}
-	RuleQRLoginPollIP  = Rule{"qr_login_poll_ip", 120, 2 * time.Minute}
-	RuleEmailVerify    = Rule{"email_verify_ip", 20, 15 * time.Minute}
-	RuleEmailAccount   = Rule{"email_account", 5, time.Hour}
-	RuleEmailAddress   = Rule{"email_address", 5, time.Hour}
-	RuleRefreshIP      = Rule{"refresh_ip", 300, 15 * time.Minute}
-	RuleRegisterIP     = Rule{"register_ip", 20, time.Hour}
-	RulePasswordU      = Rule{"password_user", 10, 15 * time.Minute}
-	RuleTicketUser     = Rule{"ticket_user", 20, time.Minute}
+	RulePasskeyBegin      = Rule{"passkey_options_ip", 30, time.Minute}
+	RulePasskeyLoginIP    = Rule{"passkey_login_ip", 20, 15 * time.Minute}
+	RuleTwoFAIP           = Rule{"2fa_ip", 20, 15 * time.Minute}
+	RuleTwoFAUser         = Rule{"2fa_user", 10, 15 * time.Minute}
+	RuleRecoverIP         = Rule{"recover_ip", 10, time.Hour}
+	RuleRecoverUsr        = Rule{"recover_user_ip", 5, time.Hour}
+	RuleRecoverCap        = Rule{"recover_user_all", 30, time.Hour}
+	RuleEmailResetUser    = Rule{"email_reset_user", 3, time.Hour}
+	RuleResetIP           = Rule{"reset_ip", 20, time.Hour}
+	RuleRecoveryPoll      = Rule{"recovery_poll_ip", 120, time.Minute}
+	RuleQRLoginIP         = Rule{"qr_login_ip", 10, 10 * time.Minute}
+	RuleQRLoginPollIP     = Rule{"qr_login_poll_ip", 120, 2 * time.Minute}
+	RuleEmailVerify       = Rule{"email_verify_ip", 20, 15 * time.Minute}
+	RuleEmailAccount      = Rule{"email_account", 5, time.Hour}
+	RuleEmailAddress      = Rule{"email_address", 5, time.Hour}
+	RuleEmailResetAddress = Rule{"email_reset_address", 5, time.Hour}
+	RuleRefreshIP         = Rule{"refresh_ip", 300, 15 * time.Minute}
+	RuleRegisterIP        = Rule{"register_ip", 20, time.Hour}
+	RulePasswordU         = Rule{"password_user", 10, 15 * time.Minute}
+	RuleTicketUser        = Rule{"ticket_user", 20, time.Minute}
 )
 
 // Limiter is a Redis sliding-window rate limiter (a sorted set per key, trimmed atomically in Lua). Callers

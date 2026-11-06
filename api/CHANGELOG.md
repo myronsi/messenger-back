@@ -43,6 +43,12 @@ Contract changes only. The backend changelog is `CHANGELOG.md` in the repository
 - A completed password recovery (key, device approval or email) removes every passkey and, except for an email
   recovery, the recovery email. The `password_reset` security event details gain `passkeys_removed` and
   `recovery_email_removed`.
+- New `POST /auth/recovery-requests/{requestId}/cancel` (public, requester capability, `204` for every
+  capability): withdraws a pending device recovery request so it stops counting towards the limit of three.
+- `security_alert` adds `login_2fa` to its types and an optional `session_id`: the session that made the change,
+  so clients can skip alerts about their own actions.
+- `POST /auth/password-reset/confirm` answers `404 not_found` for an unknown, expired or used link instead of
+  `400 invalid_credentials`, so clients can tell a dead link from a wrong code.
 
 ## 2.1.0-alpha.12
 

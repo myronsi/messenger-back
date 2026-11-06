@@ -86,7 +86,7 @@ func TestRecoveryEmailLifecycleAndPrivacy(t *testing.T) {
 	if _, err = e.svc.Authenticate(ctx, owner.AccessToken); !errors.Is(err, ErrUnauthenticated) {
 		t.Fatal("old session survived", err)
 	}
-	if _, err = e.svc.ResetWithEmail(ctx, c, token, "another password", ""); !errors.Is(err, ErrRecoveryKey) {
+	if _, err = e.svc.ResetWithEmail(ctx, c, token, "another password", ""); !errors.Is(err, ErrRecoveryLinkInvalid) {
 		t.Fatal("reset token reused", err)
 	}
 	if err = e.svc.RemoveRecoveryEmail(ctx, c, principal(next), "brand new password", ""); !errors.Is(err, ErrRecoveryLocked) {
@@ -145,7 +145,7 @@ func TestRecoveryEmailExpiryAndSecondFactor(t *testing.T) {
 	if _, err := e.store.Pool().Exec(ctx, `UPDATE email_tokens SET expires_at=now()-interval '1 second' WHERE token_hash=$1`, e.svc.recoveryHash(token)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.svc.ResetWithEmail(ctx, c, token, "brand new password", codes[1]); !errors.Is(err, ErrRecoveryKey) {
+	if _, err := e.svc.ResetWithEmail(ctx, c, token, "brand new password", codes[1]); !errors.Is(err, ErrRecoveryLinkInvalid) {
 		t.Fatal("expired token accepted", err)
 	}
 	if err := e.svc.RequestEmailReset(ctx, c, owner.User.Username); err != nil {
@@ -298,4 +298,18 @@ func TestRecoveryEmailChangeRejectsUsedBackupCodeAndLimitsGuesses(t *testing.T) 
 		}
 	}
 	t.Fatal("wrong second-factor codes are not limited")
+}
+
+func TestPublicResetRequestsDoNotBlockAddingTheAddress(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	owner := e.register(t, "email_squat_limit", "correct horse")
+	e.svc.recoveryMailEnabled = true
+	e.svc.recoveryWebURL = "http://localhost:4173"
+	for i := range RuleEmailResetAddress.Limit + 1 {
+		_ = e.svc.RequestEmailReset(ctx, e.client(fmt.Sprintf("10.0.5.%d", i+1)), "victim@example.test")
+	}
+	if err := e.svc.SetRecoveryEmail(ctx, e.client("10.0.5.200"), principal(owner), "victim@example.test", "correct horse", ""); err != nil {
+		t.Fatal("anonymous reset requests blocked adding the address", err)
+	}
 }

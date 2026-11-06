@@ -68,6 +68,15 @@ func (a *AuthServer) DenyDeviceRecovery(w http.ResponseWriter, r *http.Request, 
 	writeJSONStatus(w, http.StatusOK, map[string]string{"status": status})
 }
 
+func (a *AuthServer) CancelDeviceRecovery(w http.ResponseWriter, r *http.Request, requestId string, _ CancelDeviceRecoveryParams) {
+	if err := a.svc.CancelDeviceRecovery(r.Context(), a.clientOf(r), requestId); err != nil {
+		a.fail(w, r, err, false)
+		return
+	}
+	noStore(w)
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (a *AuthServer) CompleteDeviceRecovery(w http.ResponseWriter, r *http.Request, requestId string, _ CompleteDeviceRecoveryParams) {
 	var body struct {
 		Password string `json:"new_password"`

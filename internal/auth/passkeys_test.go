@@ -128,7 +128,7 @@ func TestPasskeyLastRemovalRequiresPasswordAndHonoursDelay(t *testing.T) {
 		t.Fatal(err)
 	}
 	id := []byte{1, 2, 3}
-	if err = e.store.Passkeys().Add(ctx, postgres.Passkey{ID: id, UserID: owner.User.ID, Credential: "sealed-test-placeholder", Name: "Test"}, owner.SessionID, proof); err != nil {
+	if err = e.store.Passkeys().Add(ctx, postgres.Passkey{ID: id, UserID: owner.User.ID, Credential: "sealed-test-placeholder", Name: "Test"}, owner.SessionID, proof.Pin(), proof.BackupCodeHash); err != nil {
 		t.Fatal(err)
 	}
 	if err = e.svc.DeletePasskey(ctx, c, principal(owner), "AQID", ""); !errors.Is(err, ErrInvalidCredentials) {

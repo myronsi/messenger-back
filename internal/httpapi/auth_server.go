@@ -120,7 +120,7 @@ func (a *AuthServer) fail(w http.ResponseWriter, r *http.Request, err error, wit
 		WriteProblem(w, http.StatusServiceUnavailable, ErrorCodeInternalError)
 	case errors.Is(err, auth.ErrTwoFactorRequired):
 		WriteProblem(w, http.StatusUnauthorized, ErrorCodeTwoFactorRequired)
-	case errors.Is(err, auth.ErrQRLoginNotFound), errors.Is(err, auth.ErrRecoveryRequestNotFound):
+	case errors.Is(err, auth.ErrQRLoginNotFound), errors.Is(err, auth.ErrRecoveryRequestNotFound), errors.Is(err, auth.ErrRecoveryLinkInvalid):
 		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
 	case errors.Is(err, auth.ErrQRLoginDecided):
 		WriteProblem(w, http.StatusConflict, ErrorCodeConflict)
