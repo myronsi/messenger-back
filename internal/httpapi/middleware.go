@@ -137,7 +137,8 @@ func requestID() middleware {
 }
 
 // observe records metrics and writes the access log. The log has the method, route pattern,
-// status, size and duration only: no query string, headers, cookies, path values or body.
+// status, size, duration and validated client versions only: no query string,
+// arbitrary headers, cookies, path values or body.
 func observe(log *slog.Logger, m *observability.Metrics) middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -159,6 +160,8 @@ func observe(log *slog.Logger, m *observability.Metrics) middleware {
 				}
 				log.Log(ctx, level, "request",
 					"method", r.Method, "route", st.route, "status", rec.status,
+					"client_version", clientVersionForLog(r.Header.Get(ClientVersionHeader)),
+					"client_api_version", clientVersionForLog(r.Header.Get(ClientAPIVersionHeader)),
 					"bytes", rec.bytes, "duration_ms", float64(d.Microseconds())/1000)
 			}()
 			next.ServeHTTP(rec, r.WithContext(ctx))

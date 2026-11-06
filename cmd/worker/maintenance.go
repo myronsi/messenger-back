@@ -20,19 +20,19 @@ const (
 	sessionRetention = 30 * 24 * time.Hour
 )
 
-// maintain removes ended sessions, old refresh history and stale recovery tokens until ctx ends.
+// maintain removes expired recovery capabilities, ended sessions and old refresh history until ctx ends.
 func maintain(ctx context.Context, log *slog.Logger, store *postgres.Store, every time.Duration) {
 	run := func() {
+		if n, err := store.PurgeRecovery(ctx); err != nil {
+			log.ErrorContext(ctx, "purging expired recovery capabilities failed", "err", err)
+		} else if n > 0 {
+			log.InfoContext(ctx, "purged expired recovery capabilities", "count", n)
+		}
 		sessions, rotated, err := store.Sessions().PurgeEnded(ctx, sessionRetention)
 		if err != nil {
 			log.ErrorContext(ctx, "purging ended sessions failed", "err", err)
 		} else if sessions+rotated > 0 {
 			log.InfoContext(ctx, "purged ended sessions", "sessions", sessions, "rotated_tokens", rotated)
-		}
-		if n, err := store.RecoveryTokens().DeleteStale(ctx); err != nil {
-			log.ErrorContext(ctx, "purging recovery tokens failed", "err", err)
-		} else if n > 0 {
-			log.InfoContext(ctx, "purged recovery tokens", "count", n)
 		}
 	}
 	run()

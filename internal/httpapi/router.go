@@ -112,7 +112,12 @@ func tokenRoute() func(*http.Request) bool {
 			p = strings.ToLower(decoded)
 		}
 		p = path.Clean("/" + strings.ReplaceAll(p, "\\", "/"))
-		return strings.Contains(p+"/", "/notifications/avatar/") || strings.Contains(p+"/", "/notifications/read/")
+		for _, secret := range []string{"/notifications/avatar/", "/notifications/read/", "/auth/recovery-requests/", "/auth/qr-login/"} {
+			if strings.Contains(p+"/", secret) {
+				return true
+			}
+		}
+		return false
 	}
 }
 

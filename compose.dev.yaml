@@ -25,6 +25,15 @@ x-go-app: &go-app
     JWT_SECRET: ${JWT_SECRET:?required}
     ENCRYPTION_KEY: ${ENCRYPTION_KEY:?required}
     RECOVERY_PEPPER: ${RECOVERY_PEPPER:?required}
+    RP_ID: ${RP_ID:-localhost}
+    RP_ORIGINS: ${RP_ORIGINS:-http://localhost:5173}
+    SMTP_HOST: ${SMTP_HOST:-}
+    SMTP_PORT: ${SMTP_PORT:-587}
+    SMTP_USERNAME: ${SMTP_USERNAME:-}
+    SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+    SMTP_FROM: ${SMTP_FROM:-}
+    SMTP_TLS_MODE: ${SMTP_TLS_MODE:-starttls}
+    RECOVERY_WEB_URL: ${RECOVERY_WEB_URL:-http://localhost:5173}
     DATABASE_URL: postgres://${POSTGRES_USER:-messenger}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-messenger}?sslmode=disable
     REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
     SCYLLA_HOSTS: scylla
@@ -39,6 +48,9 @@ x-go-app: &go-app
     STORAGE_BACKEND: s3
     S3_BUCKET: ${S3_BUCKET:-messenger-media}
     CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+    GEOIP_DB_PATH: /geoip/dbip-city-lite.mmdb
+  volumes:
+    - geoip-data:/geoip:ro
   depends_on:
     postgres:
       condition: service_healthy
@@ -57,6 +69,8 @@ x-go-app: &go-app
     elasticsearch-init:
       condition: service_completed_successfully
     object-storage-init:
+      condition: service_completed_successfully
+    geoip-init:
       condition: service_completed_successfully
 
 services:
@@ -230,6 +244,14 @@ services:
       object-storage:
         condition: service_healthy
 
+  geoip-init:
+    image: curlimages/curl:8.22.0
+    user: "0:0"
+    entrypoint: ["sh", "-c", "sh /scripts/update-dbip.sh /data/dbip-city-lite.mmdb --if-missing || echo 'GeoIP database not downloaded: locations stay empty' >&2"]
+    volumes:
+      - ./deploy/geoip:/scripts:ro
+      - geoip-data:/data
+
   # Optional: docker compose -f compose.dev.yaml --profile kibana up -d  ->  http://localhost:5601
   kibana:
     profiles: ["kibana"]
@@ -257,3 +279,4 @@ volumes:
   scylla-data:
   elasticsearch-data:
   object-storage-data:
+  geoip-data:

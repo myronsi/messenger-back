@@ -754,58 +754,6 @@ func TestSessionDuration(t *testing.T) {
 	}
 }
 
-func TestRecoveryTokenResetsPassword(t *testing.T) {
-	e := newEnv(t)
-	ctx := context.Background()
-	c := e.client("10.0.0.10")
-	a := e.register(t, "olga", "correct horse")
-
-	token, err := e.svc.IssueRecoveryToken(ctx, a.User.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var stored int
-	if err := e.store.Pool().QueryRow(ctx, "SELECT count(*) FROM recovery_tokens WHERE jti_hash = $1", token).Scan(&stored); err != nil || stored != 0 {
-		t.Fatalf("the recovery token must be stored hashed: %v %d", err, stored)
-	}
-
-	if err := e.svc.ResetPassword(ctx, c, "not-a-valid-token-at-all", "brand new pass"); !errors.Is(err, ErrInvalidRecovery) {
-		t.Fatalf("unknown token: %v", err)
-	}
-	var ve *ValidationError
-	if err := e.svc.ResetPassword(ctx, c, token, "short"); !errors.As(err, &ve) {
-		t.Fatalf("weak password: %v", err)
-	}
-	if err := e.svc.ResetPassword(ctx, c, token, "brand new pass"); err != nil {
-		t.Fatal(err)
-	}
-	if err := e.svc.ResetPassword(ctx, c, token, "another new pass"); !errors.Is(err, ErrInvalidRecovery) {
-		t.Fatalf("a recovery token is single use: %v", err)
-	}
-	if _, err := e.svc.Authenticate(ctx, a.AccessToken); !errors.Is(err, ErrUnauthenticated) {
-		t.Fatalf("all sessions end after a reset: %v", err)
-	}
-	if _, err := e.svc.Login(ctx, c, "olga", "brand new pass"); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestRecoveryTokenExpires(t *testing.T) {
-	e := newEnv(t)
-	ctx := context.Background()
-	a := e.register(t, "paul", "correct horse")
-	token, err := e.svc.IssueRecoveryToken(ctx, a.User.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := e.store.Pool().Exec(ctx, "UPDATE recovery_tokens SET expires_at = now() - interval '1 minute'"); err != nil {
-		t.Fatal(err)
-	}
-	if err := e.svc.ResetPassword(ctx, e.client("10.0.0.10"), token, "brand new pass"); !errors.Is(err, ErrInvalidRecovery) {
-		t.Fatalf("expired token: %v", err)
-	}
-}
-
 func TestWebSocketTickets(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()

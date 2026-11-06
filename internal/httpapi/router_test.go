@@ -344,3 +344,37 @@ func TestAccessLogHasNoSensitiveData(t *testing.T) {
 		}
 	}
 }
+
+func TestAccessLogClientVersions(t *testing.T) {
+	for _, tt := range []struct {
+		name, app, api, wantApp, wantAPI string
+		status                           int
+	}{
+		{"missing", "", "", "none", "none", http.StatusUnauthorized},
+		{"release", "0.6.9", "2.1.0-alpha.12", "0.6.9", "2.1.0-alpha.12", http.StatusUnauthorized},
+		{"build", " 0.6.9+abc123 ", "2.1.0-alpha.12", "0.6.9+abc123", "2.1.0-alpha.12", http.StatusUnauthorized},
+		{"outdated", "0.4.0", "1.0.0", "0.4.0", "1.0.0", http.StatusUpgradeRequired},
+		{"malformed", "secret-client-value", "secret-contract-value", "invalid", "invalid", http.StatusBadRequest},
+		{"oversized", "1.0.0+" + strings.Repeat("x", 64), "", "invalid", "none", http.StatusUnauthorized},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			e := newTestEnv(t, nil)
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/chats", http.NoBody)
+			req.Header.Set(ClientVersionHeader, tt.app)
+			req.Header.Set(ClientAPIVersionHeader, tt.api)
+			if rec := e.do(req); rec.Code != tt.status {
+				t.Fatalf("status=%d, want %d: %s", rec.Code, tt.status, rec.Body.String())
+			}
+			var entry map[string]any
+			if err := json.Unmarshal(bytes.TrimSpace(e.logs.Bytes()), &entry); err != nil {
+				t.Fatal(err)
+			}
+			if entry["client_version"] != tt.wantApp || entry["client_api_version"] != tt.wantAPI {
+				t.Fatalf("client versions: %s", e.logs)
+			}
+			if strings.Contains(e.logs.String(), "secret-") || strings.Contains(e.logs.String(), strings.Repeat("x", 64)) {
+				t.Fatalf("unvalidated header leaked: %s", e.logs)
+			}
+		})
+	}
+}

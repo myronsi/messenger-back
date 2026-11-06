@@ -9,6 +9,86 @@ type Unimplemented struct{}
 
 var _ ServerInterface = Unimplemented{}
 
+func (Unimplemented) GetRecoveryOverview(w http.ResponseWriter, r *http.Request, _ GetRecoveryOverviewParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) GetRecoveryEmail(w http.ResponseWriter, r *http.Request, _ GetRecoveryEmailParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) SetRecoveryEmail(w http.ResponseWriter, r *http.Request, _ SetRecoveryEmailParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) RemoveRecoveryEmail(w http.ResponseWriter, r *http.Request, _ RemoveRecoveryEmailParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) VerifyRecoveryEmail(w http.ResponseWriter, r *http.Request, _ VerifyRecoveryEmailParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) RequestEmailReset(w http.ResponseWriter, r *http.Request, _ RequestEmailResetParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) ConfirmEmailReset(w http.ResponseWriter, r *http.Request, _ ConfirmEmailResetParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) PasskeyRegistrationOptions(w http.ResponseWriter, r *http.Request, _ PasskeyRegistrationOptionsParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) VerifyPasskeyRegistration(w http.ResponseWriter, r *http.Request, _ VerifyPasskeyRegistrationParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) PasskeyLoginOptions(w http.ResponseWriter, r *http.Request, _ PasskeyLoginOptionsParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) VerifyPasskeyLogin(w http.ResponseWriter, r *http.Request, _ VerifyPasskeyLoginParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) ListPasskeys(w http.ResponseWriter, r *http.Request, _ ListPasskeysParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) RenamePasskey(w http.ResponseWriter, r *http.Request, id string, _ RenamePasskeyParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) RemovePasskey(w http.ResponseWriter, r *http.Request, id string, _ RemovePasskeyParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) StartDeviceRecovery(w http.ResponseWriter, r *http.Request, params StartDeviceRecoveryParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) DeviceRecoveryStatus(w http.ResponseWriter, r *http.Request, requestId string, params DeviceRecoveryStatusParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) ApproveDeviceRecovery(w http.ResponseWriter, r *http.Request, requestId string, params ApproveDeviceRecoveryParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) DenyDeviceRecovery(w http.ResponseWriter, r *http.Request, requestId string, params DenyDeviceRecoveryParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) CompleteDeviceRecovery(w http.ResponseWriter, r *http.Request, requestId string, params CompleteDeviceRecoveryParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) CancelDeviceRecovery(w http.ResponseWriter, r *http.Request, requestId string, params CancelDeviceRecoveryParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) CreateQrLogin(w http.ResponseWriter, r *http.Request, _ CreateQrLoginParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) GetQrLogin(w http.ResponseWriter, r *http.Request, _ string, _ GetQrLoginParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) PollQrLogin(w http.ResponseWriter, r *http.Request, _ string, _ PollQrLoginParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) ApproveQrLogin(w http.ResponseWriter, r *http.Request, _ string, _ ApproveQrLoginParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) DenyQrLogin(w http.ResponseWriter, r *http.Request, _ string, _ DenyQrLoginParams) {
+	notImplemented(w, r)
+}
+
 func (Unimplemented) UploadAttachment(w http.ResponseWriter, r *http.Request, params UploadAttachmentParams) {
 	notImplemented(w, r)
 }
@@ -29,19 +109,11 @@ func (Unimplemented) Logout(w http.ResponseWriter, r *http.Request, params Logou
 	notImplemented(w, r)
 }
 
-func (Unimplemented) StartRecovery(w http.ResponseWriter, r *http.Request, params StartRecoveryParams) {
-	notImplemented(w, r)
-}
-
 func (Unimplemented) RefreshToken(w http.ResponseWriter, r *http.Request, params RefreshTokenParams) {
 	notImplemented(w, r)
 }
 
 func (Unimplemented) Register(w http.ResponseWriter, r *http.Request, params RegisterParams) {
-	notImplemented(w, r)
-}
-
-func (Unimplemented) ResetPassword(w http.ResponseWriter, r *http.Request, params ResetPasswordParams) {
 	notImplemented(w, r)
 }
 

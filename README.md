@@ -20,6 +20,10 @@ Build `go.Dockerfile`; API and worker share that image. Production uses `deploy/
 
 Refresh cookies must match `/api/v2/auth/refresh`. Never reuse the retired `/api/auth` cookie path.
 
+## Third-party notices
+
+IP geolocation by [DB-IP](https://db-ip.com): sessions, security events and recovery requests show an approximate location from the DB-IP Lite city database, licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The database is downloaded at deploy time and never committed; see [GeoIP](docs/geoip.md).
+
 ## Python retirement
 
 The Python service, build, deployment, tests and completed one-time importer have been removed. Historical source remains in Git history. Existing migrated password formats remain supported so users keep access to their accounts. Historical migration records and backups are retained for audit and recovery; they are not deployment instructions.

@@ -1,0 +1,10 @@
+{
+  "type": "security_alert",
+  "event_id": "7217400317439950010",
+  "chat_id": null,
+  "data": {
+    "type": "login",
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140.0",
+    "created_at": "2026-11-06T12:00:00Z"
+  }
+}

@@ -2,6 +2,54 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.14
+
+- New schema `Location` (`city`, `country_code` (ISO 3166-1 alpha-2), `country` (English name), each nullable): the
+  approximate location of a client address from an offline GeoIP database (IP geolocation by DB-IP). Clients
+  localise the country name from `country_code`.
+- `Session` (`GET /me/sessions`) and the items of `SecurityEventPage` (`GET /me/security-events`) have a required,
+  nullable `location`, captured when the session signed in or refreshed and when the event happened.
+- The `recovery_request` WebSocket event replaces `ip_hint` with a required, nullable `location`. No response or
+  event exposes a client IP address or network.
+- Operations that take an optional second-factor `code` answer `401` with `code: two_factor_required` when every
+  other credential in the request was valid, the account has two-factor on and no `code` was sent; nothing
+  single-use is consumed, so clients ask for the code and repeat the request. Invalid other credentials and a wrong
+  `code` keep their errors. Affected: `POST /auth/recover/key`, `POST /auth/password-reset/confirm`,
+  `POST /auth/recovery-requests/{requestId}/approve`, `POST /me/recovery-key`, `POST /me/2fa/disable`,
+  `POST /auth/passkeys/register/options`, `PUT /me/email` and `DELETE /me/email`. `code` of
+  `DisableTwoFactorRequest` is now optional.
+- Sign in with a QR code. A device that is not signed in calls `POST /auth/qr-login` (public, `201`
+  `QrLoginStart`: `request_id`, `poll_token`, `url` = `<RECOVERY_WEB_URL>/qr/<request_id>`, `expires_at` after 2
+  minutes) and polls `POST /auth/qr-login/{requestId}/poll` with `{ poll_token }` (public, `QrLoginPollResult`:
+  `status` `pending`, `scanned`, `denied` or `expired`). A signed-in device opens the link: `GET
+  /auth/qr-login/{requestId}` (`QrLoginRequest` with `device`, `location`, `created_at`, `expires_at`) moves the
+  request to `scanned` and binds it to that account, then `POST /auth/qr-login/{requestId}/approve` (optional
+  `code`, `401 two_factor_required` with two-factor on and no code, `403 forbidden` for an idle or old session) or
+  `POST /auth/qr-login/{requestId}/deny` answer `204`. The first poll after approval answers `status: approved`
+  plus the `TokenResponse` fields and sets the refresh cookie, exactly once; later polls, a wrong `poll_token` and
+  unknown requests answer `expired`. Unknown, expired or used requests answer `404` to the signed-in operations,
+  already decided ones `409`.
+- New security event types `qr_login_approved`, `qr_login_denied` (both with the new device's user agent and
+  location) and `qr_login` (the new device signed in). The new `security_alert` WebSocket event
+  carries informational notices (sign-ins, password, 2FA, passkey and recovery changes, `qr_login_approved`);
+  `security_notice` stays limited to `password_reset`, so released clients that sign out on it keep working.
+- `request_id` of the `recovery_request` WebSocket event is now an approval handle that differs from the
+  requester's capability. `POST /auth/recovery-requests/{requestId}/approve` and `/deny` take this handle; status
+  polling and `/complete` keep taking the requester's capability, so a signed-in device that receives the event can
+  no longer poll or complete the request. `DeviceRecoveryApproval` has a new required `password`. Approve and deny
+  answer `404` for an unknown, expired or already decided request and `403 forbidden` for an idle or old session.
+- `POST /auth/passkeys/register/verify` answers `400 invalid_request` instead of `401 unauthenticated` for an
+  expired or used registration challenge, so clients do not treat it as a lost session.
+- A completed password recovery (key, device approval or email) removes every passkey and, except for an email
+  recovery, the recovery email. The `password_reset` security event details gain `passkeys_removed` and
+  `recovery_email_removed`.
+- New `POST /auth/recovery-requests/{requestId}/cancel` (public, requester capability, `204` for every
+  capability): withdraws a pending device recovery request so it stops counting towards the limit of three.
+- `security_alert` adds `login_2fa` to its types and an optional `session_id`: the session that made the change,
+  so clients can skip alerts about their own actions.
+- `POST /auth/password-reset/confirm` answers `404 not_found` for an unknown, expired or used link instead of
+  `400 invalid_credentials`, so clients can tell a dead link from a wrong code.
+
 ## 2.1.0-alpha.12
 
 - `GET /link-preview?url=` returns the Open Graph preview of a public web page (`title`, `description`,

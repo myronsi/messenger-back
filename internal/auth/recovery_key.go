@@ -71,13 +71,25 @@ func (s *Service) RecoveryKeyStatus(ctx context.Context, p Principal) (RecoveryK
 
 // recoveryFactor leaves backup-code consumption to the password/key transaction.
 // The sealed secret is compared again under lock so concurrent 2FA changes cannot
-// downgrade the proof. TOTP replay claims are deliberately fail-closed.
+// downgrade the proof. TOTP replay claims are deliberately fail-closed. Callers
+// verify every other credential first: a missing code answers ErrTwoFactorRequired,
+// which reveals that two-factor is on, and must come before any single-use proof is consumed.
 func (s *Service) recoveryFactor(ctx context.Context, uid int64, st postgres.SecuritySettings, code string) (*string, error) {
 	if !st.TwoFactorEnabled {
 		return nil, nil
 	}
+	if strings.TrimSpace(code) == "" {
+		return nil, ErrTwoFactorRequired
+	}
 	if IsRecoveryCode(code) {
 		hash := HashRecoveryCode(code)
+		ok, err := s.store.SecuritySettings().HasRecoveryCode(ctx, uid, hash)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return nil, ErrRecoveryKey
+		}
 		return &hash, nil
 	}
 	ok, _, err := s.checkSecondFactor(ctx, uid, st, code)
@@ -90,27 +102,24 @@ func (s *Service) recoveryFactor(ctx context.Context, uid int64, st postgres.Sec
 	return nil, nil
 }
 
+func (s *Service) limitedRecoveryFactor(ctx context.Context, uid int64, st postgres.SecuritySettings, code string) (*string, error) {
+	attempt, err := s.allow(ctx, limitCheck{RuleTwoFAUser, fmt.Sprint(uid)})
+	if err != nil {
+		return nil, err
+	}
+	backup, err := s.recoveryFactor(ctx, uid, st, code)
+	if !errors.Is(err, ErrRecoveryKey) {
+		attempt.release(ctx)
+	}
+	return backup, err
+}
+
 func (s *Service) ReplaceRecoveryKey(ctx context.Context, c Client, p Principal, password, code string) (string, error) {
-	if err := s.recoveryChangesAllowed(ctx, p.UserID); err != nil {
-		return "", err
-	}
-	if err := s.take(ctx, RuleTwoFAUser, fmt.Sprint(p.UserID)); err != nil {
-		return "", err
-	}
-	hash, err := s.verifyPassword(ctx, p.UserID, password)
-	if err != nil {
-		return "", err
-	}
-	st, err := s.store.SecuritySettings().Get(ctx, p.UserID)
-	if err != nil {
-		return "", err
-	}
-	backup, err := s.recoveryFactor(ctx, p.UserID, st, code)
+	proof, err := s.recoveryChangeProof(ctx, p, password, code)
 	if err != nil {
 		return "", err
 	}
 	key, keyHash := s.newRecoveryKey()
-	proof := postgres.RecoveryProof{PasswordHash: hash, TwoFactorEnabled: st.TwoFactorEnabled, TwoFactorSecret: st.TwoFactorSecret, BackupCodeHash: backup}
 	if err = s.store.RecoveryKeys().Replace(ctx, p.UserID, proof, keyHash); err != nil {
 		if errors.Is(err, postgres.ErrNotFound) || errors.Is(err, postgres.ErrConflict) {
 			return "", ErrRecoveryKey
@@ -122,8 +131,9 @@ func (s *Service) ReplaceRecoveryKey(ctx context.Context, c Client, p Principal,
 }
 
 // RecoverWithKey has one public failure for unknown accounts, malformed/used keys
-// and absent/wrong second factors. A replacement key is issued atomically with
-// the reset so a lost response never leaves a consumed key usable by an attacker.
+// and wrong second factors. Only after a valid key does a missing second factor
+// answer ErrTwoFactorRequired, and the key stays unused. A replacement key is issued
+// atomically with the reset so a lost response never leaves a consumed key usable by an attacker.
 func (s *Service) RecoverWithKey(ctx context.Context, c Client, username, key, newPassword, code string) (*TokenSet, error) {
 	username = normalizeUsername(username)
 	if len(username) > 64 || len(code) > 128 {
@@ -178,19 +188,7 @@ func (s *Service) RecoverWithKey(ctx context.Context, c Client, username, key, n
 	if err != nil {
 		return nil, err
 	}
-	notify := s.onRevoked
-	if s.onRecovery != nil {
-		notify = s.onRecovery
-	}
-	if err = s.revokeInCacheWithNotifier(ctx, notify, reset.RevokedSessions...); err != nil {
-		return nil, err
-	}
-	tokens, err := s.startSession(ctx, u, c, digest(passwordHash))
-	if err != nil {
-		return nil, err
-	}
-	tokens.RecoveryKey = replacement
-	return tokens, nil
+	return s.recoveredSession(ctx, c, reset, passwordHash, replacement)
 }
 
 func (s *Service) SecurityEvents(ctx context.Context, p Principal) ([]postgres.SecurityEvent, error) {

@@ -69,6 +69,8 @@ type Config struct {
 	Media         Media
 	Tracing       Tracing
 	Notifications Notifications
+	RecoveryMail  RecoveryMail
+	GeoIPDBPath   string `env:"GEOIP_DB_PATH"`
 
 	// WorkerAddr is where the worker serves /healthz and /metrics.
 	WorkerAddr string `env:"WORKER_ADDR" envDefault:":8081"`
@@ -181,6 +183,9 @@ type HTTP struct {
 
 // Auth configures sessions and the refresh cookie.
 type Auth struct {
+	RPID                   string        `env:"RP_ID"`
+	RPOrigins              []string      `env:"RP_ORIGINS" envSeparator:","`
+	RecoveryApprovalMaxAge time.Duration `env:"RECOVERY_APPROVAL_MAX_AGE" envDefault:"720h"`
 	// CookieSecure marks the refresh cookie Secure. Only turn it off for plain-HTTP local development;
 	// production refuses to start without it.
 	CookieSecure bool `env:"COOKIE_SECURE" envDefault:"true"`
@@ -369,6 +374,7 @@ func (c Config) Validate() error {
 	}
 	problems = append(problems, c.Realtime.validate()...)
 	problems = append(problems, c.Notifications.validate()...)
+	problems = append(problems, c.RecoveryMail.validate()...)
 	problems = append(problems, c.Media.validate()...)
 	switch c.Scylla.Consistency {
 	case "local_quorum", "quorum", "one", "local_one":
@@ -435,6 +441,9 @@ func (r Realtime) validate() []string {
 
 func (a Auth) validate(production bool) []string {
 	var problems []string
+	if a.RecoveryApprovalMaxAge <= 0 {
+		problems = append(problems, "RECOVERY_APPROVAL_MAX_AGE must be positive")
+	}
 	if production && !a.CookieSecure {
 		problems = append(problems, "COOKIE_SECURE must be true in production")
 	}

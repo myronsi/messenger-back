@@ -110,6 +110,10 @@ if ! docker compose run --rm postgres-migrate || ! docker compose run --rm scyll
   exit 1
 fi
 
+if ! docker compose run --rm geoip-init; then
+  echo "The GeoIP database could not be downloaded; sessions and security events are shown without a location." >&2
+fi
+
 set_image "$IMAGE"
 # A container that cannot even start fails `up`; that rolls back like a failed readiness check.
 if docker compose up -d --no-deps api worker && wait_ready; then

@@ -27,6 +27,23 @@ type RecoveryProof struct {
 	BackupCodeHash   *string
 }
 
+type PinnedProof struct {
+	CredentialPin string `json:"credential_pin,omitempty"`
+	TwoFactor     bool   `json:"two_factor"`
+	FactorPin     string `json:"factor_pin,omitempty"`
+}
+
+func (p RecoveryProof) Pin() PinnedProof {
+	pin := PinnedProof{TwoFactor: p.TwoFactorEnabled}
+	if p.PasswordHash != "" {
+		pin.CredentialPin = passwordFingerprint(p.PasswordHash)
+	}
+	if p.TwoFactorSecret != nil {
+		pin.FactorPin = passwordFingerprint(*p.TwoFactorSecret)
+	}
+	return pin
+}
+
 type RecoveryKeyRepository interface {
 	Register(context.Context, string, string, string, string) (User, error)
 	Get(context.Context, int64) (RecoveryKey, error)
@@ -78,6 +95,10 @@ func (r recoveryKeyRepo) Get(ctx context.Context, uid int64) (RecoveryKey, error
 // lockRecoveryState follows the common user -> settings lock order. Every 2FA change
 // takes the same locks, so a recovery cannot race a change to its second factor.
 func lockRecoveryState(ctx context.Context, tx pgx.Tx, uid int64, proof RecoveryProof) (*time.Time, error) {
+	return lockPinnedState(ctx, tx, uid, proof.Pin())
+}
+
+func lockPinnedState(ctx context.Context, tx pgx.Tx, uid int64, pin PinnedProof) (*time.Time, error) {
 	var password string
 	if err := tx.QueryRow(ctx, "SELECT password_hash FROM users WHERE id=$1 FOR UPDATE", uid).Scan(&password); err != nil {
 		return nil, err
@@ -92,8 +113,8 @@ func lockRecoveryState(ctx context.Context, tx pgx.Tx, uid int64, proof Recovery
  FROM user_security_settings WHERE user_id=$1 FOR UPDATE`, uid).Scan(&enabled, &secret, &locked); err != nil {
 		return nil, err
 	}
-	sameSecret := secret == nil && proof.TwoFactorSecret == nil || secret != nil && proof.TwoFactorSecret != nil && *secret == *proof.TwoFactorSecret
-	if proof.PasswordHash != "" && password != proof.PasswordHash || enabled != proof.TwoFactorEnabled || !sameSecret {
+	current := RecoveryProof{PasswordHash: password, TwoFactorEnabled: enabled, TwoFactorSecret: secret}.Pin()
+	if pin.CredentialPin != "" && current.CredentialPin != pin.CredentialPin || current.TwoFactor != pin.TwoFactor || current.FactorPin != pin.FactorPin {
 		return nil, ErrConflict
 	}
 	return locked, nil
@@ -150,26 +171,8 @@ func (r recoveryKeyRepo) Reset(ctx context.Context, uid int64, expectedHash stri
 		if err := consumeRecoveryFactor(ctx, tx, uid, proof.BackupCodeHash); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, "UPDATE users SET password_hash=$2 WHERE id=$1", uid, passwordHash); err != nil {
-			return err
-		}
-		if _, err := tx.Exec(ctx, "UPDATE user_recovery_keys SET key_hash=$2,created_at=now() WHERE user_id=$1", uid, newKeyHash); err != nil {
-			return err
-		}
-		if _, err := tx.Exec(ctx, "UPDATE user_security_settings SET recovery_locked_until=now()+interval '24 hours' WHERE user_id=$1", uid); err != nil {
-			return err
-		}
-		if _, err := tx.Exec(ctx, "DELETE FROM recovery_tokens WHERE user_id=$1", uid); err != nil {
-			return err
-		}
-		ids, err := sqlcdb.New(tx).RevokeAllSessions(ctx, uid)
-		if err != nil {
-			return err
-		}
-		if _, err = tx.Exec(ctx, `INSERT INTO user_security_events(user_id,event_type,details) VALUES($1,'password_reset','{"method":"recovery_key"}'::jsonb)`, uid); err != nil {
-			return err
-		}
-		out = PasswordReset{UserID: uid, RevokedSessions: ids}
+		var err error
+		out, err = finishRecovery(ctx, tx, uid, passwordHash, newKeyHash, "recovery_key")
 		return err
 	})
 	return out, err

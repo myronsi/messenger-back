@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ServerSecurityAlertEvent",
+  "type": "object",
+  "required": [
+    "type",
+    "event_id",
+    "chat_id",
+    "data"
+  ],
+  "properties": {
+    "type": {
+      "const": "security_alert"
+    },
+    "event_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "chat_id": {
+      "type": "null"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "password_changed",
+            "recovery_key_changed",
+            "2fa_enabled",
+            "2fa_disabled",
+            "passkey_added",
+            "passkey_removed",
+            "recovery_email_changed",
+            "recovery_email_removed",
+            "passkey_counter_warning",
+            "login",
+            "login_2fa",
+            "passkey_login",
+            "qr_login_approved"
+          ]
+        },
+        "user_agent": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "session_id": {
+          "description": "The session that made the change, when a signed-in session made it. Clients skip alerts for their own session.",
+          "type": "string",
+          "format": "uuid"
+        }
+      }
+    }
+  }
+}

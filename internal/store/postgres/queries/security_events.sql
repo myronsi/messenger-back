@@ -1,6 +1,6 @@
 -- name: RecordSecurityEvent :one
-INSERT INTO user_security_events (user_id, event_type, ip_address, user_agent, details)
-VALUES (@user_id, @event_type, @ip_address, @user_agent, @details)
+INSERT INTO user_security_events (user_id, event_type, ip_address, user_agent, location, details)
+VALUES (@user_id, @event_type, @ip_address, @user_agent, @location, @details)
 RETURNING *;
 
 -- name: ListSecurityEvents :many

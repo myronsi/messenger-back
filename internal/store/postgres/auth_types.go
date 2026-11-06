@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/myronsi/messenger-back/internal/geoip"
 )
 
 // DefaultSessionDays is the session lifetime of an account that never changed the setting.
@@ -17,6 +19,7 @@ type Session struct {
 	UserID       int64
 	UserAgent    *string
 	IP           *netip.Addr
+	Location     *geoip.Location
 	CreatedAt    time.Time
 	LastActiveAt time.Time
 	ExpiresAt    time.Time
@@ -30,12 +33,14 @@ func (s Session) Active(now time.Time) bool {
 
 // NewSession describes a session to create. RefreshTokenHash is the SHA-256 (hex) of the refresh token.
 type NewSession struct {
+	Passkey             *PasskeyLoginProof
 	PasswordFingerprint string
 	RecoveryCodeHash    string
 	UserID              int64
 	RefreshTokenHash    string
 	UserAgent           *string
 	IP                  *netip.Addr
+	Location            *geoip.Location
 	ExpiresAt           time.Time
 }
 
@@ -62,6 +67,7 @@ type RotateRequest struct {
 	NewExpiresAt  func(sessionDays int) time.Time
 	UserAgent     *string
 	IP            *netip.Addr
+	Location      *geoip.Location
 	// ReuseGrace is how long after a rotation the previous token is answered with RotateStale instead
 	// of being treated as theft.
 	ReuseGrace time.Duration
@@ -132,14 +138,4 @@ type SecuritySettingsRepository interface {
 type PasswordReset struct {
 	UserID          int64
 	RevokedSessions []uuid.UUID
-}
-
-// RecoveryTokenRepository stores single-use account recovery tokens (hashes only).
-type RecoveryTokenRepository interface {
-	Issue(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time) error
-	// ResetPassword consumes the token, sets the password and revokes every session, atomically.
-	// ErrNotFound when the token is unknown, used or expired.
-	ResetPassword(ctx context.Context, tokenHash, newPasswordHash string) (PasswordReset, error)
-	// DeleteStale removes tokens that expired long ago.
-	DeleteStale(ctx context.Context) (int64, error)
 }

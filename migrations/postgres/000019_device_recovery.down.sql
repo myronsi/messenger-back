@@ -1,0 +1,2 @@
+DROP TABLE recovery_requests;
+ALTER TABLE user_security_settings DROP COLUMN recovery_requests_blocked_until;

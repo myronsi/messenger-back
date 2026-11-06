@@ -25,6 +25,7 @@ import (
 
 	"github.com/myronsi/messenger-back/internal/auth"
 	"github.com/myronsi/messenger-back/internal/config"
+	"github.com/myronsi/messenger-back/internal/geoip"
 	"github.com/myronsi/messenger-back/internal/observability"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 )
@@ -116,10 +117,16 @@ func newRedis(t *testing.T) *goredis.Client {
 type authEnv struct {
 	router http.Handler
 	logs   *bytes.Buffer
+	store  *postgres.Store
 }
 
 // newAuthEnv builds the router with the real service on fresh stores.
 func newAuthEnv(t *testing.T, grace time.Duration, mutate func(*AuthOptions)) *authEnv {
+	t.Helper()
+	return newAuthEnvWithGeoIP(t, grace, mutate, nil)
+}
+
+func newAuthEnvWithGeoIP(t *testing.T, grace time.Duration, mutate func(*AuthOptions), geo *geoip.Locator) *authEnv {
 	t.Helper()
 	store, rdb := newPostgres(t), newRedis(t)
 	logs := &bytes.Buffer{}
@@ -131,6 +138,7 @@ func newAuthEnv(t *testing.T, grace time.Duration, mutate func(*AuthOptions)) *a
 		SessionCacheTTL:   time.Minute,
 		RefreshReuseGrace: grace,
 		Namespace:         "t" + uuid.NewString(),
+		GeoIP:             geo,
 	}, log)
 	if err != nil {
 		t.Fatal(err)
@@ -151,7 +159,7 @@ func newAuthEnv(t *testing.T, grace time.Duration, mutate func(*AuthOptions)) *a
 		API:           NewAuthServer(opts),
 		Authenticator: svc,
 	})
-	return &authEnv{router: r, logs: logs}
+	return &authEnv{router: r, logs: logs, store: store}
 }
 
 type reply struct {
@@ -642,6 +650,12 @@ func TestTwoFactorOverHTTP(t *testing.T) {
 		t.Fatalf("recovery code reused: %d", rec.Code)
 	}
 
+	if rec := authed("/me/2fa/disable", map[string]any{"password": "wrong password"}); rec.Code != http.StatusForbidden || rec.code() != "invalid_credentials" {
+		t.Fatalf("disable with wrong password and no code: %d %s", rec.Code, rec.Body)
+	}
+	if rec := authed("/me/2fa/disable", map[string]any{"password": password}); rec.Code != http.StatusUnauthorized || rec.code() != "two_factor_required" {
+		t.Fatalf("disable without code: %d %s", rec.Code, rec.Body)
+	}
 	if rec := authed("/me/2fa/disable", map[string]any{"password": "wrong password", "code": codes[1]}); rec.Code != http.StatusForbidden || rec.code() != "invalid_credentials" {
 		t.Fatalf("disable with wrong password: %d %s", rec.Code, rec.Body)
 	}
@@ -741,17 +755,22 @@ func TestClientIP(t *testing.T) {
 
 func TestRouteAccess(t *testing.T) {
 	for pattern, want := range map[string]access{
-		"GET /api/v2/meta":                        accessPublic,
-		"POST /api/v2/auth/login":                 accessPublic,
-		"POST /api/v2/auth/refresh":               accessPublic,
-		"POST /api/v2/auth/logout":                accessOptional,
-		"GET /api/v2/me":                          accessRequired,
-		"POST /api/v2/me/2fa/setup":               accessRequired,
-		"DELETE /api/v2/me/sessions/{session_id}": accessRequired,
-		"GET /api/v2/auth/login":                  accessRequired, // wrong method for a public path
-		"POST /api/v2/auth/ws-ticket":             accessRequired,
-		"POST /other/auth/login":                  accessRequired, // outside the base path
-		"":                                        accessRequired,
+		"GET /api/v2/meta":                               accessPublic,
+		"POST /api/v2/auth/login":                        accessPublic,
+		"POST /api/v2/auth/refresh":                      accessPublic,
+		"POST /api/v2/auth/logout":                       accessOptional,
+		"GET /api/v2/me":                                 accessRequired,
+		"POST /api/v2/me/2fa/setup":                      accessRequired,
+		"DELETE /api/v2/me/sessions/{session_id}":        accessRequired,
+		"GET /api/v2/auth/login":                         accessRequired, // wrong method for a public path
+		"POST /api/v2/auth/ws-ticket":                    accessRequired,
+		"POST /api/v2/auth/qr-login":                     accessPublic,
+		"POST /api/v2/auth/qr-login/{requestId}/poll":    accessPublic,
+		"GET /api/v2/auth/qr-login/{requestId}":          accessRequired,
+		"POST /api/v2/auth/qr-login/{requestId}/approve": accessRequired,
+		"POST /api/v2/auth/qr-login/{requestId}/deny":    accessRequired,
+		"POST /other/auth/login":                         accessRequired, // outside the base path
+		"":                                               accessRequired,
 	} {
 		if got := accessFor(pattern, "/api/v2"); got != want {
 			t.Errorf("%q: got %d, want %d", pattern, got, want)

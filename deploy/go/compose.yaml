@@ -14,6 +14,8 @@ x-app: &app
       required: false
   restart: unless-stopped
   # The image has no shell for a healthcheck; deploy.sh checks /readyz and /healthz from the host.
+  volumes:
+    - geoip-data:/geoip:ro
 
 x-migrate: &migrate
   image: migrate/migrate:v4.20.1
@@ -50,6 +52,17 @@ services:
     volumes:
       - ./migrate.sh:/migrate.sh:ro
       - ./migrations/scylla:/migrations:ro
+
+  geoip-init:
+    image: curlimages/curl:8.22.0
+    profiles: ["geoip"]
+    restart: "no"
+    user: "0:0"
+    entrypoint: ["sh", "/scripts/update-dbip.sh"]
+    command: ["/data/dbip-city-lite.mmdb", "--if-missing"]
+    volumes:
+      - ./geoip:/scripts:ro
+      - geoip-data:/data
 
   # A custom-format dump of DATABASE_URL to stdout (deploy.sh keeps it in backups/).
   postgres-backup:
@@ -176,3 +189,4 @@ volumes:
   scylla-data:
   elasticsearch-data:
   object-storage-data:
+  geoip-data:

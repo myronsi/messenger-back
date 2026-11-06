@@ -22,19 +22,19 @@ import (
 
 // Defines values for ApprovalRequestStatus.
 const (
-	Approved ApprovalRequestStatus = "approved"
-	Pending  ApprovalRequestStatus = "pending"
-	Rejected ApprovalRequestStatus = "rejected"
+	ApprovalRequestStatusApproved ApprovalRequestStatus = "approved"
+	ApprovalRequestStatusPending  ApprovalRequestStatus = "pending"
+	ApprovalRequestStatusRejected ApprovalRequestStatus = "rejected"
 )
 
 // Valid indicates whether the value is a known member of the ApprovalRequestStatus enum.
 func (e ApprovalRequestStatus) Valid() bool {
 	switch e {
-	case Approved:
+	case ApprovalRequestStatusApproved:
 		return true
-	case Pending:
+	case ApprovalRequestStatusPending:
 		return true
-	case Rejected:
+	case ApprovalRequestStatusRejected:
 		return true
 	default:
 		return false
@@ -116,6 +116,33 @@ func (e DeleteMessagesRequestScope) Valid() bool {
 	case DeleteMessagesRequestScopeEveryone:
 		return true
 	case DeleteMessagesRequestScopeMe:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DeviceRecoveryStatusStatus.
+const (
+	DeviceRecoveryStatusStatusApproved DeviceRecoveryStatusStatus = "approved"
+	DeviceRecoveryStatusStatusDenied   DeviceRecoveryStatusStatus = "denied"
+	DeviceRecoveryStatusStatusExpired  DeviceRecoveryStatusStatus = "expired"
+	DeviceRecoveryStatusStatusPending  DeviceRecoveryStatusStatus = "pending"
+	DeviceRecoveryStatusStatusUsed     DeviceRecoveryStatusStatus = "used"
+)
+
+// Valid indicates whether the value is a known member of the DeviceRecoveryStatusStatus enum.
+func (e DeviceRecoveryStatusStatus) Valid() bool {
+	switch e {
+	case DeviceRecoveryStatusStatusApproved:
+		return true
+	case DeviceRecoveryStatusStatusDenied:
+		return true
+	case DeviceRecoveryStatusStatusExpired:
+		return true
+	case DeviceRecoveryStatusStatusPending:
+		return true
+	case DeviceRecoveryStatusStatusUsed:
 		return true
 	default:
 		return false
@@ -347,6 +374,108 @@ func (e NotificationMuteRequestDuration) Valid() bool {
 	case N8h:
 		return true
 	case Off:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for QrLoginPollResult0Status.
+const (
+	QrLoginPollResult0StatusDenied  QrLoginPollResult0Status = "denied"
+	QrLoginPollResult0StatusExpired QrLoginPollResult0Status = "expired"
+	QrLoginPollResult0StatusPending QrLoginPollResult0Status = "pending"
+	QrLoginPollResult0StatusScanned QrLoginPollResult0Status = "scanned"
+)
+
+// Valid indicates whether the value is a known member of the QrLoginPollResult0Status enum.
+func (e QrLoginPollResult0Status) Valid() bool {
+	switch e {
+	case QrLoginPollResult0StatusDenied:
+		return true
+	case QrLoginPollResult0StatusExpired:
+		return true
+	case QrLoginPollResult0StatusPending:
+		return true
+	case QrLoginPollResult0StatusScanned:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for QrLoginPollResult1Status.
+const (
+	QrLoginPollResult1StatusApproved QrLoginPollResult1Status = "approved"
+)
+
+// Valid indicates whether the value is a known member of the QrLoginPollResult1Status enum.
+func (e QrLoginPollResult1Status) Valid() bool {
+	switch e {
+	case QrLoginPollResult1StatusApproved:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for QrLoginPollResult1TokenType.
+const (
+	QrLoginPollResult1TokenTypeBearer QrLoginPollResult1TokenType = "Bearer"
+)
+
+// Valid indicates whether the value is a known member of the QrLoginPollResult1TokenType enum.
+func (e QrLoginPollResult1TokenType) Valid() bool {
+	switch e {
+	case QrLoginPollResult1TokenTypeBearer:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for QrLoginStatus.
+const (
+	QrLoginStatusApproved QrLoginStatus = "approved"
+	QrLoginStatusDenied   QrLoginStatus = "denied"
+	QrLoginStatusExpired  QrLoginStatus = "expired"
+	QrLoginStatusPending  QrLoginStatus = "pending"
+	QrLoginStatusScanned  QrLoginStatus = "scanned"
+)
+
+// Valid indicates whether the value is a known member of the QrLoginStatus enum.
+func (e QrLoginStatus) Valid() bool {
+	switch e {
+	case QrLoginStatusApproved:
+		return true
+	case QrLoginStatusDenied:
+		return true
+	case QrLoginStatusExpired:
+		return true
+	case QrLoginStatusPending:
+		return true
+	case QrLoginStatusScanned:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RecoveryEmailStatusState.
+const (
+	RecoveryEmailStatusStateNotAdded RecoveryEmailStatusState = "not_added"
+	RecoveryEmailStatusStatePending  RecoveryEmailStatusState = "pending"
+	RecoveryEmailStatusStateVerified RecoveryEmailStatusState = "verified"
+)
+
+// Valid indicates whether the value is a known member of the RecoveryEmailStatusState enum.
+func (e RecoveryEmailStatusState) Valid() bool {
+	switch e {
+	case RecoveryEmailStatusStateNotAdded:
+		return true
+	case RecoveryEmailStatusStatePending:
+		return true
+	case RecoveryEmailStatusStateVerified:
 		return true
 	default:
 		return false
@@ -746,13 +875,45 @@ type DeleteMessagesRequest struct {
 // DeleteMessagesRequestScope defines model for DeleteMessagesRequest.Scope.
 type DeleteMessagesRequestScope string
 
+// DeviceRecoveryApproval defines model for DeviceRecoveryApproval.
+type DeviceRecoveryApproval struct {
+	Code        *string `json:"code,omitempty"`
+	MatchNumber int     `json:"match_number"`
+	Password    string  `json:"password"`
+}
+
+// DeviceRecoveryComplete defines model for DeviceRecoveryComplete.
+type DeviceRecoveryComplete struct {
+	NewPassword *string `json:"new_password,omitempty"`
+}
+
+// DeviceRecoveryResult defines model for DeviceRecoveryResult.
+type DeviceRecoveryResult struct {
+	ExpiresAt   time.Time `json:"expires_at"`
+	MatchNumber int       `json:"match_number"`
+	RequestId   string    `json:"request_id"`
+}
+
+// DeviceRecoveryStart defines model for DeviceRecoveryStart.
+type DeviceRecoveryStart struct {
+	Username Username `json:"username"`
+}
+
+// DeviceRecoveryStatus defines model for DeviceRecoveryStatus.
+type DeviceRecoveryStatus struct {
+	Status DeviceRecoveryStatusStatus `json:"status"`
+}
+
+// DeviceRecoveryStatusStatus defines model for DeviceRecoveryStatus.Status.
+type DeviceRecoveryStatusStatus string
+
 // DirectMessagePolicy defines model for DirectMessagePolicy.
 type DirectMessagePolicy string
 
 // DisableTwoFactorRequest defines model for DisableTwoFactorRequest.
 type DisableTwoFactorRequest struct {
 	// Code A code of the authenticator app, or an unused recovery code.
-	Code     string  `json:"code"`
+	Code     *string `json:"code,omitempty"`
 	Password *string `json:"password,omitempty"`
 }
 
@@ -760,6 +921,23 @@ type DisableTwoFactorRequest struct {
 type EditMessageRequest struct {
 	// Content New text, or the new caption of a file. Empty removes a file's caption; a text message rejects it.
 	Content string `json:"content"`
+}
+
+// EmailResetAccepted defines model for EmailResetAccepted.
+type EmailResetAccepted struct {
+	Message string `json:"message"`
+}
+
+// EmailResetConfirmation defines model for EmailResetConfirmation.
+type EmailResetConfirmation struct {
+	Code        *string `json:"code,omitempty"`
+	NewPassword *string `json:"new_password,omitempty"`
+	Token       string  `json:"token"`
+}
+
+// EmailResetRequest defines model for EmailResetRequest.
+type EmailResetRequest struct {
+	UsernameOrEmail string `json:"username_or_email"`
 }
 
 // ErrorCode Stable machine-readable error code. New codes can appear in MINOR versions; unknown
@@ -873,6 +1051,20 @@ type LinkPreviewImage struct {
 	// Url `GET /link-preview/image` with the signed address of the page's image
 	Url   string `json:"url"`
 	Width *int   `json:"width"`
+}
+
+// Location Approximate location of a client address, looked up in an offline GeoIP database (IP geolocation by
+// DB-IP, https://db-ip.com, CC BY 4.0). The address itself is never exposed. Each field is `null` when the
+// database does not know it; clients localise the country name from `country_code`.
+type Location struct {
+	// City City name in English
+	City *string `json:"city"`
+
+	// Country Country name in English
+	Country *string `json:"country"`
+
+	// CountryCode ISO 3166-1 alpha-2 country code
+	CountryCode *string `json:"country_code"`
 }
 
 // LoginRequest defines model for LoginRequest.
@@ -1053,6 +1245,53 @@ type NotificationSettings struct {
 	WebPush        bool                    `json:"web_push"`
 }
 
+// Passkey defines model for Passkey.
+type Passkey struct {
+	CreatedAt  time.Time  `json:"created_at"`
+	Id         string     `json:"id"`
+	LastUsedAt *time.Time `json:"last_used_at"`
+	Name       string     `json:"name"`
+}
+
+// PasskeyLoginOptions defines model for PasskeyLoginOptions.
+type PasskeyLoginOptions struct {
+	Username *Username `json:"username,omitempty"`
+}
+
+// PasskeyOptions defines model for PasskeyOptions.
+type PasskeyOptions struct {
+	ChallengeId string                 `json:"challenge_id"`
+	PublicKey   map[string]interface{} `json:"public_key"`
+}
+
+// PasskeyPage defines model for PasskeyPage.
+type PasskeyPage struct {
+	Items []Passkey `json:"items"`
+}
+
+// PasskeyRegistration defines model for PasskeyRegistration.
+type PasskeyRegistration struct {
+	Code     *string `json:"code,omitempty"`
+	Name     string  `json:"name"`
+	Password *string `json:"password,omitempty"`
+}
+
+// PasskeyRemoval defines model for PasskeyRemoval.
+type PasskeyRemoval struct {
+	Password *string `json:"password,omitempty"`
+}
+
+// PasskeyRename defines model for PasskeyRename.
+type PasskeyRename struct {
+	Name string `json:"name"`
+}
+
+// PasskeyVerification defines model for PasskeyVerification.
+type PasskeyVerification struct {
+	ChallengeId string                 `json:"challenge_id"`
+	Credential  map[string]interface{} `json:"credential"`
+}
+
 // PasswordConfirmation defines model for PasswordConfirmation.
 type PasswordConfirmation struct {
 	Password *string `json:"password,omitempty"`
@@ -1119,6 +1358,79 @@ type Problem struct {
 	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
+// QrLoginApproval defines model for QrLoginApproval.
+type QrLoginApproval struct {
+	// Code An authenticator code or an unused recovery code; required when two-factor is on.
+	Code *string `json:"code,omitempty"`
+}
+
+// QrLoginPollRequest defines model for QrLoginPollRequest.
+type QrLoginPollRequest struct {
+	PollToken *string `json:"poll_token,omitempty"`
+}
+
+// QrLoginPollResult defines model for QrLoginPollResult.
+type QrLoginPollResult struct {
+	union json.RawMessage
+}
+
+// QrLoginPollResult0 defines model for QrLoginPollResult.0.
+type QrLoginPollResult0 struct {
+	Status QrLoginPollResult0Status `json:"status"`
+}
+
+// QrLoginPollResult0Status defines model for QrLoginPollResult.0.Status.
+type QrLoginPollResult0Status string
+
+// QrLoginPollResult1 defines model for QrLoginPollResult.1.
+type QrLoginPollResult1 struct {
+	AccessToken string `json:"access_token"`
+
+	// ExpiresIn Seconds until the access token expires
+	ExpiresIn int                         `json:"expires_in"`
+	Status    QrLoginPollResult1Status    `json:"status"`
+	TokenType QrLoginPollResult1TokenType `json:"token_type"`
+}
+
+// QrLoginPollResult1Status defines model for QrLoginPollResult.1.Status.
+type QrLoginPollResult1Status string
+
+// QrLoginPollResult1TokenType defines model for QrLoginPollResult.1.TokenType.
+type QrLoginPollResult1TokenType string
+
+// QrLoginRequest defines model for QrLoginRequest.
+type QrLoginRequest struct {
+	CreatedAt Timestamp `json:"created_at"`
+
+	// Device User agent of the device that asks to sign in; `null` when it sent none.
+	Device    *string   `json:"device"`
+	ExpiresAt Timestamp `json:"expires_at"`
+
+	// Location Approximate location of the device that asks to sign in; `null` when unknown.
+	Location  *Location `json:"location"`
+	RequestId string    `json:"request_id"`
+
+	// Status `pending` until a signed-in device opens the request, `scanned` once it did, then `approved` or `denied`.
+	// `expired` when the request timed out or was used (only in poll answers).
+	Status QrLoginStatus `json:"status"`
+}
+
+// QrLoginStart defines model for QrLoginStart.
+type QrLoginStart struct {
+	ExpiresAt Timestamp `json:"expires_at"`
+
+	// PollToken Secret of the requesting device; only a keyed hash is stored.
+	PollToken string `json:"poll_token"`
+	RequestId string `json:"request_id"`
+
+	// Url `<RECOVERY_WEB_URL>/qr/<request_id>`, the content of the QR code.
+	Url string `json:"url"`
+}
+
+// QrLoginStatus `pending` until a signed-in device opens the request, `scanned` once it did, then `approved` or `denied`.
+// `expired` when the request timed out or was used (only in poll answers).
+type QrLoginStatus string
+
 // Reaction defines model for Reaction.
 type Reaction struct {
 	Emoji string `json:"emoji"`
@@ -1147,6 +1459,16 @@ type RecoverWithKeyRequest struct {
 	Username    string  `json:"username"`
 }
 
+// RecoveryEmailStatus defines model for RecoveryEmailStatus.
+type RecoveryEmailStatus struct {
+	Address string                   `json:"address"`
+	Enabled bool                     `json:"enabled"`
+	State   RecoveryEmailStatusState `json:"state"`
+}
+
+// RecoveryEmailStatusState defines model for RecoveryEmailStatus.State.
+type RecoveryEmailStatusState string
+
 // RecoveryKeyResult defines model for RecoveryKeyResult.
 type RecoveryKeyResult struct {
 	RecoveryKey string `json:"recovery_key"`
@@ -1159,16 +1481,13 @@ type RecoveryKeyStatus struct {
 	LockedUntil *time.Time `json:"locked_until"`
 }
 
-// RecoveryRequest defines model for RecoveryRequest.
-type RecoveryRequest struct {
-	DevicePart *string  `json:"device_part,omitempty"`
-	QrPart     *string  `json:"qr_part,omitempty"`
-	Username   Username `json:"username"`
-}
-
-// RecoveryResponse defines model for RecoveryResponse.
-type RecoveryResponse struct {
-	RecoveryToken string `json:"recovery_token"`
+// RecoveryOverview defines model for RecoveryOverview.
+type RecoveryOverview struct {
+	Email           RecoveryEmailStatus `json:"email"`
+	OtherDevices    int                 `json:"other_devices"`
+	Passkeys        int                 `json:"passkeys"`
+	PasskeysEnabled bool                `json:"passkeys_enabled"`
+	RecoveryKey     RecoveryKeyStatus   `json:"recovery_key"`
 }
 
 // RegisterRequest defines model for RegisterRequest.
@@ -1181,20 +1500,25 @@ type RegisterRequest struct {
 
 // RegisterResponse defines model for RegisterResponse.
 type RegisterResponse struct {
-	AccessToken string  `json:"access_token"`
-	DevicePart  *string `json:"device_part,omitempty"`
+	AccessToken string `json:"access_token"`
 
 	// ExpiresIn Seconds until the access token expires
-	ExpiresIn int     `json:"expires_in"`
-	QrPart    *string `json:"qr_part,omitempty"`
+	ExpiresIn int `json:"expires_in"`
 
 	// RecoveryKey Shown once; only a keyed hash is stored
 	RecoveryKey *string                   `json:"recovery_key,omitempty"`
 	TokenType   RegisterResponseTokenType `json:"token_type"`
+	Username    *Username                 `json:"username,omitempty"`
 }
 
 // RegisterResponseTokenType defines model for RegisterResponse.TokenType.
 type RegisterResponseTokenType string
+
+// RemoveRecoveryEmail defines model for RemoveRecoveryEmail.
+type RemoveRecoveryEmail struct {
+	Code     *string `json:"code,omitempty"`
+	Password *string `json:"password,omitempty"`
+}
 
 // ReplaceRecoveryKeyRequest defines model for ReplaceRecoveryKeyRequest.
 type ReplaceRecoveryKeyRequest struct {
@@ -1220,12 +1544,6 @@ type ReplyPreview struct {
 	Type      MessageType `json:"type"`
 }
 
-// ResetPasswordRequest defines model for ResetPasswordRequest.
-type ResetPasswordRequest struct {
-	NewPassword   *string `json:"new_password,omitempty"`
-	RecoveryToken string  `json:"recovery_token"`
-}
-
 // SearchHit defines model for SearchHit.
 type SearchHit struct {
 	// Highlight Plain-text excerpt of the matching text or file name; never HTML. The matched words are
@@ -1247,8 +1565,12 @@ type SecurityEventPage struct {
 		// Id Decimal ID as a string (Snowflake IDs exceed 2^53).
 		//
 		// Examples: 7217400317439950848
-		Id   Id     `json:"id"`
-		Type string `json:"type"`
+		Id Id `json:"id"`
+
+		// Location Approximate location of the client when the event happened; `null` when unknown.
+		Location  *Location `json:"location"`
+		Type      string    `json:"type"`
+		UserAgent *string   `json:"user_agent,omitempty"`
 	} `json:"items"`
 }
 
@@ -1283,6 +1605,9 @@ type Session struct {
 	Id         openapi_types.UUID `json:"id"`
 	IsCurrent  bool               `json:"is_current"`
 	LastUsedAt Timestamp          `json:"last_used_at"`
+
+	// Location Approximate location of the device when it signed in or last refreshed its token; `null` when unknown.
+	Location *Location `json:"location"`
 }
 
 // SetAvatarRequest defines model for SetAvatarRequest.
@@ -1291,6 +1616,13 @@ type SetAvatarRequest struct {
 	//
 	// Examples: 5f0c8a64-2f2b-4c7e-9d0e-6b1f3a2c4d5e
 	AttachmentId AttachmentRef `json:"attachment_id"`
+}
+
+// SetRecoveryEmail defines model for SetRecoveryEmail.
+type SetRecoveryEmail struct {
+	Code     *string             `json:"code,omitempty"`
+	Email    openapi_types.Email `json:"email"`
+	Password *string             `json:"password,omitempty"`
 }
 
 // SystemEvent What a `system` message records; set on system messages only, whose `content` is then `null`. The names
@@ -1457,6 +1789,11 @@ type UserPage struct {
 // Username defines model for Username.
 type Username = string
 
+// VerifyRecoveryEmail defines model for VerifyRecoveryEmail.
+type VerifyRecoveryEmail struct {
+	Token string `json:"token"`
+}
+
 // Visibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
 // `contacts` are the users you share a group with, or a direct chat that you opened or read in.
 type Visibility string
@@ -1495,6 +1832,9 @@ type Limit = int
 // Examples: 7217400317439950848
 type MessageId = Id
 
+// QrLoginRequestId defines model for QrLoginRequestId.
+type QrLoginRequestId = string
+
 // RequestId Decimal ID as a string (Snowflake IDs exceed 2^53).
 //
 // Examples: 7217400317439950848
@@ -1528,6 +1868,9 @@ type PayloadTooLarge = Problem
 
 // TooManyRequests RFC 9457 problem details. `426 Upgrade Required` (`client_outdated`) uses the same format.
 type TooManyRequests = Problem
+
+// TwoFactorRequired RFC 9457 problem details. `426 Upgrade Required` (`client_outdated`) uses the same format.
+type TwoFactorRequired = Problem
 
 // Unauthorized RFC 9457 problem details. `426 Upgrade Required` (`client_outdated`) uses the same format.
 type Unauthorized = Problem
@@ -1564,6 +1907,15 @@ type GetAttachmentContentParams struct {
 // GetAttachmentContentParamsVariant defines parameters for GetAttachmentContent.
 type GetAttachmentContentParamsVariant string
 
+// VerifyRecoveryEmailParams defines parameters for VerifyRecoveryEmail.
+type VerifyRecoveryEmailParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
 // LoginParams defines parameters for Login.
 type LoginParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
@@ -1591,8 +1943,125 @@ type LogoutParams struct {
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
 }
 
-// StartRecoveryParams defines parameters for StartRecovery.
-type StartRecoveryParams struct {
+// ListPasskeysParams defines parameters for ListPasskeys.
+type ListPasskeysParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// PasskeyLoginOptionsParams defines parameters for PasskeyLoginOptions.
+type PasskeyLoginOptionsParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// VerifyPasskeyLoginParams defines parameters for VerifyPasskeyLogin.
+type VerifyPasskeyLoginParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// PasskeyRegistrationOptionsParams defines parameters for PasskeyRegistrationOptions.
+type PasskeyRegistrationOptionsParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// VerifyPasskeyRegistrationParams defines parameters for VerifyPasskeyRegistration.
+type VerifyPasskeyRegistrationParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// RemovePasskeyParams defines parameters for RemovePasskey.
+type RemovePasskeyParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// RenamePasskeyParams defines parameters for RenamePasskey.
+type RenamePasskeyParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// ConfirmEmailResetParams defines parameters for ConfirmEmailReset.
+type ConfirmEmailResetParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// RequestEmailResetParams defines parameters for RequestEmailReset.
+type RequestEmailResetParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// CreateQrLoginParams defines parameters for CreateQrLogin.
+type CreateQrLoginParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// GetQrLoginParams defines parameters for GetQrLogin.
+type GetQrLoginParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// ApproveQrLoginParams defines parameters for ApproveQrLogin.
+type ApproveQrLoginParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// DenyQrLoginParams defines parameters for DenyQrLogin.
+type DenyQrLoginParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// PollQrLoginParams defines parameters for PollQrLogin.
+type PollQrLoginParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
@@ -1602,6 +2071,60 @@ type StartRecoveryParams struct {
 
 // RecoverWithKeyParams defines parameters for RecoverWithKey.
 type RecoverWithKeyParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// StartDeviceRecoveryParams defines parameters for StartDeviceRecovery.
+type StartDeviceRecoveryParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// DeviceRecoveryStatusParams defines parameters for DeviceRecoveryStatus.
+type DeviceRecoveryStatusParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// ApproveDeviceRecoveryParams defines parameters for ApproveDeviceRecovery.
+type ApproveDeviceRecoveryParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// CancelDeviceRecoveryParams defines parameters for CancelDeviceRecovery.
+type CancelDeviceRecoveryParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// CompleteDeviceRecoveryParams defines parameters for CompleteDeviceRecovery.
+type CompleteDeviceRecoveryParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// DenyDeviceRecoveryParams defines parameters for DenyDeviceRecovery.
+type DenyDeviceRecoveryParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
@@ -1620,15 +2143,6 @@ type RefreshTokenParams struct {
 
 // RegisterParams defines parameters for Register.
 type RegisterParams struct {
-	// XClientVersion Version of the client app, for logs and the per-client metric.
-	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
-
-	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
-	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
-}
-
-// ResetPasswordParams defines parameters for ResetPassword.
-type ResetPasswordParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
@@ -2029,6 +2543,33 @@ type BlockUserParams struct {
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
 }
 
+// RemoveRecoveryEmailParams defines parameters for RemoveRecoveryEmail.
+type RemoveRecoveryEmailParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// GetRecoveryEmailParams defines parameters for GetRecoveryEmail.
+type GetRecoveryEmailParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// SetRecoveryEmailParams defines parameters for SetRecoveryEmail.
+type SetRecoveryEmailParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
 // ChangePasswordParams defines parameters for ChangePassword.
 type ChangePasswordParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
@@ -2076,6 +2617,15 @@ type GetRecoveryKeyParams struct {
 
 // ReplaceRecoveryKeyParams defines parameters for ReplaceRecoveryKey.
 type ReplaceRecoveryKeyParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// GetRecoveryOverviewParams defines parameters for GetRecoveryOverview.
+type GetRecoveryOverviewParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
@@ -2330,23 +2880,59 @@ type CreateWebSocketTicketParams struct {
 // UploadAttachmentMultipartRequestBody defines body for UploadAttachment for multipart/form-data ContentType.
 type UploadAttachmentMultipartRequestBody = UploadAttachmentRequest
 
+// VerifyRecoveryEmailJSONRequestBody defines body for VerifyRecoveryEmail for application/json ContentType.
+type VerifyRecoveryEmailJSONRequestBody = VerifyRecoveryEmail
+
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody = LoginRequest
 
 // LoginTwoFactorJSONRequestBody defines body for LoginTwoFactor for application/json ContentType.
 type LoginTwoFactorJSONRequestBody = TwoFactorLoginRequest
 
-// StartRecoveryJSONRequestBody defines body for StartRecovery for application/json ContentType.
-type StartRecoveryJSONRequestBody = RecoveryRequest
+// PasskeyLoginOptionsJSONRequestBody defines body for PasskeyLoginOptions for application/json ContentType.
+type PasskeyLoginOptionsJSONRequestBody = PasskeyLoginOptions
+
+// VerifyPasskeyLoginJSONRequestBody defines body for VerifyPasskeyLogin for application/json ContentType.
+type VerifyPasskeyLoginJSONRequestBody = PasskeyVerification
+
+// PasskeyRegistrationOptionsJSONRequestBody defines body for PasskeyRegistrationOptions for application/json ContentType.
+type PasskeyRegistrationOptionsJSONRequestBody = PasskeyRegistration
+
+// VerifyPasskeyRegistrationJSONRequestBody defines body for VerifyPasskeyRegistration for application/json ContentType.
+type VerifyPasskeyRegistrationJSONRequestBody = PasskeyVerification
+
+// RemovePasskeyJSONRequestBody defines body for RemovePasskey for application/json ContentType.
+type RemovePasskeyJSONRequestBody = PasskeyRemoval
+
+// RenamePasskeyJSONRequestBody defines body for RenamePasskey for application/json ContentType.
+type RenamePasskeyJSONRequestBody = PasskeyRename
+
+// ConfirmEmailResetJSONRequestBody defines body for ConfirmEmailReset for application/json ContentType.
+type ConfirmEmailResetJSONRequestBody = EmailResetConfirmation
+
+// RequestEmailResetJSONRequestBody defines body for RequestEmailReset for application/json ContentType.
+type RequestEmailResetJSONRequestBody = EmailResetRequest
+
+// ApproveQrLoginJSONRequestBody defines body for ApproveQrLogin for application/json ContentType.
+type ApproveQrLoginJSONRequestBody = QrLoginApproval
+
+// PollQrLoginJSONRequestBody defines body for PollQrLogin for application/json ContentType.
+type PollQrLoginJSONRequestBody = QrLoginPollRequest
 
 // RecoverWithKeyJSONRequestBody defines body for RecoverWithKey for application/json ContentType.
 type RecoverWithKeyJSONRequestBody = RecoverWithKeyRequest
 
+// StartDeviceRecoveryJSONRequestBody defines body for StartDeviceRecovery for application/json ContentType.
+type StartDeviceRecoveryJSONRequestBody = DeviceRecoveryStart
+
+// ApproveDeviceRecoveryJSONRequestBody defines body for ApproveDeviceRecovery for application/json ContentType.
+type ApproveDeviceRecoveryJSONRequestBody = DeviceRecoveryApproval
+
+// CompleteDeviceRecoveryJSONRequestBody defines body for CompleteDeviceRecovery for application/json ContentType.
+type CompleteDeviceRecoveryJSONRequestBody = DeviceRecoveryComplete
+
 // RegisterJSONRequestBody defines body for Register for application/json ContentType.
 type RegisterJSONRequestBody = RegisterRequest
-
-// ResetPasswordJSONRequestBody defines body for ResetPassword for application/json ContentType.
-type ResetPasswordJSONRequestBody = ResetPasswordRequest
 
 // CreateChatJSONRequestBody defines body for CreateChat for application/json ContentType.
 type CreateChatJSONRequestBody = CreateChatRequest
@@ -2401,6 +2987,12 @@ type SetupTwoFactorJSONRequestBody = PasswordConfirmation
 
 // SetMyAvatarJSONRequestBody defines body for SetMyAvatar for application/json ContentType.
 type SetMyAvatarJSONRequestBody = SetAvatarRequest
+
+// RemoveRecoveryEmailJSONRequestBody defines body for RemoveRecoveryEmail for application/json ContentType.
+type RemoveRecoveryEmailJSONRequestBody = RemoveRecoveryEmail
+
+// SetRecoveryEmailJSONRequestBody defines body for SetRecoveryEmail for application/json ContentType.
+type SetRecoveryEmailJSONRequestBody = SetRecoveryEmail
 
 // RegisterNotificationDeviceJSONRequestBody defines body for RegisterNotificationDevice for application/json ContentType.
 type RegisterNotificationDeviceJSONRequestBody = NotificationDeviceRequest
@@ -2677,6 +3269,68 @@ func (t *LoginResponse) UnmarshalJSON(b []byte) error {
 	return err
 }
 
+// AsQrLoginPollResult0 returns the union data inside the QrLoginPollResult as a QrLoginPollResult0
+func (t QrLoginPollResult) AsQrLoginPollResult0() (QrLoginPollResult0, error) {
+	var body QrLoginPollResult0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromQrLoginPollResult0 overwrites any union data inside the QrLoginPollResult as the provided QrLoginPollResult0
+func (t *QrLoginPollResult) FromQrLoginPollResult0(v QrLoginPollResult0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeQrLoginPollResult0 performs a merge with any union data inside the QrLoginPollResult, using the provided QrLoginPollResult0
+func (t *QrLoginPollResult) MergeQrLoginPollResult0(v QrLoginPollResult0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsQrLoginPollResult1 returns the union data inside the QrLoginPollResult as a QrLoginPollResult1
+func (t QrLoginPollResult) AsQrLoginPollResult1() (QrLoginPollResult1, error) {
+	var body QrLoginPollResult1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromQrLoginPollResult1 overwrites any union data inside the QrLoginPollResult as the provided QrLoginPollResult1
+func (t *QrLoginPollResult) FromQrLoginPollResult1(v QrLoginPollResult1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeQrLoginPollResult1 performs a merge with any union data inside the QrLoginPollResult, using the provided QrLoginPollResult1
+func (t *QrLoginPollResult) MergeQrLoginPollResult1(v QrLoginPollResult1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t QrLoginPollResult) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *QrLoginPollResult) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// UploadAttachment Upload a file, image, audio or voice message
@@ -2685,6 +3339,9 @@ type ServerInterface interface {
 	// GetAttachmentContent Download an attachment
 	// (GET /attachments/{attachment_id}/content)
 	GetAttachmentContent(w http.ResponseWriter, r *http.Request, attachmentId AttachmentId, params GetAttachmentContentParams)
+	// VerifyRecoveryEmail Consume a one-time email verification token
+	// (POST /auth/email/verify)
+	VerifyRecoveryEmail(w http.ResponseWriter, r *http.Request, params VerifyRecoveryEmailParams)
 	// Login Sign in with username and password
 	// (POST /auth/login)
 	Login(w http.ResponseWriter, r *http.Request, params LoginParams)
@@ -2694,21 +3351,75 @@ type ServerInterface interface {
 	// Logout End the current session
 	// (POST /auth/logout)
 	Logout(w http.ResponseWriter, r *http.Request, params LogoutParams)
-	// StartRecovery Start account recovery (temporary)
-	// (POST /auth/recover)
-	StartRecovery(w http.ResponseWriter, r *http.Request, params StartRecoveryParams)
+	// ListPasskeys List the account passkeys
+	// (GET /auth/passkeys)
+	ListPasskeys(w http.ResponseWriter, r *http.Request, params ListPasskeysParams)
+	// PasskeyLoginOptions Begin discoverable passkey sign-in
+	// (POST /auth/passkeys/login/options)
+	PasskeyLoginOptions(w http.ResponseWriter, r *http.Request, params PasskeyLoginOptionsParams)
+	// VerifyPasskeyLogin Verify a passkey and create a session
+	// (POST /auth/passkeys/login/verify)
+	VerifyPasskeyLogin(w http.ResponseWriter, r *http.Request, params VerifyPasskeyLoginParams)
+	// PasskeyRegistrationOptions Begin passkey registration after password and second-factor verification
+	// (POST /auth/passkeys/register/options)
+	PasskeyRegistrationOptions(w http.ResponseWriter, r *http.Request, params PasskeyRegistrationOptionsParams)
+	// VerifyPasskeyRegistration Verify and store a passkey
+	// (POST /auth/passkeys/register/verify)
+	VerifyPasskeyRegistration(w http.ResponseWriter, r *http.Request, params VerifyPasskeyRegistrationParams)
+	// RemovePasskey Remove a passkey; the last credential requires the password
+	// (DELETE /auth/passkeys/{passkeyId})
+	RemovePasskey(w http.ResponseWriter, r *http.Request, passkeyId string, params RemovePasskeyParams)
+	// RenamePasskey Rename a passkey
+	// (PATCH /auth/passkeys/{passkeyId})
+	RenamePasskey(w http.ResponseWriter, r *http.Request, passkeyId string, params RenamePasskeyParams)
+	// ConfirmEmailReset Reset a password using a one-time email token and the current second factor
+	// (POST /auth/password-reset/confirm)
+	ConfirmEmailReset(w http.ResponseWriter, r *http.Request, params ConfirmEmailResetParams)
+	// RequestEmailReset Queue a recovery email without revealing whether an account exists
+	// (POST /auth/password-reset/request)
+	RequestEmailReset(w http.ResponseWriter, r *http.Request, params RequestEmailResetParams)
+	// CreateQrLogin Start a sign-in with a QR code
+	// (POST /auth/qr-login)
+	CreateQrLogin(w http.ResponseWriter, r *http.Request, params CreateQrLoginParams)
+	// GetQrLogin Show who asks to sign in with a QR code
+	// (GET /auth/qr-login/{requestId})
+	GetQrLogin(w http.ResponseWriter, r *http.Request, requestId QrLoginRequestId, params GetQrLoginParams)
+	// ApproveQrLogin Sign the device of a QR code into this account
+	// (POST /auth/qr-login/{requestId}/approve)
+	ApproveQrLogin(w http.ResponseWriter, r *http.Request, requestId QrLoginRequestId, params ApproveQrLoginParams)
+	// DenyQrLogin Refuse a QR sign-in
+	// (POST /auth/qr-login/{requestId}/deny)
+	DenyQrLogin(w http.ResponseWriter, r *http.Request, requestId QrLoginRequestId, params DenyQrLoginParams)
+	// PollQrLogin Poll a QR sign-in and receive the session once approved
+	// (POST /auth/qr-login/{requestId}/poll)
+	PollQrLogin(w http.ResponseWriter, r *http.Request, requestId QrLoginRequestId, params PollQrLoginParams)
 	// RecoverWithKey Reset password with a single-use recovery key
 	// (POST /auth/recover/key)
 	RecoverWithKey(w http.ResponseWriter, r *http.Request, params RecoverWithKeyParams)
+	// StartDeviceRecovery Request approval from a signed-in device
+	// (POST /auth/recovery-requests)
+	StartDeviceRecovery(w http.ResponseWriter, r *http.Request, params StartDeviceRecoveryParams)
+	// DeviceRecoveryStatus Poll the status of a secret recovery request
+	// (GET /auth/recovery-requests/{requestId})
+	DeviceRecoveryStatus(w http.ResponseWriter, r *http.Request, requestId string, params DeviceRecoveryStatusParams)
+	// ApproveDeviceRecovery Approve a recovery request using number matching, the password and the second factor
+	// (POST /auth/recovery-requests/{requestId}/approve)
+	ApproveDeviceRecovery(w http.ResponseWriter, r *http.Request, requestId string, params ApproveDeviceRecoveryParams)
+	// CancelDeviceRecovery Withdraw a pending recovery request from the requesting browser
+	// (POST /auth/recovery-requests/{requestId}/cancel)
+	CancelDeviceRecovery(w http.ResponseWriter, r *http.Request, requestId string, params CancelDeviceRecoveryParams)
+	// CompleteDeviceRecovery Consume an approved request and reset the password
+	// (POST /auth/recovery-requests/{requestId}/complete)
+	CompleteDeviceRecovery(w http.ResponseWriter, r *http.Request, requestId string, params CompleteDeviceRecoveryParams)
+	// DenyDeviceRecovery Deny an unexpected recovery request
+	// (POST /auth/recovery-requests/{requestId}/deny)
+	DenyDeviceRecovery(w http.ResponseWriter, r *http.Request, requestId string, params DenyDeviceRecoveryParams)
 	// RefreshToken Get a new access token
 	// (POST /auth/refresh)
 	RefreshToken(w http.ResponseWriter, r *http.Request, params RefreshTokenParams)
 	// Register Create an account
 	// (POST /auth/register)
 	Register(w http.ResponseWriter, r *http.Request, params RegisterParams)
-	// ResetPassword Set a new password with a recovery token (temporary)
-	// (POST /auth/reset-password)
-	ResetPassword(w http.ResponseWriter, r *http.Request, params ResetPasswordParams)
 	// ListChats My chats with last message and unread count
 	// (GET /chats)
 	ListChats(w http.ResponseWriter, r *http.Request, params ListChatsParams)
@@ -2826,6 +3537,15 @@ type ServerInterface interface {
 	// BlockUser Block a user
 	// (PUT /me/blocked-users/{user_id})
 	BlockUser(w http.ResponseWriter, r *http.Request, userId UserId, params BlockUserParams)
+	// RemoveRecoveryEmail Remove the recovery email after password verification
+	// (DELETE /me/email)
+	RemoveRecoveryEmail(w http.ResponseWriter, r *http.Request, params RemoveRecoveryEmailParams)
+	// GetRecoveryEmail Get private recovery email status
+	// (GET /me/email)
+	GetRecoveryEmail(w http.ResponseWriter, r *http.Request, params GetRecoveryEmailParams)
+	// SetRecoveryEmail Set or resend a private recovery email for verification
+	// (PUT /me/email)
+	SetRecoveryEmail(w http.ResponseWriter, r *http.Request, params SetRecoveryEmailParams)
 	// RegisterNotificationDevice Register a push destination for the current session
 	// (POST /me/notification-devices)
 	RegisterNotificationDevice(w http.ResponseWriter, r *http.Request)
@@ -2859,6 +3579,9 @@ type ServerInterface interface {
 	// ReplaceRecoveryKey Create or regenerate a recovery key after password and second-factor confirmation
 	// (POST /me/recovery-key)
 	ReplaceRecoveryKey(w http.ResponseWriter, r *http.Request, params ReplaceRecoveryKeyParams)
+	// GetRecoveryOverview List recovery methods and their current setup status
+	// (GET /me/recovery-status)
+	GetRecoveryOverview(w http.ResponseWriter, r *http.Request, params GetRecoveryOverviewParams)
 	// GetSecuritySettings Security settings
 	// (GET /me/security)
 	GetSecuritySettings(w http.ResponseWriter, r *http.Request, params GetSecuritySettingsParams)
@@ -3084,6 +3807,66 @@ func (siw *ServerInterfaceWrapper) GetAttachmentContent(w http.ResponseWriter, r
 	handler.ServeHTTP(w, r)
 }
 
+// VerifyRecoveryEmail operation middleware
+func (siw *ServerInterfaceWrapper) VerifyRecoveryEmail(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params VerifyRecoveryEmailParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.VerifyRecoveryEmail(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // Login operation middleware
 func (siw *ServerInterfaceWrapper) Login(w http.ResponseWriter, r *http.Request) {
 
@@ -3264,14 +4047,14 @@ func (siw *ServerInterfaceWrapper) Logout(w http.ResponseWriter, r *http.Request
 	handler.ServeHTTP(w, r)
 }
 
-// StartRecovery operation middleware
-func (siw *ServerInterfaceWrapper) StartRecovery(w http.ResponseWriter, r *http.Request) {
+// ListPasskeys operation middleware
+func (siw *ServerInterfaceWrapper) ListPasskeys(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
 
 	// Parameter object where we will unmarshal all parameters from the context
-	var params StartRecoveryParams
+	var params ListPasskeysParams
 
 	headers := r.Header
 
@@ -3314,7 +4097,841 @@ func (siw *ServerInterfaceWrapper) StartRecovery(w http.ResponseWriter, r *http.
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.StartRecovery(w, r, params)
+		siw.Handler.ListPasskeys(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PasskeyLoginOptions operation middleware
+func (siw *ServerInterfaceWrapper) PasskeyLoginOptions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PasskeyLoginOptionsParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PasskeyLoginOptions(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// VerifyPasskeyLogin operation middleware
+func (siw *ServerInterfaceWrapper) VerifyPasskeyLogin(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params VerifyPasskeyLoginParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.VerifyPasskeyLogin(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PasskeyRegistrationOptions operation middleware
+func (siw *ServerInterfaceWrapper) PasskeyRegistrationOptions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PasskeyRegistrationOptionsParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PasskeyRegistrationOptions(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// VerifyPasskeyRegistration operation middleware
+func (siw *ServerInterfaceWrapper) VerifyPasskeyRegistration(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params VerifyPasskeyRegistrationParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.VerifyPasskeyRegistration(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RemovePasskey operation middleware
+func (siw *ServerInterfaceWrapper) RemovePasskey(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "passkeyId" -------------
+	var passkeyId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "passkeyId", r.PathValue("passkeyId"), &passkeyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "passkeyId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RemovePasskeyParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RemovePasskey(w, r, passkeyId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RenamePasskey operation middleware
+func (siw *ServerInterfaceWrapper) RenamePasskey(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "passkeyId" -------------
+	var passkeyId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "passkeyId", r.PathValue("passkeyId"), &passkeyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "passkeyId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RenamePasskeyParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RenamePasskey(w, r, passkeyId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ConfirmEmailReset operation middleware
+func (siw *ServerInterfaceWrapper) ConfirmEmailReset(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ConfirmEmailResetParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ConfirmEmailReset(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RequestEmailReset operation middleware
+func (siw *ServerInterfaceWrapper) RequestEmailReset(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RequestEmailResetParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RequestEmailReset(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateQrLogin operation middleware
+func (siw *ServerInterfaceWrapper) CreateQrLogin(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateQrLoginParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateQrLogin(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetQrLogin operation middleware
+func (siw *ServerInterfaceWrapper) GetQrLogin(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "requestId" -------------
+	var requestId QrLoginRequestId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "requestId", r.PathValue("requestId"), &requestId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "requestId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetQrLoginParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetQrLogin(w, r, requestId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ApproveQrLogin operation middleware
+func (siw *ServerInterfaceWrapper) ApproveQrLogin(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "requestId" -------------
+	var requestId QrLoginRequestId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "requestId", r.PathValue("requestId"), &requestId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "requestId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ApproveQrLoginParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ApproveQrLogin(w, r, requestId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DenyQrLogin operation middleware
+func (siw *ServerInterfaceWrapper) DenyQrLogin(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "requestId" -------------
+	var requestId QrLoginRequestId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "requestId", r.PathValue("requestId"), &requestId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "requestId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DenyQrLoginParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DenyQrLogin(w, r, requestId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PollQrLogin operation middleware
+func (siw *ServerInterfaceWrapper) PollQrLogin(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "requestId" -------------
+	var requestId QrLoginRequestId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "requestId", r.PathValue("requestId"), &requestId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "requestId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PollQrLoginParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PollQrLogin(w, r, requestId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3375,6 +4992,411 @@ func (siw *ServerInterfaceWrapper) RecoverWithKey(w http.ResponseWriter, r *http
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RecoverWithKey(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// StartDeviceRecovery operation middleware
+func (siw *ServerInterfaceWrapper) StartDeviceRecovery(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params StartDeviceRecoveryParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StartDeviceRecovery(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeviceRecoveryStatus operation middleware
+func (siw *ServerInterfaceWrapper) DeviceRecoveryStatus(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "requestId" -------------
+	var requestId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "requestId", r.PathValue("requestId"), &requestId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "requestId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeviceRecoveryStatusParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeviceRecoveryStatus(w, r, requestId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ApproveDeviceRecovery operation middleware
+func (siw *ServerInterfaceWrapper) ApproveDeviceRecovery(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "requestId" -------------
+	var requestId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "requestId", r.PathValue("requestId"), &requestId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "requestId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ApproveDeviceRecoveryParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ApproveDeviceRecovery(w, r, requestId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CancelDeviceRecovery operation middleware
+func (siw *ServerInterfaceWrapper) CancelDeviceRecovery(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "requestId" -------------
+	var requestId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "requestId", r.PathValue("requestId"), &requestId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "requestId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CancelDeviceRecoveryParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CancelDeviceRecovery(w, r, requestId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CompleteDeviceRecovery operation middleware
+func (siw *ServerInterfaceWrapper) CompleteDeviceRecovery(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "requestId" -------------
+	var requestId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "requestId", r.PathValue("requestId"), &requestId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "requestId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CompleteDeviceRecoveryParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CompleteDeviceRecovery(w, r, requestId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DenyDeviceRecovery operation middleware
+func (siw *ServerInterfaceWrapper) DenyDeviceRecovery(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "requestId" -------------
+	var requestId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "requestId", r.PathValue("requestId"), &requestId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "requestId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DenyDeviceRecoveryParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DenyDeviceRecovery(w, r, requestId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3495,66 +5517,6 @@ func (siw *ServerInterfaceWrapper) Register(w http.ResponseWriter, r *http.Reque
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.Register(w, r, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ResetPassword operation middleware
-func (siw *ServerInterfaceWrapper) ResetPassword(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params ResetPasswordParams
-
-	headers := r.Header
-
-	// ------------- Optional header parameter "X-Client-Version" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
-		var XClientVersion ClientVersion
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
-			return
-		}
-
-		params.XClientVersion = &XClientVersion
-
-	}
-
-	// ------------- Optional header parameter "X-Client-Api-Version" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
-		var XClientApiVersion ClientApiVersion
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
-			return
-		}
-
-		params.XClientApiVersion = &XClientApiVersion
-
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ResetPassword(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6351,6 +8313,186 @@ func (siw *ServerInterfaceWrapper) BlockUser(w http.ResponseWriter, r *http.Requ
 	handler.ServeHTTP(w, r)
 }
 
+// RemoveRecoveryEmail operation middleware
+func (siw *ServerInterfaceWrapper) RemoveRecoveryEmail(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RemoveRecoveryEmailParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RemoveRecoveryEmail(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetRecoveryEmail operation middleware
+func (siw *ServerInterfaceWrapper) GetRecoveryEmail(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetRecoveryEmailParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetRecoveryEmail(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetRecoveryEmail operation middleware
+func (siw *ServerInterfaceWrapper) SetRecoveryEmail(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SetRecoveryEmailParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetRecoveryEmail(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // RegisterNotificationDevice operation middleware
 func (siw *ServerInterfaceWrapper) RegisterNotificationDevice(w http.ResponseWriter, r *http.Request) {
 
@@ -6814,6 +8956,66 @@ func (siw *ServerInterfaceWrapper) ReplaceRecoveryKey(w http.ResponseWriter, r *
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ReplaceRecoveryKey(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetRecoveryOverview operation middleware
+func (siw *ServerInterfaceWrapper) GetRecoveryOverview(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetRecoveryOverviewParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetRecoveryOverview(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -8621,8 +10823,6 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/recovery-key", wrapper.GetRecoveryKey)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/me/recovery-key", wrapper.ReplaceRecoveryKey)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/security-events", wrapper.ListSecurityEvents)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/recover", wrapper.StartRecovery)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/reset-password", wrapper.ResetPassword)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/ws/ticket", wrapper.CreateWebSocketTicket)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/me", wrapper.DeleteMe)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me", wrapper.GetMe)
@@ -8695,6 +10895,31 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/me/notification-devices/{id}", wrapper.DeleteNotificationDevice)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/chats/{chatId}/notification-mute", wrapper.SetNotificationMute)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/me/notification-devices/{id}/activity", wrapper.UpdateNotificationActivity)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/recovery-requests", wrapper.StartDeviceRecovery)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/auth/recovery-requests/{requestId}", wrapper.DeviceRecoveryStatus)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/recovery-requests/{requestId}/approve", wrapper.ApproveDeviceRecovery)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/recovery-requests/{requestId}/deny", wrapper.DenyDeviceRecovery)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/recovery-requests/{requestId}/complete", wrapper.CompleteDeviceRecovery)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/recovery-requests/{requestId}/cancel", wrapper.CancelDeviceRecovery)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/qr-login", wrapper.CreateQrLogin)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/auth/qr-login/{requestId}", wrapper.GetQrLogin)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/qr-login/{requestId}/poll", wrapper.PollQrLogin)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/qr-login/{requestId}/approve", wrapper.ApproveQrLogin)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/qr-login/{requestId}/deny", wrapper.DenyQrLogin)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/passkeys/register/options", wrapper.PasskeyRegistrationOptions)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/passkeys/register/verify", wrapper.VerifyPasskeyRegistration)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/auth/passkeys", wrapper.ListPasskeys)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/auth/passkeys/{passkeyId}", wrapper.RemovePasskey)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/auth/passkeys/{passkeyId}", wrapper.RenamePasskey)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/passkeys/login/options", wrapper.PasskeyLoginOptions)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/passkeys/login/verify", wrapper.VerifyPasskeyLogin)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/recovery-status", wrapper.GetRecoveryOverview)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/me/email", wrapper.RemoveRecoveryEmail)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/email", wrapper.GetRecoveryEmail)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/me/email", wrapper.SetRecoveryEmail)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/email/verify", wrapper.VerifyRecoveryEmail)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/password-reset/request", wrapper.RequestEmailReset)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/password-reset/confirm", wrapper.ConfirmEmailReset)
 
 	return m
 }
@@ -8719,6 +10944,8 @@ type TooManyRequestsApplicationProblemPlusJSONResponse struct {
 
 	Headers TooManyRequestsResponseHeaders
 }
+
+type TwoFactorRequiredApplicationProblemPlusJSONResponse Problem
 
 type UnauthorizedApplicationProblemPlusJSONResponse Problem
 
@@ -9001,6 +11228,135 @@ func (response GetAttachmentContent426ApplicationProblemPlusJSONResponse) VisitG
 	return err
 }
 
+type VerifyRecoveryEmailRequestObject struct {
+	Params VerifyRecoveryEmailParams
+	Body   *VerifyRecoveryEmailJSONRequestBody
+}
+
+type VerifyRecoveryEmailResponseObject interface {
+	VisitVerifyRecoveryEmailResponse(w http.ResponseWriter) error
+}
+
+type VerifyRecoveryEmail204Response struct {
+}
+
+func (response VerifyRecoveryEmail204Response) VisitVerifyRecoveryEmailResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type VerifyRecoveryEmail400ApplicationProblemPlusJSONResponse Problem
+
+func (response VerifyRecoveryEmail400ApplicationProblemPlusJSONResponse) VisitVerifyRecoveryEmailResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifyRecoveryEmail401ApplicationProblemPlusJSONResponse Problem
+
+func (response VerifyRecoveryEmail401ApplicationProblemPlusJSONResponse) VisitVerifyRecoveryEmailResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifyRecoveryEmail403ApplicationProblemPlusJSONResponse Problem
+
+func (response VerifyRecoveryEmail403ApplicationProblemPlusJSONResponse) VisitVerifyRecoveryEmailResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifyRecoveryEmail409ApplicationProblemPlusJSONResponse Problem
+
+func (response VerifyRecoveryEmail409ApplicationProblemPlusJSONResponse) VisitVerifyRecoveryEmailResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifyRecoveryEmail422ApplicationProblemPlusJSONResponse Problem
+
+func (response VerifyRecoveryEmail422ApplicationProblemPlusJSONResponse) VisitVerifyRecoveryEmailResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifyRecoveryEmail426ApplicationProblemPlusJSONResponse Problem
+
+func (response VerifyRecoveryEmail426ApplicationProblemPlusJSONResponse) VisitVerifyRecoveryEmailResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifyRecoveryEmail429ApplicationProblemPlusJSONResponse Problem
+
+func (response VerifyRecoveryEmail429ApplicationProblemPlusJSONResponse) VisitVerifyRecoveryEmailResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifyRecoveryEmail503ApplicationProblemPlusJSONResponse Problem
+
+func (response VerifyRecoveryEmail503ApplicationProblemPlusJSONResponse) VisitVerifyRecoveryEmailResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type LoginRequestObject struct {
 	Params LoginParams
 	Body   *LoginJSONRequestBody
@@ -9273,18 +11629,17 @@ func (response Logout426ApplicationProblemPlusJSONResponse) VisitLogoutResponse(
 	return err
 }
 
-type StartRecoveryRequestObject struct {
-	Params StartRecoveryParams
-	Body   *StartRecoveryJSONRequestBody
+type ListPasskeysRequestObject struct {
+	Params ListPasskeysParams
 }
 
-type StartRecoveryResponseObject interface {
-	VisitStartRecoveryResponse(w http.ResponseWriter) error
+type ListPasskeysResponseObject interface {
+	VisitListPasskeysResponse(w http.ResponseWriter) error
 }
 
-type StartRecovery200JSONResponse RecoveryResponse
+type ListPasskeys200JSONResponse PasskeyPage
 
-func (response StartRecovery200JSONResponse) VisitStartRecoveryResponse(w http.ResponseWriter) error {
+func (response ListPasskeys200JSONResponse) VisitListPasskeysResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -9296,11 +11651,9 @@ func (response StartRecovery200JSONResponse) VisitStartRecoveryResponse(w http.R
 	return err
 }
 
-type StartRecovery400ApplicationProblemPlusJSONResponse struct {
-	BadRequestApplicationProblemPlusJSONResponse
-}
+type ListPasskeys400ApplicationProblemPlusJSONResponse Problem
 
-func (response StartRecovery400ApplicationProblemPlusJSONResponse) VisitStartRecoveryResponse(w http.ResponseWriter) error {
+func (response ListPasskeys400ApplicationProblemPlusJSONResponse) VisitListPasskeysResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -9312,11 +11665,37 @@ func (response StartRecovery400ApplicationProblemPlusJSONResponse) VisitStartRec
 	return err
 }
 
-type StartRecovery404ApplicationProblemPlusJSONResponse struct {
-	NotFoundApplicationProblemPlusJSONResponse
+type ListPasskeys401ApplicationProblemPlusJSONResponse Problem
+
+func (response ListPasskeys401ApplicationProblemPlusJSONResponse) VisitListPasskeysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
 }
 
-func (response StartRecovery404ApplicationProblemPlusJSONResponse) VisitStartRecoveryResponse(w http.ResponseWriter) error {
+type ListPasskeys403ApplicationProblemPlusJSONResponse Problem
+
+func (response ListPasskeys403ApplicationProblemPlusJSONResponse) VisitListPasskeysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPasskeys404ApplicationProblemPlusJSONResponse Problem
+
+func (response ListPasskeys404ApplicationProblemPlusJSONResponse) VisitListPasskeysResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -9328,11 +11707,37 @@ func (response StartRecovery404ApplicationProblemPlusJSONResponse) VisitStartRec
 	return err
 }
 
-type StartRecovery426ApplicationProblemPlusJSONResponse struct {
-	ClientOutdatedApplicationProblemPlusJSONResponse
+type ListPasskeys409ApplicationProblemPlusJSONResponse Problem
+
+func (response ListPasskeys409ApplicationProblemPlusJSONResponse) VisitListPasskeysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
 }
 
-func (response StartRecovery426ApplicationProblemPlusJSONResponse) VisitStartRecoveryResponse(w http.ResponseWriter) error {
+type ListPasskeys422ApplicationProblemPlusJSONResponse Problem
+
+func (response ListPasskeys422ApplicationProblemPlusJSONResponse) VisitListPasskeysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPasskeys426ApplicationProblemPlusJSONResponse Problem
+
+func (response ListPasskeys426ApplicationProblemPlusJSONResponse) VisitListPasskeysResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -9344,11 +11749,1701 @@ func (response StartRecovery426ApplicationProblemPlusJSONResponse) VisitStartRec
 	return err
 }
 
-type StartRecovery429ApplicationProblemPlusJSONResponse struct {
+type ListPasskeys429ApplicationProblemPlusJSONResponse Problem
+
+func (response ListPasskeys429ApplicationProblemPlusJSONResponse) VisitListPasskeysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPasskeys503ApplicationProblemPlusJSONResponse Problem
+
+func (response ListPasskeys503ApplicationProblemPlusJSONResponse) VisitListPasskeysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PasskeyLoginOptionsRequestObject struct {
+	Params PasskeyLoginOptionsParams
+	Body   *PasskeyLoginOptionsJSONRequestBody
+}
+
+type PasskeyLoginOptionsResponseObject interface {
+	VisitPasskeyLoginOptionsResponse(w http.ResponseWriter) error
+}
+
+type PasskeyLoginOptions200JSONResponse PasskeyOptions
+
+func (response PasskeyLoginOptions200JSONResponse) VisitPasskeyLoginOptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PasskeyLoginOptions400ApplicationProblemPlusJSONResponse Problem
+
+func (response PasskeyLoginOptions400ApplicationProblemPlusJSONResponse) VisitPasskeyLoginOptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PasskeyLoginOptions401ApplicationProblemPlusJSONResponse Problem
+
+func (response PasskeyLoginOptions401ApplicationProblemPlusJSONResponse) VisitPasskeyLoginOptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PasskeyLoginOptions403ApplicationProblemPlusJSONResponse Problem
+
+func (response PasskeyLoginOptions403ApplicationProblemPlusJSONResponse) VisitPasskeyLoginOptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PasskeyLoginOptions404ApplicationProblemPlusJSONResponse Problem
+
+func (response PasskeyLoginOptions404ApplicationProblemPlusJSONResponse) VisitPasskeyLoginOptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PasskeyLoginOptions409ApplicationProblemPlusJSONResponse Problem
+
+func (response PasskeyLoginOptions409ApplicationProblemPlusJSONResponse) VisitPasskeyLoginOptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PasskeyLoginOptions422ApplicationProblemPlusJSONResponse Problem
+
+func (response PasskeyLoginOptions422ApplicationProblemPlusJSONResponse) VisitPasskeyLoginOptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PasskeyLoginOptions426ApplicationProblemPlusJSONResponse Problem
+
+func (response PasskeyLoginOptions426ApplicationProblemPlusJSONResponse) VisitPasskeyLoginOptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PasskeyLoginOptions429ApplicationProblemPlusJSONResponse Problem
+
+func (response PasskeyLoginOptions429ApplicationProblemPlusJSONResponse) VisitPasskeyLoginOptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PasskeyLoginOptions503ApplicationProblemPlusJSONResponse Problem
+
+func (response PasskeyLoginOptions503ApplicationProblemPlusJSONResponse) VisitPasskeyLoginOptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifyPasskeyLoginRequestObject struct {
+	Params VerifyPasskeyLoginParams
+	Body   *VerifyPasskeyLoginJSONRequestBody
+}
+
+type VerifyPasskeyLoginResponseObject interface {
+	VisitVerifyPasskeyLoginResponse(w http.ResponseWriter) error
+}
+
+type VerifyPasskeyLogin200JSONResponse TokenResponse
+
+func (response VerifyPasskeyLogin200JSONResponse) VisitVerifyPasskeyLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifyPasskeyLogin400ApplicationProblemPlusJSONResponse Problem
+
+func (response VerifyPasskeyLogin400ApplicationProblemPlusJSONResponse) VisitVerifyPasskeyLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifyPasskeyLogin401ApplicationProblemPlusJSONResponse Problem
+
+func (response VerifyPasskeyLogin401ApplicationProblemPlusJSONResponse) VisitVerifyPasskeyLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifyPasskeyLogin403ApplicationProblemPlusJSONResponse Problem
+
+func (response VerifyPasskeyLogin403ApplicationProblemPlusJSONResponse) VisitVerifyPasskeyLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifyPasskeyLogin404ApplicationProblemPlusJSONResponse Problem
+
+func (response VerifyPasskeyLogin404ApplicationProblemPlusJSONResponse) VisitVerifyPasskeyLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifyPasskeyLogin409ApplicationProblemPlusJSONResponse Problem
+
+func (response VerifyPasskeyLogin409ApplicationProblemPlusJSONResponse) VisitVerifyPasskeyLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifyPasskeyLogin422ApplicationProblemPlusJSONResponse Problem
+
+func (response VerifyPasskeyLogin422ApplicationProblemPlusJSONResponse) VisitVerifyPasskeyLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifyPasskeyLogin426ApplicationProblemPlusJSONResponse Problem
+
+func (response VerifyPasskeyLogin426ApplicationProblemPlusJSONResponse) VisitVerifyPasskeyLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifyPasskeyLogin429ApplicationProblemPlusJSONResponse Problem
+
+func (response VerifyPasskeyLogin429ApplicationProblemPlusJSONResponse) VisitVerifyPasskeyLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifyPasskeyLogin503ApplicationProblemPlusJSONResponse Problem
+
+func (response VerifyPasskeyLogin503ApplicationProblemPlusJSONResponse) VisitVerifyPasskeyLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PasskeyRegistrationOptionsRequestObject struct {
+	Params PasskeyRegistrationOptionsParams
+	Body   *PasskeyRegistrationOptionsJSONRequestBody
+}
+
+type PasskeyRegistrationOptionsResponseObject interface {
+	VisitPasskeyRegistrationOptionsResponse(w http.ResponseWriter) error
+}
+
+type PasskeyRegistrationOptions200JSONResponse PasskeyOptions
+
+func (response PasskeyRegistrationOptions200JSONResponse) VisitPasskeyRegistrationOptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PasskeyRegistrationOptions400ApplicationProblemPlusJSONResponse Problem
+
+func (response PasskeyRegistrationOptions400ApplicationProblemPlusJSONResponse) VisitPasskeyRegistrationOptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PasskeyRegistrationOptions401ApplicationProblemPlusJSONResponse struct {
+	TwoFactorRequiredApplicationProblemPlusJSONResponse
+}
+
+func (response PasskeyRegistrationOptions401ApplicationProblemPlusJSONResponse) VisitPasskeyRegistrationOptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PasskeyRegistrationOptions403ApplicationProblemPlusJSONResponse Problem
+
+func (response PasskeyRegistrationOptions403ApplicationProblemPlusJSONResponse) VisitPasskeyRegistrationOptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PasskeyRegistrationOptions404ApplicationProblemPlusJSONResponse Problem
+
+func (response PasskeyRegistrationOptions404ApplicationProblemPlusJSONResponse) VisitPasskeyRegistrationOptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PasskeyRegistrationOptions409ApplicationProblemPlusJSONResponse Problem
+
+func (response PasskeyRegistrationOptions409ApplicationProblemPlusJSONResponse) VisitPasskeyRegistrationOptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PasskeyRegistrationOptions422ApplicationProblemPlusJSONResponse Problem
+
+func (response PasskeyRegistrationOptions422ApplicationProblemPlusJSONResponse) VisitPasskeyRegistrationOptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PasskeyRegistrationOptions426ApplicationProblemPlusJSONResponse Problem
+
+func (response PasskeyRegistrationOptions426ApplicationProblemPlusJSONResponse) VisitPasskeyRegistrationOptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PasskeyRegistrationOptions429ApplicationProblemPlusJSONResponse Problem
+
+func (response PasskeyRegistrationOptions429ApplicationProblemPlusJSONResponse) VisitPasskeyRegistrationOptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PasskeyRegistrationOptions503ApplicationProblemPlusJSONResponse Problem
+
+func (response PasskeyRegistrationOptions503ApplicationProblemPlusJSONResponse) VisitPasskeyRegistrationOptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifyPasskeyRegistrationRequestObject struct {
+	Params VerifyPasskeyRegistrationParams
+	Body   *VerifyPasskeyRegistrationJSONRequestBody
+}
+
+type VerifyPasskeyRegistrationResponseObject interface {
+	VisitVerifyPasskeyRegistrationResponse(w http.ResponseWriter) error
+}
+
+type VerifyPasskeyRegistration204Response struct {
+}
+
+func (response VerifyPasskeyRegistration204Response) VisitVerifyPasskeyRegistrationResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type VerifyPasskeyRegistration400ApplicationProblemPlusJSONResponse Problem
+
+func (response VerifyPasskeyRegistration400ApplicationProblemPlusJSONResponse) VisitVerifyPasskeyRegistrationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifyPasskeyRegistration401ApplicationProblemPlusJSONResponse Problem
+
+func (response VerifyPasskeyRegistration401ApplicationProblemPlusJSONResponse) VisitVerifyPasskeyRegistrationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifyPasskeyRegistration403ApplicationProblemPlusJSONResponse Problem
+
+func (response VerifyPasskeyRegistration403ApplicationProblemPlusJSONResponse) VisitVerifyPasskeyRegistrationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifyPasskeyRegistration404ApplicationProblemPlusJSONResponse Problem
+
+func (response VerifyPasskeyRegistration404ApplicationProblemPlusJSONResponse) VisitVerifyPasskeyRegistrationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifyPasskeyRegistration409ApplicationProblemPlusJSONResponse Problem
+
+func (response VerifyPasskeyRegistration409ApplicationProblemPlusJSONResponse) VisitVerifyPasskeyRegistrationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifyPasskeyRegistration422ApplicationProblemPlusJSONResponse Problem
+
+func (response VerifyPasskeyRegistration422ApplicationProblemPlusJSONResponse) VisitVerifyPasskeyRegistrationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifyPasskeyRegistration426ApplicationProblemPlusJSONResponse Problem
+
+func (response VerifyPasskeyRegistration426ApplicationProblemPlusJSONResponse) VisitVerifyPasskeyRegistrationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifyPasskeyRegistration429ApplicationProblemPlusJSONResponse Problem
+
+func (response VerifyPasskeyRegistration429ApplicationProblemPlusJSONResponse) VisitVerifyPasskeyRegistrationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifyPasskeyRegistration503ApplicationProblemPlusJSONResponse Problem
+
+func (response VerifyPasskeyRegistration503ApplicationProblemPlusJSONResponse) VisitVerifyPasskeyRegistrationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemovePasskeyRequestObject struct {
+	PasskeyId string `json:"passkeyId"`
+	Params    RemovePasskeyParams
+	Body      *RemovePasskeyJSONRequestBody
+}
+
+type RemovePasskeyResponseObject interface {
+	VisitRemovePasskeyResponse(w http.ResponseWriter) error
+}
+
+type RemovePasskey204Response struct {
+}
+
+func (response RemovePasskey204Response) VisitRemovePasskeyResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type RemovePasskey400ApplicationProblemPlusJSONResponse Problem
+
+func (response RemovePasskey400ApplicationProblemPlusJSONResponse) VisitRemovePasskeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemovePasskey401ApplicationProblemPlusJSONResponse Problem
+
+func (response RemovePasskey401ApplicationProblemPlusJSONResponse) VisitRemovePasskeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemovePasskey403ApplicationProblemPlusJSONResponse Problem
+
+func (response RemovePasskey403ApplicationProblemPlusJSONResponse) VisitRemovePasskeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemovePasskey404ApplicationProblemPlusJSONResponse Problem
+
+func (response RemovePasskey404ApplicationProblemPlusJSONResponse) VisitRemovePasskeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemovePasskey409ApplicationProblemPlusJSONResponse Problem
+
+func (response RemovePasskey409ApplicationProblemPlusJSONResponse) VisitRemovePasskeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemovePasskey422ApplicationProblemPlusJSONResponse Problem
+
+func (response RemovePasskey422ApplicationProblemPlusJSONResponse) VisitRemovePasskeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemovePasskey426ApplicationProblemPlusJSONResponse Problem
+
+func (response RemovePasskey426ApplicationProblemPlusJSONResponse) VisitRemovePasskeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemovePasskey429ApplicationProblemPlusJSONResponse Problem
+
+func (response RemovePasskey429ApplicationProblemPlusJSONResponse) VisitRemovePasskeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemovePasskey503ApplicationProblemPlusJSONResponse Problem
+
+func (response RemovePasskey503ApplicationProblemPlusJSONResponse) VisitRemovePasskeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenamePasskeyRequestObject struct {
+	PasskeyId string `json:"passkeyId"`
+	Params    RenamePasskeyParams
+	Body      *RenamePasskeyJSONRequestBody
+}
+
+type RenamePasskeyResponseObject interface {
+	VisitRenamePasskeyResponse(w http.ResponseWriter) error
+}
+
+type RenamePasskey204Response struct {
+}
+
+func (response RenamePasskey204Response) VisitRenamePasskeyResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type RenamePasskey400ApplicationProblemPlusJSONResponse Problem
+
+func (response RenamePasskey400ApplicationProblemPlusJSONResponse) VisitRenamePasskeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenamePasskey401ApplicationProblemPlusJSONResponse Problem
+
+func (response RenamePasskey401ApplicationProblemPlusJSONResponse) VisitRenamePasskeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenamePasskey403ApplicationProblemPlusJSONResponse Problem
+
+func (response RenamePasskey403ApplicationProblemPlusJSONResponse) VisitRenamePasskeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenamePasskey404ApplicationProblemPlusJSONResponse Problem
+
+func (response RenamePasskey404ApplicationProblemPlusJSONResponse) VisitRenamePasskeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenamePasskey409ApplicationProblemPlusJSONResponse Problem
+
+func (response RenamePasskey409ApplicationProblemPlusJSONResponse) VisitRenamePasskeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenamePasskey422ApplicationProblemPlusJSONResponse Problem
+
+func (response RenamePasskey422ApplicationProblemPlusJSONResponse) VisitRenamePasskeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenamePasskey426ApplicationProblemPlusJSONResponse Problem
+
+func (response RenamePasskey426ApplicationProblemPlusJSONResponse) VisitRenamePasskeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenamePasskey429ApplicationProblemPlusJSONResponse Problem
+
+func (response RenamePasskey429ApplicationProblemPlusJSONResponse) VisitRenamePasskeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenamePasskey503ApplicationProblemPlusJSONResponse Problem
+
+func (response RenamePasskey503ApplicationProblemPlusJSONResponse) VisitRenamePasskeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ConfirmEmailResetRequestObject struct {
+	Params ConfirmEmailResetParams
+	Body   *ConfirmEmailResetJSONRequestBody
+}
+
+type ConfirmEmailResetResponseObject interface {
+	VisitConfirmEmailResetResponse(w http.ResponseWriter) error
+}
+
+type ConfirmEmailReset200JSONResponse RegisterResponse
+
+func (response ConfirmEmailReset200JSONResponse) VisitConfirmEmailResetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ConfirmEmailReset400ApplicationProblemPlusJSONResponse Problem
+
+func (response ConfirmEmailReset400ApplicationProblemPlusJSONResponse) VisitConfirmEmailResetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ConfirmEmailReset401ApplicationProblemPlusJSONResponse struct {
+	TwoFactorRequiredApplicationProblemPlusJSONResponse
+}
+
+func (response ConfirmEmailReset401ApplicationProblemPlusJSONResponse) VisitConfirmEmailResetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ConfirmEmailReset403ApplicationProblemPlusJSONResponse Problem
+
+func (response ConfirmEmailReset403ApplicationProblemPlusJSONResponse) VisitConfirmEmailResetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ConfirmEmailReset404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response ConfirmEmailReset404ApplicationProblemPlusJSONResponse) VisitConfirmEmailResetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ConfirmEmailReset409ApplicationProblemPlusJSONResponse Problem
+
+func (response ConfirmEmailReset409ApplicationProblemPlusJSONResponse) VisitConfirmEmailResetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ConfirmEmailReset422ApplicationProblemPlusJSONResponse Problem
+
+func (response ConfirmEmailReset422ApplicationProblemPlusJSONResponse) VisitConfirmEmailResetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ConfirmEmailReset426ApplicationProblemPlusJSONResponse Problem
+
+func (response ConfirmEmailReset426ApplicationProblemPlusJSONResponse) VisitConfirmEmailResetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ConfirmEmailReset429ApplicationProblemPlusJSONResponse Problem
+
+func (response ConfirmEmailReset429ApplicationProblemPlusJSONResponse) VisitConfirmEmailResetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ConfirmEmailReset503ApplicationProblemPlusJSONResponse Problem
+
+func (response ConfirmEmailReset503ApplicationProblemPlusJSONResponse) VisitConfirmEmailResetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RequestEmailResetRequestObject struct {
+	Params RequestEmailResetParams
+	Body   *RequestEmailResetJSONRequestBody
+}
+
+type RequestEmailResetResponseObject interface {
+	VisitRequestEmailResetResponse(w http.ResponseWriter) error
+}
+
+type RequestEmailReset202JSONResponse EmailResetAccepted
+
+func (response RequestEmailReset202JSONResponse) VisitRequestEmailResetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(202)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RequestEmailReset400ApplicationProblemPlusJSONResponse Problem
+
+func (response RequestEmailReset400ApplicationProblemPlusJSONResponse) VisitRequestEmailResetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RequestEmailReset401ApplicationProblemPlusJSONResponse Problem
+
+func (response RequestEmailReset401ApplicationProblemPlusJSONResponse) VisitRequestEmailResetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RequestEmailReset403ApplicationProblemPlusJSONResponse Problem
+
+func (response RequestEmailReset403ApplicationProblemPlusJSONResponse) VisitRequestEmailResetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RequestEmailReset409ApplicationProblemPlusJSONResponse Problem
+
+func (response RequestEmailReset409ApplicationProblemPlusJSONResponse) VisitRequestEmailResetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RequestEmailReset422ApplicationProblemPlusJSONResponse Problem
+
+func (response RequestEmailReset422ApplicationProblemPlusJSONResponse) VisitRequestEmailResetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RequestEmailReset426ApplicationProblemPlusJSONResponse Problem
+
+func (response RequestEmailReset426ApplicationProblemPlusJSONResponse) VisitRequestEmailResetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RequestEmailReset429ApplicationProblemPlusJSONResponse Problem
+
+func (response RequestEmailReset429ApplicationProblemPlusJSONResponse) VisitRequestEmailResetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RequestEmailReset503ApplicationProblemPlusJSONResponse Problem
+
+func (response RequestEmailReset503ApplicationProblemPlusJSONResponse) VisitRequestEmailResetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateQrLoginRequestObject struct {
+	Params CreateQrLoginParams
+}
+
+type CreateQrLoginResponseObject interface {
+	VisitCreateQrLoginResponse(w http.ResponseWriter) error
+}
+
+type CreateQrLogin201JSONResponse QrLoginStart
+
+func (response CreateQrLogin201JSONResponse) VisitCreateQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateQrLogin400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response CreateQrLogin400ApplicationProblemPlusJSONResponse) VisitCreateQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateQrLogin426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response CreateQrLogin426ApplicationProblemPlusJSONResponse) VisitCreateQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateQrLogin429ApplicationProblemPlusJSONResponse struct {
 	TooManyRequestsApplicationProblemPlusJSONResponse
 }
 
-func (response StartRecovery429ApplicationProblemPlusJSONResponse) VisitStartRecoveryResponse(w http.ResponseWriter) error {
+func (response CreateQrLogin429ApplicationProblemPlusJSONResponse) VisitCreateQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetQrLoginRequestObject struct {
+	RequestId QrLoginRequestId `json:"requestId"`
+	Params    GetQrLoginParams
+}
+
+type GetQrLoginResponseObject interface {
+	VisitGetQrLoginResponse(w http.ResponseWriter) error
+}
+
+type GetQrLogin200JSONResponse QrLoginRequest
+
+func (response GetQrLogin200JSONResponse) VisitGetQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetQrLogin400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response GetQrLogin400ApplicationProblemPlusJSONResponse) VisitGetQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetQrLogin401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response GetQrLogin401ApplicationProblemPlusJSONResponse) VisitGetQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetQrLogin404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetQrLogin404ApplicationProblemPlusJSONResponse) VisitGetQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetQrLogin426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetQrLogin426ApplicationProblemPlusJSONResponse) VisitGetQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetQrLogin429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response GetQrLogin429ApplicationProblemPlusJSONResponse) VisitGetQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApproveQrLoginRequestObject struct {
+	RequestId QrLoginRequestId `json:"requestId"`
+	Params    ApproveQrLoginParams
+	Body      *ApproveQrLoginJSONRequestBody
+}
+
+type ApproveQrLoginResponseObject interface {
+	VisitApproveQrLoginResponse(w http.ResponseWriter) error
+}
+
+type ApproveQrLogin204Response struct {
+}
+
+func (response ApproveQrLogin204Response) VisitApproveQrLoginResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type ApproveQrLogin400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response ApproveQrLogin400ApplicationProblemPlusJSONResponse) VisitApproveQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApproveQrLogin401ApplicationProblemPlusJSONResponse struct {
+	TwoFactorRequiredApplicationProblemPlusJSONResponse
+}
+
+func (response ApproveQrLogin401ApplicationProblemPlusJSONResponse) VisitApproveQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApproveQrLogin403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response ApproveQrLogin403ApplicationProblemPlusJSONResponse) VisitApproveQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApproveQrLogin404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response ApproveQrLogin404ApplicationProblemPlusJSONResponse) VisitApproveQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApproveQrLogin409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response ApproveQrLogin409ApplicationProblemPlusJSONResponse) VisitApproveQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApproveQrLogin426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response ApproveQrLogin426ApplicationProblemPlusJSONResponse) VisitApproveQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApproveQrLogin429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response ApproveQrLogin429ApplicationProblemPlusJSONResponse) VisitApproveQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DenyQrLoginRequestObject struct {
+	RequestId QrLoginRequestId `json:"requestId"`
+	Params    DenyQrLoginParams
+}
+
+type DenyQrLoginResponseObject interface {
+	VisitDenyQrLoginResponse(w http.ResponseWriter) error
+}
+
+type DenyQrLogin204Response struct {
+}
+
+func (response DenyQrLogin204Response) VisitDenyQrLoginResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DenyQrLogin400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response DenyQrLogin400ApplicationProblemPlusJSONResponse) VisitDenyQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DenyQrLogin401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response DenyQrLogin401ApplicationProblemPlusJSONResponse) VisitDenyQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DenyQrLogin404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response DenyQrLogin404ApplicationProblemPlusJSONResponse) VisitDenyQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DenyQrLogin409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response DenyQrLogin409ApplicationProblemPlusJSONResponse) VisitDenyQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DenyQrLogin426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response DenyQrLogin426ApplicationProblemPlusJSONResponse) VisitDenyQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DenyQrLogin429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response DenyQrLogin429ApplicationProblemPlusJSONResponse) VisitDenyQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PollQrLoginRequestObject struct {
+	RequestId QrLoginRequestId `json:"requestId"`
+	Params    PollQrLoginParams
+	Body      *PollQrLoginJSONRequestBody
+}
+
+type PollQrLoginResponseObject interface {
+	VisitPollQrLoginResponse(w http.ResponseWriter) error
+}
+
+type PollQrLogin200ResponseHeaders struct {
+	SetCookie *string
+}
+
+type PollQrLogin200JSONResponse struct {
+	Body    QrLoginPollResult
+	Headers PollQrLogin200ResponseHeaders
+}
+
+func (response PollQrLogin200JSONResponse) VisitPollQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.SetCookie != nil {
+		w.Header().Set("Set-Cookie", fmt.Sprint(*response.Headers.SetCookie))
+	}
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PollQrLogin400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response PollQrLogin400ApplicationProblemPlusJSONResponse) VisitPollQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PollQrLogin426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response PollQrLogin426ApplicationProblemPlusJSONResponse) VisitPollQrLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PollQrLogin429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response PollQrLogin429ApplicationProblemPlusJSONResponse) VisitPollQrLoginResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -9403,7 +13498,7 @@ func (response RecoverWithKey400ApplicationProblemPlusJSONResponse) VisitRecover
 }
 
 type RecoverWithKey401ApplicationProblemPlusJSONResponse struct {
-	UnauthorizedApplicationProblemPlusJSONResponse
+	TwoFactorRequiredApplicationProblemPlusJSONResponse
 }
 
 func (response RecoverWithKey401ApplicationProblemPlusJSONResponse) VisitRecoverWithKeyResponse(w http.ResponseWriter) error {
@@ -9487,6 +13582,798 @@ type RecoverWithKey429ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response RecoverWithKey429ApplicationProblemPlusJSONResponse) VisitRecoverWithKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartDeviceRecoveryRequestObject struct {
+	Params StartDeviceRecoveryParams
+	Body   *StartDeviceRecoveryJSONRequestBody
+}
+
+type StartDeviceRecoveryResponseObject interface {
+	VisitStartDeviceRecoveryResponse(w http.ResponseWriter) error
+}
+
+type StartDeviceRecovery200JSONResponse DeviceRecoveryResult
+
+func (response StartDeviceRecovery200JSONResponse) VisitStartDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartDeviceRecovery400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response StartDeviceRecovery400ApplicationProblemPlusJSONResponse) VisitStartDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartDeviceRecovery401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response StartDeviceRecovery401ApplicationProblemPlusJSONResponse) VisitStartDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartDeviceRecovery403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response StartDeviceRecovery403ApplicationProblemPlusJSONResponse) VisitStartDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartDeviceRecovery409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response StartDeviceRecovery409ApplicationProblemPlusJSONResponse) VisitStartDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartDeviceRecovery422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response StartDeviceRecovery422ApplicationProblemPlusJSONResponse) VisitStartDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartDeviceRecovery426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response StartDeviceRecovery426ApplicationProblemPlusJSONResponse) VisitStartDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartDeviceRecovery429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response StartDeviceRecovery429ApplicationProblemPlusJSONResponse) VisitStartDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeviceRecoveryStatusRequestObject struct {
+	RequestId string `json:"requestId"`
+	Params    DeviceRecoveryStatusParams
+}
+
+type DeviceRecoveryStatusResponseObject interface {
+	VisitDeviceRecoveryStatusResponse(w http.ResponseWriter) error
+}
+
+type DeviceRecoveryStatus200JSONResponse DeviceRecoveryStatus
+
+func (response DeviceRecoveryStatus200JSONResponse) VisitDeviceRecoveryStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeviceRecoveryStatus400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response DeviceRecoveryStatus400ApplicationProblemPlusJSONResponse) VisitDeviceRecoveryStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeviceRecoveryStatus401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response DeviceRecoveryStatus401ApplicationProblemPlusJSONResponse) VisitDeviceRecoveryStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeviceRecoveryStatus403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response DeviceRecoveryStatus403ApplicationProblemPlusJSONResponse) VisitDeviceRecoveryStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeviceRecoveryStatus409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response DeviceRecoveryStatus409ApplicationProblemPlusJSONResponse) VisitDeviceRecoveryStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeviceRecoveryStatus422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response DeviceRecoveryStatus422ApplicationProblemPlusJSONResponse) VisitDeviceRecoveryStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeviceRecoveryStatus426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response DeviceRecoveryStatus426ApplicationProblemPlusJSONResponse) VisitDeviceRecoveryStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeviceRecoveryStatus429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response DeviceRecoveryStatus429ApplicationProblemPlusJSONResponse) VisitDeviceRecoveryStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApproveDeviceRecoveryRequestObject struct {
+	RequestId string `json:"requestId"`
+	Params    ApproveDeviceRecoveryParams
+	Body      *ApproveDeviceRecoveryJSONRequestBody
+}
+
+type ApproveDeviceRecoveryResponseObject interface {
+	VisitApproveDeviceRecoveryResponse(w http.ResponseWriter) error
+}
+
+type ApproveDeviceRecovery200JSONResponse DeviceRecoveryStatus
+
+func (response ApproveDeviceRecovery200JSONResponse) VisitApproveDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApproveDeviceRecovery400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response ApproveDeviceRecovery400ApplicationProblemPlusJSONResponse) VisitApproveDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApproveDeviceRecovery401ApplicationProblemPlusJSONResponse struct {
+	TwoFactorRequiredApplicationProblemPlusJSONResponse
+}
+
+func (response ApproveDeviceRecovery401ApplicationProblemPlusJSONResponse) VisitApproveDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApproveDeviceRecovery403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response ApproveDeviceRecovery403ApplicationProblemPlusJSONResponse) VisitApproveDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApproveDeviceRecovery404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response ApproveDeviceRecovery404ApplicationProblemPlusJSONResponse) VisitApproveDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApproveDeviceRecovery409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response ApproveDeviceRecovery409ApplicationProblemPlusJSONResponse) VisitApproveDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApproveDeviceRecovery422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response ApproveDeviceRecovery422ApplicationProblemPlusJSONResponse) VisitApproveDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApproveDeviceRecovery426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response ApproveDeviceRecovery426ApplicationProblemPlusJSONResponse) VisitApproveDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApproveDeviceRecovery429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response ApproveDeviceRecovery429ApplicationProblemPlusJSONResponse) VisitApproveDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelDeviceRecoveryRequestObject struct {
+	RequestId string `json:"requestId"`
+	Params    CancelDeviceRecoveryParams
+}
+
+type CancelDeviceRecoveryResponseObject interface {
+	VisitCancelDeviceRecoveryResponse(w http.ResponseWriter) error
+}
+
+type CancelDeviceRecovery204Response struct {
+}
+
+func (response CancelDeviceRecovery204Response) VisitCancelDeviceRecoveryResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type CancelDeviceRecovery400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response CancelDeviceRecovery400ApplicationProblemPlusJSONResponse) VisitCancelDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelDeviceRecovery426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response CancelDeviceRecovery426ApplicationProblemPlusJSONResponse) VisitCancelDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelDeviceRecovery429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response CancelDeviceRecovery429ApplicationProblemPlusJSONResponse) VisitCancelDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteDeviceRecoveryRequestObject struct {
+	RequestId string `json:"requestId"`
+	Params    CompleteDeviceRecoveryParams
+	Body      *CompleteDeviceRecoveryJSONRequestBody
+}
+
+type CompleteDeviceRecoveryResponseObject interface {
+	VisitCompleteDeviceRecoveryResponse(w http.ResponseWriter) error
+}
+
+type CompleteDeviceRecovery200JSONResponse RegisterResponse
+
+func (response CompleteDeviceRecovery200JSONResponse) VisitCompleteDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteDeviceRecovery400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response CompleteDeviceRecovery400ApplicationProblemPlusJSONResponse) VisitCompleteDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteDeviceRecovery401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response CompleteDeviceRecovery401ApplicationProblemPlusJSONResponse) VisitCompleteDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteDeviceRecovery403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response CompleteDeviceRecovery403ApplicationProblemPlusJSONResponse) VisitCompleteDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteDeviceRecovery409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response CompleteDeviceRecovery409ApplicationProblemPlusJSONResponse) VisitCompleteDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteDeviceRecovery422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response CompleteDeviceRecovery422ApplicationProblemPlusJSONResponse) VisitCompleteDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteDeviceRecovery426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response CompleteDeviceRecovery426ApplicationProblemPlusJSONResponse) VisitCompleteDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteDeviceRecovery429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response CompleteDeviceRecovery429ApplicationProblemPlusJSONResponse) VisitCompleteDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DenyDeviceRecoveryRequestObject struct {
+	RequestId string `json:"requestId"`
+	Params    DenyDeviceRecoveryParams
+}
+
+type DenyDeviceRecoveryResponseObject interface {
+	VisitDenyDeviceRecoveryResponse(w http.ResponseWriter) error
+}
+
+type DenyDeviceRecovery200JSONResponse DeviceRecoveryStatus
+
+func (response DenyDeviceRecovery200JSONResponse) VisitDenyDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DenyDeviceRecovery400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response DenyDeviceRecovery400ApplicationProblemPlusJSONResponse) VisitDenyDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DenyDeviceRecovery401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response DenyDeviceRecovery401ApplicationProblemPlusJSONResponse) VisitDenyDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DenyDeviceRecovery403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response DenyDeviceRecovery403ApplicationProblemPlusJSONResponse) VisitDenyDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DenyDeviceRecovery404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response DenyDeviceRecovery404ApplicationProblemPlusJSONResponse) VisitDenyDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DenyDeviceRecovery409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response DenyDeviceRecovery409ApplicationProblemPlusJSONResponse) VisitDenyDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DenyDeviceRecovery422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response DenyDeviceRecovery422ApplicationProblemPlusJSONResponse) VisitDenyDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DenyDeviceRecovery426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response DenyDeviceRecovery426ApplicationProblemPlusJSONResponse) VisitDenyDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DenyDeviceRecovery429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response DenyDeviceRecovery429ApplicationProblemPlusJSONResponse) VisitDenyDeviceRecoveryResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -9702,106 +14589,6 @@ type Register429ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response Register429ApplicationProblemPlusJSONResponse) VisitRegisterResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/problem+json")
-	if response.Headers.RetryAfter != nil {
-		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
-	}
-	w.WriteHeader(429)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ResetPasswordRequestObject struct {
-	Params ResetPasswordParams
-	Body   *ResetPasswordJSONRequestBody
-}
-
-type ResetPasswordResponseObject interface {
-	VisitResetPasswordResponse(w http.ResponseWriter) error
-}
-
-type ResetPassword204Response struct {
-}
-
-func (response ResetPassword204Response) VisitResetPasswordResponse(w http.ResponseWriter) error {
-	w.WriteHeader(204)
-	return nil
-}
-
-type ResetPassword400ApplicationProblemPlusJSONResponse struct {
-	BadRequestApplicationProblemPlusJSONResponse
-}
-
-func (response ResetPassword400ApplicationProblemPlusJSONResponse) VisitResetPasswordResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(400)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ResetPassword401ApplicationProblemPlusJSONResponse struct {
-	UnauthorizedApplicationProblemPlusJSONResponse
-}
-
-func (response ResetPassword401ApplicationProblemPlusJSONResponse) VisitResetPasswordResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(401)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ResetPassword422ApplicationProblemPlusJSONResponse struct {
-	ValidationFailedApplicationProblemPlusJSONResponse
-}
-
-func (response ResetPassword422ApplicationProblemPlusJSONResponse) VisitResetPasswordResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(422)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ResetPassword426ApplicationProblemPlusJSONResponse struct {
-	ClientOutdatedApplicationProblemPlusJSONResponse
-}
-
-func (response ResetPassword426ApplicationProblemPlusJSONResponse) VisitResetPasswordResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(426)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ResetPassword429ApplicationProblemPlusJSONResponse struct {
-	TooManyRequestsApplicationProblemPlusJSONResponse
-}
-
-func (response ResetPassword429ApplicationProblemPlusJSONResponse) VisitResetPasswordResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -13226,7 +18013,7 @@ func (response DisableTwoFactor400ApplicationProblemPlusJSONResponse) VisitDisab
 }
 
 type DisableTwoFactor401ApplicationProblemPlusJSONResponse struct {
-	UnauthorizedApplicationProblemPlusJSONResponse
+	TwoFactorRequiredApplicationProblemPlusJSONResponse
 }
 
 func (response DisableTwoFactor401ApplicationProblemPlusJSONResponse) VisitDisableTwoFactorResponse(w http.ResponseWriter) error {
@@ -13813,6 +18600,402 @@ func (response BlockUser426ApplicationProblemPlusJSONResponse) VisitBlockUserRes
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveRecoveryEmailRequestObject struct {
+	Params RemoveRecoveryEmailParams
+	Body   *RemoveRecoveryEmailJSONRequestBody
+}
+
+type RemoveRecoveryEmailResponseObject interface {
+	VisitRemoveRecoveryEmailResponse(w http.ResponseWriter) error
+}
+
+type RemoveRecoveryEmail204Response struct {
+}
+
+func (response RemoveRecoveryEmail204Response) VisitRemoveRecoveryEmailResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type RemoveRecoveryEmail400ApplicationProblemPlusJSONResponse Problem
+
+func (response RemoveRecoveryEmail400ApplicationProblemPlusJSONResponse) VisitRemoveRecoveryEmailResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveRecoveryEmail401ApplicationProblemPlusJSONResponse struct {
+	TwoFactorRequiredApplicationProblemPlusJSONResponse
+}
+
+func (response RemoveRecoveryEmail401ApplicationProblemPlusJSONResponse) VisitRemoveRecoveryEmailResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveRecoveryEmail403ApplicationProblemPlusJSONResponse Problem
+
+func (response RemoveRecoveryEmail403ApplicationProblemPlusJSONResponse) VisitRemoveRecoveryEmailResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveRecoveryEmail409ApplicationProblemPlusJSONResponse Problem
+
+func (response RemoveRecoveryEmail409ApplicationProblemPlusJSONResponse) VisitRemoveRecoveryEmailResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveRecoveryEmail422ApplicationProblemPlusJSONResponse Problem
+
+func (response RemoveRecoveryEmail422ApplicationProblemPlusJSONResponse) VisitRemoveRecoveryEmailResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveRecoveryEmail426ApplicationProblemPlusJSONResponse Problem
+
+func (response RemoveRecoveryEmail426ApplicationProblemPlusJSONResponse) VisitRemoveRecoveryEmailResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveRecoveryEmail429ApplicationProblemPlusJSONResponse Problem
+
+func (response RemoveRecoveryEmail429ApplicationProblemPlusJSONResponse) VisitRemoveRecoveryEmailResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveRecoveryEmail503ApplicationProblemPlusJSONResponse Problem
+
+func (response RemoveRecoveryEmail503ApplicationProblemPlusJSONResponse) VisitRemoveRecoveryEmailResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRecoveryEmailRequestObject struct {
+	Params GetRecoveryEmailParams
+}
+
+type GetRecoveryEmailResponseObject interface {
+	VisitGetRecoveryEmailResponse(w http.ResponseWriter) error
+}
+
+type GetRecoveryEmail200JSONResponse RecoveryEmailStatus
+
+func (response GetRecoveryEmail200JSONResponse) VisitGetRecoveryEmailResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRecoveryEmail400ApplicationProblemPlusJSONResponse Problem
+
+func (response GetRecoveryEmail400ApplicationProblemPlusJSONResponse) VisitGetRecoveryEmailResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRecoveryEmail401ApplicationProblemPlusJSONResponse Problem
+
+func (response GetRecoveryEmail401ApplicationProblemPlusJSONResponse) VisitGetRecoveryEmailResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRecoveryEmail403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetRecoveryEmail403ApplicationProblemPlusJSONResponse) VisitGetRecoveryEmailResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRecoveryEmail409ApplicationProblemPlusJSONResponse Problem
+
+func (response GetRecoveryEmail409ApplicationProblemPlusJSONResponse) VisitGetRecoveryEmailResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRecoveryEmail422ApplicationProblemPlusJSONResponse Problem
+
+func (response GetRecoveryEmail422ApplicationProblemPlusJSONResponse) VisitGetRecoveryEmailResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRecoveryEmail426ApplicationProblemPlusJSONResponse Problem
+
+func (response GetRecoveryEmail426ApplicationProblemPlusJSONResponse) VisitGetRecoveryEmailResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRecoveryEmail429ApplicationProblemPlusJSONResponse Problem
+
+func (response GetRecoveryEmail429ApplicationProblemPlusJSONResponse) VisitGetRecoveryEmailResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRecoveryEmail503ApplicationProblemPlusJSONResponse Problem
+
+func (response GetRecoveryEmail503ApplicationProblemPlusJSONResponse) VisitGetRecoveryEmailResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetRecoveryEmailRequestObject struct {
+	Params SetRecoveryEmailParams
+	Body   *SetRecoveryEmailJSONRequestBody
+}
+
+type SetRecoveryEmailResponseObject interface {
+	VisitSetRecoveryEmailResponse(w http.ResponseWriter) error
+}
+
+type SetRecoveryEmail204Response struct {
+}
+
+func (response SetRecoveryEmail204Response) VisitSetRecoveryEmailResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type SetRecoveryEmail400ApplicationProblemPlusJSONResponse Problem
+
+func (response SetRecoveryEmail400ApplicationProblemPlusJSONResponse) VisitSetRecoveryEmailResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetRecoveryEmail401ApplicationProblemPlusJSONResponse struct {
+	TwoFactorRequiredApplicationProblemPlusJSONResponse
+}
+
+func (response SetRecoveryEmail401ApplicationProblemPlusJSONResponse) VisitSetRecoveryEmailResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetRecoveryEmail403ApplicationProblemPlusJSONResponse Problem
+
+func (response SetRecoveryEmail403ApplicationProblemPlusJSONResponse) VisitSetRecoveryEmailResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetRecoveryEmail409ApplicationProblemPlusJSONResponse Problem
+
+func (response SetRecoveryEmail409ApplicationProblemPlusJSONResponse) VisitSetRecoveryEmailResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetRecoveryEmail422ApplicationProblemPlusJSONResponse Problem
+
+func (response SetRecoveryEmail422ApplicationProblemPlusJSONResponse) VisitSetRecoveryEmailResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetRecoveryEmail426ApplicationProblemPlusJSONResponse Problem
+
+func (response SetRecoveryEmail426ApplicationProblemPlusJSONResponse) VisitSetRecoveryEmailResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetRecoveryEmail429ApplicationProblemPlusJSONResponse Problem
+
+func (response SetRecoveryEmail429ApplicationProblemPlusJSONResponse) VisitSetRecoveryEmailResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetRecoveryEmail503ApplicationProblemPlusJSONResponse Problem
+
+func (response SetRecoveryEmail503ApplicationProblemPlusJSONResponse) VisitSetRecoveryEmailResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -14784,7 +19967,7 @@ func (response ReplaceRecoveryKey400ApplicationProblemPlusJSONResponse) VisitRep
 }
 
 type ReplaceRecoveryKey401ApplicationProblemPlusJSONResponse struct {
-	UnauthorizedApplicationProblemPlusJSONResponse
+	TwoFactorRequiredApplicationProblemPlusJSONResponse
 }
 
 func (response ReplaceRecoveryKey401ApplicationProblemPlusJSONResponse) VisitReplaceRecoveryKeyResponse(w http.ResponseWriter) error {
@@ -14878,6 +20061,140 @@ func (response ReplaceRecoveryKey429ApplicationProblemPlusJSONResponse) VisitRep
 		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
 	}
 	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRecoveryOverviewRequestObject struct {
+	Params GetRecoveryOverviewParams
+}
+
+type GetRecoveryOverviewResponseObject interface {
+	VisitGetRecoveryOverviewResponse(w http.ResponseWriter) error
+}
+
+type GetRecoveryOverview200JSONResponse RecoveryOverview
+
+func (response GetRecoveryOverview200JSONResponse) VisitGetRecoveryOverviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRecoveryOverview400ApplicationProblemPlusJSONResponse Problem
+
+func (response GetRecoveryOverview400ApplicationProblemPlusJSONResponse) VisitGetRecoveryOverviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRecoveryOverview401ApplicationProblemPlusJSONResponse Problem
+
+func (response GetRecoveryOverview401ApplicationProblemPlusJSONResponse) VisitGetRecoveryOverviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRecoveryOverview403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetRecoveryOverview403ApplicationProblemPlusJSONResponse) VisitGetRecoveryOverviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRecoveryOverview409ApplicationProblemPlusJSONResponse Problem
+
+func (response GetRecoveryOverview409ApplicationProblemPlusJSONResponse) VisitGetRecoveryOverviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRecoveryOverview422ApplicationProblemPlusJSONResponse Problem
+
+func (response GetRecoveryOverview422ApplicationProblemPlusJSONResponse) VisitGetRecoveryOverviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRecoveryOverview426ApplicationProblemPlusJSONResponse Problem
+
+func (response GetRecoveryOverview426ApplicationProblemPlusJSONResponse) VisitGetRecoveryOverviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRecoveryOverview429ApplicationProblemPlusJSONResponse Problem
+
+func (response GetRecoveryOverview429ApplicationProblemPlusJSONResponse) VisitGetRecoveryOverviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRecoveryOverview503ApplicationProblemPlusJSONResponse Problem
+
+func (response GetRecoveryOverview503ApplicationProblemPlusJSONResponse) VisitGetRecoveryOverviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -17189,6 +22506,9 @@ type StrictServerInterface interface {
 	// GetAttachmentContent Download an attachment
 	// (GET /attachments/{attachment_id}/content)
 	GetAttachmentContent(ctx context.Context, request GetAttachmentContentRequestObject) (GetAttachmentContentResponseObject, error)
+	// VerifyRecoveryEmail Consume a one-time email verification token
+	// (POST /auth/email/verify)
+	VerifyRecoveryEmail(ctx context.Context, request VerifyRecoveryEmailRequestObject) (VerifyRecoveryEmailResponseObject, error)
 	// Login Sign in with username and password
 	// (POST /auth/login)
 	Login(ctx context.Context, request LoginRequestObject) (LoginResponseObject, error)
@@ -17198,21 +22518,75 @@ type StrictServerInterface interface {
 	// Logout End the current session
 	// (POST /auth/logout)
 	Logout(ctx context.Context, request LogoutRequestObject) (LogoutResponseObject, error)
-	// StartRecovery Start account recovery (temporary)
-	// (POST /auth/recover)
-	StartRecovery(ctx context.Context, request StartRecoveryRequestObject) (StartRecoveryResponseObject, error)
+	// ListPasskeys List the account passkeys
+	// (GET /auth/passkeys)
+	ListPasskeys(ctx context.Context, request ListPasskeysRequestObject) (ListPasskeysResponseObject, error)
+	// PasskeyLoginOptions Begin discoverable passkey sign-in
+	// (POST /auth/passkeys/login/options)
+	PasskeyLoginOptions(ctx context.Context, request PasskeyLoginOptionsRequestObject) (PasskeyLoginOptionsResponseObject, error)
+	// VerifyPasskeyLogin Verify a passkey and create a session
+	// (POST /auth/passkeys/login/verify)
+	VerifyPasskeyLogin(ctx context.Context, request VerifyPasskeyLoginRequestObject) (VerifyPasskeyLoginResponseObject, error)
+	// PasskeyRegistrationOptions Begin passkey registration after password and second-factor verification
+	// (POST /auth/passkeys/register/options)
+	PasskeyRegistrationOptions(ctx context.Context, request PasskeyRegistrationOptionsRequestObject) (PasskeyRegistrationOptionsResponseObject, error)
+	// VerifyPasskeyRegistration Verify and store a passkey
+	// (POST /auth/passkeys/register/verify)
+	VerifyPasskeyRegistration(ctx context.Context, request VerifyPasskeyRegistrationRequestObject) (VerifyPasskeyRegistrationResponseObject, error)
+	// RemovePasskey Remove a passkey; the last credential requires the password
+	// (DELETE /auth/passkeys/{passkeyId})
+	RemovePasskey(ctx context.Context, request RemovePasskeyRequestObject) (RemovePasskeyResponseObject, error)
+	// RenamePasskey Rename a passkey
+	// (PATCH /auth/passkeys/{passkeyId})
+	RenamePasskey(ctx context.Context, request RenamePasskeyRequestObject) (RenamePasskeyResponseObject, error)
+	// ConfirmEmailReset Reset a password using a one-time email token and the current second factor
+	// (POST /auth/password-reset/confirm)
+	ConfirmEmailReset(ctx context.Context, request ConfirmEmailResetRequestObject) (ConfirmEmailResetResponseObject, error)
+	// RequestEmailReset Queue a recovery email without revealing whether an account exists
+	// (POST /auth/password-reset/request)
+	RequestEmailReset(ctx context.Context, request RequestEmailResetRequestObject) (RequestEmailResetResponseObject, error)
+	// CreateQrLogin Start a sign-in with a QR code
+	// (POST /auth/qr-login)
+	CreateQrLogin(ctx context.Context, request CreateQrLoginRequestObject) (CreateQrLoginResponseObject, error)
+	// GetQrLogin Show who asks to sign in with a QR code
+	// (GET /auth/qr-login/{requestId})
+	GetQrLogin(ctx context.Context, request GetQrLoginRequestObject) (GetQrLoginResponseObject, error)
+	// ApproveQrLogin Sign the device of a QR code into this account
+	// (POST /auth/qr-login/{requestId}/approve)
+	ApproveQrLogin(ctx context.Context, request ApproveQrLoginRequestObject) (ApproveQrLoginResponseObject, error)
+	// DenyQrLogin Refuse a QR sign-in
+	// (POST /auth/qr-login/{requestId}/deny)
+	DenyQrLogin(ctx context.Context, request DenyQrLoginRequestObject) (DenyQrLoginResponseObject, error)
+	// PollQrLogin Poll a QR sign-in and receive the session once approved
+	// (POST /auth/qr-login/{requestId}/poll)
+	PollQrLogin(ctx context.Context, request PollQrLoginRequestObject) (PollQrLoginResponseObject, error)
 	// RecoverWithKey Reset password with a single-use recovery key
 	// (POST /auth/recover/key)
 	RecoverWithKey(ctx context.Context, request RecoverWithKeyRequestObject) (RecoverWithKeyResponseObject, error)
+	// StartDeviceRecovery Request approval from a signed-in device
+	// (POST /auth/recovery-requests)
+	StartDeviceRecovery(ctx context.Context, request StartDeviceRecoveryRequestObject) (StartDeviceRecoveryResponseObject, error)
+	// DeviceRecoveryStatus Poll the status of a secret recovery request
+	// (GET /auth/recovery-requests/{requestId})
+	DeviceRecoveryStatus(ctx context.Context, request DeviceRecoveryStatusRequestObject) (DeviceRecoveryStatusResponseObject, error)
+	// ApproveDeviceRecovery Approve a recovery request using number matching, the password and the second factor
+	// (POST /auth/recovery-requests/{requestId}/approve)
+	ApproveDeviceRecovery(ctx context.Context, request ApproveDeviceRecoveryRequestObject) (ApproveDeviceRecoveryResponseObject, error)
+	// CancelDeviceRecovery Withdraw a pending recovery request from the requesting browser
+	// (POST /auth/recovery-requests/{requestId}/cancel)
+	CancelDeviceRecovery(ctx context.Context, request CancelDeviceRecoveryRequestObject) (CancelDeviceRecoveryResponseObject, error)
+	// CompleteDeviceRecovery Consume an approved request and reset the password
+	// (POST /auth/recovery-requests/{requestId}/complete)
+	CompleteDeviceRecovery(ctx context.Context, request CompleteDeviceRecoveryRequestObject) (CompleteDeviceRecoveryResponseObject, error)
+	// DenyDeviceRecovery Deny an unexpected recovery request
+	// (POST /auth/recovery-requests/{requestId}/deny)
+	DenyDeviceRecovery(ctx context.Context, request DenyDeviceRecoveryRequestObject) (DenyDeviceRecoveryResponseObject, error)
 	// RefreshToken Get a new access token
 	// (POST /auth/refresh)
 	RefreshToken(ctx context.Context, request RefreshTokenRequestObject) (RefreshTokenResponseObject, error)
 	// Register Create an account
 	// (POST /auth/register)
 	Register(ctx context.Context, request RegisterRequestObject) (RegisterResponseObject, error)
-	// ResetPassword Set a new password with a recovery token (temporary)
-	// (POST /auth/reset-password)
-	ResetPassword(ctx context.Context, request ResetPasswordRequestObject) (ResetPasswordResponseObject, error)
 	// ListChats My chats with last message and unread count
 	// (GET /chats)
 	ListChats(ctx context.Context, request ListChatsRequestObject) (ListChatsResponseObject, error)
@@ -17330,6 +22704,15 @@ type StrictServerInterface interface {
 	// BlockUser Block a user
 	// (PUT /me/blocked-users/{user_id})
 	BlockUser(ctx context.Context, request BlockUserRequestObject) (BlockUserResponseObject, error)
+	// RemoveRecoveryEmail Remove the recovery email after password verification
+	// (DELETE /me/email)
+	RemoveRecoveryEmail(ctx context.Context, request RemoveRecoveryEmailRequestObject) (RemoveRecoveryEmailResponseObject, error)
+	// GetRecoveryEmail Get private recovery email status
+	// (GET /me/email)
+	GetRecoveryEmail(ctx context.Context, request GetRecoveryEmailRequestObject) (GetRecoveryEmailResponseObject, error)
+	// SetRecoveryEmail Set or resend a private recovery email for verification
+	// (PUT /me/email)
+	SetRecoveryEmail(ctx context.Context, request SetRecoveryEmailRequestObject) (SetRecoveryEmailResponseObject, error)
 	// RegisterNotificationDevice Register a push destination for the current session
 	// (POST /me/notification-devices)
 	RegisterNotificationDevice(ctx context.Context, request RegisterNotificationDeviceRequestObject) (RegisterNotificationDeviceResponseObject, error)
@@ -17363,6 +22746,9 @@ type StrictServerInterface interface {
 	// ReplaceRecoveryKey Create or regenerate a recovery key after password and second-factor confirmation
 	// (POST /me/recovery-key)
 	ReplaceRecoveryKey(ctx context.Context, request ReplaceRecoveryKeyRequestObject) (ReplaceRecoveryKeyResponseObject, error)
+	// GetRecoveryOverview List recovery methods and their current setup status
+	// (GET /me/recovery-status)
+	GetRecoveryOverview(ctx context.Context, request GetRecoveryOverviewRequestObject) (GetRecoveryOverviewResponseObject, error)
 	// GetSecuritySettings Security settings
 	// (GET /me/security)
 	GetSecuritySettings(ctx context.Context, request GetSecuritySettingsRequestObject) (GetSecuritySettingsResponseObject, error)
@@ -17536,6 +22922,39 @@ func (sh *strictHandler) GetAttachmentContent(w http.ResponseWriter, r *http.Req
 	}
 }
 
+// VerifyRecoveryEmail operation middleware
+func (sh *strictHandler) VerifyRecoveryEmail(w http.ResponseWriter, r *http.Request, params VerifyRecoveryEmailParams) {
+	var request VerifyRecoveryEmailRequestObject
+
+	request.Params = params
+
+	var body VerifyRecoveryEmailJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.VerifyRecoveryEmail(ctx, request.(VerifyRecoveryEmailRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "VerifyRecoveryEmail")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(VerifyRecoveryEmailResponseObject); ok {
+		if err := validResponse.VisitVerifyRecoveryEmailResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // Login operation middleware
 func (sh *strictHandler) Login(w http.ResponseWriter, r *http.Request, params LoginParams) {
 	var request LoginRequestObject
@@ -17628,13 +23047,39 @@ func (sh *strictHandler) Logout(w http.ResponseWriter, r *http.Request, params L
 	}
 }
 
-// StartRecovery operation middleware
-func (sh *strictHandler) StartRecovery(w http.ResponseWriter, r *http.Request, params StartRecoveryParams) {
-	var request StartRecoveryRequestObject
+// ListPasskeys operation middleware
+func (sh *strictHandler) ListPasskeys(w http.ResponseWriter, r *http.Request, params ListPasskeysParams) {
+	var request ListPasskeysRequestObject
 
 	request.Params = params
 
-	var body StartRecoveryJSONRequestBody
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListPasskeys(ctx, request.(ListPasskeysRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListPasskeys")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListPasskeysResponseObject); ok {
+		if err := validResponse.VisitListPasskeysResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PasskeyLoginOptions operation middleware
+func (sh *strictHandler) PasskeyLoginOptions(w http.ResponseWriter, r *http.Request, params PasskeyLoginOptionsParams) {
+	var request PasskeyLoginOptionsRequestObject
+
+	request.Params = params
+
+	var body PasskeyLoginOptionsJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
 		return
@@ -17642,18 +23087,402 @@ func (sh *strictHandler) StartRecovery(w http.ResponseWriter, r *http.Request, p
 	request.Body = &body
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.StartRecovery(ctx, request.(StartRecoveryRequestObject))
+		return sh.ssi.PasskeyLoginOptions(ctx, request.(PasskeyLoginOptionsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "StartRecovery")
+		handler = middleware(handler, "PasskeyLoginOptions")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(StartRecoveryResponseObject); ok {
-		if err := validResponse.VisitStartRecoveryResponse(w); err != nil {
+	} else if validResponse, ok := response.(PasskeyLoginOptionsResponseObject); ok {
+		if err := validResponse.VisitPasskeyLoginOptionsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// VerifyPasskeyLogin operation middleware
+func (sh *strictHandler) VerifyPasskeyLogin(w http.ResponseWriter, r *http.Request, params VerifyPasskeyLoginParams) {
+	var request VerifyPasskeyLoginRequestObject
+
+	request.Params = params
+
+	var body VerifyPasskeyLoginJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.VerifyPasskeyLogin(ctx, request.(VerifyPasskeyLoginRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "VerifyPasskeyLogin")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(VerifyPasskeyLoginResponseObject); ok {
+		if err := validResponse.VisitVerifyPasskeyLoginResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PasskeyRegistrationOptions operation middleware
+func (sh *strictHandler) PasskeyRegistrationOptions(w http.ResponseWriter, r *http.Request, params PasskeyRegistrationOptionsParams) {
+	var request PasskeyRegistrationOptionsRequestObject
+
+	request.Params = params
+
+	var body PasskeyRegistrationOptionsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PasskeyRegistrationOptions(ctx, request.(PasskeyRegistrationOptionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PasskeyRegistrationOptions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PasskeyRegistrationOptionsResponseObject); ok {
+		if err := validResponse.VisitPasskeyRegistrationOptionsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// VerifyPasskeyRegistration operation middleware
+func (sh *strictHandler) VerifyPasskeyRegistration(w http.ResponseWriter, r *http.Request, params VerifyPasskeyRegistrationParams) {
+	var request VerifyPasskeyRegistrationRequestObject
+
+	request.Params = params
+
+	var body VerifyPasskeyRegistrationJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.VerifyPasskeyRegistration(ctx, request.(VerifyPasskeyRegistrationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "VerifyPasskeyRegistration")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(VerifyPasskeyRegistrationResponseObject); ok {
+		if err := validResponse.VisitVerifyPasskeyRegistrationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RemovePasskey operation middleware
+func (sh *strictHandler) RemovePasskey(w http.ResponseWriter, r *http.Request, passkeyId string, params RemovePasskeyParams) {
+	var request RemovePasskeyRequestObject
+
+	request.PasskeyId = passkeyId
+	request.Params = params
+
+	var body RemovePasskeyJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RemovePasskey(ctx, request.(RemovePasskeyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RemovePasskey")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RemovePasskeyResponseObject); ok {
+		if err := validResponse.VisitRemovePasskeyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RenamePasskey operation middleware
+func (sh *strictHandler) RenamePasskey(w http.ResponseWriter, r *http.Request, passkeyId string, params RenamePasskeyParams) {
+	var request RenamePasskeyRequestObject
+
+	request.PasskeyId = passkeyId
+	request.Params = params
+
+	var body RenamePasskeyJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RenamePasskey(ctx, request.(RenamePasskeyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RenamePasskey")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RenamePasskeyResponseObject); ok {
+		if err := validResponse.VisitRenamePasskeyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ConfirmEmailReset operation middleware
+func (sh *strictHandler) ConfirmEmailReset(w http.ResponseWriter, r *http.Request, params ConfirmEmailResetParams) {
+	var request ConfirmEmailResetRequestObject
+
+	request.Params = params
+
+	var body ConfirmEmailResetJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ConfirmEmailReset(ctx, request.(ConfirmEmailResetRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ConfirmEmailReset")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ConfirmEmailResetResponseObject); ok {
+		if err := validResponse.VisitConfirmEmailResetResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RequestEmailReset operation middleware
+func (sh *strictHandler) RequestEmailReset(w http.ResponseWriter, r *http.Request, params RequestEmailResetParams) {
+	var request RequestEmailResetRequestObject
+
+	request.Params = params
+
+	var body RequestEmailResetJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RequestEmailReset(ctx, request.(RequestEmailResetRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RequestEmailReset")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RequestEmailResetResponseObject); ok {
+		if err := validResponse.VisitRequestEmailResetResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateQrLogin operation middleware
+func (sh *strictHandler) CreateQrLogin(w http.ResponseWriter, r *http.Request, params CreateQrLoginParams) {
+	var request CreateQrLoginRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateQrLogin(ctx, request.(CreateQrLoginRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateQrLogin")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateQrLoginResponseObject); ok {
+		if err := validResponse.VisitCreateQrLoginResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetQrLogin operation middleware
+func (sh *strictHandler) GetQrLogin(w http.ResponseWriter, r *http.Request, requestId QrLoginRequestId, params GetQrLoginParams) {
+	var request GetQrLoginRequestObject
+
+	request.RequestId = requestId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetQrLogin(ctx, request.(GetQrLoginRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetQrLogin")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetQrLoginResponseObject); ok {
+		if err := validResponse.VisitGetQrLoginResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ApproveQrLogin operation middleware
+func (sh *strictHandler) ApproveQrLogin(w http.ResponseWriter, r *http.Request, requestId QrLoginRequestId, params ApproveQrLoginParams) {
+	var request ApproveQrLoginRequestObject
+
+	request.RequestId = requestId
+	request.Params = params
+
+	var body ApproveQrLoginJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+			return
+		}
+	} else {
+		request.Body = &body
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ApproveQrLogin(ctx, request.(ApproveQrLoginRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ApproveQrLogin")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ApproveQrLoginResponseObject); ok {
+		if err := validResponse.VisitApproveQrLoginResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DenyQrLogin operation middleware
+func (sh *strictHandler) DenyQrLogin(w http.ResponseWriter, r *http.Request, requestId QrLoginRequestId, params DenyQrLoginParams) {
+	var request DenyQrLoginRequestObject
+
+	request.RequestId = requestId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DenyQrLogin(ctx, request.(DenyQrLoginRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DenyQrLogin")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DenyQrLoginResponseObject); ok {
+		if err := validResponse.VisitDenyQrLoginResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PollQrLogin operation middleware
+func (sh *strictHandler) PollQrLogin(w http.ResponseWriter, r *http.Request, requestId QrLoginRequestId, params PollQrLoginParams) {
+	var request PollQrLoginRequestObject
+
+	request.RequestId = requestId
+	request.Params = params
+
+	var body PollQrLoginJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PollQrLogin(ctx, request.(PollQrLoginRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PollQrLogin")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PollQrLoginResponseObject); ok {
+		if err := validResponse.VisitPollQrLoginResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -17687,6 +23516,188 @@ func (sh *strictHandler) RecoverWithKey(w http.ResponseWriter, r *http.Request, 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(RecoverWithKeyResponseObject); ok {
 		if err := validResponse.VisitRecoverWithKeyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// StartDeviceRecovery operation middleware
+func (sh *strictHandler) StartDeviceRecovery(w http.ResponseWriter, r *http.Request, params StartDeviceRecoveryParams) {
+	var request StartDeviceRecoveryRequestObject
+
+	request.Params = params
+
+	var body StartDeviceRecoveryJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.StartDeviceRecovery(ctx, request.(StartDeviceRecoveryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "StartDeviceRecovery")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(StartDeviceRecoveryResponseObject); ok {
+		if err := validResponse.VisitStartDeviceRecoveryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeviceRecoveryStatus operation middleware
+func (sh *strictHandler) DeviceRecoveryStatus(w http.ResponseWriter, r *http.Request, requestId string, params DeviceRecoveryStatusParams) {
+	var request DeviceRecoveryStatusRequestObject
+
+	request.RequestId = requestId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeviceRecoveryStatus(ctx, request.(DeviceRecoveryStatusRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeviceRecoveryStatus")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeviceRecoveryStatusResponseObject); ok {
+		if err := validResponse.VisitDeviceRecoveryStatusResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ApproveDeviceRecovery operation middleware
+func (sh *strictHandler) ApproveDeviceRecovery(w http.ResponseWriter, r *http.Request, requestId string, params ApproveDeviceRecoveryParams) {
+	var request ApproveDeviceRecoveryRequestObject
+
+	request.RequestId = requestId
+	request.Params = params
+
+	var body ApproveDeviceRecoveryJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ApproveDeviceRecovery(ctx, request.(ApproveDeviceRecoveryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ApproveDeviceRecovery")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ApproveDeviceRecoveryResponseObject); ok {
+		if err := validResponse.VisitApproveDeviceRecoveryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CancelDeviceRecovery operation middleware
+func (sh *strictHandler) CancelDeviceRecovery(w http.ResponseWriter, r *http.Request, requestId string, params CancelDeviceRecoveryParams) {
+	var request CancelDeviceRecoveryRequestObject
+
+	request.RequestId = requestId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CancelDeviceRecovery(ctx, request.(CancelDeviceRecoveryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CancelDeviceRecovery")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CancelDeviceRecoveryResponseObject); ok {
+		if err := validResponse.VisitCancelDeviceRecoveryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CompleteDeviceRecovery operation middleware
+func (sh *strictHandler) CompleteDeviceRecovery(w http.ResponseWriter, r *http.Request, requestId string, params CompleteDeviceRecoveryParams) {
+	var request CompleteDeviceRecoveryRequestObject
+
+	request.RequestId = requestId
+	request.Params = params
+
+	var body CompleteDeviceRecoveryJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CompleteDeviceRecovery(ctx, request.(CompleteDeviceRecoveryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CompleteDeviceRecovery")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CompleteDeviceRecoveryResponseObject); ok {
+		if err := validResponse.VisitCompleteDeviceRecoveryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DenyDeviceRecovery operation middleware
+func (sh *strictHandler) DenyDeviceRecovery(w http.ResponseWriter, r *http.Request, requestId string, params DenyDeviceRecoveryParams) {
+	var request DenyDeviceRecoveryRequestObject
+
+	request.RequestId = requestId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DenyDeviceRecovery(ctx, request.(DenyDeviceRecoveryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DenyDeviceRecovery")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DenyDeviceRecoveryResponseObject); ok {
+		if err := validResponse.VisitDenyDeviceRecoveryResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -17746,39 +23757,6 @@ func (sh *strictHandler) Register(w http.ResponseWriter, r *http.Request, params
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(RegisterResponseObject); ok {
 		if err := validResponse.VisitRegisterResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// ResetPassword operation middleware
-func (sh *strictHandler) ResetPassword(w http.ResponseWriter, r *http.Request, params ResetPasswordParams) {
-	var request ResetPasswordRequestObject
-
-	request.Params = params
-
-	var body ResetPasswordJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.ResetPassword(ctx, request.(ResetPasswordRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "ResetPassword")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(ResetPasswordResponseObject); ok {
-		if err := validResponse.VisitResetPasswordResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -18952,6 +24930,98 @@ func (sh *strictHandler) BlockUser(w http.ResponseWriter, r *http.Request, userI
 	}
 }
 
+// RemoveRecoveryEmail operation middleware
+func (sh *strictHandler) RemoveRecoveryEmail(w http.ResponseWriter, r *http.Request, params RemoveRecoveryEmailParams) {
+	var request RemoveRecoveryEmailRequestObject
+
+	request.Params = params
+
+	var body RemoveRecoveryEmailJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RemoveRecoveryEmail(ctx, request.(RemoveRecoveryEmailRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RemoveRecoveryEmail")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RemoveRecoveryEmailResponseObject); ok {
+		if err := validResponse.VisitRemoveRecoveryEmailResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetRecoveryEmail operation middleware
+func (sh *strictHandler) GetRecoveryEmail(w http.ResponseWriter, r *http.Request, params GetRecoveryEmailParams) {
+	var request GetRecoveryEmailRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetRecoveryEmail(ctx, request.(GetRecoveryEmailRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetRecoveryEmail")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetRecoveryEmailResponseObject); ok {
+		if err := validResponse.VisitGetRecoveryEmailResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SetRecoveryEmail operation middleware
+func (sh *strictHandler) SetRecoveryEmail(w http.ResponseWriter, r *http.Request, params SetRecoveryEmailParams) {
+	var request SetRecoveryEmailRequestObject
+
+	request.Params = params
+
+	var body SetRecoveryEmailJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SetRecoveryEmail(ctx, request.(SetRecoveryEmailRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SetRecoveryEmail")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SetRecoveryEmailResponseObject); ok {
+		if err := validResponse.VisitSetRecoveryEmailResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // RegisterNotificationDevice operation middleware
 func (sh *strictHandler) RegisterNotificationDevice(w http.ResponseWriter, r *http.Request) {
 	var request RegisterNotificationDeviceRequestObject
@@ -19276,6 +25346,32 @@ func (sh *strictHandler) ReplaceRecoveryKey(w http.ResponseWriter, r *http.Reque
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ReplaceRecoveryKeyResponseObject); ok {
 		if err := validResponse.VisitReplaceRecoveryKeyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetRecoveryOverview operation middleware
+func (sh *strictHandler) GetRecoveryOverview(w http.ResponseWriter, r *http.Request, params GetRecoveryOverviewParams) {
+	var request GetRecoveryOverviewRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetRecoveryOverview(ctx, request.(GetRecoveryOverviewRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetRecoveryOverview")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetRecoveryOverviewResponseObject); ok {
+		if err := validResponse.VisitGetRecoveryOverviewResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

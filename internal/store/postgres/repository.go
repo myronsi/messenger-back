@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/myronsi/messenger-back/internal/geoip"
 )
 
 // User is an account. The password hash is not part of it; see UserRepository.Credentials.
@@ -421,6 +423,7 @@ type SecurityEvent struct {
 	Type      string
 	IP        *netip.Addr
 	UserAgent *string
+	Location  *geoip.Location
 	Details   json.RawMessage
 	CreatedAt time.Time
 }
@@ -431,6 +434,7 @@ type NewSecurityEvent struct {
 	Type      string
 	IP        *netip.Addr
 	UserAgent *string
+	Location  *geoip.Location
 	// Details is a JSON object; leave empty for none. Never put secrets, tokens or message content in it.
 	Details json.RawMessage
 }

@@ -17,6 +17,7 @@ func eventFrom(e sqlcdb.UserSecurityEvent) SecurityEvent {
 		UserID:    e.UserID,
 		Type:      e.EventType,
 		IP:        e.IpAddress,
+		Location:  decodeLocation(e.Location),
 		UserAgent: e.UserAgent,
 		Details:   json.RawMessage(e.Details),
 		CreatedAt: e.CreatedAt,
@@ -31,7 +32,7 @@ func (r securityEventRepo) Record(ctx context.Context, e NewSecurityEvent) (Secu
 	ctx, cancel := r.s.call(ctx)
 	defer cancel()
 	row, err := r.s.q.RecordSecurityEvent(ctx, sqlcdb.RecordSecurityEventParams{
-		UserID: e.UserID, EventType: e.Type, IpAddress: e.IP, UserAgent: e.UserAgent, Details: details,
+		UserID: e.UserID, EventType: e.Type, IpAddress: e.IP, UserAgent: e.UserAgent, Location: encodeLocation(e.Location), Details: details,
 	})
 	if err != nil {
 		return SecurityEvent{}, mapError(err)

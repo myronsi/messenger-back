@@ -15,7 +15,7 @@ import (
 
 func sessionFrom(s sqlcdb.UserSession) Session {
 	return Session{
-		ID: s.ID, UserID: s.UserID, UserAgent: s.UserAgent, IP: s.IpAddress,
+		ID: s.ID, UserID: s.UserID, UserAgent: s.UserAgent, IP: s.IpAddress, Location: decodeLocation(s.Location),
 		CreatedAt: s.CreatedAt, LastActiveAt: s.LastActiveAt, ExpiresAt: s.ExpiresAt, RevokedAt: s.RevokedAt,
 	}
 }
@@ -44,7 +44,16 @@ func (r sessionRepo) Create(ctx context.Context, n NewSession) (Session, error) 
 				return ErrNotFound
 			}
 		}
-		row, err := q.CreateSession(ctx, sqlcdb.CreateSessionParams{UserID: n.UserID, RefreshTokenHash: n.RefreshTokenHash, UserAgent: n.UserAgent, IpAddress: n.IP, ExpiresAt: n.ExpiresAt})
+		if n.Passkey != nil {
+			changed, err := q.UpdatePasskeyForLogin(ctx, sqlcdb.UpdatePasskeyForLoginParams{CredentialID: n.Passkey.ID, UserID: n.UserID, ExpectedCredential: n.Passkey.ExpectedCredential, Credential: n.Passkey.Credential})
+			if err != nil {
+				return err
+			}
+			if changed != 1 {
+				return ErrConflict
+			}
+		}
+		row, err := q.CreateSession(ctx, sqlcdb.CreateSessionParams{UserID: n.UserID, RefreshTokenHash: n.RefreshTokenHash, UserAgent: n.UserAgent, IpAddress: n.IP, Location: encodeLocation(n.Location), ExpiresAt: n.ExpiresAt})
 		out = sessionFrom(row)
 		return err
 	})
@@ -69,7 +78,7 @@ func (r sessionRepo) Rotate(ctx context.Context, req RotateRequest) (RotateResul
 				return err
 			}
 			next, err := q.RotateSession(ctx, sqlcdb.RotateSessionParams{
-				ID: cur.ID, NewHash: req.NewHash, ExpiresAt: req.NewExpiresAt(days), UserAgent: req.UserAgent, IpAddress: req.IP,
+				ID: cur.ID, NewHash: req.NewHash, ExpiresAt: req.NewExpiresAt(days), UserAgent: req.UserAgent, IpAddress: req.IP, Location: encodeLocation(req.Location),
 			})
 			if err != nil {
 				return err
@@ -343,48 +352,4 @@ func (r settingsRepo) CountRecoveryCodes(ctx context.Context, userID int64) (int
 	defer cancel()
 	n, err := r.s.q.CountUnusedRecoveryCodes(ctx, userID)
 	return int(n), mapError(err)
-}
-
-type recoveryRepo struct{ s *Store }
-
-var _ RecoveryTokenRepository = recoveryRepo{}
-
-func (r recoveryRepo) Issue(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time) error {
-	ctx, cancel := r.s.call(ctx)
-	defer cancel()
-	return mapError(r.s.q.CreateRecoveryToken(ctx, sqlcdb.CreateRecoveryTokenParams{JtiHash: tokenHash, UserID: userID, ExpiresAt: expiresAt}))
-}
-
-func (r recoveryRepo) ResetPassword(ctx context.Context, tokenHash, newPasswordHash string) (PasswordReset, error) {
-	var out PasswordReset
-	err := r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
-		out = PasswordReset{} // the transaction can be retried
-		uid, err := q.ConsumeRecoveryToken(ctx, tokenHash)
-		if err != nil {
-			return err
-		}
-		if _, err := q.LockUser(ctx, uid); err != nil {
-			return err
-		}
-		if _, err := q.SetPasswordHash(ctx, sqlcdb.SetPasswordHashParams{ID: uid, PasswordHash: newPasswordHash}); err != nil {
-			return err
-		}
-		ids, err := q.RevokeAllSessions(ctx, uid)
-		if err != nil {
-			return err
-		}
-		out = PasswordReset{UserID: uid, RevokedSessions: ids}
-		return nil
-	})
-	if err != nil {
-		return PasswordReset{}, err
-	}
-	return out, nil
-}
-
-func (r recoveryRepo) DeleteStale(ctx context.Context) (int64, error) {
-	ctx, cancel := r.s.call(ctx)
-	defer cancel()
-	n, err := r.s.q.DeleteStaleRecoveryTokens(ctx)
-	return n, mapError(err)
 }

@@ -20,6 +20,7 @@ import (
 	"github.com/myronsi/messenger-back/internal/auth"
 	"github.com/myronsi/messenger-back/internal/chats"
 	"github.com/myronsi/messenger-back/internal/config"
+	"github.com/myronsi/messenger-back/internal/geoip"
 	"github.com/myronsi/messenger-back/internal/httpapi"
 	"github.com/myronsi/messenger-back/internal/linkpreview"
 	"github.com/myronsi/messenger-back/internal/media"
@@ -80,14 +81,43 @@ func run() error {
 	if cfg.Env == "production" && !cfg.Auth.ProxiesSet() && !loopbackListener(cfg.HTTP.Addr) {
 		log.Warn("TRUSTED_PROXIES is not set, so only loopback proxies are trusted: clients behind any other proxy share its address and its rate limits", "http_addr", cfg.HTTP.Addr)
 	}
+	geo := geoip.Open(cfg.GeoIPDBPath, log)
+	defer func() { _ = geo.Close() }()
 	var rt *realtimeStack
+	passkeys, err := auth.NewPasskeys(cfg.Auth.RPID, cfg.Auth.RPOrigins)
+	if err != nil {
+		return fmt.Errorf("passkey configuration is invalid")
+	}
 	authSvc, err := auth.NewService(pg, rd.Client(), auth.Config{
-		JWTSecret:         []byte(cfg.JWTSecret.Reveal()),
-		EncryptionKey:     key,
-		RecoveryPepper:    []byte(cfg.RecoveryPepper.Reveal()),
-		SessionCacheTTL:   cfg.Auth.SessionCacheTTL,
-		RefreshReuseGrace: cfg.Auth.RefreshReuseGrace,
-		HashConcurrency:   cfg.Auth.PasswordHashConcurrency,
+		Passkeys:            passkeys,
+		RecoveryMailEnabled: cfg.RecoveryMail.Host != "",
+		RecoveryWebURL:      cfg.RecoveryMail.WebURL,
+		OnSecurityEvent: func(ctx context.Context, uid int64, kind string, client auth.Client) {
+			if rt == nil || rt.fanout == nil {
+				return
+			}
+			switch kind {
+			case "password_changed", "recovery_key_changed", "2fa_enabled", "2fa_disabled", "passkey_added", "passkey_removed", "recovery_email_changed", "recovery_email_removed", "passkey_counter_warning", "login", "login_2fa", "passkey_login", "qr_login_approved":
+				alert := map[string]any{"type": kind, "user_agent": client.UserAgent, "created_at": time.Now().UTC()}
+				if p, ok := httpapi.PrincipalFrom(ctx); ok {
+					alert["session_id"] = p.SessionID
+				}
+				rt.fanout.NotifyUser(ctx, uid, "security_alert", alert)
+			}
+		},
+		JWTSecret:              []byte(cfg.JWTSecret.Reveal()),
+		EncryptionKey:          key,
+		RecoveryPepper:         []byte(cfg.RecoveryPepper.Reveal()),
+		SessionCacheTTL:        cfg.Auth.SessionCacheTTL,
+		RefreshReuseGrace:      cfg.Auth.RefreshReuseGrace,
+		HashConcurrency:        cfg.Auth.PasswordHashConcurrency,
+		RecoveryApprovalMaxAge: cfg.Auth.RecoveryApprovalMaxAge,
+		GeoIP:                  geo,
+		OnRecoveryRequest: func(ctx context.Context, uid int64, notice auth.RecoveryRequestNotice) {
+			if rt != nil && rt.fanout != nil {
+				rt.fanout.NotifyUser(ctx, uid, "recovery_request", notice)
+			}
+		},
 		// Revoked sessions lose their WebSockets on every instance.
 		OnRevoked: func(ctx context.Context, sessions []uuid.UUID) { rt.closeSessions(ctx, sessions) },
 		OnRecovery: func(ctx context.Context, sessions []uuid.UUID) {

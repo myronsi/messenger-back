@@ -56,6 +56,12 @@
     },
     {
       "$ref": "server/security_notice.schema.json"
+    },
+    {
+      "$ref": "server/security_alert.schema.json"
+    },
+    {
+      "$ref": "server/recovery_request.schema.json"
     }
   ]
 }

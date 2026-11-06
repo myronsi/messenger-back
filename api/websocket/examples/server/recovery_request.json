@@ -1,0 +1,12 @@
+{
+  "type": "recovery_request",
+  "event_id": "7217400317439950849",
+  "chat_id": null,
+  "data": {
+    "request_id": "z8uFZt0xFYtjm_iO3vI9xFYxsy7xM4K5uM1g1s8YbYI",
+    "user_agent": "Chrome on Windows",
+    "location": { "city": "Berlin", "country_code": "DE", "country": "Germany" },
+    "choices": [17, 42, 85],
+    "expires_at": "2026-11-05T20:00:00Z"
+  }
+}
