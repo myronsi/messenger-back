@@ -134,13 +134,3 @@ type PasswordReset struct {
 	UserID          int64
 	RevokedSessions []uuid.UUID
 }
-
-// RecoveryTokenRepository stores single-use account recovery tokens (hashes only).
-type RecoveryTokenRepository interface {
-	Issue(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time) error
-	// ResetPassword consumes the token, sets the password and revokes every session, atomically.
-	// ErrNotFound when the token is unknown, used or expired.
-	ResetPassword(ctx context.Context, tokenHash, newPasswordHash string) (PasswordReset, error)
-	// DeleteStale removes tokens that expired long ago.
-	DeleteStale(ctx context.Context) (int64, error)
-}

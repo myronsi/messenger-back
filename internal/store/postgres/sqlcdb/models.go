@@ -161,7 +161,7 @@ type RecoveryMailQueue struct {
 
 type RecoveryRequest struct {
 	IDHash            string
-	UserID            int64
+	UserID            *int64
 	MatchNumber       int16
 	Choices           []byte
 	Status            string
@@ -171,13 +171,6 @@ type RecoveryRequest struct {
 	ApprovedProof     []byte
 	CreatedAt         time.Time
 	ExpiresAt         time.Time
-}
-
-type RecoveryToken struct {
-	JtiHash   string
-	UserID    int64
-	ExpiresAt time.Time
-	UsedAt    *time.Time
 }
 
 type User struct {

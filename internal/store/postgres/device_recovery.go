@@ -36,26 +36,28 @@ func (r recoveryRequestRepo) Create(ctx context.Context, request DeviceRecovery)
 	created := false
 	err := r.s.inRawTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		created = false
-		if _, err := sqlcdb.New(tx).LockUser(ctx, request.UserID); err != nil {
+		if _, err := tx.Exec(ctx, `SELECT 1 FROM users WHERE id=$1 FOR UPDATE`, request.UserID); err != nil {
 			return err
 		}
 		var blocked bool
-		if err := tx.QueryRow(ctx, `SELECT COALESCE(recovery_requests_blocked_until>now(),false) FROM user_security_settings WHERE user_id=$1`, request.UserID).Scan(&blocked); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT recovery_requests_blocked_until>now() FROM user_security_settings WHERE user_id=$1),false)`, request.UserID).Scan(&blocked); err != nil {
 			return err
 		}
 		var pending int
 		if err := tx.QueryRow(ctx, `SELECT count(*) FROM recovery_requests WHERE user_id=$1 AND status IN ('pending','approved') AND expires_at>now()`, request.UserID).Scan(&pending); err != nil {
 			return err
 		}
-		if blocked || pending >= 3 {
-			return nil
+		genuine := request.UserID != 0 && !blocked && pending < 3
+		owner := &request.UserID
+		if !genuine {
+			owner = nil
 		}
 		choices, err := json.Marshal(request.Choices)
 		if err != nil {
 			return err
 		}
-		_, err = tx.Exec(ctx, `INSERT INTO recovery_requests(id_hash,user_id,match_number,choices,user_agent,ip_hint,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7)`, request.Hash, request.UserID, request.Match, choices, request.UserAgent, request.IPHint, request.ExpiresAt)
-		created = err == nil
+		_, err = tx.Exec(ctx, `INSERT INTO recovery_requests(id_hash,user_id,match_number,choices,user_agent,ip_hint,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7)`, request.Hash, owner, request.Match, choices, request.UserAgent, request.IPHint, request.ExpiresAt)
+		created = err == nil && genuine
 		return err
 	})
 	return created, mapError(err)
@@ -77,7 +79,7 @@ func scanDeviceRecovery(row pgx.Row) (DeviceRecovery, error) {
 	return out, err
 }
 
-const recoveryRequestColumns = `id_hash,user_id,match_number,status,user_agent,ip_hint,choices,expires_at,approved_by_session,approved_proof`
+const recoveryRequestColumns = `id_hash,COALESCE(user_id,0),match_number,status,user_agent,ip_hint,choices,expires_at,approved_by_session,approved_proof`
 
 func (r recoveryRequestRepo) Get(ctx context.Context, hash string) (DeviceRecovery, error) {
 	ctx, cancel := r.s.call(ctx)
@@ -147,9 +149,6 @@ func finishRecovery(ctx context.Context, tx pgx.Tx, uid int64, password, key, me
 		return out, err
 	}
 	if _, err := tx.Exec(ctx, `UPDATE user_security_settings SET recovery_locked_until=now()+interval '24 hours' WHERE user_id=$1`, uid); err != nil {
-		return out, err
-	}
-	if _, err := tx.Exec(ctx, `DELETE FROM recovery_tokens WHERE user_id=$1`, uid); err != nil {
 		return out, err
 	}
 	if _, err := tx.Exec(ctx, `DELETE FROM email_tokens WHERE user_id=$1`, uid); err != nil {

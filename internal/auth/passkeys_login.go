@@ -44,9 +44,18 @@ func (s *Service) FinishPasskeyLogin(ctx context.Context, c Client, id string, r
 	if s.passkeys == nil {
 		return nil, ErrPasskeysUnavailable
 	}
-	if err := s.take(ctx, RuleLoginIP, c.ipString()); err != nil {
+	attempt, err := s.allow(ctx, limitCheck{RulePasskeyLoginIP, c.ipString()})
+	if err != nil {
 		return nil, err
 	}
+	tokens, err := s.finishPasskeyLogin(ctx, c, id, response)
+	if err == nil {
+		attempt.release(ctx)
+	}
+	return tokens, err
+}
+
+func (s *Service) finishPasskeyLogin(ctx context.Context, c Client, id string, response json.RawMessage) (*TokenSet, error) {
 	if len(id) < 32 || len(id) > 128 {
 		return nil, ErrInvalidCredentials
 	}

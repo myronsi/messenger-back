@@ -147,6 +147,10 @@ func (r passkeyRepo) Rename(ctx context.Context, uid int64, id []byte, name stri
 func (r passkeyRepo) Delete(ctx context.Context, uid int64, id []byte, passwordHash string) error {
 	return r.s.inRawTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := sqlcdb.New(tx)
+		user, err := q.LockUser(ctx, uid)
+		if err != nil {
+			return err
+		}
 		if err := recoveryChangesAllowed(ctx, q, uid); err != nil {
 			return err
 		}
@@ -155,10 +159,6 @@ func (r passkeyRepo) Delete(ctx context.Context, uid int64, id []byte, passwordH
 			return err
 		}
 		if count <= 1 {
-			user, err := q.LockUser(ctx, uid)
-			if err != nil {
-				return err
-			}
 			if passwordHash == "" || passwordHash != user.PasswordHash {
 				return ErrConflict
 			}

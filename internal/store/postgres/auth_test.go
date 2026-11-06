@@ -329,47 +329,6 @@ func TestSessionCreationDoesNotSpendCodeForStalePassword(t *testing.T) {
 	}
 }
 
-func TestRecoveryTokens(t *testing.T) {
-	s := newTestStore(t)
-	ctx := context.Background()
-	u := mustUser(t, s, "alice")
-	newSession(t, s, u.ID, "a1")
-	newSession(t, s, u.ID, "a2")
-	repo := s.RecoveryTokens()
-
-	if err := repo.Issue(ctx, u.ID, "tok", time.Now().Add(time.Minute)); err != nil {
-		t.Fatal(err)
-	}
-	if err := repo.Issue(ctx, u.ID, "old", time.Now().Add(-time.Minute)); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := repo.ResetPassword(ctx, "old", "x"); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("expired token: %v", err)
-	}
-	if _, err := repo.ResetPassword(ctx, "unknown", "x"); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("unknown token: %v", err)
-	}
-	res, err := repo.ResetPassword(ctx, "tok", "new-hash")
-	if err != nil || res.UserID != u.ID || len(res.RevokedSessions) != 2 {
-		t.Fatalf("reset: %+v %v", res, err)
-	}
-	if c, _ := s.Users().CredentialsByID(ctx, u.ID); c.PasswordHash != "new-hash" {
-		t.Fatal("password was not set")
-	}
-	if list, _ := s.Sessions().ListActive(ctx, u.ID); len(list) != 0 {
-		t.Fatal("sessions survived a password reset")
-	}
-	if _, err := repo.ResetPassword(ctx, "tok", "other"); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("token used twice: %v", err)
-	}
-	if c, _ := s.Users().CredentialsByID(ctx, u.ID); c.PasswordHash != "new-hash" {
-		t.Fatal("a used token changed the password")
-	}
-	if n, err := repo.DeleteStale(ctx); err != nil || n != 0 {
-		t.Fatalf("stale: %d %v", n, err)
-	}
-}
-
 func TestRegisterAndPasswordChange(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
@@ -419,9 +378,6 @@ func TestDeleteAccountWithSessionsAndTwoFactor(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := s.SecuritySettings().ConfirmTwoFactor(ctx, u.ID, "p", []string{"c"}); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.RecoveryTokens().Issue(ctx, u.ID, "t", time.Now().Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.Users().DeleteAccount(ctx, u.ID); err != nil {

@@ -94,9 +94,6 @@ func (s *Store) Sessions() SessionRepository { return sessionRepo{s} }
 // SecuritySettings returns the repository of security options and the second factor.
 func (s *Store) SecuritySettings() SecuritySettingsRepository { return settingsRepo{s} }
 
-// RecoveryTokens returns the repository of single-use account recovery tokens.
-func (s *Store) RecoveryTokens() RecoveryTokenRepository { return recoveryRepo{s} }
-
 // call derives the context of one repository call: the caller's context plus the query timeout.
 func (s *Store) call(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(ctx, s.timeout)

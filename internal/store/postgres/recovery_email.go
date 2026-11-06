@@ -116,16 +116,19 @@ func (r recoveryEmailRepo) FindVerified(ctx context.Context, identifier string) 
 	return out, mapError(err)
 }
 func (r recoveryEmailRepo) IssueToken(ctx context.Context, email RecoveryEmail, hash, purpose string, expires time.Time) error {
-	ctx, cancel := r.s.call(ctx)
-	defer cancel()
-	tag, err := r.s.pool.Exec(ctx, `INSERT INTO email_tokens(token_hash,user_id,address,purpose,expires_at) SELECT $1,user_id,address,$3,$4 FROM recovery_emails WHERE user_id=$2 AND address=$5 AND ($3='verify_email' OR verified_at IS NOT NULL)`, hash, email.UserID, purpose, expires, email.Address)
-	if err != nil {
-		return err
-	}
-	if tag.RowsAffected() != 1 {
-		return ErrNotFound
-	}
-	return nil
+	return mapError(r.s.inRawTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `DELETE FROM email_tokens WHERE user_id=$1 AND purpose=$2 AND used_at IS NULL`, email.UserID, purpose); err != nil {
+			return err
+		}
+		tag, err := tx.Exec(ctx, `INSERT INTO email_tokens(token_hash,user_id,address,purpose,expires_at) SELECT $1,e.user_id,e.address,$3,$4 FROM recovery_emails e WHERE e.user_id=$2 AND e.address=$5 AND ($3='verify_email' OR e.verified_at IS NOT NULL) AND NOT EXISTS(SELECT 1 FROM recovery_emails o WHERE lower(o.address)=lower(e.address) AND o.user_id<>e.user_id AND o.verified_at IS NOT NULL)`, hash, email.UserID, purpose, expires, email.Address)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() != 1 {
+			return ErrNotFound
+		}
+		return nil
+	}))
 }
 func (r recoveryEmailRepo) Verify(ctx context.Context, hash string) error {
 	return mapError(r.s.inRawTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
@@ -139,6 +142,13 @@ func (r recoveryEmailRepo) Verify(ctx context.Context, hash string) error {
 		var address string
 		if err := tx.QueryRow(ctx, `UPDATE email_tokens SET used_at=now() WHERE token_hash=$1 AND used_at IS NULL AND expires_at>now() RETURNING address`, hash).Scan(&address); err != nil {
 			return err
+		}
+		var taken bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM recovery_emails WHERE lower(address)=lower($2) AND user_id<>$1 AND verified_at IS NOT NULL)`, uid, address).Scan(&taken); err != nil {
+			return err
+		}
+		if taken {
+			return ErrNotFound
 		}
 		tag, err := tx.Exec(ctx, `UPDATE recovery_emails SET verified_at=now() WHERE user_id=$1 AND address=$2`, uid, address)
 		if err != nil {

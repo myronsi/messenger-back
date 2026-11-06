@@ -65,6 +65,8 @@ func TestDeviceRecoveryWrongNumberDenyExpiryAndSpam(t *testing.T) {
 			ctx := context.Background()
 			c := e.client("10.0.0.92")
 			owner := e.register(t, "device_cases", "correct horse")
+			notices := 0
+			e.svc.onRecoveryRequest = func(context.Context, int64, RecoveryRequestNotice) { notices++ }
 			r, err := e.svc.StartDeviceRecovery(ctx, c, owner.User.Username)
 			if err != nil {
 				t.Fatal(err)
@@ -83,8 +85,8 @@ func TestDeviceRecoveryWrongNumberDenyExpiryAndSpam(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if status, err = e.svc.DeviceRecoveryStatus(ctx, c, fake.ID); err != nil || status != "expired" {
-					t.Fatal("deny did not block new notifications", status, err)
+				if status, err = e.svc.DeviceRecoveryStatus(ctx, c, fake.ID); err != nil || status != "pending" || notices != 1 {
+					t.Fatal("deny did not block new notifications or the blocked request is distinguishable", status, notices, err)
 				}
 			case "expired":
 				_, err = e.store.Pool().Exec(ctx, `UPDATE recovery_requests SET expires_at=now()-interval '1 second' WHERE id_hash=$1`, e.svc.recoveryHash(r.ID))
@@ -143,20 +145,44 @@ func TestDeviceRecoveryUnknownAndPendingCap(t *testing.T) {
 	ctx := context.Background()
 	c := e.client("10.0.0.94")
 	owner := e.register(t, "device_cap", "correct horse")
+	notices := 0
+	e.svc.onRecoveryRequest = func(context.Context, int64, RecoveryRequestNotice) { notices++ }
 	unknown, err := e.svc.StartDeviceRecovery(ctx, c, "nobody_here")
 	if err != nil || len(unknown.ID) < 32 || unknown.Match < 10 || !unknown.ExpiresAt.After(time.Now()) {
 		t.Fatal("unknown account shape differs", unknown, err)
 	}
-	for i := 0; i < 4; i++ {
+	var requests []RecoveryRequestResult
+	for range 4 {
 		r, err := e.svc.StartDeviceRecovery(ctx, c, owner.User.Username)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if i == 3 {
-			status, err := e.svc.DeviceRecoveryStatus(ctx, c, r.ID)
-			if err != nil || status != "expired" {
-				t.Fatal("more than three active requests", status, err)
-			}
+		requests = append(requests, r)
+	}
+	if notices != 3 {
+		t.Fatal("more than three active requests notified", notices)
+	}
+	capped := requests[3]
+	for _, id := range []string{unknown.ID, requests[0].ID, capped.ID} {
+		if status, err := e.svc.DeviceRecoveryStatus(ctx, c, id); err != nil || status != "pending" {
+			t.Fatal("status polling reveals account existence", status, err)
+		}
+	}
+	for _, r := range []RecoveryRequestResult{unknown, capped} {
+		if _, err = e.svc.DecideDeviceRecovery(ctx, c, principal(owner), r.ID, r.Match, "", false); !errors.Is(err, ErrRecoveryKey) {
+			t.Fatal("decoy request approved", err)
+		}
+		if _, err = e.svc.CompleteDeviceRecovery(ctx, c, r.ID, "brand new password"); !errors.Is(err, ErrRecoveryKey) {
+			t.Fatal("decoy request completed", err)
+		}
+		if status, err := e.svc.DeviceRecoveryStatus(ctx, c, r.ID); err != nil || status != "pending" {
+			t.Fatal("decoy changed state", status, err)
+		}
+	}
+	e.skip(11 * time.Minute)
+	for _, id := range []string{unknown.ID, requests[0].ID, capped.ID} {
+		if status, err := e.svc.DeviceRecoveryStatus(ctx, c, id); err != nil || status != "expired" {
+			t.Fatal("expiry differs between real and decoy requests", status, err)
 		}
 	}
 }

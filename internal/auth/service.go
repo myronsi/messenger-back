@@ -28,7 +28,6 @@ type Store interface {
 	Users() postgres.UserRepository
 	Sessions() postgres.SessionRepository
 	SecuritySettings() postgres.SecuritySettingsRepository
-	RecoveryTokens() postgres.RecoveryTokenRepository
 	RecoveryKeys() postgres.RecoveryKeyRepository
 	RecoveryRequests() postgres.RecoveryRequestRepository
 	Passkeys() postgres.PasskeyRepository
@@ -192,9 +191,6 @@ type TwoFactorSetup struct {
 
 // SessionDurations are the allowed values of the session duration setting, in days.
 var SessionDurations = []int{30, 90, 180, 365}
-
-// RecoveryTokenTTL is how long a recovery token can be used.
-const RecoveryTokenTTL = 15 * time.Minute
 
 const maxBioLen = 500
 

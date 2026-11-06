@@ -32,7 +32,7 @@ CREATE TABLE recovery_emails (
     verified_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE UNIQUE INDEX recovery_emails_address_idx ON recovery_emails(lower(address));
+CREATE UNIQUE INDEX recovery_emails_verified_address_idx ON recovery_emails(lower(address)) WHERE verified_at IS NOT NULL;
 
 CREATE TABLE email_tokens (
     token_hash TEXT PRIMARY KEY,

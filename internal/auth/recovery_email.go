@@ -141,7 +141,7 @@ func (s *Service) VerifyRecoveryEmail(ctx context.Context, c Client, token strin
 		return ErrRecoveryKey
 	}
 	err := s.store.RecoveryEmails().Verify(ctx, s.recoveryHash(token))
-	if errors.Is(err, postgres.ErrNotFound) {
+	if errors.Is(err, postgres.ErrNotFound) || errors.Is(err, postgres.ErrConflict) {
 		return ErrRecoveryKey
 	}
 	return err
@@ -250,6 +250,15 @@ func (s *Service) processRecoveryMail(ctx context.Context, job postgres.Recovery
 	}
 	if err != nil {
 		return err
+	}
+	if job.Kind == "password_reset" {
+		var limited *RateLimitError
+		if err = s.take(ctx, RuleEmailResetUser, fmt.Sprint(email.UserID)); errors.As(err, &limited) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
 	}
 	token, err := randomToken(32)
 	if err != nil {

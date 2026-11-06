@@ -15,8 +15,11 @@ Device requests expire after ten minutes. An eligible logged-in session must sel
 number from three choices; the requesting browser displays that number. A wrong number or denial
 blocks new requests for fifteen minutes. At most three active requests are allowed. Completion checks
 the approving session again, including revocation, inactivity and its pinned security credentials.
-Request capabilities are random and only keyed hashes are persisted. Unknown accounts receive the
-same start-response shape and polling expires without revealing account existence.
+Request capabilities are random and only keyed hashes are persisted. Unknown accounts, blocked accounts
+and requests over the cap store an ownerless decoy request with the same expiry and run the same
+queries, so the start response and status polling are identical: `pending` until expiry, then
+`expired`. A decoy never notifies anyone; approving or completing it fails like a request that was
+never approved.
 
 ## Passkeys
 
@@ -29,7 +32,9 @@ minutes and registration challenges are bound to the creating session. Registrat
 discoverable credential and user verification. Login validates the origin, RP, challenge, credential,
 user handle and user verification with the WebAuthn library. Credential updates and new sessions are
 committed together. A counter clone warning rejects login. Stored credential records are encrypted.
-Deleting the final passkey requires the password; the recovery delay also applies to changes.
+Deleting the final passkey requires the password; the user row is locked before passkeys are counted,
+so concurrent deletes cannot remove the last one without that check. The recovery delay also applies to
+changes. Failed passkey logins have their own per-IP limit and do not use the password-login budget.
 
 ## Optional email
 
@@ -40,6 +45,10 @@ falls back to plaintext; `tls` uses implicit TLS. `plain` is restricted to a loo
 
 Adding, replacing or removing an address requires the password and any enabled second factor.
 An address must be verified before it can reset a password. Changing it invalidates old tokens.
+Adding an address always gets the same response; only verified addresses are unique. If another account
+has already verified the address, no verification mail is sent and verification fails with the generic
+invalid-token error. At most three reset links per account are sent per hour (counted by the worker,
+so the public response does not change) and a new reset link invalidates older unused ones.
 Verification and reset tokens expire after thirty minutes, are bound to the address and are single use.
 The public reset request always returns the same accepted message, including when mail is disabled
 or the account/address is unknown. The worker resolves identifiers asynchronously from an encrypted
@@ -55,7 +64,8 @@ worker maintenance. Security activity records contain method/device metadata, ne
 Migration 18 removes `user_recovery_shares`; the preceding application already uses recovery keys.
 Its down migration restores the empty table shape, not historical secrets. Retain verified database
 backups under the deployment retention policy if historical restoration is required. Migrations 19
-and 20 add device requests, passkeys and email. Keep new tables during an application-only rollback;
+and 20 add device requests, passkeys and email. Migration 21 drops the unused legacy `recovery_tokens`
+table; its down migration restores the empty table shape. Keep new tables during an application-only rollback;
 running their down migrations deletes the newly registered methods. Removed `/auth/recover` and
 `/auth/reset-password` endpoints are absent from the contract and routing. Update clients before
 enforcing a minimum contract version that excludes older clients.

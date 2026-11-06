@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -171,5 +172,74 @@ func TestRecoveryEmailTokensInvalidatedByKeyRecovery(t *testing.T) {
 	}
 	if _, err := e.store.RecoveryEmails().Token(ctx, e.svc.recoveryHash(token), "password_reset"); !errors.Is(err, postgres.ErrNotFound) {
 		t.Fatal("old email capability survived another recovery", err)
+	}
+}
+
+func TestRecoveryEmailUniqueOnlyWhenVerified(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	c := e.client("10.0.0.105")
+	first := e.register(t, "email_first", "correct horse")
+	second := e.register(t, "email_second", "correct horse")
+	third := e.register(t, "email_third", "correct horse")
+	e.svc.recoveryMailEnabled = true
+	e.svc.recoveryWebURL = "http://localhost:4173"
+	for _, owner := range []*TokenSet{first, second} {
+		if err := e.svc.SetRecoveryEmail(ctx, c, principal(owner), "Shared@example.test", "correct horse", ""); err != nil {
+			t.Fatal("adding an address leaks whether it is used", err)
+		}
+	}
+	_, firstToken := recoveryMailToken(t, e)
+	_, secondToken := recoveryMailToken(t, e)
+	if firstToken == "" || secondToken == "" {
+		t.Fatal("verification mail missing")
+	}
+	if err := e.svc.VerifyRecoveryEmail(ctx, c, firstToken); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.svc.VerifyRecoveryEmail(ctx, c, secondToken); !errors.Is(err, ErrRecoveryKey) {
+		t.Fatal("second account verified an address already verified elsewhere", err)
+	}
+	if status, err := e.svc.RecoveryEmailStatus(ctx, principal(second)); err != nil || status.State != "pending" {
+		t.Fatal("conflicting address became verified", status, err)
+	}
+	if err := e.svc.SetRecoveryEmail(ctx, c, principal(third), "shared@example.test", "correct horse", ""); err != nil {
+		t.Fatal("adding a verified address leaks that it is used", err)
+	}
+	if address, token := recoveryMailToken(t, e); address != "" || token != "" {
+		t.Fatal("verification mail sent for an address verified by another account")
+	}
+}
+
+func TestRecoveryEmailResetLimitedPerAccountAndRotatesTokens(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	owner := e.register(t, "email_reset_limit", "correct horse")
+	enableEmail(t, e, owner, "")
+	var tokens []string
+	for i := range RuleEmailResetUser.Limit + 1 {
+		c := e.client(fmt.Sprintf("10.0.1.%d", i+1))
+		if err := e.svc.RequestEmailReset(ctx, c, owner.User.Username); err != nil {
+			t.Fatal(err)
+		}
+		_, token := recoveryMailToken(t, e)
+		tokens = append(tokens, token)
+	}
+	for i, token := range tokens[:RuleEmailResetUser.Limit] {
+		if token == "" {
+			t.Fatal("reset mail missing", i)
+		}
+	}
+	if tokens[RuleEmailResetUser.Limit] != "" {
+		t.Fatal("per-account reset limit not applied")
+	}
+	for _, token := range tokens[:RuleEmailResetUser.Limit-1] {
+		if _, err := e.store.RecoveryEmails().Token(ctx, e.svc.recoveryHash(token), "password_reset"); !errors.Is(err, postgres.ErrNotFound) {
+			t.Fatal("older reset token survived a new one", err)
+		}
+	}
+	latest := tokens[RuleEmailResetUser.Limit-1]
+	if _, err := e.svc.ResetWithEmail(ctx, e.client("10.0.0.106"), latest, "brand new password", ""); err != nil {
+		t.Fatal(err)
 	}
 }
