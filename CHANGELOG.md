@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.7.0-alpha.1...v1.8.0-alpha.1) (2026-11-06)
+
+
+### Features
+
+* **auth:** device, passkey, email and QR sign-in recovery; locations; client version logs ([#159](https://github.com/myronsi/messenger-back/issues/159)) ([2d1264e](https://github.com/myronsi/messenger-back/commit/2d1264e721ec870f0d6a5f560083f5199b15a7fc))
+
 ## [1.7.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.6.0-alpha.1...v1.7.0-alpha.1) (2026-11-05)
 
 
