@@ -3,7 +3,8 @@
 # Usage: deploy.sh <app_dir> <image>
 # <app_dir> holds this bundle and .env (from env.example; docs/deploy-go.md).
 #
-# Order: pull, (bundled stores), backup, migrations, then api and worker on the new image. If they do not
+# Order: checks (including the calls settings), pull, (bundled stores), backup, migrations, (the media server
+# with CALLS_ENABLED=true, removed otherwise), then api and worker on the new image. If they do not
 # become ready, the previous image is started again. Migrations are not rolled back: they are written to
 # work with the previous version too, and the backup taken before them is in backups/.
 set -euo pipefail
@@ -39,6 +40,71 @@ STORES=(postgres redis scylla elasticsearch object-storage)
 bundled_stores=false
 case ",$(value COMPOSE_PROFILES)," in *,stores,*) bundled_stores=true ;; esac
 
+# Audio calls (docs/calls.md#deployment): the media server runs only with CALLS_ENABLED=true, and then only
+# with complete settings. Problems name the settings, never their values.
+calls_enabled=false
+calls_flag="$(value CALLS_ENABLED | tr -d '' | sed -E 's/[[:space:]]+#.*$//; s/^[[:space:]]+//; s/[[:space:]]+$//' | tr 'A-Z' 'a-z')"
+case "$calls_flag" in
+  1|t|true) calls_enabled=true ;;
+  ''|0|f|false) ;;
+  *) echo "CALLS_ENABLED must be true or false. Nothing was changed." >&2; exit 1 ;;
+esac
+CALLS_HTTP_PORT="$(value CALLS_HTTP_PORT)"; CALLS_HTTP_PORT="${CALLS_HTTP_PORT:-7880}"
+if $calls_enabled; then
+  problems=()
+  for name in CALLS_PUBLIC_URL CALLS_API_URL CALLS_API_KEY CALLS_API_SECRET CALLS_NODE_IP CALLS_TURN_DOMAIN \
+    CALLS_TURN_CERT_FILE CALLS_TURN_KEY_FILE; do
+    [ -n "$(value "$name")" ] || problems+=("$name is empty")
+  done
+  case "$(value CALLS_PUBLIC_URL)" in
+    '') ;;
+    *example.com*) problems+=("CALLS_PUBLIC_URL is still the example") ;;
+    wss://*) ;;
+    *) problems+=("CALLS_PUBLIC_URL must start with wss://") ;;
+  esac
+  case "$(value CALLS_TURN_DOMAIN)" in
+    '') ;;
+    *example.com) problems+=("CALLS_TURN_DOMAIN is still the example") ;;
+    *[!A-Za-z0-9.-]*) problems+=("CALLS_TURN_DOMAIN must be a host name") ;;
+  esac
+  case "$(value CALLS_API_KEY)" in
+    *[!A-Za-z0-9_-]*) problems+=("CALLS_API_KEY may contain only letters, digits, _ and -") ;;
+  esac
+  secret="$(value CALLS_API_SECRET)"
+  if [ -n "$secret" ]; then
+    [ "${#secret}" -ge 32 ] || problems+=("CALLS_API_SECRET is shorter than 32 characters")
+    case "$secret" in
+      *[!A-Za-z0-9+/=_-]*) problems+=("CALLS_API_SECRET may contain only letters, digits and + / = _ -") ;;
+      *dev-only*) problems+=("CALLS_API_SECRET is the development value") ;;
+    esac
+  fi
+  unset secret
+  if [ -n "$(value CALLS_NODE_IP)" ] && ! [[ "$(value CALLS_NODE_IP)" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]; then
+    problems+=("CALLS_NODE_IP must be the host's public IPv4 address (the Elastic IP)")
+  fi
+  for name in CALLS_TURN_CERT_FILE CALLS_TURN_KEY_FILE; do
+    file="$(value "$name")"
+    if [ -n "$file" ] && { [ ! -r "$file" ] || [ ! -s "$file" ]; }; then
+      problems+=("$name does not name a file the deploy user can read")
+    fi
+  done
+  for name in CALLS_HTTP_PORT CALLS_METRICS_PORT CALLS_TCP_PORT CALLS_TURN_TLS_PORT CALLS_TURN_UDP_PORT \
+    CALLS_UDP_PORT_START CALLS_UDP_PORT_END CALLS_TURN_RELAY_PORT_START CALLS_TURN_RELAY_PORT_END; do
+    case "$(value "$name")" in
+      *[!0-9]*) problems+=("$name must be a port number") ;;
+    esac
+  done
+  if [ "${#problems[@]}" -gt 0 ]; then
+    echo "calls: enabled, but the settings are incomplete (docs/calls.md#deployment):" >&2
+    printf '  - %s\n' "${problems[@]}" >&2
+    echo "Complete them or set CALLS_ENABLED=false. Nothing was changed." >&2
+    exit 1
+  fi
+  echo "calls: enabled"
+else
+  echo "calls: disabled (CALLS_ENABLED is not true)"
+fi
+
 # Roll back to what is actually running; .env may name an image that was never pulled.
 previous_image=""
 running="$(docker compose ps -q api 2>/dev/null || true)"
@@ -68,6 +134,35 @@ wait_ready() {
   return 1
 }
 
+# LiveKit ignores environment variables it does not know and then falls back to its default ports, which are
+# not published. Its startup line names the ports it really uses.
+check_livekit_ports() {
+  local line want
+  line="$(docker compose logs --no-color livekit 2>/dev/null | grep -F '"starting LiveKit server"' | tail -n1 || true)"
+  [ -n "$line" ] || return 0
+  for want in "\"rtc.portTCP\":$(port_value CALLS_TCP_PORT 7881)"     "\"rtc.portUDP\":{\"Start\":$(port_value CALLS_UDP_PORT_START 50000),\"End\":$(port_value CALLS_UDP_PORT_END 50003)}"; do
+    case "$line" in *"$want"*) ;; *) echo "calls: the media server does not use $want; check compose.yaml." >&2; return 1 ;; esac
+  done
+  line="$(docker compose logs --no-color livekit 2>/dev/null | grep -F '"Starting TURN server"' | tail -n1 || true)"
+  [ -n "$line" ] || return 0
+  for want in "\"turn.relay_range_start\":$(port_value CALLS_TURN_RELAY_PORT_START 50004)"     "\"turn.relay_range_end\":$(port_value CALLS_TURN_RELAY_PORT_END 50100)"     "\"turn.portTLS\":$(port_value CALLS_TURN_TLS_PORT 5349)" "\"turn.portUDP\":$(port_value CALLS_TURN_UDP_PORT 3478)"; do
+    case "$line" in *"$want"*) ;; *) echo "calls: the media server does not use $want; check compose.yaml." >&2; return 1 ;; esac
+  done
+}
+
+port_value() { local v; v="$(value "$1")"; echo "${v:-$2}"; }
+
+# LiveKit answers "OK" on its signalling port, which nginx proxies for calls.<domain>.
+wait_livekit() {
+  for _ in $(seq 1 30); do
+    if curl -fsS "http://127.0.0.1:${CALLS_HTTP_PORT}/" > /dev/null 2>&1; then
+      return 0
+    fi
+    sleep 2
+  done
+  return 1
+}
+
 free_mb() {
   local dirs=() dir
   dir="$(docker info --format '{{.DockerRootDir}}' 2>/dev/null || true)"
@@ -89,6 +184,10 @@ fi
 # Pull before touching anything, so a failed pull leaves the deployment as it was. A release tag never
 # moves, so an image that is here already is that release.
 docker image inspect "$IMAGE" > /dev/null 2>&1 || docker pull "$IMAGE"
+if $calls_enabled; then
+  livekit_image="$(docker compose config --images livekit)"
+  docker image inspect "$livekit_image" > /dev/null 2>&1 || docker pull "$livekit_image"
+fi
 
 if $bundled_stores; then
   docker compose up -d --wait "${STORES[@]}"
@@ -112,6 +211,24 @@ fi
 
 if ! docker compose run --rm geoip-init; then
   echo "The GeoIP database could not be downloaded; sessions and security events are shown without a location." >&2
+fi
+
+# The media server starts before api and worker, which then find it ready. Compose restarts it only when its
+# image, settings or livekit.yaml changed, since a restart ends every running call. A rollback of the new
+# image leaves it as it is. Disabling calls removes it.
+if $calls_enabled; then
+  LIVEKIT_CONFIG_SHA256="$(sha256sum livekit/livekit.yaml | cut -d' ' -f1)"
+  export LIVEKIT_CONFIG_SHA256
+  if ! docker compose up -d --wait --wait-timeout 120 livekit || ! wait_livekit || ! check_livekit_ports; then
+    echo "calls: the media server is not healthy; $IMAGE was not deployed, ${previous_image:-nothing} keeps running." >&2
+    echo "calls: fix the media server, or set CALLS_ENABLED=false to deploy without calls." >&2
+    docker compose logs --no-color --tail 40 livekit >&2 || true
+    exit 1
+  fi
+  echo "calls: media server healthy"
+elif [ -n "$(docker compose ps -aq livekit 2>/dev/null || true)" ]; then
+  docker compose rm -sf livekit
+  echo "calls: media server stopped and removed"
 fi
 
 set_image "$IMAGE"

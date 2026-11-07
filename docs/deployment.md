@@ -71,3 +71,67 @@ that is not production.
 | Object storage | versioning plus replication or backup | quarterly: restore a sample of objects and verify their checksums |
 
 Write down the recovery point and recovery time you aim for and measure them during the tests.
+
+## Audio calls (media server)
+
+Calls run through one LiveKit node on the same host as the API (`livekit` service, profile `calls`); how to
+enable, disable and rotate it is in [deploy-go.md](deploy-go.md#audio-calls), the ports, AWS checklist and
+traffic budget in [calls.md](calls.md#deployment). There is no failover: a host failure or reboot ends every
+call, and the clients have to join again.
+
+### Resource budget on the t3a.large (2 vCPUs, 8 GiB, burstable)
+
+Messaging and the stores come first; the media server gets a fixed share and admission control keeps it
+inside it.
+
+| Consumer | Memory | CPU |
+| --- | --- | --- |
+| Bundled stores (Elasticsearch 1 GiB heap, ScyllaDB 1 GiB, PostgreSQL, Redis, object storage) | about 3.5 GiB | most of the baseline |
+| `api`, `worker`, nginx, the OS | about 1 GiB | |
+| `livekit` (`CALLS_MEM_LIMIT`, `CALLS_CPUS`) | 1 GiB, hard limit | at most 1 vCPU, half the CPU weight of the other containers |
+| Headroom | about 2.5 GiB | |
+
+Measure before enabling calls instead of trusting this table: `docker stats --no-stream` and the CloudWatch
+`CPUCreditBalance` during a normal day. A t3a.large earns credits for 30 % of both vCPUs (about 0.6 vCPU)
+around the clock; above that it spends credits, and with none left it is throttled to that baseline, so
+messaging slows down too. The media server's limits keep it from taking more than one vCPU, but sustained
+calls still drain credits: watch the balance during the load test. With "unlimited" credit mode the host is
+not throttled, and every hour above the baseline is billed instead.
+
+`CALLS_MAX_ACTIVE_PARTICIPANTS` (admission control in the API) and `limit.bytes_per_sec` in
+`deploy/go/livekit/livekit.yaml` (LiveKit refuses new participants above about 160 Mbit/s) are the brakes.
+Set the first from the load test, below the point where CPU, packets/s or credits run out.
+
+Docker publishes about 100 UDP ports for the media server. With Docker's userland proxy (the default), that
+is one small `docker-proxy` process per port; outside traffic does not pass through them (iptables does the
+forwarding). If their memory matters, set `"userland-proxy": false` in `/etc/docker/daemon.json` and restart
+Docker in a maintenance window. Bridge networking costs some CPU per packet compared with host networking
+(which LiveKit recommends for large nodes); if the load test shows the network stack (softirq) as the limit,
+moving `livekit` to `network_mode: host` is the next step, which then needs the room API and metrics ports
+bound to loopback and the API to reach LiveKit through the host.
+
+### Monitoring and alerts
+
+LiveKit's Prometheus metrics are on `127.0.0.1:${CALLS_METRICS_PORT}` (default 6789, loopback only); the
+API's own call metrics are on its `/metrics`. Never route either publicly. Alert on:
+
+| Signal | Source | Alert when |
+| --- | --- | --- |
+| CPU credits | CloudWatch `CPUCreditBalance` | it falls steadily during calls, or below 20 % of the maximum |
+| CPU | CloudWatch `CPUUtilization`, `docker stats` | sustained above the baseline (30 %) for 15 minutes |
+| Packets per second | CloudWatch `NetworkPacketsOut`/`NetworkPacketsIn` (per minute), LiveKit `livekit_node_packet_total{type="out"}` | above the rate measured as safe in the load test |
+| Dropped packets, quality | LiveKit `livekit_node_packet_total{type="dropped"}`, `livekit_quality_score`, `livekit_forward_latency` | drops rising with load; median quality score falling below 3.5 |
+| Egress | CloudWatch `NetworkOut`, the AWS bill (Budgets) | daily egress above the expected profile; monthly budget alert on data transfer |
+| Join failures | the API's call metrics and logs (`503 calls_unavailable`, failed joins and grants); LiveKit `livekit_participant_total` and `livekit_room_total` next to the API's joined count | join failures above 5 % for 5 minutes, or LiveKit's participant count far from the API's |
+| Media server up | `curl -fsS http://127.0.0.1:${CALLS_HTTP_PORT}/` from the host, container health | not `OK` for 2 minutes |
+| Memory | `docker stats` for `livekit` | above 80 % of `CALLS_MEM_LIMIT` |
+
+Logs and metrics must not carry media keys, security codes or key envelope bodies; LiveKit never sees them.
+Keep LiveKit at `logging.level: info`: at `debug` it logs each room's TURN password. Its logs name rooms,
+participant identities and client addresses; compose keeps at most 30 MB of them.
+
+### Region outage
+
+The host's region is the only one. If it fails, calls and messaging fail together; there is no second
+media node to move to (deferred, see the plan). Users far from the region get higher latency; quality by
+distance is recorded in the device checklist results.
