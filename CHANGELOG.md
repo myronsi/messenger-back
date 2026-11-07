@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.8.0-alpha.1...v1.9.0-alpha.1) (2026-11-07)
+
+
+### Features
+
+* **calls:** end-to-end encrypted audio calls ([#167](https://github.com/myronsi/messenger-back/issues/167)) ([8bd1e97](https://github.com/myronsi/messenger-back/commit/8bd1e976295dd1fac787b9ee0b7e751fde427f8b))
+
 ## [1.8.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.7.0-alpha.1...v1.8.0-alpha.1) (2026-11-06)
 
 
