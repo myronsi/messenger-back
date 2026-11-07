@@ -57,7 +57,7 @@ func TestCallsConfiguration(t *testing.T) {
 func TestCallsSettingsLoad(t *testing.T) {
 	env := map[string]string{
 		"JWT_SECRET": strings.Repeat("j", 32), "RECOVERY_PEPPER": strings.Repeat("p", 32),
-		"ENCRYPTION_KEY": "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=", "DATABASE_URL": "postgres://u:p@localhost/db",
+		"ENCRYPTION_KEY": testKey, "DATABASE_URL": "postgres://u:p@localhost/db",
 		"REDIS_URL": "redis://localhost:6379", "SCYLLA_HOSTS": "localhost", "ELASTICSEARCH_URL": "http://localhost:9200",
 		"CALLS_API_KEY": "placeholder", "CALLS_TURN_PORT": "3478", "CALLS_NODE_IP": "203.0.113.1",
 	}
