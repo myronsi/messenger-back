@@ -63,7 +63,7 @@ A chat the user is not in looks like a chat that does not exist (`not_found`).
 
 `Fanout` renders every event per recipient (the sender as each member may see them, the sender's own copy with
 `client_temp_id`) and publishes all of them in one pipeline. What travels on `user:{id}` is a small frame around the
-client event, so the receiving gateway can apply three rules before forwarding:
+client event, so the receiving gateway can apply these rules before forwarding:
 
 - **Removed from a chat:** (sent by the chat and group endpoints, #53) the removal (`chat_deleted`) marks the chat
   for that user; later events of the chat are
@@ -71,12 +71,22 @@ client event, so the receiving gateway can apply three rules before forwarding:
   `group_created` for the chat lifts the mark.
 - **Presence order:** a presence change is forwarded only when its version is newer than the last one for that
   user, because changes published by different instances can overtake each other.
+- **One session only:** a frame can name a session; the gateway then forwards it only to that session's sockets.
+  `call_keys` uses this, because sealed call keys are addressed to one session (`docs/calls-e2ee.md`).
 - **Backpressure:** each connection has a bounded send buffer (`WS_SEND_BUFFER`, 256 events). A client that cannot
   keep up is closed with `1013` instead of slowing down everyone else; it reconnects and catches up through REST.
 
 Delivery is best effort. After every reconnect the client loads what it missed with the `after` cursor; the
 `event_id`s let it spot duplicates. When the bus had to subscribe again after losing Redis, the affected users'
 sockets are closed with `1012` "reconnect" for exactly this reason.
+
+## Calls
+
+`call_updated` carries the whole call ([calls.md](calls.md)) and goes to every member of the chat after every change
+of the call (`Fanout.CallUpdated`, recipients from the members cache); clients keep the highest `version`. It is a chat
+event, so the removal rule above applies. `call_keys` (`Fanout.CallKeys`) goes to the recipient user's channel with the
+recipient session in the frame, and only that session's sockets receive it. Both are best effort: clients load
+`GET /calls` and `GET /calls/{id}/keys` after a reconnect.
 
 ## Presence
 

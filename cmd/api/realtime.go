@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/myronsi/messenger-back/internal/app"
+	"github.com/myronsi/messenger-back/internal/calls"
 	"github.com/myronsi/messenger-back/internal/events"
 	"github.com/myronsi/messenger-back/internal/ids"
 	"github.com/myronsi/messenger-back/internal/media"
@@ -219,8 +220,16 @@ func (st *realtimeStack) stop() {
 // accountDeleted cleans up after a deleted account: the chats it took along are announced to their other
 // members and handed to the worker (which deletes their messages), the groups it left get a fresh member list,
 // and the files of v1 chats are deleted.
-func (st *realtimeStack) accountDeleted(storage media.Storage, log *slog.Logger) func(ctx context.Context, userID int64, d postgres.DeletedAccount) {
+func (st *realtimeStack) accountDeleted(storage media.Storage, callsSvc *calls.Service, log *slog.Logger) func(ctx context.Context, userID int64, d postgres.DeletedAccount) {
 	return func(ctx context.Context, userID int64, d postgres.DeletedAccount) {
+		if callsSvc != nil {
+			for _, chatID := range d.LeftGroups {
+				callsSvc.MembersRemoved(ctx, chatID, []int64{userID})
+			}
+			if len(d.DeletedChats) > 0 {
+				callsSvc.ChatsDeleted(ctx)
+			}
+		}
 		changed := make([]int64, 0, len(d.DeletedChats)+len(d.LeftGroups))
 		for chatID, others := range d.DeletedChats {
 			changed = append(changed, chatID)

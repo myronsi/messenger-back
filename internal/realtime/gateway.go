@@ -358,7 +358,9 @@ func (g *Gateway) Deliver(userID int64, payload []byte) {
 	}
 	conns := make([]*conn, 0, len(st.conns))
 	for c := range st.conns {
-		conns = append(conns, c)
+		if f.Session == nil || c.sessionID == *f.Session {
+			conns = append(conns, c)
+		}
 	}
 	g.mu.Unlock()
 	for _, c := range conns {

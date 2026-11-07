@@ -42,6 +42,7 @@ Add that line yourself if your `.env` came from elsewhere.
 | `elasticsearch` | `elasticsearch:9.5.3` | 9200 | single node, 1 GB heap, security on, plain HTTP |
 | `object-storage` | `rustfs/rustfs:1.0.1` | 9000 (S3), 9001 (console) | S3-compatible |
 | `kibana` | `kibana:9.5.3` | 5601 | optional: `--profile kibana`, sign in as `elastic` |
+| `livekit` | see `compose.dev.yaml` | 7880 | optional: `--profile calls`, the media server of audio calls; set `CALLS_ENABLED=true` in `.env` ([calls.md](calls.md#deployment)) |
 
 Every port is bound to `127.0.0.1` only. Change one with `API_PORT`, `POSTGRES_PORT`, `S3_PORT` and so on
 in `.env` (see the end of `.env.example`). The host-side URLs for `make run` and `make migrate` follow

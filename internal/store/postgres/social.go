@@ -44,6 +44,7 @@ type PrivacySettings struct {
 	DirectMessages      string
 	GroupInvites        string
 	SearchVisibility    string
+	CallsEnabled        bool
 }
 
 // DefaultPrivacy is what a user without a settings row gets (the column defaults).
@@ -51,7 +52,7 @@ func DefaultPrivacy(userID int64) PrivacySettings {
 	return PrivacySettings{
 		UserID: userID, AvatarVisibility: VisibleEveryone, ProfileVisibility: VisibleEveryone,
 		PresenceVisibility: VisibleEveryone, ReadReceiptsEnabled: true, DirectMessages: VisibleEveryone,
-		GroupInvites: VisibleEveryone, SearchVisibility: VisibleEveryone,
+		GroupInvites: VisibleEveryone, SearchVisibility: VisibleEveryone, CallsEnabled: true,
 	}
 }
 
@@ -122,6 +123,7 @@ func privacyFrom(p sqlcdb.UserPrivacySetting) PrivacySettings {
 		UserID: p.UserID, AvatarVisibility: p.AvatarVisibility, ProfileVisibility: p.ProfileVisibility,
 		PresenceVisibility: p.PresenceVisibility, ReadReceiptsEnabled: p.ReadReceiptsEnabled,
 		DirectMessages: p.DirectMessages, GroupInvites: p.GroupInvites, SearchVisibility: p.SearchVisibility,
+		CallsEnabled: p.CallsEnabled,
 	}
 }
 
@@ -154,6 +156,7 @@ func (r socialRepo) UpdatePrivacy(ctx context.Context, p PrivacySettings) (Priva
 		UserID: p.UserID, AvatarVisibility: p.AvatarVisibility, ProfileVisibility: p.ProfileVisibility,
 		PresenceVisibility: p.PresenceVisibility, ReadReceiptsEnabled: p.ReadReceiptsEnabled,
 		DirectMessages: p.DirectMessages, GroupInvites: p.GroupInvites, SearchVisibility: p.SearchVisibility,
+		CallsEnabled: p.CallsEnabled,
 	})
 	if err != nil {
 		return PrivacySettings{}, mapError(err)
@@ -170,6 +173,7 @@ type PrivacyPatch struct {
 	DirectMessages      *string
 	GroupInvites        *string
 	SearchVisibility    *string
+	CallsEnabled        *bool
 }
 
 func (r socialRepo) PatchPrivacy(ctx context.Context, userID int64, p PrivacyPatch) (PrivacySettings, error) {
@@ -182,6 +186,7 @@ func (r socialRepo) PatchPrivacy(ctx context.Context, userID int64, p PrivacyPat
 		UserID: userID, AvatarVisibility: p.AvatarVisibility, ProfileVisibility: p.ProfileVisibility,
 		PresenceVisibility: p.PresenceVisibility, ReadReceiptsEnabled: p.ReadReceiptsEnabled,
 		DirectMessages: p.DirectMessages, GroupInvites: p.GroupInvites, SearchVisibility: p.SearchVisibility,
+		CallsEnabled: p.CallsEnabled,
 	})
 	if err != nil {
 		return PrivacySettings{}, mapError(err)

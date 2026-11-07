@@ -25,6 +25,11 @@ type Metrics struct {
 	events         *prometheus.CounterVec
 	clientAPI      *prometheus.CounterVec
 	notifications  *prometheus.CounterVec
+	callsStarted   prometheus.Counter
+	callsEnded     *prometheus.CounterVec
+	callJoined     prometheus.Gauge
+	callJoinFailed *prometheus.CounterVec
+	callWebhooks   *prometheus.CounterVec
 }
 
 // NewMetrics registers the collectors together with the Go runtime and process collectors.
@@ -65,6 +70,26 @@ func NewMetrics() *Metrics {
 			Name: "messenger_events_handled_total",
 			Help: "Stream events handled by the worker, by consumer group and outcome (ok, failed, dead_letter). Alert on dead_letter.",
 		}, []string{"group", "outcome"}),
+		callsStarted: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "messenger_calls_started_total",
+			Help: "Audio calls started.",
+		}),
+		callsEnded: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "messenger_calls_ended_total",
+			Help: "Audio calls ended, by reason (completed, missed, declined, cancelled, failed).",
+		}, []string{"reason"}),
+		callJoined: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "messenger_call_participants_active",
+			Help: "Sessions joined to a call across all calls (compare with CALLS_MAX_ACTIVE_PARTICIPANTS).",
+		}),
+		callJoinFailed: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "messenger_call_join_failures_total",
+			Help: "Refused call joins by error code.",
+		}, []string{"code"}),
+		callWebhooks: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "messenger_call_webhook_events_total",
+			Help: "Media server webhook events by event and outcome (handled, duplicate, ignored, rejected, failed).",
+		}, []string{"event", "outcome"}),
 		storeCheckTime: prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Name:    "messenger_store_check_duration_seconds",
 			Help:    "Duration of the readiness check per data store.",
@@ -75,11 +100,24 @@ func NewMetrics() *Metrics {
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 		m.requests, m.duration, m.inFlight, m.webSockets, m.messages, m.storeErrors, m.storeCheckTime, m.events, m.clientAPI, m.notifications,
+		m.callsStarted, m.callsEnded, m.callJoined, m.callJoinFailed, m.callWebhooks,
 	)
 	return m
 }
 
 func (m *Metrics) Notification(outcome string) { m.notifications.WithLabelValues(outcome).Inc() }
+
+func (m *Metrics) CallStarted() { m.callsStarted.Inc() }
+
+func (m *Metrics) CallEnded(reason string) { m.callsEnded.WithLabelValues(reason).Inc() }
+
+func (m *Metrics) CallParticipants(n int) { m.callJoined.Set(float64(n)) }
+
+func (m *Metrics) CallJoinFailed(code string) { m.callJoinFailed.WithLabelValues(code).Inc() }
+
+func (m *Metrics) CallWebhook(event, outcome string) {
+	m.callWebhooks.WithLabelValues(event, outcome).Inc()
+}
 
 // Handler serves the metrics in the Prometheus text format.
 func (m *Metrics) Handler() http.Handler {

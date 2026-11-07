@@ -12,6 +12,7 @@ make up
 ```
 
 The API is served at `http://127.0.0.1:8080/api/v2`; readiness is `/readyz`.
+Audio calls (end-to-end encrypted, through a LiveKit media server) are off by default; see [calls](docs/calls.md).
 Use `make test`, `make lint` and `make docker` for validation and builds.
 
 ## Deployment
