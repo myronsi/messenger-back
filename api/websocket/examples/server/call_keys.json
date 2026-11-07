@@ -1,0 +1,19 @@
+{
+  "type": "call_keys",
+  "event_id": "7217400317439950111",
+  "chat_id": "77",
+  "data": {
+    "call_id": "7217400317439950100",
+    "epoch": 2,
+    "items": [
+      {
+        "epoch": 2,
+        "sender_user_id": "1002",
+        "sender_session_id": "9c1d2e3f-4a5b-4c6d-8e7f-001122334455",
+        "recipient_session_id": "5b0e8f0a-3f1c-4a52-9a8e-0d6e1c3f9b21",
+        "enc": "BJCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+        "ciphertext": "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"
+      }
+    ]
+  }
+}

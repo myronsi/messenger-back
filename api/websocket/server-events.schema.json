@@ -62,6 +62,12 @@
     },
     {
       "$ref": "server/recovery_request.schema.json"
+    },
+    {
+      "$ref": "server/call_updated.schema.json"
+    },
+    {
+      "$ref": "server/call_keys.schema.json"
     }
   ]
 }

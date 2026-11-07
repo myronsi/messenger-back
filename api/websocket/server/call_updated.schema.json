@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ServerCallUpdatedEvent",
+  "description": "A call of the chat started, rang, changed participants or epoch, or ended. Carries the whole call; keep the one with the highest `version`. Sent to every member of the chat.",
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "call_updated"
+    },
+    "event_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "chat_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "call": {
+          "$ref": "../../openapi.yaml#/components/schemas/Call"
+        }
+      },
+      "required": [
+        "call"
+      ]
+    }
+  },
+  "required": [
+    "type",
+    "event_id",
+    "chat_id",
+    "data"
+  ]
+}

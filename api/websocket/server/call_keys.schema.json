@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ServerCallKeysEvent",
+  "description": "Sealed sender keys for this session (see docs/calls-e2ee.md). Sent only to the recipient session.",
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "call_keys"
+    },
+    "event_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "chat_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "data": {
+      "$ref": "../../openapi.yaml#/components/schemas/CallKeyEnvelopeList"
+    }
+  },
+  "required": [
+    "type",
+    "event_id",
+    "chat_id",
+    "data"
+  ]
+}
