@@ -95,6 +95,9 @@ WHERE c.state <> 'ended' AND (
     OR (c.empty_since IS NOT NULL AND c.empty_since <= @grace_before)
     OR EXISTS (SELECT 1 FROM call_participants p
                WHERE p.call_id = c.id AND p.state = 'joined' AND p.disconnected_at <= @grace_before)
+    OR (c.kind = 'direct' AND c.started_at <= @grace_before AND c.ring_expires_at <= @now
+        AND EXISTS (SELECT 1 FROM call_participants p
+                    WHERE p.call_id = c.id AND p.user_id = c.initiator_id AND p.joined_at IS NULL))
 )
 ORDER BY c.id
 LIMIT @max_rows;
@@ -103,7 +106,39 @@ LIMIT @max_rows;
 SELECT id FROM calls WHERE state <> 'ended' ORDER BY id LIMIT @max_rows;
 
 -- name: DeleteOrphanedCalls :execrows
-DELETE FROM calls WHERE chat_id IS NULL AND state = 'ended';
+DELETE FROM calls
+WHERE chat_id IS NULL AND state = 'ended' AND (room_deleted_at IS NOT NULL OR ended_at < now() - interval '1 hour');
+
+-- name: MarkCallRoomDeleted :exec
+UPDATE calls SET room_deleted_at = now() WHERE id = @id AND room_deleted_at IS NULL;
+
+-- name: PendingCallRooms :many
+SELECT id FROM calls
+WHERE state = 'ended' AND room_deleted_at IS NULL AND ended_at > @since AND ended_at <= @until
+ORDER BY ended_at
+LIMIT @max_rows;
+
+-- name: ListCallRepairs :many
+SELECT r.call_id, r.user_id, r.session_id, r.session_ended, r.removed, r.blocked
+FROM (
+    SELECT p.call_id, p.user_id, p.session_id,
+           (p.state = 'joined' AND (s.id IS NULL OR s.revoked_at IS NOT NULL OR s.expires_at <= now()))::bool AS session_ended,
+           (NOT EXISTS (SELECT 1 FROM participants m WHERE m.chat_id = c.chat_id AND m.user_id = p.user_id))::bool AS removed,
+           (c.kind = 'direct' AND EXISTS (
+               SELECT 1 FROM call_participants o
+               JOIN user_blocks b ON (b.blocker_id = p.user_id AND b.blocked_id = o.user_id)
+                                  OR (b.blocker_id = o.user_id AND b.blocked_id = p.user_id)
+               WHERE o.call_id = p.call_id AND o.user_id <> p.user_id))::bool AS blocked
+    FROM calls c
+    JOIN call_participants p ON p.call_id = c.id
+    LEFT JOIN user_sessions s ON s.id = p.session_id
+    WHERE c.state <> 'ended' AND c.chat_id IS NOT NULL
+      AND (sqlc.narg(call_id)::bigint IS NULL OR c.id = sqlc.narg(call_id)::bigint)
+      AND (p.state IN ('joined', 'ringing') OR (p.user_id = c.initiator_id AND c.started_at IS NULL))
+) r
+WHERE r.session_ended OR r.removed OR r.blocked
+ORDER BY r.call_id, r.user_id
+LIMIT @max_rows;
 
 -- name: ClaimCallSummary :one
 UPDATE calls
@@ -142,6 +177,9 @@ SELECT public_key FROM call_identities WHERE session_id = @session_id;
 
 -- name: ShareCallIdentity :one
 SELECT public_key FROM call_identities WHERE session_id = @session_id AND user_id = @user_id FOR SHARE;
+
+-- name: KeyShareChat :one
+SELECT id FROM chats WHERE id = @id FOR KEY SHARE;
 
 -- name: ShareChatMember :one
 SELECT user_id FROM participants WHERE chat_id = @chat_id AND user_id = @user_id FOR KEY SHARE;

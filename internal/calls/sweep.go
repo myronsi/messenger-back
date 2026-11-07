@@ -11,9 +11,10 @@ import (
 )
 
 const (
-	sweepEvery     = 2 * time.Second
-	reconcileEvery = 30 * time.Second
-	sweepBatch     = 100
+	sweepEvery      = 2 * time.Second
+	reconcileEvery  = 30 * time.Second
+	sweepBatch      = 100
+	roomRetryWindow = time.Hour
 )
 
 func (s *Service) Run(ctx context.Context) {
@@ -97,6 +98,7 @@ func (s *Service) Sweep(ctx context.Context) {
 			s.d.Log.WarnContext(ctx, "sweep call", "call_id", id, "error", err)
 		}
 	}
+	s.repair(ctx)
 	if _, err := s.d.Store.Calls().DeleteOrphans(ctx); err != nil && ctx.Err() == nil {
 		s.d.Log.WarnContext(ctx, "delete calls of deleted chats", "error", err)
 	}
@@ -110,6 +112,7 @@ func (s *Service) Reconcile(ctx context.Context) {
 	if s.d.Media == nil {
 		return
 	}
+	s.retryRoomDeletions(ctx)
 	ids, err := s.d.Store.Calls().OpenIDs(ctx, 500)
 	if err != nil {
 		if ctx.Err() == nil {
@@ -136,6 +139,22 @@ func (s *Service) retrySummaries(ctx context.Context) {
 			return
 		}
 		s.postSummary(ctx, id)
+	}
+}
+
+func (s *Service) retryRoomDeletions(ctx context.Context) {
+	now := s.now()
+	ids, err := s.d.Store.Calls().PendingRooms(ctx, now.Add(-roomRetryWindow), now.Add(-10*time.Second), sweepBatch)
+	if err != nil {
+		if ctx.Err() == nil {
+			s.d.Log.WarnContext(ctx, "media rooms of ended calls", "error", err)
+		}
+		return
+	}
+	for _, id := range ids {
+		if ctx.Err() != nil || !s.deleteRoom(ctx, id) {
+			return
+		}
 	}
 }
 
@@ -187,7 +206,7 @@ func (s *Service) postSummary(ctx context.Context, callID int64) {
 		}
 	}
 	summary := &messages.CallSummary{CallID: c.ID, Kind: string(c.Kind), Outcome: c.EndReason}
-	if c.StartedAt != nil && c.EndedAt != nil {
+	if c.StartedAt != nil && c.EndedAt != nil && c.EndReason != reasonCancelled {
 		d := int(max(c.EndedAt.Sub(*c.StartedAt), 0) / time.Second)
 		summary.DurationSeconds = &d
 	}

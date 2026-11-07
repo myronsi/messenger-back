@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -73,11 +74,29 @@ type CallMember struct {
 	ChatID    int64
 	UserID    int64
 	SessionID uuid.UUID
+	Leave     int64
 }
 
 type CallGuard struct {
 	IdentityKey string
 	Blocked     bool
+	Left        *Call
+}
+
+type CallJoin struct {
+	Call        Call
+	Changed     bool
+	Left        Call
+	LeftChanged bool
+}
+
+type CallRepair struct {
+	CallID       int64
+	UserID       int64
+	SessionID    *uuid.UUID
+	SessionEnded bool
+	Removed      bool
+	Blocked      bool
 }
 
 type CallStart struct {
@@ -112,7 +131,7 @@ type CallRepository interface {
 	OpenInChat(ctx context.Context, chatID int64) (Call, error)
 	ForUser(ctx context.Context, userID int64) ([]Call, error)
 	Update(ctx context.Context, id int64, fn func(c *Call) (bool, error)) (Call, bool, error)
-	UpdateAsMember(ctx context.Context, id int64, m CallMember, fn func(c *Call, g CallGuard) (bool, error)) (Call, bool, error)
+	UpdateAsMember(ctx context.Context, id int64, m CallMember, fn func(c *Call, g CallGuard) (bool, error)) (CallJoin, error)
 	JoinedCallOf(ctx context.Context, userID int64) (int64, error)
 	CallsOfSessions(ctx context.Context, sessions []uuid.UUID) ([]int64, error)
 	JoinedCount(ctx context.Context) (int, error)
@@ -123,13 +142,16 @@ type CallRepository interface {
 	FinishSummary(ctx context.Context, id int64) error
 	PendingSummaries(ctx context.Context, since, until time.Time, limit int) ([]int64, error)
 	DeleteOrphans(ctx context.Context) (int64, error)
+	RoomDeleted(ctx context.Context, id int64) error
+	PendingRooms(ctx context.Context, since, until time.Time, limit int) ([]int64, error)
+	Repairs(ctx context.Context, limit int) ([]CallRepair, error)
 	Purge(ctx context.Context, retention time.Duration) (CallPurge, error)
 
 	SetIdentity(ctx context.Context, userID int64, sessionID uuid.UUID, publicKey string) (bool, error)
 	Identity(ctx context.Context, sessionID uuid.UUID) (string, error)
 	DeleteIdentities(ctx context.Context, sessions []uuid.UUID) error
 
-	PutEnvelopes(ctx context.Context, callID int64, check func(Call) error, sender CallKeyEnvelope, recipients []CallKeyEnvelope) (Call, error)
+	PutEnvelopes(ctx context.Context, callID int64, check func(c Call, stale map[uuid.UUID]bool) error, sender CallKeyEnvelope, recipients []CallKeyEnvelope) (Call, []CallKeyEnvelope, error)
 	Envelopes(ctx context.Context, callID, epoch int64, recipient uuid.UUID) ([]CallKeyEnvelope, error)
 	PushDevices(ctx context.Context, userIDs []int64) ([]CallPushDevice, error)
 }
@@ -208,29 +230,10 @@ func (r callRepo) Start(ctx context.Context, n NewCall) (CallStart, error) {
 	for range 2 {
 		err = r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
 			out = CallStart{}
-			rows, err := q.ListCallCandidates(ctx, sqlcdb.ListCallCandidatesParams{InitiatorID: n.InitiatorID, ChatID: n.ChatID})
-			if err != nil {
+			if _, err := q.KeyShareChat(ctx, n.ChatID); err != nil {
 				return err
 			}
-			member := false
-			others := make([]CallCandidate, 0, len(rows))
-			for _, row := range rows {
-				if row.UserID == n.InitiatorID {
-					member = true
-					continue
-				}
-				others = append(others, CallCandidate{UserID: row.UserID, CallsEnabled: row.CallsEnabled, Blocked: row.Blocked})
-			}
-			if !member {
-				return ErrNotFound
-			}
-			var ring []int64
-			if n.Ring != nil {
-				if ring, err = n.Ring(others); err != nil {
-					return err
-				}
-			}
-			started, err := r.startIn(ctx, q, n, ring)
+			started, err := r.startIn(ctx, q, n)
 			if err != nil {
 				return err
 			}
@@ -249,14 +252,21 @@ func (r callRepo) Start(ctx context.Context, n NewCall) (CallStart, error) {
 	return out, nil
 }
 
-func (r callRepo) startIn(ctx context.Context, q *sqlcdb.Queries, n NewCall, ring []int64) (CallStart, error) {
+func (r callRepo) startIn(ctx context.Context, q *sqlcdb.Queries, n NewCall) (CallStart, error) {
 	chatID := n.ChatID
 	existing, err := q.OpenCallInChat(ctx, &chatID)
 	if err == nil {
+		if _, err := q.ShareChatMember(ctx, sqlcdb.ShareChatMemberParams{ChatID: n.ChatID, UserID: n.InitiatorID}); err != nil {
+			return CallStart{}, err
+		}
 		call, err := r.load(ctx, q, existing)
 		return CallStart{Call: call}, err
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
+		return CallStart{}, err
+	}
+	ring, err := r.ringList(ctx, q, n)
+	if err != nil {
 		return CallStart{}, err
 	}
 	c, err := q.InsertCall(ctx, sqlcdb.InsertCallParams{
@@ -282,6 +292,29 @@ func (r callRepo) startIn(ctx context.Context, q *sqlcdb.Queries, n NewCall, rin
 	}
 	call, err := r.load(ctx, q, c)
 	return CallStart{Call: call, Created: true}, err
+}
+
+func (r callRepo) ringList(ctx context.Context, q *sqlcdb.Queries, n NewCall) ([]int64, error) {
+	rows, err := q.ListCallCandidates(ctx, sqlcdb.ListCallCandidatesParams{InitiatorID: n.InitiatorID, ChatID: n.ChatID})
+	if err != nil {
+		return nil, err
+	}
+	member := false
+	others := make([]CallCandidate, 0, len(rows))
+	for _, row := range rows {
+		if row.UserID == n.InitiatorID {
+			member = true
+			continue
+		}
+		others = append(others, CallCandidate{UserID: row.UserID, CallsEnabled: row.CallsEnabled, Blocked: row.Blocked})
+	}
+	if !member {
+		return nil, ErrNotFound
+	}
+	if n.Ring == nil {
+		return nil, nil
+	}
+	return n.Ring(others)
 }
 
 func (r callRepo) Get(ctx context.Context, id int64) (Call, error) {
@@ -347,16 +380,40 @@ func optString(s string) *string {
 	return &s
 }
 
-func (r callRepo) Update(ctx context.Context, id int64, fn func(c *Call) (bool, error)) (Call, bool, error) {
-	return r.update(ctx, id, func(_ context.Context, _ *sqlcdb.Queries, c *Call) (bool, error) { return fn(c) })
+func sameCall(a, b Call) bool {
+	if a.State != b.State || a.EndReason != b.EndReason || a.Epoch != b.Epoch || a.Version != b.Version ||
+		!sameTime(a.StartedAt, b.StartedAt) || !sameTime(a.EndedAt, b.EndedAt) || !sameTime(a.EmptySince, b.EmptySince) ||
+		len(a.Participants) != len(b.Participants) {
+		return false
+	}
+	for i := range a.Participants {
+		if !sameParticipant(a.Participants[i], b.Participants[i]) {
+			return false
+		}
+	}
+	return true
 }
 
-func (r callRepo) UpdateAsMember(ctx context.Context, id int64, m CallMember, fn func(c *Call, g CallGuard) (bool, error)) (Call, bool, error) {
-	return r.update(ctx, id, func(ctx context.Context, q *sqlcdb.Queries, c *Call) (bool, error) {
+func cloneCall(c Call) Call {
+	c.Participants = append([]CallParticipant(nil), c.Participants...)
+	return c
+}
+
+func (r callRepo) Update(ctx context.Context, id int64, fn func(c *Call) (bool, error)) (Call, bool, error) {
+	out, err := r.update(ctx, id, 0, func(_ context.Context, _ *sqlcdb.Queries, c, _ *Call) (bool, error) { return fn(c) })
+	return out.Call, out.Changed, err
+}
+
+func (r callRepo) UpdateAsMember(ctx context.Context, id int64, m CallMember, fn func(c *Call, g CallGuard) (bool, error)) (CallJoin, error) {
+	other := m.Leave
+	if other == id {
+		other = 0
+	}
+	return r.update(ctx, id, other, func(ctx context.Context, q *sqlcdb.Queries, c, left *Call) (bool, error) {
 		if c.ChatID != m.ChatID {
 			return false, ErrNotFound
 		}
-		var g CallGuard
+		g := CallGuard{Left: left}
 		key, err := q.ShareCallIdentity(ctx, sqlcdb.ShareCallIdentityParams{SessionID: m.SessionID, UserID: m.UserID})
 		switch {
 		case err == nil:
@@ -385,49 +442,83 @@ func (r callRepo) UpdateAsMember(ctx context.Context, id int64, m CallMember, fn
 	})
 }
 
-func (r callRepo) update(ctx context.Context, id int64, fn func(ctx context.Context, q *sqlcdb.Queries, c *Call) (bool, error), before ...func(ctx context.Context, q *sqlcdb.Queries) error) (Call, bool, error) {
+func (r callRepo) lockCalls(ctx context.Context, q *sqlcdb.Queries, id, other int64) (Call, *Call, error) {
+	ids := []int64{id}
+	if other != 0 {
+		ids = append(ids, other)
+		slices.Sort(ids)
+	}
 	var (
-		out     Call
-		changed bool
+		main Call
+		left *Call
 	)
+	for _, cid := range ids {
+		row, err := q.LockCall(ctx, cid)
+		if errors.Is(err, pgx.ErrNoRows) && cid == other {
+			continue
+		}
+		if err != nil {
+			return Call{}, nil, err
+		}
+		c, err := r.load(ctx, q, row)
+		if err != nil {
+			return Call{}, nil, err
+		}
+		if cid == id {
+			main = c
+		} else {
+			left = &c
+		}
+	}
+	return main, left, nil
+}
+
+func (r callRepo) update(ctx context.Context, id, other int64, fn func(ctx context.Context, q *sqlcdb.Queries, c, left *Call) (bool, error), before ...func(ctx context.Context, q *sqlcdb.Queries) error) (CallJoin, error) {
+	var out CallJoin
 	err := r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
-		out, changed = Call{}, false
+		out = CallJoin{}
 		for _, b := range before {
 			if err := b(ctx, q); err != nil {
 				return err
 			}
 		}
-		row, err := q.LockCall(ctx, id)
+		orig, origLeft, err := r.lockCalls(ctx, q, id, other)
 		if err != nil {
 			return err
 		}
-		orig, err := r.load(ctx, q, row)
+		c := cloneCall(orig)
+		var left *Call
+		if origLeft != nil {
+			l := cloneCall(*origLeft)
+			left = &l
+		}
+		ok, err := fn(ctx, q, &c, left)
 		if err != nil {
 			return err
 		}
-		c := orig
-		c.Participants = append([]CallParticipant(nil), orig.Participants...)
-		ok, err := fn(ctx, q, &c)
-		if err != nil {
-			return err
+		if left != nil && !sameCall(*origLeft, *left) {
+			if err := r.save(ctx, q, *origLeft, *left); err != nil {
+				return err
+			}
+			out.Left, out.LeftChanged = *left, true
 		}
 		if !ok {
-			out = orig
+			out.Call = orig
 			return nil
 		}
 		if err := r.save(ctx, q, orig, c); err != nil {
 			return err
 		}
-		out, changed = c, true
+		out.Call, out.Changed = c, true
 		return nil
 	})
 	if errors.Is(err, errJoinedElsewhere) {
-		return Call{}, false, ErrConflict
+		return CallJoin{}, ErrConflict
 	}
 	if err != nil {
-		return Call{}, false, err
+		return CallJoin{}, err
 	}
-	return out, changed, nil
+	return out, nil
 }
 
 func (r callRepo) save(ctx context.Context, q *sqlcdb.Queries, orig, c Call) error {
@@ -545,6 +636,36 @@ func (r callRepo) DeleteOrphans(ctx context.Context) (int64, error) {
 	return n, mapError(err)
 }
 
+func (r callRepo) RoomDeleted(ctx context.Context, id int64) error {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	return mapError(r.s.q.MarkCallRoomDeleted(ctx, id))
+}
+
+func (r callRepo) PendingRooms(ctx context.Context, since, until time.Time, limit int) ([]int64, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	ids, err := r.s.q.PendingCallRooms(ctx, sqlcdb.PendingCallRoomsParams{Since: &since, Until: &until, MaxRows: clampLimit(limit)})
+	return ids, mapError(err)
+}
+
+func (r callRepo) Repairs(ctx context.Context, limit int) ([]CallRepair, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	rows, err := r.s.q.ListCallRepairs(ctx, sqlcdb.ListCallRepairsParams{MaxRows: clampLimit(limit)})
+	if err != nil {
+		return nil, mapError(err)
+	}
+	out := make([]CallRepair, len(rows))
+	for i, rp := range rows {
+		out[i] = CallRepair{
+			CallID: rp.CallID, UserID: rp.UserID, SessionID: rp.SessionID,
+			SessionEnded: rp.SessionEnded, Removed: rp.Removed, Blocked: rp.Blocked,
+		}
+	}
+	return out, nil
+}
+
 func (r callRepo) Purge(ctx context.Context, retention time.Duration) (CallPurge, error) {
 	ctx, cancel := r.s.call(ctx)
 	defer cancel()
@@ -608,10 +729,13 @@ func (r callRepo) DeleteIdentities(ctx context.Context, sessions []uuid.UUID) er
 	return mapError(r.s.q.DeleteCallIdentities(ctx, sessions))
 }
 
-func (r callRepo) PutEnvelopes(ctx context.Context, callID int64, check func(Call) error, sender CallKeyEnvelope, recipients []CallKeyEnvelope) (Call, error) {
-	var out Call
+func (r callRepo) PutEnvelopes(ctx context.Context, callID int64, check func(c Call, stale map[uuid.UUID]bool) error, sender CallKeyEnvelope, recipients []CallKeyEnvelope) (Call, []CallKeyEnvelope, error) {
+	var (
+		out  Call
+		kept []CallKeyEnvelope
+	)
 	err := r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
-		out = Call{}
+		out, kept = Call{}, nil
 		row, err := q.ShareCall(ctx, callID)
 		if err != nil {
 			return err
@@ -620,23 +744,42 @@ func (r callRepo) PutEnvelopes(ctx context.Context, callID int64, check func(Cal
 		if err != nil {
 			return err
 		}
-		if err := check(c); err != nil {
+		id := callID
+		repairs, err := q.ListCallRepairs(ctx, sqlcdb.ListCallRepairsParams{CallID: &id, MaxRows: 1000})
+		if err != nil {
 			return err
+		}
+		stale := map[uuid.UUID]bool{}
+		for _, rp := range repairs {
+			if rp.SessionID != nil {
+				stale[*rp.SessionID] = true
+			}
+		}
+		if err := check(c, stale); err != nil {
+			return err
+		}
+		for _, e := range recipients {
+			if !stale[e.RecipientSessionID] {
+				kept = append(kept, e)
+			}
+		}
+		out = c
+		if len(kept) == 0 {
+			return nil
 		}
 		p := sqlcdb.SaveCallEnvelopesParams{
 			CallID: callID, Epoch: sender.Epoch, SenderSessionID: sender.SenderSessionID, SenderUserID: sender.SenderUserID,
-			Recipients: make([]uuid.UUID, len(recipients)), Encs: make([]string, len(recipients)), Ciphertexts: make([]string, len(recipients)),
+			Recipients: make([]uuid.UUID, len(kept)), Encs: make([]string, len(kept)), Ciphertexts: make([]string, len(kept)),
 		}
-		for i, e := range recipients {
+		for i, e := range kept {
 			p.Recipients[i], p.Encs[i], p.Ciphertexts[i] = e.RecipientSessionID, e.Enc, e.Ciphertext
 		}
-		if err := q.SaveCallEnvelopes(ctx, p); err != nil {
-			return err
-		}
-		out = c
-		return nil
+		return q.SaveCallEnvelopes(ctx, p)
 	})
-	return out, err
+	if err != nil {
+		return Call{}, nil, err
+	}
+	return out, kept, nil
 }
 
 func (r callRepo) Envelopes(ctx context.Context, callID, epoch int64, recipient uuid.UUID) ([]CallKeyEnvelope, error) {

@@ -167,7 +167,7 @@ type CallPayload struct {
 	Type        string `json:"type"`
 	Action      string `json:"action"`
 	CallID      string `json:"call_id"`
-	ChatID      string `json:"chat_id"`
+	CallChatID  string `json:"call_chat_id"`
 	UserID      string `json:"user_id"`
 	Kind        string `json:"kind"`
 	Title       string `json:"title"`
@@ -175,6 +175,7 @@ type CallPayload struct {
 	SenderID    string `json:"sender_id,omitempty"`
 	AvatarToken string `json:"avatar_token,omitempty"`
 	ExpiresAt   int64  `json:"expires_at"`
+	Reason      string `json:"reason,omitempty"`
 }
 
 func (s *Sender) SendCall(ctx context.Context, d postgres.NotificationDevice, p CallPayload, ttl time.Duration) error {

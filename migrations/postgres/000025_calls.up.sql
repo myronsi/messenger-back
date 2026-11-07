@@ -18,6 +18,7 @@ CREATE TABLE calls (
     summary_message_id BIGINT,
     summary_claimed_at TIMESTAMPTZ,
     summary_posted_at TIMESTAMPTZ,
+    room_deleted_at   TIMESTAMPTZ,
     CONSTRAINT calls_end_shape CHECK ((state = 'ended') = (ended_at IS NOT NULL AND end_reason IS NOT NULL))
 );
 

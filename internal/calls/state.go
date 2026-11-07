@@ -16,6 +16,13 @@ const (
 	reasonFailed    = "failed"
 )
 
+const (
+	stopAnswered = "answered"
+	stopDeclined = "declined"
+	stopMissed   = "missed"
+	stopEnded    = "ended"
+)
+
 type effects struct {
 	changed    bool
 	visible    bool
@@ -23,9 +30,18 @@ type effects struct {
 	deleteRoom bool
 	remove     []string
 	cancel     []int64
+	stopped    map[int64]string
 }
 
 func (fx *effects) show() { fx.changed, fx.visible = true, true }
+
+func (fx *effects) stop(userID int64, reason string) {
+	if fx.stopped == nil {
+		fx.stopped = map[int64]string{}
+	}
+	fx.cancel = append(fx.cancel, userID)
+	fx.stopped[userID] = reason
+}
 
 func find(c *postgres.Call, userID int64) *postgres.CallParticipant {
 	for i := range c.Participants {
@@ -50,8 +66,18 @@ func joinedSession(p *postgres.CallParticipant, session uuid.UUID) bool {
 	return p != nil && p.State == postgres.CallParticipantJoined && p.SessionID != nil && *p.SessionID == session
 }
 
+func everJoined(c *postgres.Call) int {
+	n := 0
+	for _, p := range c.Participants {
+		if p.JoinedAt != nil {
+			n++
+		}
+	}
+	return n
+}
+
 func outcome(c *postgres.Call) string {
-	if c.StartedAt != nil {
+	if c.StartedAt != nil && everJoined(c) >= 2 {
 		return reasonCompleted
 	}
 	return reasonCancelled
@@ -77,7 +103,7 @@ func endCall(c *postgres.Call, reason string, now time.Time, fx *effects) {
 			setLeft(p, now, fx)
 		case postgres.CallParticipantRinging:
 			p.State = postgres.CallParticipantMissed
-			fx.cancel = append(fx.cancel, p.UserID)
+			fx.stop(p.UserID, stopMissed)
 		}
 	}
 	c.State, c.EndReason, c.EndedAt, c.EmptySince = postgres.CallEnded, reason, at(now), nil
@@ -142,7 +168,7 @@ func join(c *postgres.Call, r joinRequest, now time.Time, fx *effects) error {
 		p = &c.Participants[len(c.Participants)-1]
 	}
 	if p.State == postgres.CallParticipantRinging {
-		fx.cancel = append(fx.cancel, r.userID)
+		fx.stop(r.userID, stopAnswered)
 	}
 	p.State, p.SessionID, p.IdentityKey = postgres.CallParticipantJoined, &r.session, r.identityKey
 	p.JoinedAt, p.LeftAt, p.DisconnectedAt = at(now), nil, nil
@@ -179,7 +205,7 @@ func decline(c *postgres.Call, userID int64, now time.Time, fx *effects) {
 		return
 	}
 	p.State = postgres.CallParticipantDeclined
-	fx.cancel = append(fx.cancel, userID)
+	fx.stop(userID, stopDeclined)
 	fx.show()
 	if c.Kind == postgres.ChatDirect {
 		endCall(c, reasonDeclined, now, fx)
@@ -196,7 +222,7 @@ func removeUser(c *postgres.Call, userID int64, now time.Time, fx *effects) {
 		leaveParticipant(c, p, now, fx)
 	case p != nil && p.State == postgres.CallParticipantRinging:
 		p.State = postgres.CallParticipantMissed
-		fx.cancel = append(fx.cancel, userID)
+		fx.stop(userID, stopEnded)
 		fx.show()
 	}
 	if c.State != postgres.CallEnded && userID == c.InitiatorID && c.StartedAt == nil {
@@ -249,7 +275,7 @@ func sweep(c *postgres.Call, now time.Time, grace time.Duration, fx *effects) {
 		for i := range c.Participants {
 			if p := &c.Participants[i]; p.State == postgres.CallParticipantRinging {
 				p.State = postgres.CallParticipantMissed
-				fx.cancel = append(fx.cancel, p.UserID)
+				fx.stop(p.UserID, stopMissed)
 				fx.show()
 			}
 		}
@@ -260,20 +286,29 @@ func sweep(c *postgres.Call, now time.Time, grace time.Duration, fx *effects) {
 	if c.State != postgres.CallEnded && joinedCount(c) == 0 && c.EmptySince != nil && now.Sub(*c.EmptySince) >= grace {
 		endCall(c, outcome(c), now, fx)
 	}
+	if c.State != postgres.CallEnded && initiatorAbsent(c, now, grace) {
+		endCall(c, outcome(c), now, fx)
+	}
+}
+
+func initiatorAbsent(c *postgres.Call, now time.Time, grace time.Duration) bool {
+	if c.Kind != postgres.ChatDirect || c.StartedAt == nil || now.Sub(*c.StartedAt) < grace || now.Before(c.RingExpiresAt) {
+		return false
+	}
+	p := find(c, c.InitiatorID)
+	return p != nil && p.JoinedAt == nil
 }
 
 func roomFinished(c *postgres.Call, now time.Time, fx *effects) {
 	if c.State == postgres.CallEnded {
 		return
 	}
-	reason := outcome(c)
-	for _, p := range c.Participants {
-		if p.State == postgres.CallParticipantJoined && p.DisconnectedAt == nil {
-			reason = reasonFailed
-			break
+	for i := range c.Participants {
+		if p := &c.Participants[i]; p.State == postgres.CallParticipantJoined && p.DisconnectedAt == nil {
+			p.DisconnectedAt = at(now)
+			fx.changed = true
 		}
 	}
-	endCall(c, reason, now, fx)
 }
 
 func mediaJoined(c *postgres.Call, userID int64, session uuid.UUID, fx *effects) {

@@ -66,6 +66,7 @@ type Call struct {
 	SummaryMessageID *int64
 	SummaryClaimedAt *time.Time
 	SummaryPostedAt  *time.Time
+	RoomDeletedAt    *time.Time
 }
 
 type CallIdentity struct {

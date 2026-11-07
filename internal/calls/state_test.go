@@ -60,7 +60,7 @@ func TestDirectCallEndsWhenTheInitiatorWhoNeverJoinedLeaves(t *testing.T) {
 	}
 	var fx effects
 	leave(&c, 1, t0.Add(time.Minute), &fx)
-	if c.State != postgres.CallEnded || c.EndReason != reasonCompleted || !fx.ended || len(fx.remove) != 1 || fx.remove[0] != Identity(2, b) {
+	if c.State != postgres.CallEnded || c.EndReason != reasonCancelled || !fx.ended || len(fx.remove) != 1 || fx.remove[0] != Identity(2, b) {
 		t.Fatalf("initiator left: %+v %+v", c, fx)
 	}
 
@@ -216,23 +216,78 @@ func TestMediaEvents(t *testing.T) {
 	}
 	fx = effects{}
 	roomFinished(&c, t0.Add(time.Minute), &fx)
-	if c.State != postgres.CallEnded || c.EndReason != reasonFailed {
-		t.Fatalf("room finished with someone in it: %+v", c)
+	if c.State != postgres.CallActive || !fx.changed || fx.visible || find(&c, 1).DisconnectedAt == nil {
+		t.Fatalf("room finished with someone in it: %+v %+v", c, fx)
+	}
+	fx = effects{}
+	mediaJoined(&c, 1, s1, &fx)
+	if find(&c, 1).DisconnectedAt != nil {
+		t.Fatal("a rejoin into the recreated room was not recorded")
 	}
 }
 
-func TestRoomFinishedAfterEveryoneDisconnected(t *testing.T) {
+func TestRoomFinishedLeavesEndingToTheServer(t *testing.T) {
 	c := newCall(postgres.ChatGroup, 2)
 	s1, s2 := uuid.New(), uuid.New()
 	mustJoin(t, &c, 1, s1, t0)
 	mustJoin(t, &c, 2, s2, t0)
 	var fx effects
 	mediaLeft(&c, 1, s1, t0.Add(time.Second), &fx)
-	mediaLeft(&c, 2, s2, t0.Add(time.Second), &fx)
 	fx = effects{}
-	roomFinished(&c, t0.Add(21*time.Second), &fx)
+	roomFinished(&c, t0.Add(10*time.Second), &fx)
+	if c.State != postgres.CallActive || *find(&c, 1).DisconnectedAt != t0.Add(time.Second) || *find(&c, 2).DisconnectedAt != t0.Add(10*time.Second) {
+		t.Fatalf("room finished: %+v", c)
+	}
+	fx = effects{}
+	sweep(&c, t0.Add(21*time.Second), 20*time.Second, &fx)
+	if find(&c, 1).State != postgres.CallParticipantLeft || find(&c, 2).State != postgres.CallParticipantJoined || c.State == postgres.CallEnded {
+		t.Fatalf("after the first grace: %+v", c)
+	}
+	sweep(&c, t0.Add(30*time.Second), 20*time.Second, &fx)
+	sweep(&c, t0.Add(50*time.Second), 20*time.Second, &fx)
 	if c.State != postgres.CallEnded || c.EndReason != reasonCompleted || joinedCount(&c) != 0 {
 		t.Fatalf("room finished after everyone left the media room: %+v", c)
+	}
+}
+
+func TestCompletedNeedsTwoParticipants(t *testing.T) {
+	g := newCall(postgres.ChatGroup, 2, 3)
+	mustJoin(t, &g, 2, uuid.New(), t0)
+	var fx effects
+	endCall(&g, outcome(&g), t0.Add(time.Minute), &fx)
+	if g.EndReason != reasonCancelled {
+		t.Fatalf("one participant: %s", g.EndReason)
+	}
+	g = newCall(postgres.ChatGroup, 2, 3)
+	mustJoin(t, &g, 2, uuid.New(), t0)
+	mustJoin(t, &g, 3, uuid.New(), t0)
+	fx = effects{}
+	endCall(&g, outcome(&g), t0.Add(time.Minute), &fx)
+	if g.EndReason != reasonCompleted {
+		t.Fatalf("two participants without the initiator: %s", g.EndReason)
+	}
+}
+
+func TestDirectCallEndsWhenTheInitiatorNeverJoins(t *testing.T) {
+	c := newCall(postgres.ChatDirect, 2)
+	mustJoin(t, &c, 2, uuid.New(), t0.Add(2*time.Second))
+	var fx effects
+	sweep(&c, t0.Add(25*time.Second), 20*time.Second, &fx)
+	if c.State != postgres.CallActive {
+		t.Fatal("ended within the ring window")
+	}
+	sweep(&c, t0.Add(30*time.Second), 20*time.Second, &fx)
+	if c.State != postgres.CallEnded || c.EndReason != reasonCancelled || joinedCount(&c) != 0 {
+		t.Fatalf("callee alone: %+v", c)
+	}
+
+	d := newCall(postgres.ChatDirect, 2)
+	mustJoin(t, &d, 2, uuid.New(), t0.Add(2*time.Second))
+	mustJoin(t, &d, 1, uuid.New(), t0.Add(3*time.Second))
+	fx = effects{}
+	sweep(&d, t0.Add(time.Minute), 20*time.Second, &fx)
+	if d.State != postgres.CallActive || fx.changed {
+		t.Fatalf("both joined: %+v", d)
 	}
 }
 

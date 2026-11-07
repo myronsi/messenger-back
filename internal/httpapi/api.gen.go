@@ -17937,6 +17937,25 @@ func (response StartChatCall429ApplicationProblemPlusJSONResponse) VisitStartCha
 	return err
 }
 
+type StartChatCall503ApplicationProblemPlusJSONResponse struct {
+	CallsUnavailableApplicationProblemPlusJSONResponse
+}
+
+func (response StartChatCall503ApplicationProblemPlusJSONResponse) VisitStartChatCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListChatMediaRequestObject struct {
 	ChatId ChatId `json:"chat_id"`
 	Params ListChatMediaParams

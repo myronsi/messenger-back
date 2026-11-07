@@ -27,7 +27,10 @@ notifications turned off skipped) and sends each one at once, in the background 
 `notifications.Sender.SendCall` with `TTL` = remaining ring time, `Urgency: high` and `Topic: call-<call_id>`, so a
 later push of the same call replaces it. When ringing stops (answered, declined, missed, ended) the same users get an
 `action: cancel` push with the same topic. Previews decide the title (caller or group name, else `Messenger`) and add
-`sender_id` and an avatar token; `expires_at` is in unix seconds. Chat mutes do not apply. An expired destination is
+`sender_id` and an avatar token; `expires_at` is in unix seconds. The chat id is sent as `call_chat_id`, not
+`chat_id`, so older service workers, which treat any push with a numeric `chat_id` as a new message, reject call
+pushes. `cancel` pushes carry `reason`: `answered`, `declined`, `missed` or `ended` ([calls.md](calls.md#push)).
+Chat mutes do not apply. An expired destination is
 removed like in the queue. Payloads and destinations are never logged.
 
 ## Configuration

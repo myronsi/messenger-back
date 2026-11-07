@@ -1,6 +1,7 @@
 package calls
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"slices"
@@ -19,7 +20,7 @@ const (
 	pushConcurrency = 8
 )
 
-func (s *Service) push(ctx context.Context, c postgres.Call, users []int64, action string) {
+func (s *Service) push(ctx context.Context, c postgres.Call, users []int64, action string, reasons map[int64]string) {
 	if s.d.Push == nil || len(users) == 0 {
 		return
 	}
@@ -55,17 +56,20 @@ func (s *Service) push(ctx context.Context, c postgres.Call, users []int64, acti
 		}
 		wg.Go(func() {
 			defer func() { <-slots }()
-			if !s.pushOne(ctx, c, d, action, title, ttl) {
+			if !s.pushOne(ctx, c, d, action, title, ttl, reasons[d.UserID]) {
 				stop()
 			}
 		})
 	}
 }
 
-func (s *Service) pushOne(ctx context.Context, c postgres.Call, d postgres.CallPushDevice, action, title string, ttl time.Duration) bool {
+func (s *Service) pushOne(ctx context.Context, c postgres.Call, d postgres.CallPushDevice, action, title string, ttl time.Duration, reason string) bool {
 	p := notifications.CallPayload{
-		Type: "call", Action: action, CallID: strconv.FormatInt(c.ID, 10), ChatID: strconv.FormatInt(c.ChatID, 10),
+		Type: "call", Action: action, CallID: strconv.FormatInt(c.ID, 10), CallChatID: strconv.FormatInt(c.ChatID, 10),
 		UserID: strconv.FormatInt(d.UserID, 10), Kind: string(c.Kind), Title: "Messenger", ExpiresAt: c.RingExpiresAt.Unix(),
+	}
+	if action == actionCancel {
+		p.Reason = cmp.Or(reason, stopEnded)
 	}
 	if action == actionRing && d.Previews {
 		p.Preview, p.Title, p.SenderID = true, title, strconv.FormatInt(c.InitiatorID, 10)

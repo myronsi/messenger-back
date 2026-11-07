@@ -86,3 +86,53 @@ func (s *Service) Blocked(ctx context.Context, blockerID, blockedID int64) {
 		s.d.Log.WarnContext(ctx, "end call of a blocked pair", "call_id", c.ID, "error", err)
 	}
 }
+
+type repairPlan struct {
+	blocked  bool
+	removed  []int64
+	sessions map[uuid.UUID]bool
+}
+
+func (s *Service) repair(ctx context.Context) {
+	rows, err := s.d.Store.Calls().Repairs(ctx, 4*sweepBatch)
+	if err != nil {
+		if ctx.Err() == nil {
+			s.d.Log.WarnContext(ctx, "calls to repair", "error", err)
+		}
+		return
+	}
+	plans := map[int64]*repairPlan{}
+	var order []int64
+	for _, r := range rows {
+		p := plans[r.CallID]
+		if p == nil {
+			p = &repairPlan{sessions: map[uuid.UUID]bool{}}
+			plans[r.CallID] = p
+			order = append(order, r.CallID)
+		}
+		switch {
+		case r.Blocked:
+			p.blocked = true
+		case r.Removed:
+			p.removed = append(p.removed, r.UserID)
+		case r.SessionEnded && r.SessionID != nil:
+			p.sessions[*r.SessionID] = true
+		}
+	}
+	for _, id := range order {
+		p := plans[id]
+		if _, err := s.apply(ctx, id, func(c *postgres.Call, now time.Time, fx *effects) error {
+			if p.blocked && c.Kind == postgres.ChatDirect {
+				endCall(c, outcome(c), now, fx)
+				return nil
+			}
+			for _, uid := range p.removed {
+				removeUser(c, uid, now, fx)
+			}
+			removeSessions(c, p.sessions, now, fx)
+			return nil
+		}); err != nil && !errors.Is(err, ErrNotFound) && ctx.Err() == nil {
+			s.d.Log.WarnContext(ctx, "repair call", "call_id", id, "error", err)
+		}
+	}
+}

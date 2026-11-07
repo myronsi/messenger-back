@@ -2,6 +2,38 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.15
+
+- End-to-end encrypted audio calls in direct chats and groups (tag `calls`, see `docs/calls.md` and
+  `docs/calls-e2ee.md`). `GET /calls/config` (`CallConfig`: `enabled`, `max_participants`,
+  `ring_timeout_seconds`) tells clients whether to show call controls; with `enabled: false` they hide them.
+- `PUT /me/call-identity` (`CallIdentityRequest`, `204`) registers the session's P-256 call identity key
+  (`CallIdentityKey`, 87 characters of base64url); a new key raises the epoch of a call the session is in.
+- `GET /calls` (`CallList`) lists the user's calls that are not over; clients load it after every (re)connect.
+  `GET /chats/{chat_id}/call` returns the chat's current call, `POST /chats/{chat_id}/call` (`StartCallRequest`
+  with a required `client_request_id`, idempotent for 24 hours) starts one (`201`) or returns the running one
+  (`200`). `GET /calls/{call_id}` reads a call, ended calls for 90 days.
+- `POST /calls/{call_id}/join` (optional `JoinCallRequest` with `takeover`) answers or joins and returns
+  `CallJoin` (`call` and a short-lived `CallGrant`: `url`, `token`, `identity`, `expires_at`);
+  `POST /calls/{call_id}/grant` renews the grant for the session that joined. `POST /calls/{call_id}/decline`,
+  `/leave` and `/end` answer `204`.
+- `GET /calls/{call_id}/keys` (`CallKeyEnvelopeList`) and `POST /calls/{call_id}/keys` (`SendCallKeysRequest` with
+  1 to 64 `OutgoingCallKeyEnvelope`) relay opaque HPKE envelopes (`CallKeyEnvelope`) for the current epoch.
+- New schemas `Call` (`kind`, `state`, `end_reason`, `epoch`, `version`, `participants`, timestamps),
+  `CallState` (`ringing`, `active`, `ended`), `CallEndReason` (`completed`, `missed`, `declined`, `cancelled`,
+  `failed`), `CallParticipant` and `CallParticipantState` (`ringing`, `joined`, `declined`, `missed`, `left`).
+- New error codes `calls_unavailable`, `calls_not_allowed`, `call_identity_required`, `call_full`, `call_ended`,
+  `already_in_call` and `stale_epoch`. Every call operation except `GET /calls/config` can answer `503`
+  (`CallsUnavailable`, with `Retry-After` when calls are only away for a moment). `403 calls_not_allowed` when the
+  peer of a direct chat has calls off or one user blocked the other; `409` for `already_in_call`, `call_ended`,
+  `call_full` and `stale_epoch`; `422 call_identity_required` when joining without a call identity.
+- New WebSocket events `call_updated` (the whole `Call` to every chat member; keep the highest `version`) and
+  `call_keys` (a `CallKeyEnvelopeList` for the recipient session only).
+- `PrivacySettings` has a required `calls_enabled` (default `true`) and `UpdatePrivacySettingsRequest` an optional
+  one: with `false` nobody can ring the user.
+- `SystemEventKind` adds `call`: one `system` message per call, posted when it ends, with `actor` the initiator and
+  `SystemEvent.call` a `CallSummary` (`call_id`, `kind`, `outcome`, `duration_seconds`).
+
 ## 2.1.0-alpha.14
 
 - New schema `Location` (`city`, `country_code` (ISO 3166-1 alpha-2), `country` (English name), each nullable): the

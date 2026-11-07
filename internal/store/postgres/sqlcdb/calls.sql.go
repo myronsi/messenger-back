@@ -96,7 +96,8 @@ func (q *Queries) DeleteCallIdentities(ctx context.Context, sessionIds []uuid.UU
 }
 
 const deleteOrphanedCalls = `-- name: DeleteOrphanedCalls :execrows
-DELETE FROM calls WHERE chat_id IS NULL AND state = 'ended'
+DELETE FROM calls
+WHERE chat_id IS NULL AND state = 'ended' AND (room_deleted_at IS NOT NULL OR ended_at < now() - interval '1 hour')
 `
 
 func (q *Queries) DeleteOrphanedCalls(ctx context.Context) (int64, error) {
@@ -117,6 +118,9 @@ WHERE c.state <> 'ended' AND (
     OR (c.empty_since IS NOT NULL AND c.empty_since <= $3)
     OR EXISTS (SELECT 1 FROM call_participants p
                WHERE p.call_id = c.id AND p.state = 'joined' AND p.disconnected_at <= $3)
+    OR (c.kind = 'direct' AND c.started_at <= $3 AND c.ring_expires_at <= $2
+        AND EXISTS (SELECT 1 FROM call_participants p
+                    WHERE p.call_id = c.id AND p.user_id = c.initiator_id AND p.joined_at IS NULL))
 )
 ORDER BY c.id
 LIMIT $4
@@ -164,7 +168,7 @@ func (q *Queries) FinishCallSummary(ctx context.Context, id int64) error {
 }
 
 const getCall = `-- name: GetCall :one
-SELECT id, chat_id, kind, initiator_id, state, end_reason, epoch, version, max_participants, created_at, started_at, ended_at, ring_expires_at, empty_since, summary_message_id, summary_claimed_at, summary_posted_at FROM calls WHERE id = $1
+SELECT id, chat_id, kind, initiator_id, state, end_reason, epoch, version, max_participants, created_at, started_at, ended_at, ring_expires_at, empty_since, summary_message_id, summary_claimed_at, summary_posted_at, room_deleted_at FROM calls WHERE id = $1
 `
 
 func (q *Queries) GetCall(ctx context.Context, id int64) (Call, error) {
@@ -188,6 +192,7 @@ func (q *Queries) GetCall(ctx context.Context, id int64) (Call, error) {
 		&i.SummaryMessageID,
 		&i.SummaryClaimedAt,
 		&i.SummaryPostedAt,
+		&i.RoomDeletedAt,
 	)
 	return i, err
 }
@@ -229,7 +234,7 @@ func (q *Queries) GetCallStartRequest(ctx context.Context, arg GetCallStartReque
 const insertCall = `-- name: InsertCall :one
 INSERT INTO calls (chat_id, kind, initiator_id, state, max_participants, ring_expires_at)
 VALUES ($1, $2, $3, 'ringing', $4, $5)
-RETURNING id, chat_id, kind, initiator_id, state, end_reason, epoch, version, max_participants, created_at, started_at, ended_at, ring_expires_at, empty_since, summary_message_id, summary_claimed_at, summary_posted_at
+RETURNING id, chat_id, kind, initiator_id, state, end_reason, epoch, version, max_participants, created_at, started_at, ended_at, ring_expires_at, empty_since, summary_message_id, summary_claimed_at, summary_posted_at, room_deleted_at
 `
 
 type InsertCallParams struct {
@@ -267,6 +272,7 @@ func (q *Queries) InsertCall(ctx context.Context, arg InsertCallParams) (Call, e
 		&i.SummaryMessageID,
 		&i.SummaryClaimedAt,
 		&i.SummaryPostedAt,
+		&i.RoomDeletedAt,
 	)
 	return i, err
 }
@@ -326,6 +332,17 @@ func (q *Queries) JoinedCallsOfSessions(ctx context.Context, sessionIds []uuid.U
 		return nil, err
 	}
 	return items, nil
+}
+
+const keyShareChat = `-- name: KeyShareChat :one
+SELECT id FROM chats WHERE id = $1 FOR KEY SHARE
+`
+
+func (q *Queries) KeyShareChat(ctx context.Context, id int64) (int64, error) {
+	row := q.db.QueryRow(ctx, keyShareChat, id)
+	var id_2 int64
+	err := row.Scan(&id_2)
+	return id_2, err
 }
 
 const listCallCandidates = `-- name: ListCallCandidates :many
@@ -496,6 +513,70 @@ func (q *Queries) ListCallPushDevices(ctx context.Context, userIds []int64) ([]L
 	return items, nil
 }
 
+const listCallRepairs = `-- name: ListCallRepairs :many
+SELECT r.call_id, r.user_id, r.session_id, r.session_ended, r.removed, r.blocked
+FROM (
+    SELECT p.call_id, p.user_id, p.session_id,
+           (p.state = 'joined' AND (s.id IS NULL OR s.revoked_at IS NOT NULL OR s.expires_at <= now()))::bool AS session_ended,
+           (NOT EXISTS (SELECT 1 FROM participants m WHERE m.chat_id = c.chat_id AND m.user_id = p.user_id))::bool AS removed,
+           (c.kind = 'direct' AND EXISTS (
+               SELECT 1 FROM call_participants o
+               JOIN user_blocks b ON (b.blocker_id = p.user_id AND b.blocked_id = o.user_id)
+                                  OR (b.blocker_id = o.user_id AND b.blocked_id = p.user_id)
+               WHERE o.call_id = p.call_id AND o.user_id <> p.user_id))::bool AS blocked
+    FROM calls c
+    JOIN call_participants p ON p.call_id = c.id
+    LEFT JOIN user_sessions s ON s.id = p.session_id
+    WHERE c.state <> 'ended' AND c.chat_id IS NOT NULL
+      AND ($1::bigint IS NULL OR c.id = $1::bigint)
+      AND (p.state IN ('joined', 'ringing') OR (p.user_id = c.initiator_id AND c.started_at IS NULL))
+) r
+WHERE r.session_ended OR r.removed OR r.blocked
+ORDER BY r.call_id, r.user_id
+LIMIT $2
+`
+
+type ListCallRepairsParams struct {
+	CallID  *int64
+	MaxRows int32
+}
+
+type ListCallRepairsRow struct {
+	CallID       int64
+	UserID       int64
+	SessionID    *uuid.UUID
+	SessionEnded bool
+	Removed      bool
+	Blocked      bool
+}
+
+func (q *Queries) ListCallRepairs(ctx context.Context, arg ListCallRepairsParams) ([]ListCallRepairsRow, error) {
+	rows, err := q.db.Query(ctx, listCallRepairs, arg.CallID, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCallRepairsRow{}
+	for rows.Next() {
+		var i ListCallRepairsRow
+		if err := rows.Scan(
+			&i.CallID,
+			&i.UserID,
+			&i.SessionID,
+			&i.SessionEnded,
+			&i.Removed,
+			&i.Blocked,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listParticipantsOfCalls = `-- name: ListParticipantsOfCalls :many
 SELECT call_id, user_id, position, state, session_id, identity_key, joined_at, left_at, disconnected_at FROM call_participants WHERE call_id = ANY($1::bigint[]) ORDER BY call_id, position, user_id
 `
@@ -531,7 +612,7 @@ func (q *Queries) ListParticipantsOfCalls(ctx context.Context, callIds []int64) 
 }
 
 const listUserCalls = `-- name: ListUserCalls :many
-SELECT id, chat_id, kind, initiator_id, state, end_reason, epoch, version, max_participants, created_at, started_at, ended_at, ring_expires_at, empty_since, summary_message_id, summary_claimed_at, summary_posted_at FROM calls
+SELECT id, chat_id, kind, initiator_id, state, end_reason, epoch, version, max_participants, created_at, started_at, ended_at, ring_expires_at, empty_since, summary_message_id, summary_claimed_at, summary_posted_at, room_deleted_at FROM calls
 WHERE id IN (
     SELECT c.id FROM calls c
     JOIN call_participants p ON p.call_id = c.id AND p.user_id = $1
@@ -570,6 +651,7 @@ func (q *Queries) ListUserCalls(ctx context.Context, userID int64) ([]Call, erro
 			&i.SummaryMessageID,
 			&i.SummaryClaimedAt,
 			&i.SummaryPostedAt,
+			&i.RoomDeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -582,7 +664,7 @@ func (q *Queries) ListUserCalls(ctx context.Context, userID int64) ([]Call, erro
 }
 
 const lockCall = `-- name: LockCall :one
-SELECT id, chat_id, kind, initiator_id, state, end_reason, epoch, version, max_participants, created_at, started_at, ended_at, ring_expires_at, empty_since, summary_message_id, summary_claimed_at, summary_posted_at FROM calls WHERE id = $1 FOR UPDATE
+SELECT id, chat_id, kind, initiator_id, state, end_reason, epoch, version, max_participants, created_at, started_at, ended_at, ring_expires_at, empty_since, summary_message_id, summary_claimed_at, summary_posted_at, room_deleted_at FROM calls WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) LockCall(ctx context.Context, id int64) (Call, error) {
@@ -606,6 +688,7 @@ func (q *Queries) LockCall(ctx context.Context, id int64) (Call, error) {
 		&i.SummaryMessageID,
 		&i.SummaryClaimedAt,
 		&i.SummaryPostedAt,
+		&i.RoomDeletedAt,
 	)
 	return i, err
 }
@@ -624,6 +707,15 @@ func (q *Queries) LockCallIdentity(ctx context.Context, sessionID uuid.UUID) (Ca
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const markCallRoomDeleted = `-- name: MarkCallRoomDeleted :exec
+UPDATE calls SET room_deleted_at = now() WHERE id = $1 AND room_deleted_at IS NULL
+`
+
+func (q *Queries) MarkCallRoomDeleted(ctx context.Context, id int64) error {
+	_, err := q.db.Exec(ctx, markCallRoomDeleted, id)
+	return err
 }
 
 const openCallIDs = `-- name: OpenCallIDs :many
@@ -651,7 +743,7 @@ func (q *Queries) OpenCallIDs(ctx context.Context, maxRows int32) ([]int64, erro
 }
 
 const openCallInChat = `-- name: OpenCallInChat :one
-SELECT id, chat_id, kind, initiator_id, state, end_reason, epoch, version, max_participants, created_at, started_at, ended_at, ring_expires_at, empty_since, summary_message_id, summary_claimed_at, summary_posted_at FROM calls WHERE chat_id = $1 AND state <> 'ended'
+SELECT id, chat_id, kind, initiator_id, state, end_reason, epoch, version, max_participants, created_at, started_at, ended_at, ring_expires_at, empty_since, summary_message_id, summary_claimed_at, summary_posted_at, room_deleted_at FROM calls WHERE chat_id = $1 AND state <> 'ended'
 `
 
 func (q *Queries) OpenCallInChat(ctx context.Context, chatID *int64) (Call, error) {
@@ -675,8 +767,42 @@ func (q *Queries) OpenCallInChat(ctx context.Context, chatID *int64) (Call, erro
 		&i.SummaryMessageID,
 		&i.SummaryClaimedAt,
 		&i.SummaryPostedAt,
+		&i.RoomDeletedAt,
 	)
 	return i, err
+}
+
+const pendingCallRooms = `-- name: PendingCallRooms :many
+SELECT id FROM calls
+WHERE state = 'ended' AND room_deleted_at IS NULL AND ended_at > $1 AND ended_at <= $2
+ORDER BY ended_at
+LIMIT $3
+`
+
+type PendingCallRoomsParams struct {
+	Since   *time.Time
+	Until   *time.Time
+	MaxRows int32
+}
+
+func (q *Queries) PendingCallRooms(ctx context.Context, arg PendingCallRoomsParams) ([]int64, error) {
+	rows, err := q.db.Query(ctx, pendingCallRooms, arg.Since, arg.Until, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int64{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const pendingCallSummaries = `-- name: PendingCallSummaries :many
@@ -826,7 +952,7 @@ func (q *Queries) SaveCallStartRequest(ctx context.Context, arg SaveCallStartReq
 }
 
 const shareCall = `-- name: ShareCall :one
-SELECT id, chat_id, kind, initiator_id, state, end_reason, epoch, version, max_participants, created_at, started_at, ended_at, ring_expires_at, empty_since, summary_message_id, summary_claimed_at, summary_posted_at FROM calls WHERE id = $1 FOR SHARE
+SELECT id, chat_id, kind, initiator_id, state, end_reason, epoch, version, max_participants, created_at, started_at, ended_at, ring_expires_at, empty_since, summary_message_id, summary_claimed_at, summary_posted_at, room_deleted_at FROM calls WHERE id = $1 FOR SHARE
 `
 
 func (q *Queries) ShareCall(ctx context.Context, id int64) (Call, error) {
@@ -850,6 +976,7 @@ func (q *Queries) ShareCall(ctx context.Context, id int64) (Call, error) {
 		&i.SummaryMessageID,
 		&i.SummaryClaimedAt,
 		&i.SummaryPostedAt,
+		&i.RoomDeletedAt,
 	)
 	return i, err
 }

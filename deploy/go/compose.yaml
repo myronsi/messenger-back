@@ -86,7 +86,7 @@ services:
       - "${CALLS_TURN_RELAY_PORT_START:-50004}-${CALLS_TURN_RELAY_PORT_END:-50100}:${CALLS_TURN_RELAY_PORT_START:-50004}-${CALLS_TURN_RELAY_PORT_END:-50100}/udp"
       # TURN/TLS: 0.0.0.0:5349 with its own Security Group rule, or 127.0.0.1:5349 behind nginx's stream
       # block on 443 (then CALLS_TURN_TLS_PORT=443, the port browsers are told).
-      - "${CALLS_TURN_TLS_PUBLISH:-0.0.0.0:5349}:${CALLS_TURN_TLS_PORT:-5349}/tcp"
+      - "${CALLS_TURN_TLS_PUBLISH:-0.0.0.0:${CALLS_TURN_TLS_PORT:-5349}}:${CALLS_TURN_TLS_PORT:-5349}/tcp"
     # Media must not starve messaging and the stores on the 2 vCPU / 8 GiB host: a hard cap, and half the CPU
     # weight of the other containers when they compete.
     cpus: ${CALLS_CPUS:-1.0}

@@ -6,6 +6,7 @@ import (
 	"crypto/ecdh"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -44,6 +45,8 @@ type recorder struct {
 	deleted []string
 	present map[string][]string
 	failMed bool
+	failDel bool
+	depart  []time.Duration
 	sysIDs  []int64
 	nextID  int64
 	failSys bool
@@ -87,13 +90,14 @@ func (r *recorder) SendCall(_ context.Context, _ postgres.NotificationDevice, p 
 	return nil
 }
 
-func (r *recorder) CreateRoom(_ context.Context, room string, _, _ time.Duration, _ int) error {
+func (r *recorder) CreateRoom(_ context.Context, room string, empty, departure time.Duration, _ int) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.failMed {
 		return errors.New("media down")
 	}
 	r.created = append(r.created, room)
+	r.depart = append(r.depart, empty, departure)
 	return nil
 }
 
@@ -107,6 +111,9 @@ func (r *recorder) RemoveParticipant(_ context.Context, _, identity string) erro
 func (r *recorder) DeleteRoom(_ context.Context, room string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.failDel {
+		return errors.New("media down")
+	}
 	r.deleted = append(r.deleted, room)
 	return nil
 }
@@ -124,7 +131,7 @@ func (r *recorder) snapshot() recorder {
 		updates: append([]postgres.Call(nil), r.updates...), keys: append([]keyEvent(nil), r.keys...),
 		system: append([]messages.SystemEvent(nil), r.system...), pushes: append([]notifications.CallPayload(nil), r.pushes...),
 		ttls: append([]time.Duration(nil), r.ttls...), created: append([]string(nil), r.created...),
-		removed: append([]string(nil), r.removed...), deleted: append([]string(nil), r.deleted...),
+		removed: append([]string(nil), r.removed...), deleted: append([]string(nil), r.deleted...), depart: append([]time.Duration(nil), r.depart...),
 		sysIDs: append([]int64(nil), r.sysIDs...),
 	}
 }
@@ -288,6 +295,17 @@ func TestDirectCallLifecycle(t *testing.T) {
 		rec.pushes[0].CallID != strconv.FormatInt(c.ID, 10) || rec.pushes[0].AvatarToken == "" || rec.ttls[0] <= 0 || rec.ttls[0] > 30*time.Second {
 		t.Fatalf("ring push: %+v %v", rec.pushes, rec.ttls)
 	}
+	raw, err := json.Marshal(rec.pushes[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fields map[string]any
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := fields["chat_id"]; ok || fields["call_chat_id"] != strconv.FormatInt(chat, 10) {
+		t.Fatalf("a call push must not look like a message push: %s", raw)
+	}
 
 	if _, _, err := e.svc.Join(ctx, alice, uuid.New(), c.ID, false); !errors.Is(err, ErrIdentityRequired) {
 		t.Fatalf("join without identity: %v", err)
@@ -365,6 +383,12 @@ func TestDirectCallLifecycle(t *testing.T) {
 	}
 	if len(rec.deleted) != 1 || len(rec.created) == 0 {
 		t.Fatalf("media: created %v deleted %v", rec.created, rec.deleted)
+	}
+	if len(rec.removed) != 0 {
+		t.Fatalf("ending a call deletes the room instead of removing each identity: %v", rec.removed)
+	}
+	if rec.depart[0] < 2*20*time.Second+30*time.Second || rec.depart[1] < 2*20*time.Second+30*time.Second {
+		t.Fatalf("media room timeouts must exceed the server's grace: %v", rec.depart[:2])
 	}
 	versions := map[int64]bool{}
 	for _, u := range rec.updates {
@@ -690,6 +714,7 @@ func TestRemovalFromOutside(t *testing.T) {
 	}
 	e.svc.Sweep(ctx)
 	e.settle()
+	e.svc.Sweep(ctx)
 	if _, err := e.pg.Calls().Get(ctx, call.ID); !errors.Is(err, postgres.ErrNotFound) {
 		t.Fatalf("call of a deleted chat kept: %v", err)
 	}
@@ -843,9 +868,37 @@ func TestWebhooks(t *testing.T) {
 	}
 	send("EV_5", "room_finished", "")
 	e.settle()
-	if got, _ := e.svc.Get(ctx, a, call.ID); got.State != postgres.CallEnded || got.EndReason != reasonFailed {
-		t.Fatalf("room finished: %+v", got)
+	got, _ = e.svc.Get(ctx, a, call.ID)
+	if got.State != postgres.CallActive || find(&got, a).DisconnectedAt == nil {
+		t.Fatalf("room finished must only mark the joined sessions as disconnected: %+v", got)
 	}
+	if _, err := e.svc.Grant(ctx, a, sa, call.ID); err != nil {
+		t.Fatalf("grant after the room finished: %v", err)
+	}
+	if rec := e.rec.snapshot(); rec.created[len(rec.created)-1] != room {
+		t.Fatalf("the grant recreates the room: %v", rec.created)
+	}
+	e.advance(21 * time.Second)
+	e.svc.Sweep(ctx)
+	e.advance(21 * time.Second)
+	e.svc.Sweep(ctx)
+	e.settle()
+	if got, _ := e.svc.Get(ctx, a, call.ID); got.State != postgres.CallEnded || got.EndReason != reasonCompleted {
+		t.Fatalf("after the graces: %+v", got)
+	}
+
+	gone := e.start(a, e.group(a, b))
+	if _, err := e.pg.Pool().Exec(ctx, `DELETE FROM calls WHERE id = $1`, gone.ID); err != nil {
+		t.Fatal(err)
+	}
+	room = RoomName(gone.ID)
+	if code := send("EV_8", "participant_joined", Identity(a, sa)); code != 200 {
+		t.Fatalf("participant_joined for a deleted call: %d", code)
+	}
+	if rec := e.rec.snapshot(); rec.deleted[len(rec.deleted)-1] != room {
+		t.Fatalf("the room of a deleted call stays open: %v", rec.deleted)
+	}
+	room = RoomName(call.ID)
 
 	body := `{"id":"EV_6","event":"room_finished","room":{"name":"` + room + `"}}`
 	token := webhookToken(t, testKey, testSecret, []byte(body), time.Now().Add(time.Minute))
@@ -973,8 +1026,12 @@ func TestDirectCallEndsWhenTheInitiatorLeavesWithoutJoining(t *testing.T) {
 	if err := e.svc.Leave(ctx, a, call.ID); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := e.svc.Get(ctx, b, call.ID); got.State != postgres.CallEnded || got.EndReason != reasonCompleted || joinedCount(&got) != 0 {
+	if got, _ := e.svc.Get(ctx, b, call.ID); got.State != postgres.CallEnded || got.EndReason != reasonCancelled || joinedCount(&got) != 0 {
 		t.Fatalf("after the initiator left: %+v", got)
+	}
+	e.settle()
+	if rec := e.rec.snapshot(); len(rec.system) != 1 || rec.system[0].Call.Outcome != reasonCancelled || rec.system[0].Call.DurationSeconds != nil {
+		t.Fatalf("nobody talked, so no duration: %+v", rec.system)
 	}
 }
 

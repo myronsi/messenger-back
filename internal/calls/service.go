@@ -5,7 +5,9 @@ import (
 	"crypto/ecdh"
 	"encoding/base64"
 	"errors"
+	"maps"
 	"regexp"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,6 +21,11 @@ const (
 	maxEnc            = 128
 	maxCiphertext     = 256
 	roomEmptyTimeout  = 120 * time.Second
+	roomTimeoutMargin = time.Minute
+	publishTimeout    = 5 * time.Second
+	mediaCallTimeout  = 5 * time.Second
+	roomDeleteTimeout = 10 * time.Second
+	removeConcurrency = 4
 )
 
 var base64url = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
@@ -36,25 +43,11 @@ type OutgoingEnvelope struct {
 	Ciphertext         string
 }
 
-type step func(c *postgres.Call, g postgres.CallGuard) (bool, error)
-
 func (s *Service) apply(ctx context.Context, callID int64, fn func(c *postgres.Call, now time.Time, fx *effects) error) (postgres.Call, error) {
-	return s.commit(ctx, func(st step) (postgres.Call, bool, error) {
-		return s.d.Store.Calls().Update(ctx, callID, func(c *postgres.Call) (bool, error) { return st(c, postgres.CallGuard{}) })
-	}, func(c *postgres.Call, _ postgres.CallGuard, now time.Time, fx *effects) error { return fn(c, now, fx) })
-}
-
-func (s *Service) applyAs(ctx context.Context, callID int64, m postgres.CallMember, fn func(c *postgres.Call, g postgres.CallGuard, now time.Time, fx *effects) error) (postgres.Call, error) {
-	return s.commit(ctx, func(st step) (postgres.Call, bool, error) {
-		return s.d.Store.Calls().UpdateAsMember(ctx, callID, m, st)
-	}, fn)
-}
-
-func (s *Service) commit(ctx context.Context, update func(st step) (postgres.Call, bool, error), fn func(c *postgres.Call, g postgres.CallGuard, now time.Time, fx *effects) error) (postgres.Call, error) {
 	var fx effects
-	c, changed, err := update(func(c *postgres.Call, g postgres.CallGuard) (bool, error) {
+	c, changed, err := s.d.Store.Calls().Update(ctx, callID, func(c *postgres.Call) (bool, error) {
 		fx = effects{}
-		if err := fn(c, g, s.now(), &fx); err != nil {
+		if err := fn(c, s.now(), &fx); err != nil {
 			return false, err
 		}
 		if fx.visible {
@@ -62,18 +55,50 @@ func (s *Service) commit(ctx context.Context, update func(st step) (postgres.Cal
 		}
 		return fx.changed, nil
 	})
-	switch {
-	case errors.Is(err, postgres.ErrNotFound):
-		return postgres.Call{}, ErrNotFound
-	case errors.Is(err, postgres.ErrConflict):
-		return postgres.Call{}, ErrAlreadyInCall
-	case err != nil && isServiceError(err):
+	if err := storeError(err); err != nil {
 		return postgres.Call{}, err
-	case err != nil:
-		return postgres.Call{}, unavailable(err)
 	}
 	s.after(ctx, c, fx, changed)
 	return c, nil
+}
+
+func (s *Service) applyAs(ctx context.Context, callID int64, m postgres.CallMember, fn func(c *postgres.Call, g postgres.CallGuard, now time.Time, fx, left *effects) error) (postgres.Call, error) {
+	var fx, lfx effects
+	res, err := s.d.Store.Calls().UpdateAsMember(ctx, callID, m, func(c *postgres.Call, g postgres.CallGuard) (bool, error) {
+		fx, lfx = effects{}, effects{}
+		if err := fn(c, g, s.now(), &fx, &lfx); err != nil {
+			return false, err
+		}
+		if fx.visible {
+			c.Version++
+		}
+		if g.Left != nil && lfx.visible {
+			g.Left.Version++
+		}
+		return fx.changed, nil
+	})
+	if err := storeError(err); err != nil {
+		return postgres.Call{}, err
+	}
+	if res.LeftChanged {
+		s.after(ctx, res.Left, lfx, true)
+	}
+	s.after(ctx, res.Call, fx, res.Changed)
+	return res.Call, nil
+}
+
+func storeError(err error) error {
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, postgres.ErrNotFound):
+		return ErrNotFound
+	case errors.Is(err, postgres.ErrConflict):
+		return ErrAlreadyInCall
+	case isServiceError(err):
+		return err
+	}
+	return unavailable(err)
 }
 
 func isServiceError(err error) bool {
@@ -97,31 +122,59 @@ func (s *Service) after(ctx context.Context, c postgres.Call, fx effects, change
 	}
 	if len(fx.cancel) > 0 && changed {
 		users := append([]int64(nil), fx.cancel...)
-		s.background(ctx, func(ctx context.Context) { s.push(ctx, c, users, actionCancel) })
+		reasons := maps.Clone(fx.stopped)
+		s.background(ctx, func(ctx context.Context) { s.push(ctx, c, users, actionCancel, reasons) })
 	}
-	if s.d.Media == nil || (len(fx.remove) == 0 && !fx.deleteRoom) {
-		return
+	switch {
+	case fx.deleteRoom && changed:
+		s.background(ctx, func(ctx context.Context) { s.deleteRoom(ctx, c.ID) })
+	case len(fx.remove) > 0 && s.d.Media != nil:
+		remove := append([]string(nil), fx.remove...)
+		s.background(ctx, func(ctx context.Context) { s.removeIdentities(ctx, c.ID, remove) })
 	}
-	remove, deleteRoom := append([]string(nil), fx.remove...), fx.deleteRoom && changed
-	s.background(ctx, func(ctx context.Context) {
-		room := RoomName(c.ID)
-		for _, id := range remove {
-			if err := s.d.Media.RemoveParticipant(ctx, room, id); err != nil {
-				s.d.Log.WarnContext(ctx, "remove call participant from the media room", "call_id", c.ID, "error", err)
-			}
+}
+
+func (s *Service) deleteRoom(ctx context.Context, callID int64) bool {
+	if s.d.Media != nil {
+		dctx, cancel := context.WithTimeout(ctx, roomDeleteTimeout)
+		err := s.d.Media.DeleteRoom(dctx, RoomName(callID))
+		cancel()
+		if err != nil {
+			s.d.Log.WarnContext(ctx, "delete media room", "call_id", callID, "error", err)
+			return false
 		}
-		if deleteRoom {
-			if err := s.d.Media.DeleteRoom(ctx, room); err != nil {
-				s.d.Log.WarnContext(ctx, "delete media room", "call_id", c.ID, "error", err)
+	}
+	if err := s.d.Store.Calls().RoomDeleted(context.WithoutCancel(ctx), callID); err != nil {
+		s.d.Log.WarnContext(ctx, "mark media room as deleted", "call_id", callID, "error", err)
+		return false
+	}
+	return true
+}
+
+func (s *Service) removeIdentities(ctx context.Context, callID int64, identities []string) {
+	room := RoomName(callID)
+	slots := make(chan struct{}, removeConcurrency)
+	var wg sync.WaitGroup
+	defer wg.Wait()
+	for _, id := range identities {
+		slots <- struct{}{}
+		wg.Go(func() {
+			defer func() { <-slots }()
+			rctx, cancel := context.WithTimeout(ctx, mediaCallTimeout)
+			defer cancel()
+			if err := s.d.Media.RemoveParticipant(rctx, room, id); err != nil {
+				s.d.Log.WarnContext(ctx, "remove call participant from the media room", "call_id", callID, "error", err)
 			}
-		}
-	})
+		})
+	}
 }
 
 func (s *Service) publish(ctx context.Context, c postgres.Call) {
 	if c.ChatID == 0 || s.d.Notifier == nil || s.d.Members == nil {
 		return
 	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), publishTimeout)
+	defer cancel()
 	members, err := s.d.Members(ctx, c.ChatID)
 	if err != nil {
 		s.d.Log.WarnContext(ctx, "call members", "call_id", c.ID, "error", err)
@@ -215,13 +268,8 @@ func (s *Service) Start(ctx context.Context, userID, chatID int64, requestID uui
 		Ring:          func(others []postgres.CallCandidate) ([]int64, error) { return ringList(chat.Type, others) },
 		RingExpiresAt: now.Add(s.cfg.RingTimeout), ClientRequestID: requestID,
 	})
-	switch {
-	case errors.Is(err, postgres.ErrNotFound):
-		return postgres.Call{}, false, ErrNotFound
-	case err != nil && isServiceError(err):
+	if err := storeError(err); err != nil {
 		return postgres.Call{}, false, err
-	case err != nil:
-		return postgres.Call{}, false, unavailable(err)
 	}
 	if st.Created {
 		s.d.Metrics.CallStarted()
@@ -233,7 +281,7 @@ func (s *Service) Start(ctx context.Context, userID, chatID int64, requestID uui
 				ring = append(ring, p.UserID)
 			}
 		}
-		s.background(ctx, func(ctx context.Context) { s.push(ctx, c, ring, actionRing) })
+		s.background(ctx, func(ctx context.Context) { s.push(ctx, c, ring, actionRing, nil) })
 	}
 	return st.Call, st.Created, nil
 }
@@ -304,29 +352,29 @@ func (s *Service) join(ctx context.Context, userID int64, session uuid.UUID, cal
 	}
 	other, err := s.d.Store.Calls().JoinedCallOf(ctx, userID)
 	switch {
-	case err == nil && other != callID && !takeover:
-		return postgres.Call{}, Grant{}, ErrAlreadyInCall
-	case err == nil && other != callID:
-		if _, err := s.apply(ctx, other, func(c *postgres.Call, now time.Time, fx *effects) error {
-			leave(c, userID, now, fx)
-			return nil
-		}); err != nil && !errors.Is(err, ErrNotFound) {
-			return postgres.Call{}, Grant{}, err
-		}
-	case err != nil && !errors.Is(err, postgres.ErrNotFound):
+	case errors.Is(err, postgres.ErrNotFound):
+		other = 0
+	case err != nil:
 		return postgres.Call{}, Grant{}, unavailable(err)
+	case other == callID:
+		other = 0
+	case !takeover:
+		return postgres.Call{}, Grant{}, ErrAlreadyInCall
 	}
 	if p := find(&c, userID); p == nil || p.State != postgres.CallParticipantJoined {
 		n, err := s.d.Store.Calls().JoinedCount(ctx)
 		if err != nil {
 			return postgres.Call{}, Grant{}, unavailable(err)
 		}
+		if other != 0 {
+			n--
+		}
 		if n >= s.cfg.MaxActiveParticipants {
 			return postgres.Call{}, Grant{}, ErrBusy
 		}
 	}
-	m := postgres.CallMember{ChatID: c.ChatID, UserID: userID, SessionID: session}
-	c, err = s.applyAs(ctx, callID, m, func(c *postgres.Call, g postgres.CallGuard, now time.Time, fx *effects) error {
+	m := postgres.CallMember{ChatID: c.ChatID, UserID: userID, SessionID: session, Leave: other}
+	c, err = s.applyAs(ctx, callID, m, func(c *postgres.Call, g postgres.CallGuard, now time.Time, fx, left *effects) error {
 		switch {
 		case g.IdentityKey == "":
 			return ErrIdentityRequired
@@ -334,7 +382,15 @@ func (s *Service) join(ctx context.Context, userID int64, session uuid.UUID, cal
 			return ErrNotAllowed
 		}
 		r := joinRequest{userID: userID, session: session, identityKey: g.IdentityKey, takeover: takeover, maxParticipants: s.cfg.MaxParticipants}
-		return join(c, r, now, fx)
+		if err := join(c, r, now, fx); err != nil {
+			return err
+		}
+		if g.Left != nil {
+			if p := find(g.Left, userID); p != nil && p.State == postgres.CallParticipantJoined {
+				leave(g.Left, userID, now, left)
+			}
+		}
+		return nil
 	})
 	if err != nil {
 		return postgres.Call{}, Grant{}, err
@@ -346,13 +402,19 @@ func (s *Service) join(ctx context.Context, userID int64, session uuid.UUID, cal
 	return c, g, nil
 }
 
+func (s *Service) roomTimeouts() (time.Duration, time.Duration) {
+	departure := 2*s.cfg.EmptyGrace + roomTimeoutMargin
+	return max(roomEmptyTimeout, departure), departure
+}
+
 func (s *Service) ensureRoom(ctx context.Context, c postgres.Call) error {
 	if s.d.Media == nil {
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	if err := s.d.Media.CreateRoom(ctx, RoomName(c.ID), roomEmptyTimeout, s.cfg.EmptyGrace, s.cfg.MaxParticipants); err != nil {
+	empty, departure := s.roomTimeouts()
+	if err := s.d.Media.CreateRoom(ctx, RoomName(c.ID), empty, departure, s.cfg.MaxParticipants); err != nil {
 		s.d.Log.WarnContext(ctx, "create media room", "call_id", c.ID, "error", err)
 		return unavailable(err)
 	}
@@ -443,15 +505,12 @@ func (s *Service) SetIdentity(ctx context.Context, userID int64, session uuid.UU
 	if !ValidIdentityKey(key) {
 		return invalid("public_key must be an uncompressed P-256 point, base64url without padding")
 	}
-	changed, err := s.d.Store.Calls().SetIdentity(ctx, userID, session, key)
+	_, err := s.d.Store.Calls().SetIdentity(ctx, userID, session, key)
 	if errors.Is(err, postgres.ErrNotFound) {
 		return ErrNotFound
 	}
 	if err != nil {
 		return unavailable(err)
-	}
-	if !changed {
-		return nil
 	}
 	callID, err := s.d.Store.Calls().JoinedCallOf(ctx, userID)
 	if errors.Is(err, postgres.ErrNotFound) {
@@ -460,9 +519,20 @@ func (s *Service) SetIdentity(ctx context.Context, userID int64, session uuid.UU
 	if err != nil {
 		return unavailable(err)
 	}
-	_, err = s.apply(ctx, callID, func(c *postgres.Call, _ time.Time, fx *effects) error {
-		if p := find(c, userID); joinedSession(p, session) && p.IdentityKey != key {
-			p.IdentityKey = key
+	c, err := s.d.Store.Calls().Get(ctx, callID)
+	if errors.Is(err, postgres.ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return unavailable(err)
+	}
+	if p := find(&c, userID); !joinedSession(p, session) || p.IdentityKey == key || c.ChatID == 0 {
+		return nil
+	}
+	m := postgres.CallMember{ChatID: c.ChatID, UserID: userID, SessionID: session}
+	_, err = s.applyAs(ctx, callID, m, func(c *postgres.Call, g postgres.CallGuard, _ time.Time, fx, _ *effects) error {
+		if p := find(c, userID); joinedSession(p, session) && g.IdentityKey != "" && p.IdentityKey != g.IdentityKey {
+			p.IdentityKey = g.IdentityKey
 			c.Epoch++
 			fx.show()
 		}
@@ -511,12 +581,12 @@ func (s *Service) SendKeys(ctx context.Context, userID int64, session uuid.UUID,
 		}
 	}
 	owners := map[uuid.UUID]int64{}
-	c, err := s.d.Store.Calls().PutEnvelopes(ctx, callID, func(c postgres.Call) error {
+	c, kept, err := s.d.Store.Calls().PutEnvelopes(ctx, callID, func(c postgres.Call, stale map[uuid.UUID]bool) error {
 		clear(owners)
 		if c.State == postgres.CallEnded {
 			return ErrEnded
 		}
-		if !joinedSession(find(&c, userID), session) {
+		if !joinedSession(find(&c, userID), session) || stale[session] {
 			return ErrNotJoined
 		}
 		if epoch != c.Epoch {
@@ -534,16 +604,11 @@ func (s *Service) SendKeys(ctx context.Context, userID int64, session uuid.UUID,
 		}
 		return nil
 	}, sender, recipients)
-	switch {
-	case errors.Is(err, postgres.ErrNotFound):
-		return ErrNotFound
-	case err != nil && isServiceError(err):
+	if err := storeError(err); err != nil {
 		return err
-	case err != nil:
-		return unavailable(err)
 	}
 	if s.d.Notifier != nil {
-		for _, e := range recipients {
+		for _, e := range kept {
 			s.d.Notifier.CallKeys(ctx, c, owners[e.RecipientSessionID], e.RecipientSessionID, []postgres.CallKeyEnvelope{e})
 		}
 	}

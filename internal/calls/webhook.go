@@ -136,7 +136,19 @@ func (s *Service) handleEvent(ctx context.Context, ev webhookEvent) (bool, error
 	}
 	_, err := s.apply(ctx, callID, fn)
 	if errors.Is(err, ErrNotFound) {
-		return false, nil
+		return s.closeUnknownRoom(ctx, callID, ev.Event)
 	}
 	return err == nil, err
+}
+
+func (s *Service) closeUnknownRoom(ctx context.Context, callID int64, event string) (bool, error) {
+	if event != "participant_joined" || s.d.Media == nil {
+		return false, nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, roomDeleteTimeout)
+	defer cancel()
+	if err := s.d.Media.DeleteRoom(ctx, RoomName(callID)); err != nil {
+		return false, err
+	}
+	return true, nil
 }

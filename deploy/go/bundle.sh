@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Assembles what deploy-go.yml uploads to the server: the stack, its scripts, the media server's
-# configuration and the migrations.
+# Assembles what deploy-go.yml uploads to the server: the stack, its scripts and the migrations.
 # Usage: deploy/go/bundle.sh <out_dir>   (run from the repository root)
 set -euo pipefail
 

@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/myronsi/messenger-back/internal/calls"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/redis"
@@ -238,6 +240,10 @@ func (c *CallServer) StartChatCall(w http.ResponseWriter, r *http.Request, chatI
 	}
 	var body StartCallRequest
 	if !decode(w, r, &body) {
+		return
+	}
+	if body.ClientRequestId == uuid.Nil {
+		WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "client_request_id", Message: "required, a UUID other than the nil UUID"})
 		return
 	}
 	if !allow(w, r, c.o.Limiter, RateCallStart, strconv.FormatInt(p.UserID, 10), c.o.Log) {

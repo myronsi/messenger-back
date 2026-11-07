@@ -21,7 +21,6 @@ room:
   max_participants: 10
   # A room nobody joined closes after this; the API ends unanswered calls after CALLS_RING_TIMEOUT anyway.
   empty_timeout: 120
-  # Matches CALLS_EMPTY_GRACE: how long a room stays after the last participant left.
   departure_timeout: 20
 
 webhook:

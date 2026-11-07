@@ -14,6 +14,15 @@ if (pkg.version !== spec.info.version) {
   errors.push(`api/package.json version ${pkg.version} differs from openapi.yaml info.version ${spec.info.version}`);
 }
 
+const HTTP_METHODS = ["get", "put", "post", "delete", "patch", "head", "options", "trace"];
+for (const [path, item] of Object.entries(spec.paths ?? {})) {
+  for (const method of HTTP_METHODS) {
+    const op = item?.[method];
+    if (!op?.tags?.includes("calls") || op.operationId === "getCallConfig") continue;
+    if (!op.responses?.["503"]) errors.push(`${method.toUpperCase()} ${path} (${op.operationId}) is tagged calls but declares no 503 response`);
+  }
+}
+
 const events = loadEvents();
 const defs = bundle(spec, events);
 const ajv = new Ajv2020({ strict: false, allErrors: true });

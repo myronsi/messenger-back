@@ -235,6 +235,28 @@ func TestCallsOverHTTP(t *testing.T) {
 	}
 }
 
+func TestStartCallNeedsAClientRequestID(t *testing.T) {
+	e := newCallEnv(t, true)
+	alice, bob := e.register(t, "alice"), e.register(t, "bob")
+	chat, _, err := e.store.Chats().CreateDirect(context.Background(), e.userID(t, alice), e.userID(t, bob))
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := "/chats/" + FormatID(chat.ID) + "/call"
+	for _, body := range []map[string]any{{}, {"client_request_id": uuid.Nil.String()}} {
+		r := e.do(t, request{method: http.MethodPost, path: path, token: alice.access, body: body})
+		if r.Code != http.StatusUnprocessableEntity || r.code() != "validation_failed" {
+			t.Fatalf("start with %v: %d %s", body, r.Code, r.Body)
+		}
+	}
+	if r := e.do(t, request{method: http.MethodGet, path: path, token: alice.access}); r.Code != http.StatusNotFound {
+		t.Fatalf("a refused start created a call: %d %s", r.Code, r.Body)
+	}
+	if r := e.do(t, request{method: http.MethodPost, path: path, token: alice.access, body: map[string]any{"client_request_id": uuid.NewString()}}); r.Code != http.StatusCreated {
+		t.Fatalf("start: %d %s", r.Code, r.Body)
+	}
+}
+
 func TestGroupCallEndNeedsARole(t *testing.T) {
 	e := newCallEnv(t, true)
 	owner, member, caller := e.register(t, "owner"), e.register(t, "member"), e.register(t, "caller")

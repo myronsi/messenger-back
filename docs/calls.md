@@ -40,7 +40,8 @@ start ──► ringing ──(first join by someone else)──► active ─�
               ├─ ring timeout, nobody answered ──► ended (missed)
               ├─ initiator leaves first ─────────► ended (cancelled)
               ├─ direct peer declines ───────────► ended (declined)
-              └─ end for everyone / media failure ► ended (completed / failed)
+              ├─ end for everyone ───────────────► ended (completed / cancelled)
+              └─ older than 24 h / calls off ────► ended (failed)
 ```
 
 Participant states: `ringing` → `joined` | `declined` | `missed`; `joined` → `left`. In a group call `declined`,
@@ -55,16 +56,21 @@ Participant states: `ringing` → `joined` | `declined` | `missed`; `joined` →
   admission limit. Joining from a second session is refused unless `takeover` is set; takeover removes the old
   session from the media room. Every join, leave, removal, takeover and identity change increases the **epoch**.
 - **Decline** stops ringing on all of the user's devices; in a direct call it ends the call as `declined`.
-- **Leave**: a direct call ends when either side leaves (`completed`, or `cancelled` before an answer), also when
-  that side never joined (for example the caller whose own join failed). A group call keeps running while someone
-  is joined; once the room is empty for `CALLS_EMPTY_GRACE` (20 s) it ends.
+- **Leave**: a direct call ends when either side leaves, also when that side never joined (for example the caller
+  whose own join failed). A group call keeps running while someone is joined; once the room is empty for
+  `CALLS_EMPTY_GRACE` (20 s) it ends.
+- **Outcome**: a call is `completed` only if at least two participants were joined at some point (not necessarily
+  at the same time); otherwise ending it is `cancelled` (or `missed` / `declined` as above), and its system message
+  has no duration. A direct call whose callee answered but whose caller has not joined by the later of
+  `CALLS_EMPTY_GRACE` after the answer and the end of the ring window ends as `cancelled`.
 - **End for everyone**: allowed roles above; removes everyone from the media room.
 - **Removal from outside**: session revoked or logged out, user removed from or leaving the group, chat deleted, or
   a block in a direct chat. The affected session is removed from the media room right away (not only when its token
   expires) and the epoch increases, so it cannot decrypt later audio.
 - **Media service events** (signed webhooks) reconcile the state: a participant that disconnected from LiveKit
-  for longer than the grace becomes `left`; a room the media service finished ends the call (`failed` if people
-  were still connected to it). The worker also reconciles calls stuck after an API or media restart.
+  for longer than the grace becomes `left`; a room the media service finished counts as "every joined session
+  disconnected now", so only the server ends calls (the next join or grant creates the room again). The sweeper
+  also reconciles calls stuck after an API or media restart and repairs removals whose hook was missed.
 
 Every change bumps the call's `version` and is published as a `call_updated` event to all chat members. Clients
 load `GET /calls` after every reconnect.
@@ -111,7 +117,7 @@ Payload (JSON, alongside the message payload fields the worker already knows):
   "type": "call",
   "action": "ring",
   "call_id": "7217400317439950100",
-  "chat_id": "77",
+  "call_chat_id": "77",
   "user_id": "1002",
   "kind": "direct",
   "title": "Alice",
@@ -121,6 +127,13 @@ Payload (JSON, alongside the message payload fields the worker already knows):
   "expires_at": 1762516830
 }
 ```
+
+The chat is in `call_chat_id`, never `chat_id`: older service workers treat any push with a numeric `chat_id` as a
+new message (they do not read `type`), so a call push must fail their check. `cancel` pushes also carry `reason`:
+`answered` (the user joined on some device), `declined`, `missed` (the ring timed out, or the call ended before the
+user answered) or `ended` (anything else, for example the user was removed from the group); ring pushes have none.
+The app shows `missed` and `declined` as "Missed call", `answered` as "Answered on another device", and `ended` or no
+reason as "Call ended".
 
 `action` is `ring` or `cancel`; `title` is the caller (direct) or group name when the user's previews are on and
 `"Messenger"` otherwise; `expires_at` is the end of the ring window in unix seconds, the same unit as message pushes. The service worker shows one
@@ -142,7 +155,10 @@ the app reloads the call and offers Join only if it still rings.
 | `CALLS_TOKEN_TTL` | `10m` | Media grant lifetime. |
 
 `CALLS_ENABLED=true` with any of the URL, key or secret missing is a configuration error: the API refuses to start
-and the deploy preflight fails. All of them empty with `CALLS_ENABLED` unset leaves calls off.
+and the deploy preflight fails. All of them empty with `CALLS_ENABLED` unset leaves calls off. The preflight reads
+`.env` as Compose does (CRLF line endings, quotes, `export` and trailing ` # comments` are fine). After starting
+LiveKit it compares the ports in its startup log with the settings and stops the deploy when they differ or when the
+startup lines do not appear within 30 seconds, unless the container was not recreated.
 
 Rate limits per user: 10 call starts per minute, 30 joins per minute, 60 key posts per 10 s, 10 identity
 registrations per minute (each change increases the epoch of the user's call), 30 grant renewals per minute.
@@ -170,7 +186,8 @@ joined session and a snapshot of its identity key; `call_participants_one_joined
 across all calls), `call_identities` (one public key per session, deleted with the session or by the hooks),
 `call_key_envelopes` (current and previous epoch only, deleted when the call ends), `call_start_requests`
 (idempotency of `client_request_id`, 24 h) and `user_privacy_settings.calls_enabled`. `calls.summary_message_id`,
-`summary_claimed_at` and `summary_posted_at` track the system message ([System message](#implementation)).
+`summary_claimed_at` and `summary_posted_at` track the system message ([System message](#implementation));
+`calls.room_deleted_at` records that LiveKit's room of an ended call was deleted.
 
 **Rules the code adds to the lifecycle above:**
 
@@ -180,12 +197,17 @@ across all calls), `call_identities` (one public key per session, deleted with t
 - `version` increases with every change visible in the contract; the media bookkeeping (a participant lost by the
   media server) is stored without a new version.
 - Joining with the same session again is idempotent (same epoch). Joining while joined to another call is `409
-  already_in_call`; with `takeover` the user first leaves the other call. The body of `POST /calls/{id}/join` is
+  already_in_call`; with `takeover` the user leaves the other call in the join's own transaction (both call rows
+  locked in id order), so a join that fails (`call_full`, `call_ended`, `calls_not_allowed`,
+  `call_identity_required`, `503`) leaves the other call untouched. The admission check counts the moving user's
+  joined row as freed. The body of `POST /calls/{id}/join` is
   optional; an empty body counts as none, also with `Content-Type: application/json`.
 - Start and join check membership, blocks and the session's identity once before the transaction (fast refusal)
-  and again inside it, under locks that serialise them with removals: start reads the members to ring with `FOR
-  KEY SHARE` on their `participants` rows and builds the ring list (privacy, blocks) in the same transaction as the
-  insert; join takes `FOR KEY SHARE` on the user's `participants` row, then the call row, then `FOR SHARE` on the
+  and again inside it, under locks that serialise them with removals: start takes `FOR KEY SHARE` on the `chats`
+  row first (the same order as the chat code, which locks the chat before its `participants` rows), then returns
+  the chat's open call if there is one (`200`, even when the peer has calls off or a block exists), and only
+  otherwise reads the members to ring with `FOR KEY SHARE` on their `participants` rows and builds the ring list
+  (privacy, blocks) in the same transaction as the insert; join takes `FOR KEY SHARE` on the user's `participants` row, then the call row, then `FOR SHARE` on the
   session's `call_identities` row, and re-checks blocks of a direct call. A member removed or a session ended at the
   same time either makes the join fail (`404`, `422 call_identity_required`) or waits until it committed, so the
   `MembersRemoved` / `SessionsEnded` hooks find the participant and remove it. A replayed `client_request_id`
@@ -195,13 +217,27 @@ across all calls), `call_identities` (one public key per session, deleted with t
 - Leave works for the user, from any of their sessions. Decline, leave and end of a call that is over change nothing
   (`204`).
 - A removed session or member of a direct call ends it; in a group call the participant leaves (`epoch` + 1).
+- The removal hooks (`SessionsEnded`, `MembersRemoved`, `Blocked`) run once after the commit and only log errors, and
+  a block that commits while a start is still open is invisible to both. The sweeper therefore also checks the
+  state itself every 2 s (`CallRepository.Repairs`): joined sessions that are revoked, expired or deleted leave;
+  joined or ringing users who are no longer chat members are removed (an initiator of an unanswered call cancels
+  it); open direct calls of a blocked pair end. Key envelopes for such sessions are neither stored nor relayed, and
+  such a sender gets `409 conflict`, also before the sweeper got to the call.
+- `PUT /me/call-identity` is idempotent: also when the stored key is unchanged it compares the joined roster entry
+  of the session with the stored key (read under `FOR SHARE` in the update's transaction) and bumps the epoch if
+  they differ, so a retry repairs a roster update that failed after the key was stored.
 - The server-wide admission (`CALLS_MAX_ACTIVE_PARTICIPANTS`) counts joined rows before the join transaction, so
   concurrent joins can pass it by a few; the per-call limit is checked under the row lock.
 - Every call operation except `GET /calls/config` may answer `503` (`CallsUnavailable` in the contract):
   `calls_unavailable` when calls are off or at capacity (`Retry-After: 10`), `internal_error` with `Retry-After: 2`
   when LiveKit or a store is away.
-- After commit: `call_updated` to the members (members cache), pushes, LiveKit calls and the system message run in
-  the background with their own deadline; shutdown waits for them.
+- After commit: `call_updated` to the members (members cache) is published right away, detached from the request
+  (5 s deadline), so a client that went away does not lose the event; pushes, LiveKit calls and the system message
+  run in the background with their own deadline; shutdown waits for them.
+- Media teardown: when a call ends, only `DeleteRoom` runs (it disconnects everyone), with its own 10 s deadline,
+  and success sets `room_deleted_at`; the 30 s run retries `DeleteRoom` for calls ended in the last hour whose room
+  is not marked deleted. Leaves, removals and takeovers call `RemoveParticipant` per identity, at most 4 at a time,
+  5 s each.
 
 **LiveKit** (protocol of server `v1.13.10`, without `server-sdk-go`):
 
@@ -210,23 +246,29 @@ across all calls), `call_identities` (one public key per session, deleted with t
   with an admin token (`video.roomAdmin`, `roomCreate`, `roomList`, `room`), valid one minute. Twirp `not_found` on
   removal or deletion counts as done. Responses are never logged (`CreateRoom` returns TURN credentials).
 - LiveKit runs with `room.auto_create: false`: every join (before the join is stored) and every grant renewal
-  calls `CreateRoom` (`empty_timeout` 120 s, `departure_timeout` = `CALLS_EMPTY_GRACE`, `max_participants` =
-  `CALLS_MAX_PARTICIPANTS`); if that fails, the request answers `503` and the client retries.
+  calls `CreateRoom` (`departure_timeout` = 2 × `CALLS_EMPTY_GRACE` + 60 s, `empty_timeout` = the larger of 120 s
+  and that, `max_participants` = `CALLS_MAX_PARTICIPANTS`); if that fails, the request answers `503` and the client
+  retries. Both timeouts stay above the server's own grace (disconnect grace plus empty grace plus a sweep), so
+  LiveKit does not close a room the server still considers open; the room values override `livekit.yaml`.
 - Webhook `POST /api/v2/calls/media-webhook` (router, outside the contract and the bearer authentication): the
   `Authorization` header is a JWT (with or without `Bearer `) signed with the API secret, `iss` = API key, `exp`
   required, claim `sha256` = base64 (standard) of the SHA-256 of the raw body. The webhook arrives over plain HTTP
   inside the compose network, so this signature is the only authentication. Events are deduplicated by `id` in Redis
   (`once:calls_webhook:{digest}`, 24 h; released when handling failed so LiveKit's retry is processed).
-  `participant_joined` clears a disconnect, or removes an identity that is not a joined session of the call;
-  `participant_left` / `participant_connection_aborted` mark the participant as disconnected (it leaves after the
-  grace); `room_finished` ends the call (`failed` if a joined participant was still connected). Other events are
-  ignored.
+  `participant_joined` clears a disconnect, or removes an identity that is not a joined session of the call; for a
+  call that no longer exists (for example deleted with its chat) it deletes the whole room (a failure answers `503`
+  so LiveKit retries); `participant_left` / `participant_connection_aborted` mark the participant as disconnected
+  (it leaves after the grace); `room_finished` marks every joined session that is still connected as disconnected
+  now, without ending the call: the sweeper ends it after the graces unless someone rejoins (the next join or
+  grant calls `CreateRoom` again). Other events are ignored.
 
 **Sweeper** (`calls.Service.Run`, every API instance): every 2 s it ends or updates due calls (ring timeout, empty
-grace, participants disconnected longer than the grace, deleted chats, calls older than 24 h) and deletes ended calls
-of deleted chats. A second goroutine runs every 30 s, with a 30 s deadline per run, so slow LiveKit answers never
-delay ring timeouts: it compares joined participants with `ListParticipants` of their room (3 s per room),
-re-posts lost system messages and updates the participant gauge. Transitions take the row lock, so several
+grace, participants disconnected longer than the grace, a direct call whose caller never joined, deleted chats,
+calls older than 24 h), repairs missed removals (see the rules above) and deletes ended calls of deleted chats once
+their media room is deleted (or an hour after they ended). A second goroutine runs every 30 s, with a 30 s deadline
+per run, so slow LiveKit answers never delay ring timeouts: it retries failed room deletions, compares joined
+participants with `ListParticipants` of their room (3 s per room), re-posts lost system messages and updates the
+participant gauge. Transitions take the row lock, so several
 instances can sweep at once. It runs in the API rather than the worker because ending a call posts a system message
 (Snowflake ids) and publishes events, which only the API's realtime stack can do.
 
@@ -258,7 +300,9 @@ title. Payload contents are never logged.
 
 **Tests:** `internal/calls` (state machine, grants, webhook signatures, the Twirp client, and against PostgreSQL and
 Redis: authorization, privacy and blocks, concurrent starts, answers from two sessions, end racing join, join
-racing a member removal or session end, start racing a removal, replay after removal, the media room before the
+racing a member removal or session end, start racing a removal or a block, start before chat locks, the sweeper
+repairing missed hooks, failed takeovers, outcomes without a second participant, room deletion retries, cancel
+push reasons, identity retries, replay after removal, the media room before the
 join, idempotency, ring timeout, epochs, `stale_epoch`, roster checks, removal hooks, retention, the system message
 after a crash, calls switched off, webhooks),
 `internal/httpapi/call_server_test.go` (contract-checked HTTP flow, calls switched off),
@@ -283,8 +327,8 @@ livekit ─http://api:8080/api/v2/calls/media-webhook (signed)────► ap
   unaffected. One node, no Redis.
 - **Configuration:** `deploy/go/livekit/livekit.yaml` holds what is the same everywhere: rooms are created only by
   the API (`room.auto_create: false`, so the API calls `CreateRoom` before the first grant), `room.max_participants`
-  10 (overridden by `CALLS_MAX_PARTICIPANTS`), `room.empty_timeout` 120 s, `room.departure_timeout` 20 s
-  (`CALLS_EMPTY_GRACE`), the webhook to the API, JSON logs at `info`, Prometheus on 6789. Compose adds the
+  10, `room.empty_timeout` and `room.departure_timeout` (all three overridden per room by the API's `CreateRoom`,
+  see [Implementation](#implementation)), the webhook to the API, JSON logs at `info`, Prometheus on 6789. Compose adds the
   per-host values from `.env`: `LIVEKIT_KEYS` from `CALLS_API_KEY`/`CALLS_API_SECRET` (the webhook is signed with
   the same key), `NODE_IP` from `CALLS_NODE_IP`, the ports, and the TURN domain and certificate. LiveKit gets only
   these, never the whole `.env`.
@@ -309,6 +353,7 @@ http module cannot, because it only proxies HTTP.
   `deploy/go/livekit/nginx-turn-443-stream.conf.example`; in `.env`: `CALLS_TURN_TLS_PORT=443`,
   `CALLS_TURN_TLS_PUBLISH=127.0.0.1:5349`. Use it when the device checklist finds users on 443-only networks. It
   touches every HTTPS site of the host, so change it in a maintenance window and test the web app right after.
+  Without `CALLS_TURN_TLS_PUBLISH` the host port follows `CALLS_TURN_TLS_PORT` on every address.
 - **Signalling** (`wss://calls.<domain>`) always goes through the existing nginx as an ordinary WebSocket reverse
   proxy: `deploy/go/livekit/nginx-calls.conf.example`. It logs paths without the query string (browsers send the
   access token there) and does not expose LiveKit's room API (`/twirp/`).
