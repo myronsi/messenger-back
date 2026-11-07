@@ -110,7 +110,13 @@ type Deps struct {
 	Events    EventLog
 	// Storage deletes the files of deleted chats (keys from the chat repository). Optional.
 	DeleteFile func(ctx context.Context, key string) error
+	Calls      CallHooks
 	Log        *slog.Logger
+}
+
+type CallHooks interface {
+	MembersRemoved(ctx context.Context, chatID int64, userIDs []int64)
+	ChatsDeleted(ctx context.Context)
 }
 
 // Service implements the chat use cases.
@@ -707,6 +713,9 @@ func (s *Service) Delete(ctx context.Context, userID, chatID int64) error {
 		return notFoundOr(err)
 	}
 	s.d.Notifier.ChatRemoved(ctx, chatID, members)
+	if s.d.Calls != nil {
+		s.d.Calls.ChatsDeleted(ctx)
+	}
 	if err := s.d.Unread.Forget(ctx, chatID, members...); err != nil {
 		s.d.Log.WarnContext(ctx, "forget unread", "error", err)
 	}

@@ -31,6 +31,8 @@ var generators = map[string]func() string{
 	"KIBANA_PASSWORD":   hexBytes(16),
 	"S3_ACCESS_KEY":     hexBytes(8),
 	"S3_SECRET_KEY":     hexBytes(20),
+	"CALLS_API_KEY":     hexBytes(8),
+	"CALLS_API_SECRET":  hexBytes(32),
 }
 
 var ref = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)

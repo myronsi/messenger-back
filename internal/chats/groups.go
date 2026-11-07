@@ -285,6 +285,9 @@ func (s *Service) membership(ctx context.Context, chatID, actor int64, added, re
 		s.emit(ctx, events.Event{Type: events.ChatMemberAdded, ChatID: chatID, UserID: uid, ActorID: actor})
 	}
 	if len(removed) > 0 {
+		if s.d.Calls != nil {
+			s.d.Calls.MembersRemoved(ctx, chatID, removed)
+		}
 		s.d.Notifier.ChatRemoved(ctx, chatID, removed)
 		if err := s.d.Unread.Forget(ctx, chatID, removed...); err != nil {
 			s.d.Log.WarnContext(ctx, "forget unread", "error", err)
@@ -477,6 +480,9 @@ func (s *Service) DeleteGroup(ctx context.Context, userID, chatID int64) error {
 func (s *Service) removedChat(ctx context.Context, chatID, actor int64, members []int64, keys []string) error {
 	ctx = context.WithoutCancel(ctx)
 	s.d.Notifier.ChatRemoved(ctx, chatID, members)
+	if s.d.Calls != nil {
+		s.d.Calls.ChatsDeleted(ctx)
+	}
 	if err := s.d.Unread.Forget(ctx, chatID, members...); err != nil {
 		s.d.Log.WarnContext(ctx, "forget unread", "error", err)
 	}

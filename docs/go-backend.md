@@ -23,6 +23,7 @@ The Go backend is the sole supported backend. The Python implementation and its 
 | `internal/ids` | Snowflake IDs for messages |
 | `internal/chats` | the chat list, direct chats, groups, pins, read markers and approval requests ([chats.md](chats.md)) |
 | `internal/auth` | authentication, sessions and 2FA ([auth.md](auth.md)) |
+| `internal/calls` | audio calls: lifecycle, key epochs, LiveKit grants, room API and webhooks, call pushes, the sweeper ([calls.md](calls.md)) |
 | `internal/search` | message search: the Elasticsearch index, its indexer and the searches ([search.md](search.md)) |
 | `migrations/{postgres,scylla}` | schema migrations (`make migrate`, applied automatically by the dev stack) |
 | `compose.dev.yaml`, `deploy/dev` | development stack and its init steps, see [dev-environment.md](dev-environment.md); production notes are in [deployment.md](deployment.md) |
@@ -53,6 +54,28 @@ make docker            # distroless, non-root image from go.Dockerfile
 - `go.Dockerfile` and the default `Dockerfile` build the Go API and worker.
 
 - Authentication, sessions and 2FA are described in [auth.md](auth.md). Every route except a short allowlist needs a bearer token.
+- `POST /api/v2/calls/media-webhook` (LiveKit) is mounted outside the contract and authenticated by its signed body hash, not a bearer token ([calls.md](calls.md#implementation)).
+
+## Audio call settings
+
+Calls are off unless `CALLS_ENABLED=true`; then `CALLS_PUBLIC_URL`, `CALLS_API_URL`, `CALLS_API_KEY` and
+`CALLS_API_SECRET` are required, or the process refuses to start. With calls off the other `CALLS_*` values are not
+checked, and deploy-only variables (`CALLS_NODE_IP`, `CALLS_TURN_*`, ports, limits of the LiveKit container) are
+ignored by the API. Locally, start LiveKit with `docker compose -f compose.dev.yaml --profile calls up -d`; production
+setup is in [calls.md](calls.md#deployment).
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `CALLS_ENABLED` | `false` | master switch; off: `GET /calls/config` reports `enabled: false`, every other call operation `503 calls_unavailable`; calls still open are ended as `failed` with their system message |
+| `CALLS_PUBLIC_URL` | — | `wss://` URL of LiveKit for browsers (`ws://` allowed outside production) |
+| `CALLS_API_URL` | — | `http(s)://` URL of LiveKit's room API as the API reaches it |
+| `CALLS_API_KEY` | — | LiveKit API key |
+| `CALLS_API_SECRET` | — | LiveKit API secret, at least 32 characters (redacted like other secrets) |
+| `CALLS_MAX_PARTICIPANTS` | `10` | joined sessions per call (2-65: a session seals its key for at most 64 others per request; the product limit is 10) |
+| `CALLS_MAX_ACTIVE_PARTICIPANTS` | `50` | joined sessions across all calls; above it joins get `503 calls_unavailable` with `Retry-After` |
+| `CALLS_RING_TIMEOUT` | `30s` | ring window (5s-5m) |
+| `CALLS_EMPTY_GRACE` | `20s` | reconnect grace of an empty group call or a lost participant (1s-5m) |
+| `CALLS_TOKEN_TTL` | `10m` | lifetime of a media grant (1m-24h) |
 
 ## CI
 

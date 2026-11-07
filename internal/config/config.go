@@ -70,6 +70,7 @@ type Config struct {
 	Tracing       Tracing
 	Notifications Notifications
 	RecoveryMail  RecoveryMail
+	Calls         Calls
 	GeoIPDBPath   string `env:"GEOIP_DB_PATH"`
 
 	// WorkerAddr is where the worker serves /healthz and /metrics.
@@ -375,6 +376,7 @@ func (c Config) Validate() error {
 	problems = append(problems, c.Realtime.validate()...)
 	problems = append(problems, c.Notifications.validate()...)
 	problems = append(problems, c.RecoveryMail.validate()...)
+	problems = append(problems, c.Calls.validate(c.Env == "production")...)
 	problems = append(problems, c.Media.validate()...)
 	switch c.Scylla.Consistency {
 	case "local_quorum", "quorum", "one", "local_one":

@@ -1,0 +1,44 @@
+# LiveKit, the media server of audio calls (docs/calls.md#deployment): one node, no Redis.
+# The same on every host and free of secrets. compose.yaml adds what differs per host as environment of the
+# livekit service: the API key and secret (LIVEKIT_KEYS), the public IP (NODE_IP), the UDP and TCP ports, the
+# TURN domain, port and certificate, and room.max_participants (CALLS_MAX_PARTICIPANTS).
+port: 7880
+
+rtc:
+  # The Elastic IP is given as NODE_IP; nothing is discovered over STUN.
+  use_external_ip: false
+  # Media is ICE over UDP (rtc.udp_port, one multiplexed range) with ICE over TCP (rtc.tcp_port) as fallback.
+  allow_tcp_fallback: true
+
+turn:
+  enabled: true
+  # LiveKit terminates TLS itself with the turn.<domain> certificate.
+  external_tls: false
+
+room:
+  # Only the API creates rooms (CreateRoom); a token for an ended call cannot open its room again.
+  auto_create: false
+  max_participants: 10
+  # A room nobody joined closes after this; the API ends unanswered calls after CALLS_RING_TIMEOUT anyway.
+  empty_timeout: 120
+  # Matches CALLS_EMPTY_GRACE: how long a room stays after the last participant left.
+  departure_timeout: 20
+
+webhook:
+  # Signed with the API key (LIVEKIT_WEBHOOK_API_KEY), sent inside the compose network.
+  urls:
+    - http://api:8080/api/v2/calls/media-webhook
+
+limit:
+  # About 160 Mbit/s: above it the node refuses new participants (planned peak about 72 Mbit/s).
+  bytes_per_sec: 20000000
+
+logging:
+  # Room names, participant identities and addresses only; media keys never reach the server.
+  level: info
+  json: true
+  pion_level: error
+  sample: false
+
+prometheus:
+  port: 6789

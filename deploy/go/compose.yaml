@@ -35,6 +35,82 @@ services:
     ports:
       - "127.0.0.1:${WORKER_PORT:-8081}:8081"
 
+  # --- Audio calls (COMPOSE profile calls): started by deploy.sh only with CALLS_ENABLED=true. ---
+
+  # LiveKit with embedded TURN (docs/calls.md#deployment). Bridge network with explicit ports: the API reaches
+  # it as http://livekit:7880, its webhooks reach http://api:8080, and the signalling and metrics ports stay on
+  # loopback. Published media ports are the same inside and outside, because LiveKit advertises them to
+  # browsers; only TURN/TLS behind nginx on 443 differs (see its ports entry).
+  # It gets only the settings below, never the whole .env.
+  livekit:
+    image: livekit/livekit-server:v1.13.10
+    profiles: ["calls"]
+    command: ["--config", "/etc/livekit/livekit.yaml"]
+    # Set by deploy.sh to the hash of livekit/livekit.yaml, so a changed file recreates the container (and
+    # ends running calls) while an unchanged one leaves it running.
+    labels:
+      messenger.livekit-config: ${LIVEKIT_CONFIG_SHA256:-}
+    environment:
+      LIVEKIT_KEYS: "${CALLS_API_KEY:-}: ${CALLS_API_SECRET:-}"
+      LIVEKIT_WEBHOOK_API_KEY: ${CALLS_API_KEY:-}
+      NODE_IP: ${CALLS_NODE_IP:-}
+      LIVEKIT_ROOM_MAX_PARTICIPANTS: ${CALLS_MAX_PARTICIPANTS:-10}
+      LIVEKIT_RTC_TCP_PORT: ${CALLS_TCP_PORT:-7881}
+      LIVEKIT_RTC_UDP_PORT_START: ${CALLS_UDP_PORT_START:-50000}
+      LIVEKIT_RTC_UDP_PORT_END: ${CALLS_UDP_PORT_END:-50003}
+      LIVEKIT_TURN_DOMAIN: ${CALLS_TURN_DOMAIN:-}
+      LIVEKIT_TURN_TLS_PORT: ${CALLS_TURN_TLS_PORT:-5349}
+      LIVEKIT_TURN_UDP_PORT: ${CALLS_TURN_UDP_PORT:-3478}
+      LIVEKIT_TURN_RELAY_RANGE_START: ${CALLS_TURN_RELAY_PORT_START:-50004}
+      LIVEKIT_TURN_RELAY_RANGE_END: ${CALLS_TURN_RELAY_PORT_END:-50100}
+      LIVEKIT_TURN_CERT: /etc/livekit/turn.crt
+      LIVEKIT_TURN_KEY: /etc/livekit/turn.key
+    volumes:
+      - ./livekit/livekit.yaml:/etc/livekit/livekit.yaml:ro
+      - type: bind
+        source: ${CALLS_TURN_CERT_FILE:-/dev/null}
+        target: /etc/livekit/turn.crt
+        read_only: true
+      - type: bind
+        source: ${CALLS_TURN_KEY_FILE:-/dev/null}
+        target: /etc/livekit/turn.key
+        read_only: true
+    ports:
+      # Signalling (wss://calls.<domain> through the host's nginx) and Prometheus metrics: loopback only.
+      - "127.0.0.1:${CALLS_HTTP_PORT:-7880}:7880/tcp"
+      - "127.0.0.1:${CALLS_METRICS_PORT:-6789}:6789/tcp"
+      # Public (Security Group): ICE/TCP, ICE/UDP, TURN/UDP and the TURN relay ports.
+      - "${CALLS_TCP_PORT:-7881}:${CALLS_TCP_PORT:-7881}/tcp"
+      - "${CALLS_UDP_PORT_START:-50000}-${CALLS_UDP_PORT_END:-50003}:${CALLS_UDP_PORT_START:-50000}-${CALLS_UDP_PORT_END:-50003}/udp"
+      - "${CALLS_TURN_UDP_PORT:-3478}:${CALLS_TURN_UDP_PORT:-3478}/udp"
+      - "${CALLS_TURN_RELAY_PORT_START:-50004}-${CALLS_TURN_RELAY_PORT_END:-50100}:${CALLS_TURN_RELAY_PORT_START:-50004}-${CALLS_TURN_RELAY_PORT_END:-50100}/udp"
+      # TURN/TLS: 0.0.0.0:5349 with its own Security Group rule, or 127.0.0.1:5349 behind nginx's stream
+      # block on 443 (then CALLS_TURN_TLS_PORT=443, the port browsers are told).
+      - "${CALLS_TURN_TLS_PUBLISH:-0.0.0.0:5349}:${CALLS_TURN_TLS_PORT:-5349}/tcp"
+    # Media must not starve messaging and the stores on the 2 vCPU / 8 GiB host: a hard cap, and half the CPU
+    # weight of the other containers when they compete.
+    cpus: ${CALLS_CPUS:-1.0}
+    cpu_shares: 512
+    mem_limit: ${CALLS_MEM_LIMIT:-1g}
+    memswap_limit: ${CALLS_MEM_LIMIT:-1g}
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:7880/"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    # The logs name rooms, participant identities and client addresses: keep them small and short-lived.
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    restart: unless-stopped
+
   # --- One-shot steps, run by deploy.sh before api and worker start. ---
 
   postgres-migrate:

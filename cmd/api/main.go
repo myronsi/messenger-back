@@ -18,6 +18,7 @@ import (
 
 	"github.com/myronsi/messenger-back/internal/app"
 	"github.com/myronsi/messenger-back/internal/auth"
+	"github.com/myronsi/messenger-back/internal/calls"
 	"github.com/myronsi/messenger-back/internal/chats"
 	"github.com/myronsi/messenger-back/internal/config"
 	"github.com/myronsi/messenger-back/internal/geoip"
@@ -83,7 +84,10 @@ func run() error {
 	}
 	geo := geoip.Open(cfg.GeoIPDBPath, log)
 	defer func() { _ = geo.Close() }()
-	var rt *realtimeStack
+	var (
+		rt       *realtimeStack
+		callsSvc *calls.Service
+	)
 	passkeys, err := auth.NewPasskeys(cfg.Auth.RPID, cfg.Auth.RPOrigins)
 	if err != nil {
 		return fmt.Errorf("passkey configuration is invalid")
@@ -119,10 +123,18 @@ func run() error {
 			}
 		},
 		// Revoked sessions lose their WebSockets on every instance.
-		OnRevoked: func(ctx context.Context, sessions []uuid.UUID) { rt.closeSessions(ctx, sessions) },
+		OnRevoked: func(ctx context.Context, sessions []uuid.UUID) {
+			rt.closeSessions(ctx, sessions)
+			if callsSvc != nil {
+				callsSvc.SessionsEnded(ctx, sessions)
+			}
+		},
 		OnRecovery: func(ctx context.Context, sessions []uuid.UUID) {
 			if rt.fanout != nil {
 				rt.fanout.CloseSessionsWithNotice(ctx, sessions)
+			}
+			if callsSvc != nil {
+				callsSvc.SessionsEnded(ctx, sessions)
 			}
 		},
 	}, log)
@@ -132,6 +144,16 @@ func run() error {
 	rt, err = startRealtime(p, pg, rd, sc, authSvc)
 	if err != nil {
 		return err
+	}
+
+	callsSvc, err = startCalls(p, pg, rd, rt)
+	if err != nil {
+		return err
+	}
+	var callHooks chats.CallHooks
+	var callWebhook http.Handler
+	if callsSvc != nil {
+		callHooks, callWebhook = callsSvc, callsSvc.WebhookHandler()
 	}
 
 	storage, storagePing, err := media.StorageFrom(cfg.Media)
@@ -175,12 +197,17 @@ func run() error {
 				Service: mediaSvc, Store: pg, Directory: rt.directory, Limiter: rt.limiter, Events: rt.events, BasePath: cfg.HTTP.BasePath, Log: log,
 			}),
 		).WithAccount(httpapi.NewAccountServer(httpapi.AccountOptions{
-			Store: pg, Directory: rt.directory, Deleter: authSvc, AfterDeletion: rt.accountDeleted(storage, log),
+			Store: pg, Directory: rt.directory, Deleter: authSvc, AfterDeletion: rt.accountDeleted(storage, callsSvc, log),
+			OnBlocked: func(ctx context.Context, blocker, blocked int64) {
+				if callsSvc != nil {
+					callsSvc.Blocked(ctx, blocker, blocked)
+				}
+			},
 			Events: rt.events, Limiter: rt.limiter, BasePath: cfg.HTTP.BasePath, Log: log,
 		})).WithChats(httpapi.NewChatServer(httpapi.ChatOptions{
 			Service: chats.New(chats.Deps{
 				Store: pg, Messages: rt.store, Unread: rt.unread, Members: rt.members, Sender: rt.messages,
-				Directory: rt.directory, Notifier: rt.fanout, Events: rt.events, DeleteFile: storage.Delete, Log: log,
+				Directory: rt.directory, Notifier: rt.fanout, Events: rt.events, DeleteFile: storage.Delete, Calls: callHooks, Log: log,
 			}),
 			Limiter: rt.limiter, BasePath: cfg.HTTP.BasePath, Log: log,
 		})).WithMessages(httpapi.NewMessageServer(httpapi.MessageOptions{
@@ -191,11 +218,14 @@ func run() error {
 				Cache: linkpreview.NewRedisCache(rd.Client()), SignKey: linkpreview.DeriveKey(cfg.JWTSecret.Reveal()),
 			}),
 			Limiter: rt.limiter, BasePath: cfg.HTTP.BasePath, Log: log,
+		})).WithCalls(httpapi.NewCallServer(httpapi.CallOptions{
+			Service: callsSvc, Limits: callLimits(cfg.Calls), Limiter: rt.limiter, Log: log,
 		})).WithNotifications(httpapi.NotificationOptions{Store: pg.Notifications(), Config: cfg.Notifications, Tokens: notifications.NewActionTokens(cfg.Notifications.VAPIDPrivate.Reveal())}).WithMeta(httpapi.MetaInfo{
 			BackendVersion: version.Backend, Commit: os.Getenv("APP_COMMIT"), MinClientAPIVersion: cfg.Realtime.MinClientAPIVersion,
 		}),
 		Authenticator:       authSvc,
 		WebSocket:           rt.gateway,
+		CallWebhook:         callWebhook,
 		UploadMaxBytes:      mediaSvc.Limits().Max(),
 		MinClientAPIVersion: cfg.Realtime.MinClientAPIVersion,
 		Checks:              checks,
@@ -208,7 +238,7 @@ func run() error {
 	if err := p.Serve(srv); err != nil {
 		return err
 	}
-	if err := shutdown(log, cfg.HTTP, srv, router.Drain, rt); err != nil {
+	if err := shutdown(log, cfg.HTTP, srv, router.Drain, rt, callsSvc); err != nil {
 		return err
 	}
 	return p.Err()
@@ -216,7 +246,7 @@ func run() error {
 
 // shutdown drains the server: /readyz turns 503, the listener closes, in-flight requests finish
 // and open WebSockets get the "reconnect" close code.
-func shutdown(log *slog.Logger, cfg config.HTTP, srv *http.Server, drain func(), rt *realtimeStack) error {
+func shutdown(log *slog.Logger, cfg config.HTTP, srv *http.Server, drain func(), rt *realtimeStack, callsSvc *calls.Service) error {
 	log.Info("shutting down")
 	drain()
 	if cfg.DrainDelay > 0 {
@@ -234,6 +264,9 @@ func shutdown(log *slog.Logger, cfg config.HTTP, srv *http.Server, drain func(),
 	err := srv.Shutdown(ctx)
 	<-done
 	rt.stop()
+	if callsSvc != nil {
+		callsSvc.Wait(ctx)
+	}
 	if err != nil {
 		_ = srv.Close()
 		return fmt.Errorf("shutdown: %w", err)

@@ -26,6 +26,7 @@ Every merge publishes Go snapshot images `go-master` and `go-sha-<sha>`. Release
 | `env.example` | every setting the stack needs, documented |
 | `migrations/`, `migrate.sh`, `object-storage/` | what the one-shot steps run |
 | `geoip/` | `update-dbip.sh`, which the `geoip-init` step runs to download the DB-IP Lite city database ([GeoIP](geoip.md)) |
+| `livekit/livekit.yaml` | the media server of audio calls (`livekit` service, profile `calls`); see [Audio calls](#audio-calls) |
 
 An upload replaces the bundle's files and `migrations/` as a whole: after a rollback, no later release's migrations are left on disk. It never touches what only the server has: `.env`, `.env.notifications`, `backups/` and `reports/`.
 
@@ -37,12 +38,13 @@ An upload replaces the bundle's files and `migrations/` as a whole: after a roll
 
 `deploy.sh <app_dir> <image>`:
 
-1. **Checks:** stops at once, changing nothing, if `.env` is missing or the disk is too full. Then it pulls the image; a failed pull also leaves the deployment as it was.
+1. **Checks:** stops at once, changing nothing, if `.env` is missing, the disk is too full, or `CALLS_ENABLED=true` comes with incomplete call settings. It prints `calls: enabled` or `calls: disabled`. Then it pulls the image (and LiveKit's with calls enabled); a failed pull also leaves the deployment as it was.
 2. **Stores:** with the bundled stores, it starts them and creates the ScyllaDB keyspace and the bucket.
 3. **Backup:** writes a `pg_dump` (custom format) of `DATABASE_URL` to `backups/` and keeps the last 10. If the dump fails, nothing is migrated or deployed.
 4. **Migrations:** runs the PostgreSQL and ScyllaDB migrations. If one fails, the running version stays. A database that is already newer than the release (a rollback) is left as it is. Then `geoip-init` downloads the DB-IP Lite city database into the `geoip-data` volume when it is missing. A failed download only means sessions and security events have no location; the deployment continues.
-5. **Start:** starts `api` and `worker` on the new image, then waits for `/readyz` (every store) and the worker's `/healthz`.
-6. **Rollback:** if they do not get ready, starts the previous image again and fails. Migrations are not rolled back, so they must also work with the previous version: add first, remove a release later.
+5. **Media server:** with `CALLS_ENABLED=true`, starts `livekit` and waits until it answers on `CALLS_HTTP_PORT`; if it does not, the deployment stops and the running version stays. Compose restarts it only when its image, settings or `livekit.yaml` changed. With calls disabled, a `livekit` container that is still there is removed.
+6. **Start:** starts `api` and `worker` on the new image, then waits for `/readyz` (every store) and the worker's `/healthz`.
+7. **Rollback:** if they do not get ready, starts the previous image again and fails. Migrations are not rolled back, so they must also work with the previous version: add first, remove a release later.
 
 ## One-time setup
 
@@ -95,6 +97,68 @@ An upload replaces the bundle's files and `migrations/` as a whole: after a roll
   docker compose run --rm -T --entrypoint sh postgres-backup \
     -c 'pg_restore --clean --if-exists --no-owner -d "$DATABASE_URL"' < backups/messenger-YYYYmmdd-HHMMSS.dump
   ```
+
+## Audio calls
+
+Calls are off until `CALLS_ENABLED=true` in `.env`. Off, nothing of them runs and messaging is unaffected. The design, ports, AWS checklist and budgets are in [calls.md](calls.md#deployment).
+
+### Enabling calls on a host
+
+1. **AWS and DNS** (project owner, by hand): the Security Group rules, the `calls.<domain>` and `turn.<domain>` records and the certificates from the [checklist](calls.md#aws-and-dns-checklist).
+2. **Certificates.** `calls.<domain>` is served by nginx like the other sites (`certbot certonly --nginx -d calls.<domain>`). LiveKit terminates TURN/TLS itself, so `turn.<domain>` needs a certificate the deploy user can read. Request it with a deploy hook that copies it and restarts the media server:
+
+   ```sh
+   sudo certbot certonly --nginx -d turn.<domain> \
+     --deploy-hook /etc/letsencrypt/renewal-hooks/deploy/messenger-turn.sh
+   ```
+
+   `/etc/letsencrypt/renewal-hooks/deploy/messenger-turn.sh` (mode 0755; replace the domain and the user):
+
+   ```sh
+   #!/bin/sh
+   set -eu
+   case " $RENEWED_DOMAINS " in *" turn.<domain> "*) ;; *) exit 0 ;; esac
+   install -d -o deploy -g deploy -m 700 /opt/messenger-go/tls/turn
+   install -o deploy -g deploy -m 600 "$RENEWED_LINEAGE/fullchain.pem" "$RENEWED_LINEAGE/privkey.pem" /opt/messenger-go/tls/turn/
+   if [ -n "$(cd /opt/messenger-go && docker compose ps -q livekit)" ]; then
+     cd /opt/messenger-go && docker compose restart livekit
+   fi
+   ```
+
+   Run it once by hand after the first request (`sudo RENEWED_DOMAINS=turn.<domain> RENEWED_LINEAGE=/etc/letsencrypt/live/turn.<domain> sh /etc/letsencrypt/renewal-hooks/deploy/messenger-turn.sh`). LiveKit reads the certificate at start, so a renewal restarts it, which ends the calls running at that moment (about every 60 days).
+3. **nginx:** add the `calls.<domain>` server block from `deploy/go/livekit/nginx-calls.conf.example`. For TURN on 443 instead of 5349, also apply `deploy/go/livekit/nginx-turn-443-stream.conf.example`. `nginx -t && systemctl reload nginx`.
+4. **`.env`:** set `CALLS_ENABLED=true`, `CALLS_PUBLIC_URL=wss://calls.<domain>`, `CALLS_NODE_IP` (the Elastic IP), `CALLS_TURN_DOMAIN=turn.<domain>`, the certificate paths, and a key and secret (`CALLS_API_KEY`: any name, for example `calls-2026-11`; `CALLS_API_SECRET`: `openssl rand -hex 32`). Keep the secret in the secret manager and copy it into `.env`; nothing reads the secret manager directly. Staging and production never share a key or secret.
+5. **Deploy** (the workflow, or the same tag again). The log shows `calls: enabled` and `calls: media server healthy`. Then `curl -fsS https://calls.<domain>/` prints `OK`.
+6. Follow the [load test](calls.md#load-test) and the [device checklist](calls.md#physical-device-checklist) before telling users.
+
+A preflight failure lists the settings that are missing or wrong (never their values), and nothing is changed.
+
+### Disabling calls (rollback)
+
+1. Set `CALLS_ENABLED=false` in `.env`.
+2. Either deploy again (it removes `livekit`), or at once on the host:
+
+   ```sh
+   cd /opt/messenger-go
+   docker compose up -d --no-deps api worker
+   docker compose rm -sf livekit
+   ```
+
+The API stops offering calls; removing `livekit` ends the calls that are running. Messages, history and the call tables stay; the schema is additive, so earlier releases keep working. Enabling again is the steps above without the one-time parts.
+
+### Rotating the media credentials
+
+Rotate `CALLS_API_SECRET` (and give the key a new name) when it may have leaked, when someone who knew it leaves, and at least yearly.
+
+1. Pick a quiet hour: the media server restarts and running calls end; clients ask for a new grant when the users join again.
+2. Put a new `CALLS_API_KEY` and `CALLS_API_SECRET` into `.env` (and keep them in the secret manager).
+3. Deploy again. `livekit` (new keys), `api` and `worker` restart with the new pair; grants and webhooks signed with the old one stop working at once.
+
+LiveKit could accept two keys at once for a rotation without interruption, but the API signs with one; with calls of a few minutes, the short interruption is the simpler choice.
+
+### Staging on the same host
+
+The plan allows staging calls on the production host. That needs its own compose project name (`COMPOSE_PROJECT_NAME` in its `.env`), its own `API_PORT`, `WORKER_PORT` every `CALLS_*_PORT` (including the UDP ranges, with their own Security Group rule) and `CALLS_TURN_TLS_PUBLISH`, its own `calls`/`turn` names and certificates, and a small `CALLS_MAX_ACTIVE_PARTICIPANTS`. Its media competes with production's for the same two vCPUs: keep `CALLS_CPUS` low and test in a quiet window.
 
 ## Python retirement
 

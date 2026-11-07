@@ -22,10 +22,11 @@ Production keys have no prefix; tests put a random namespace in front of every k
 | Unread counters | `unread:{user_id}`: field per chat id, `{chat_id}:read` per read chat, plus `_built` | hash | none (rebuilt when `_built` is missing) | `Unread` |
 | Unread message ids | `unread:{user_id}:{chat_id}`: zero-padded message ids | sorted set (lex order) | 7 days after the last change, at most 1000 ids | `Unread` |
 | Chat membership cache | `members:{chat_id}` (user ids plus the marker `0`), `members:{chat_id}:v` (version) | set, string | 10 min; version 24 h | `Members` |
-| Rate limits (frequent actions) | `rl:{action}:{digest of ip or user}` | string (GCRA) | until the bucket is full again | `RateLimiter` |
+| Rate limits (frequent actions) | `rl:{action}:{digest of ip or user}` (calls: `call_start`, `call_join`, `call_keys`, `call_identity`, `call_grant`) | string (GCRA) | until the bucket is full again | `RateLimiter` |
 | Rate limits (auth failures) | `auth:rl:{rule}:{digest}` | sorted set (sliding window) | the window | `auth.Limiter` |
 | WebSocket ticket | `auth:wsticket:{digest}` → user and session id | string | 30 s, single use (`GETDEL`) | `auth.Tickets` |
 | 2FA login challenge | `auth:2fa:{digest}` | hash | 5 min, 5 attempts | `auth.Challenges` |
+| Call webhook events | `once:calls_webhook:{digest}` | string | 24 h | `Once` |
 | Session cache | `auth:sess:{session_id}` | string | `SESSION_CACHE_TTL` (30 s) | `auth.SessionCache` |
 | Durable events | `events:messages`, `events:chats`, `events:users`; `<stream>:dead`, `<stream>:retry:<group>` | stream, hash | trimmed with `MAXLEN ~` | `Streams`, `Consumer` ([events.md](events.md)) |
 
