@@ -49,6 +49,12 @@ x-go-app: &go-app
     S3_BUCKET: ${S3_BUCKET:-messenger-media}
     CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
     GEOIP_DB_PATH: /geoip/dbip-city-lite.mmdb
+    # Audio calls against the livekit service (profile calls). The key defaults are development-only values.
+    CALLS_ENABLED: ${CALLS_ENABLED:-false}
+    CALLS_PUBLIC_URL: ${CALLS_PUBLIC_URL:-ws://localhost:7880}
+    CALLS_API_URL: http://livekit:7880
+    CALLS_API_KEY: ${CALLS_API_KEY:-devkey}
+    CALLS_API_SECRET: ${CALLS_API_SECRET:-dev-only-secret-not-for-production-use}
   volumes:
     - geoip-data:/geoip:ro
   depends_on:
@@ -251,6 +257,30 @@ services:
     volumes:
       - ./deploy/geoip:/scripts:ro
       - geoip-data:/data
+
+  # Optional audio calls: CALLS_ENABLED=true in .env, then
+  #   docker compose -f compose.dev.yaml --profile calls up -d   ->  ws://localhost:7880
+  # Development keys (devkey / dev-only-...) unless .env sets CALLS_API_KEY and CALLS_API_SECRET; no TURN.
+  # Media uses 127.0.0.1 UDP 50000-50001, or TCP 7881 where UDP is not forwarded to the host.
+  livekit:
+    profiles: ["calls"]
+    image: livekit/livekit-server:v1.13.10
+    command: ["--config", "/etc/livekit/livekit.yaml"]
+    environment:
+      LIVEKIT_KEYS: "${CALLS_API_KEY:-devkey}: ${CALLS_API_SECRET:-dev-only-secret-not-for-production-use}"
+      LIVEKIT_WEBHOOK_API_KEY: ${CALLS_API_KEY:-devkey}
+    volumes:
+      - ./deploy/dev/livekit/livekit.yaml:/etc/livekit/livekit.yaml:ro
+    ports:
+      - "127.0.0.1:${CALLS_HTTP_PORT:-7880}:7880/tcp"
+      - "127.0.0.1:7881:7881/tcp"
+      - "127.0.0.1:50000-50001:50000-50001/udp"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:7880/"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
 
   # Optional: docker compose -f compose.dev.yaml --profile kibana up -d  ->  http://localhost:5601
   kibana:

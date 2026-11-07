@@ -217,5 +217,8 @@ func presentSystemEvent(e messages.SystemEvent) *SystemEvent {
 		name := e.TargetName
 		out.TargetName = &name
 	}
+	if c := e.Call; c != nil {
+		out.Call = &CallSummary{CallId: FormatID(c.CallID), Kind: CallSummaryKind(c.Kind), Outcome: CallEndReason(c.Outcome), DurationSeconds: c.DurationSeconds}
+	}
 	return out
 }

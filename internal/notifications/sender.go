@@ -162,6 +162,44 @@ func (s *Sender) Send(ctx context.Context, d postgres.NotificationDevice, p Payl
 	defer func() { _ = resp.Body.Close() }()
 	return deliveryResponse(resp, d.Platform)
 }
+
+type CallPayload struct {
+	Type        string `json:"type"`
+	Action      string `json:"action"`
+	CallID      string `json:"call_id"`
+	CallChatID  string `json:"call_chat_id"`
+	UserID      string `json:"user_id"`
+	Kind        string `json:"kind"`
+	Title       string `json:"title"`
+	Preview     bool   `json:"preview"`
+	SenderID    string `json:"sender_id,omitempty"`
+	AvatarToken string `json:"avatar_token,omitempty"`
+	ExpiresAt   int64  `json:"expires_at"`
+	Reason      string `json:"reason,omitempty"`
+}
+
+func (s *Sender) SendCall(ctx context.Context, d postgres.NotificationDevice, p CallPayload, ttl time.Duration) error {
+	if d.Platform != "web" || !ValidateDevice(d) {
+		return ErrUnregistered
+	}
+	if !s.cfg.WebEnabled() {
+		return ErrUnavailable
+	}
+	raw, err := json.Marshal(p)
+	if err != nil {
+		return err
+	}
+	resp, err := webpush.SendNotificationWithContext(ctx, raw, &webpush.Subscription{Endpoint: d.Destination, Keys: webpush.Keys{P256dh: d.P256dh, Auth: d.Auth}}, &webpush.Options{
+		Subscriber: s.cfg.VAPIDSubject, VAPIDPublicKey: s.cfg.VAPIDPublic, VAPIDPrivateKey: s.cfg.VAPIDPrivate.Reveal(),
+		TTL: max(int(ttl/time.Second), 1), HTTPClient: s.client, Urgency: webpush.UrgencyHigh, Topic: "call-" + p.CallID,
+	})
+	if err != nil {
+		return errors.New("web push transport failed")
+	}
+	defer func() { _ = resp.Body.Close() }()
+	return deliveryResponse(resp, "web")
+}
+
 func deliveryResponse(resp *http.Response, platform string) error {
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {

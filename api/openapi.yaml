@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.14
+  version: 2.1.0-alpha.15
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -58,6 +58,8 @@ tags:
     description: Approval requests (direct messages and group invites)
   - name: websocket
     description: Realtime connection (see `websocket.md`)
+  - name: calls
+    description: Audio calls (see `docs/calls.md` and `docs/calls-e2ee.md`)
 
 paths:
   /meta:
@@ -3394,6 +3396,316 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
 
+  /calls/config:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    get:
+      tags: [calls]
+      operationId: getCallConfig
+      summary: Whether audio calls are available and their limits
+      description: |
+        `enabled` is `false` when the server has no media service configured or calls are switched off; clients then
+        hide every call control. Clients must also check that the browser supports call encryption before offering
+        calls.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Call availability
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CallConfig" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /me/call-identity:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    put:
+      tags: [calls]
+      operationId: setCallIdentity
+      summary: Register this session's call identity public key
+      description: |
+        One key per session (see `docs/calls-e2ee.md`). Registering a different key replaces the old one; if the
+        session is in a call, the call's epoch increases. The private key never leaves the client.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CallIdentityRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Stored
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "503": { $ref: "#/components/responses/CallsUnavailable" }
+  /calls:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    get:
+      tags: [calls]
+      operationId: listMyCalls
+      summary: Calls that are not over and involve the current user
+      description: |
+        Calls ringing the user and calls the user has joined, newest first. Clients load this after every
+        (re)connect, because realtime events are best effort.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Current calls
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CallList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "503": { $ref: "#/components/responses/CallsUnavailable" }
+  /chats/{chat_id}/call:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ChatId"
+    get:
+      tags: [calls]
+      operationId: getChatCall
+      summary: The chat's call that is not over
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: The current call of the chat
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Call" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/CallsUnavailable" }
+    post:
+      tags: [calls]
+      operationId: startChatCall
+      summary: Start a call in the chat, or get the one already running
+      description: |
+        Starts ringing the other members. A chat has at most one call that is not over: when one exists it is
+        returned with `200` and the client joins it instead. `client_request_id` makes retries idempotent for
+        24 hours. Starting does not join: the caller then calls `POST /calls/{call_id}/join`.
+
+        Refused with `403` (`calls_not_allowed`) when the peer of a direct chat has calls turned off or one user
+        blocked the other, `503` (`calls_unavailable`) when calls are off on the server.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StartCallRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: A call was already running in the chat
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Call" }
+        "201":
+          description: The new call, ringing
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Call" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "503": { $ref: "#/components/responses/CallsUnavailable" }
+  /calls/{call_id}:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/CallId"
+    get:
+      tags: [calls]
+      operationId: getCall
+      summary: A call of one of the user's chats
+      description: Ended calls stay readable for 90 days.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: The call
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Call" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/CallsUnavailable" }
+  /calls/{call_id}/join:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/CallId"
+    post:
+      tags: [calls]
+      operationId: joinCall
+      summary: Answer or join a call with this session
+      description: |
+        Answers a ringing call or joins a running group call, and returns a short-lived media grant for this
+        session. The session must have a call identity (`422`, `call_identity_required`). A user is in at most one
+        call with one session: `409` (`already_in_call`) unless `takeover` is `true`, which moves the user's
+        participation to this session (the other session is removed from the media room). Other `409` codes:
+        `call_ended`, `call_full`. The epoch of the call increases. The body is optional: no body, an empty body
+        and `{}` all join without takeover.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/JoinCallRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Joined
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CallJoin" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "503": { $ref: "#/components/responses/CallsUnavailable" }
+  /calls/{call_id}/grant:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/CallId"
+    post:
+      tags: [calls]
+      operationId: renewCallGrant
+      summary: A fresh media grant for the session that joined
+      description: For reconnecting to the media server. Only the session that joined gets one (`409` otherwise).
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: The grant
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CallGrant" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "503": { $ref: "#/components/responses/CallsUnavailable" }
+  /calls/{call_id}/decline:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/CallId"
+    post:
+      tags: [calls]
+      operationId: declineCall
+      summary: Decline a ringing call
+      description: |
+        Stops the ringing on all of the user's devices. In a direct call this ends the call (`declined`); in a group
+        call only this user's invitation ends. Declining a call that no longer rings changes nothing.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Declined
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/CallsUnavailable" }
+  /calls/{call_id}/leave:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/CallId"
+    post:
+      tags: [calls]
+      operationId: leaveCall
+      summary: Leave the call
+      description: |
+        A direct call ends when either side leaves. A group call ends when the last participant has left and the
+        short reconnect grace has passed. The caller leaving a call nobody answered cancels it (`cancelled`).
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Left
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/CallsUnavailable" }
+  /calls/{call_id}/end:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/CallId"
+    post:
+      tags: [calls]
+      operationId: endCall
+      summary: End the call for everyone
+      description: |
+        Allowed for the initiator, for both members of a direct call, and for the owner, admins and moderators of a
+        group (`403` otherwise). Everyone is removed from the media room.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Ended
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/CallsUnavailable" }
+  /calls/{call_id}/keys:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/CallId"
+    get:
+      tags: [calls]
+      operationId: getCallKeys
+      summary: Key envelopes addressed to this session in the current epoch
+      description: For catching up after a reconnect; the same envelopes also arrive as `call_keys` events.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: The envelopes
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CallKeyEnvelopeList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/CallsUnavailable" }
+    post:
+      tags: [calls]
+      operationId: sendCallKeys
+      summary: Send this session's sealed sender key to the other participants
+      description: |
+        Relays opaque HPKE envelopes (see `docs/calls-e2ee.md`). Only the session that joined may send, only for the
+        current epoch (`409`, `stale_epoch`), and only to sessions on the roster of that epoch (`422`). The server
+        never sees a plaintext key.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SendCallKeysRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Relayed
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "503": { $ref: "#/components/responses/CallsUnavailable" }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -3459,6 +3771,11 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    CallId:
+      name: call_id
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/Id" }
 
     ClientVersion:
       name: X-Client-Version
@@ -3535,6 +3852,18 @@ components:
       headers:
         Retry-After:
           description: Seconds until the next attempt is allowed
+          schema: { type: integer, minimum: 0 }
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    CallsUnavailable:
+      description: |
+        Calls are switched off on the server, or the server is at its call capacity (both `calls_unavailable`), or
+        the media service or a store is away for a moment (`internal_error`). Retry after `Retry-After` when it is
+        present; without it calls stay off until `GET /calls/config` reports them enabled.
+      headers:
+        Retry-After:
+          description: Seconds until a retry may succeed
           schema: { type: integer, minimum: 0 }
       content:
         application/problem+json:
@@ -3691,6 +4020,13 @@ components:
         - invalid_client_version
         - blocked_by_user
         - approval_required
+        - calls_unavailable
+        - calls_not_allowed
+        - call_identity_required
+        - call_full
+        - call_ended
+        - already_in_call
+        - stale_epoch
         - internal_error
     Problem:
       type: object
@@ -3971,6 +4307,7 @@ components:
         - direct_messages
         - group_invites
         - search_visibility
+        - calls_enabled
         - exceptions
       properties:
         avatar_visibility: { $ref: "#/components/schemas/Visibility" }
@@ -3980,6 +4317,9 @@ components:
         direct_messages: { $ref: "#/components/schemas/DirectMessagePolicy" }
         group_invites: { $ref: "#/components/schemas/GroupInvitePolicy" }
         search_visibility: { $ref: "#/components/schemas/SearchVisibility" }
+        calls_enabled:
+          type: boolean
+          description: Whether others may ring this user. Calls are only possible from an existing direct chat or a shared group.
         exceptions: { $ref: "#/components/schemas/PrivacyExceptions" }
     UpdatePrivacySettingsRequest:
       type: object
@@ -3992,6 +4332,7 @@ components:
         direct_messages: { $ref: "#/components/schemas/DirectMessagePolicy" }
         group_invites: { $ref: "#/components/schemas/GroupInvitePolicy" }
         search_visibility: { $ref: "#/components/schemas/SearchVisibility" }
+        calls_enabled: { type: boolean }
     PrivacyExceptionsRequest:
       type: object
       required: [user_ids]
@@ -4242,13 +4583,14 @@ components:
         height: { type: [integer, "null"], minimum: 1 }
     SystemEventKind:
       type: string
-      enum: [group_created, member_added, member_joined, member_removed, member_left]
+      enum: [group_created, member_added, member_joined, member_removed, member_left, call]
     SystemEvent:
       type: object
       description: |
         What a `system` message records; set on system messages only, whose `content` is then `null`. The names
         are the display names at the time of the event. `target` fields are set for `member_added` and
-        `member_removed`.
+        `member_removed`. `call` is set for `call` messages: one per call, posted when the call ends, `actor` is the
+        initiator.
       required: [kind, actor_id, actor_name]
       properties:
         kind: { $ref: "#/components/schemas/SystemEventKind" }
@@ -4259,6 +4601,7 @@ components:
         actor_name: { type: string }
         target_id: { $ref: "#/components/schemas/Id" }
         target_name: { type: string }
+        call: { $ref: "#/components/schemas/CallSummary" }
     MessagePage:
       type: object
       required: [items, next_cursor, prev_cursor]
@@ -4862,3 +5205,229 @@ components:
       properties:
         message:
           type: string
+
+    # ----------------------------------------------------------- calls
+    CallConfig:
+      type: object
+      required: [enabled, max_participants, ring_timeout_seconds]
+      properties:
+        enabled: { type: boolean }
+        max_participants:
+          type: integer
+          minimum: 2
+          description: Most sessions joined to one call at the same time.
+        ring_timeout_seconds:
+          type: integer
+          minimum: 1
+          description: How long an invitation rings before it counts as missed.
+    CallIdentityRequest:
+      type: object
+      required: [public_key]
+      properties:
+        public_key: { $ref: "#/components/schemas/CallIdentityKey" }
+    CallIdentityKey:
+      type: string
+      description: |
+        P-256 public key as an uncompressed point (65 bytes, first byte `0x04`), base64url without padding.
+      minLength: 87
+      maxLength: 87
+      pattern: "^[A-Za-z0-9_-]+$"
+    CallState:
+      type: string
+      description: "`ringing` until someone answers, `active` while people are in it, `ended` afterwards."
+      enum: [ringing, active, ended]
+    CallEndReason:
+      type: string
+      description: |
+        Why the call ended: `completed` (people talked), `missed` (nobody answered in time), `declined` (the peer of a
+        direct call declined), `cancelled` (the caller hung up before an answer), `failed` (the media service lost
+        the call).
+      enum: [completed, missed, declined, cancelled, failed]
+    CallParticipantState:
+      type: string
+      description: "`left` and `declined` can become `joined` again in a group call."
+      enum: [ringing, joined, declined, missed, left]
+    CallParticipant:
+      type: object
+      required: [user_id, state, session_id, identity_key, joined_at]
+      properties:
+        user_id: { $ref: "#/components/schemas/Id" }
+        state: { $ref: "#/components/schemas/CallParticipantState" }
+        session_id:
+          description: The session that joined; `null` unless `state` is `joined`.
+          oneOf:
+            - { type: string, format: uuid }
+            - type: "null"
+        identity_key:
+          description: Call identity of the joined session; `null` unless `state` is `joined`.
+          oneOf:
+            - $ref: "#/components/schemas/CallIdentityKey"
+            - type: "null"
+        joined_at:
+          description: When the participant last joined; `null` if never.
+          oneOf:
+            - $ref: "#/components/schemas/Timestamp"
+            - type: "null"
+    Call:
+      type: object
+      required:
+        - id
+        - chat_id
+        - kind
+        - state
+        - end_reason
+        - initiator_id
+        - created_at
+        - started_at
+        - ended_at
+        - ring_expires_at
+        - epoch
+        - version
+        - max_participants
+        - participants
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        chat_id: { $ref: "#/components/schemas/Id" }
+        kind:
+          type: string
+          enum: [direct, group]
+        state: { $ref: "#/components/schemas/CallState" }
+        end_reason:
+          oneOf:
+            - $ref: "#/components/schemas/CallEndReason"
+            - type: "null"
+        initiator_id: { $ref: "#/components/schemas/Id" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        started_at:
+          description: First answer; `null` while nobody answered.
+          oneOf:
+            - $ref: "#/components/schemas/Timestamp"
+            - type: "null"
+        ended_at:
+          oneOf:
+            - $ref: "#/components/schemas/Timestamp"
+            - type: "null"
+        ring_expires_at:
+          description: When ringing invitations of this call turn into `missed`.
+          $ref: "#/components/schemas/Timestamp"
+        epoch:
+          type: integer
+          minimum: 0
+          description: Key epoch; increases whenever the set of joined sessions or their identity keys change.
+        version:
+          type: integer
+          minimum: 1
+          description: Increases with every change of the call; ignore events with a lower version than one already seen.
+        max_participants: { type: integer, minimum: 2 }
+        participants:
+          type: array
+          description: Everyone invited or joined, the initiator first.
+          items: { $ref: "#/components/schemas/CallParticipant" }
+    CallList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Call" }
+    StartCallRequest:
+      type: object
+      required: [client_request_id]
+      properties:
+        client_request_id:
+          type: string
+          format: uuid
+          description: Idempotency key chosen by the client.
+    JoinCallRequest:
+      type: object
+      properties:
+        takeover:
+          type: boolean
+          default: false
+          description: Move the user's participation from another session to this one.
+    CallGrant:
+      type: object
+      required: [url, token, identity, expires_at]
+      properties:
+        url:
+          type: string
+          description: WebSocket URL of the media server (`wss://`).
+        token:
+          type: string
+          description: Media access token for this call and session only; microphone audio only.
+        identity:
+          type: string
+          description: The participant identity inside the media room (`<user_id>:<session_id>`).
+        expires_at: { $ref: "#/components/schemas/Timestamp" }
+    CallJoin:
+      type: object
+      required: [call, grant]
+      properties:
+        call: { $ref: "#/components/schemas/Call" }
+        grant: { $ref: "#/components/schemas/CallGrant" }
+    CallKeyEnvelope:
+      type: object
+      description: An HPKE Auth-mode envelope carrying one sender key (see `docs/calls-e2ee.md`).
+      required: [epoch, sender_user_id, sender_session_id, recipient_session_id, enc, ciphertext]
+      properties:
+        epoch: { type: integer, minimum: 0 }
+        sender_user_id: { $ref: "#/components/schemas/Id" }
+        sender_session_id: { type: string, format: uuid }
+        recipient_session_id: { type: string, format: uuid }
+        enc:
+          type: string
+          description: HPKE encapsulated key, base64url without padding.
+          maxLength: 128
+          pattern: "^[A-Za-z0-9_-]+$"
+        ciphertext:
+          type: string
+          description: Sealed sender key, base64url without padding.
+          maxLength: 256
+          pattern: "^[A-Za-z0-9_-]+$"
+    CallKeyEnvelopeList:
+      type: object
+      required: [call_id, epoch, items]
+      properties:
+        call_id: { $ref: "#/components/schemas/Id" }
+        epoch: { type: integer, minimum: 0 }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/CallKeyEnvelope" }
+    SendCallKeysRequest:
+      type: object
+      required: [epoch, envelopes]
+      properties:
+        epoch: { type: integer, minimum: 0 }
+        envelopes:
+          type: array
+          minItems: 1
+          maxItems: 64
+          items: { $ref: "#/components/schemas/OutgoingCallKeyEnvelope" }
+    OutgoingCallKeyEnvelope:
+      type: object
+      required: [recipient_session_id, enc, ciphertext]
+      properties:
+        recipient_session_id: { type: string, format: uuid }
+        enc:
+          type: string
+          maxLength: 128
+          pattern: "^[A-Za-z0-9_-]+$"
+        ciphertext:
+          type: string
+          maxLength: 256
+          pattern: "^[A-Za-z0-9_-]+$"
+    CallSummary:
+      type: object
+      description: The call a `call` system message records.
+      required: [call_id, kind, outcome, duration_seconds]
+      properties:
+        call_id: { $ref: "#/components/schemas/Id" }
+        kind:
+          type: string
+          enum: [direct, group]
+        outcome: { $ref: "#/components/schemas/CallEndReason" }
+        duration_seconds:
+          description: From the first answer to the end; `null` if nobody answered.
+          oneOf:
+            - { type: integer, minimum: 0 }
+            - type: "null"

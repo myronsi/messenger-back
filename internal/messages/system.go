@@ -16,14 +16,23 @@ const (
 	SystemMemberJoined  = "member_joined"
 	SystemMemberRemoved = "member_removed"
 	SystemMemberLeft    = "member_left"
+	SystemCall          = "call"
 )
 
 type SystemEvent struct {
-	Kind       string `json:"kind"`
-	ActorID    *int64 `json:"actor_id,omitempty"`
-	ActorName  string `json:"actor_name,omitempty"`
-	TargetID   *int64 `json:"target_id,omitempty"`
-	TargetName string `json:"target_name,omitempty"`
+	Kind       string       `json:"kind"`
+	ActorID    *int64       `json:"actor_id,omitempty"`
+	ActorName  string       `json:"actor_name,omitempty"`
+	TargetID   *int64       `json:"target_id,omitempty"`
+	TargetName string       `json:"target_name,omitempty"`
+	Call       *CallSummary `json:"call,omitempty"`
+}
+
+type CallSummary struct {
+	CallID          int64  `json:"call_id,string"`
+	Kind            string `json:"kind"`
+	Outcome         string `json:"outcome"`
+	DurationSeconds *int   `json:"duration_seconds"`
 }
 
 func ParseSystemEvent(m scylla.Message) (SystemEvent, bool) {
@@ -38,6 +47,22 @@ func ParseSystemEvent(m scylla.Message) (SystemEvent, bool) {
 }
 
 func (s *Service) SendSystem(ctx context.Context, chatID int64, e SystemEvent) (scylla.Message, error) {
+	id, err := s.SystemMessageID()
+	if err != nil {
+		return scylla.Message{}, err
+	}
+	return s.SendSystemAs(ctx, chatID, id, e)
+}
+
+func (s *Service) SystemMessageID() (int64, error) {
+	id, err := s.d.IDs.Next()
+	if err != nil {
+		return 0, fmt.Errorf("%w: %w", ErrUnavailable, err)
+	}
+	return id, nil
+}
+
+func (s *Service) SendSystemAs(ctx context.Context, chatID, id int64, e SystemEvent) (scylla.Message, error) {
 	ctx = context.WithoutCancel(ctx)
 	body, err := json.Marshal(e)
 	if err != nil {
@@ -46,10 +71,6 @@ func (s *Service) SendSystem(ctx context.Context, chatID int64, e SystemEvent) (
 	members, err := s.Members(ctx, chatID)
 	if err != nil {
 		return scylla.Message{}, err
-	}
-	id, err := s.d.IDs.Next()
-	if err != nil {
-		return scylla.Message{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
 	content := string(body)
 	m := scylla.Message{ChatID: chatID, ID: id, Type: scylla.TypeSystem, Content: &content, CreatedAt: ids.Time(id)}

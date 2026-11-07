@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/myronsi/messenger-back/internal/calls"
 	"github.com/myronsi/messenger-back/internal/jobs"
 	"github.com/myronsi/messenger-back/internal/media"
 	"github.com/myronsi/messenger-back/internal/search"
@@ -33,6 +34,13 @@ func maintain(ctx context.Context, log *slog.Logger, store *postgres.Store, ever
 			log.ErrorContext(ctx, "purging ended sessions failed", "err", err)
 		} else if sessions+rotated > 0 {
 			log.InfoContext(ctx, "purged ended sessions", "sessions", sessions, "rotated_tokens", rotated)
+		}
+		purged, err := store.Calls().Purge(ctx, calls.Retention)
+		if err != nil {
+			log.ErrorContext(ctx, "purging old calls failed", "err", err)
+		} else if purged.Calls+purged.StartRequests+purged.Envelopes+purged.Identities > 0 {
+			log.InfoContext(ctx, "purged call data", "calls", purged.Calls, "start_requests", purged.StartRequests,
+				"envelopes", purged.Envelopes, "identities", purged.Identities)
 		}
 	}
 	run()

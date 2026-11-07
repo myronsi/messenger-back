@@ -1,0 +1,54 @@
+# Example (optional): TURN/TLS on port 443, shared with the existing HTTPS sites, for networks that allow
+# nothing but 443. The default needs none of this: TURN/TLS on 5349 with its own Security Group rule.
+# See docs/calls.md#deployment.
+#
+# nginx's stream module reads the TLS server name (SNI) without decrypting and passes the connection on:
+#   turn.<domain>  ->  LiveKit's TURN/TLS, which terminates TLS with its own certificate
+#   anything else  ->  the existing HTTPS server blocks, moved from 443 to 127.0.0.1:8443
+#
+# 1. Install the stream module if it is separate (Debian/Ubuntu: libnginx-mod-stream) and put the stream
+#    block below at the top level of /etc/nginx/nginx.conf (outside http), or include it from there.
+# 2. In every server block that listens on 443 today (the web app and API, calls.<domain>), replace
+#      listen 443 ssl ...;   listen [::]:443 ssl ...;
+#    with
+#      listen 127.0.0.1:8443 ssl proxy_protocol;
+#      set_real_ip_from 127.0.0.1;
+#      real_ip_header proxy_protocol;
+#    The PROXY protocol header carries the client address, so X-Forwarded-For, the API's rate limits and
+#    session records keep seeing real clients instead of 127.0.0.1. Keep `http2` on those listen lines if
+#    they have it. HTTP/3 (UDP 443), if configured, is not affected.
+# 3. In .env: CALLS_TURN_TLS_PORT=443 (what LiveKit tells browsers) and CALLS_TURN_TLS_PUBLISH=127.0.0.1:5349
+#    (where the container's TURN/TLS is published), then deploy again. Port 5349 needs no Security Group
+#    rule in this mode.
+# 4. `nginx -t && systemctl reload nginx`, then test both: the web app over https://, and TURN with the
+#    browser forced to relay (docs/calls.md#physical-device-checklist).
+#
+# Replace turn.example.com below.
+
+stream {
+    map $ssl_preread_server_name $messenger_tls_backend {
+        turn.example.com  127.0.0.1:5350;
+        default           127.0.0.1:8443;
+    }
+
+    server {
+        listen 443;
+        listen [::]:443;
+        ssl_preread on;
+        proxy_pass $messenger_tls_backend;
+        # Every backend gets the client address; the TURN hop below removes it again.
+        proxy_protocol on;
+        proxy_connect_timeout 5s;
+        # TURN connections last as long as a call.
+        proxy_timeout 1h;
+    }
+
+    # LiveKit's TURN listener does not expect the PROXY protocol header: accept it here and pass the plain
+    # TLS stream on to CALLS_TURN_TLS_PUBLISH.
+    server {
+        listen 127.0.0.1:5350 proxy_protocol;
+        proxy_pass 127.0.0.1:5349;
+        proxy_connect_timeout 5s;
+        proxy_timeout 1h;
+    }
+}

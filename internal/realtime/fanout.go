@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/myronsi/messenger-back/internal/calls"
 	"github.com/myronsi/messenger-back/internal/chats"
 	"github.com/myronsi/messenger-back/internal/httpapi"
 	"github.com/myronsi/messenger-back/internal/messages"
@@ -32,6 +33,7 @@ type frame struct {
 	ChatID  int64           `json:"c,omitempty"`
 	Subject int64           `json:"s,omitempty"`
 	Version int64           `json:"v,omitempty"`
+	Session *uuid.UUID      `json:"x,omitempty"`
 	Event   json.RawMessage `json:"e"`
 }
 
@@ -456,4 +458,19 @@ func (f *Fanout) GroupCreated(ctx context.Context, chatID int64, views map[int64
 // GroupUpdated implements chats.GroupNotifier.
 func (f *Fanout) GroupUpdated(ctx context.Context, chatID int64, views map[int64]chats.GroupView) {
 	f.groupEvent(ctx, "group_updated", chatID, views)
+}
+
+var _ calls.Notifier = (*Fanout)(nil)
+
+func (f *Fanout) CallUpdated(ctx context.Context, c postgres.Call, recipients []int64) {
+	f.same(ctx, "call_updated", c.ChatID, map[string]any{"call": httpapi.PresentCall(c)}, recipients)
+}
+
+func (f *Fanout) CallKeys(ctx context.Context, c postgres.Call, recipient int64, session uuid.UUID, envelopes []postgres.CallKeyEnvelope) {
+	raw, err := f.encode("call_keys", c.ChatID, httpapi.PresentCallKeys(c, envelopes), "")
+	if err != nil {
+		f.log.ErrorContext(ctx, "encode event", "error", err, "type", "call_keys")
+		return
+	}
+	f.publish(ctx, map[int64]frame{recipient: {Kind: kindEvent, ChatID: c.ChatID, Session: &session, Event: raw}})
 }

@@ -48,6 +48,65 @@ type AttachmentLink struct {
 	CreatedAt    time.Time
 }
 
+type Call struct {
+	ID               int64
+	ChatID           *int64
+	Kind             string
+	InitiatorID      int64
+	State            string
+	EndReason        *string
+	Epoch            int64
+	Version          int64
+	MaxParticipants  int32
+	CreatedAt        time.Time
+	StartedAt        *time.Time
+	EndedAt          *time.Time
+	RingExpiresAt    time.Time
+	EmptySince       *time.Time
+	SummaryMessageID *int64
+	SummaryClaimedAt *time.Time
+	SummaryPostedAt  *time.Time
+	RoomDeletedAt    *time.Time
+}
+
+type CallIdentity struct {
+	SessionID uuid.UUID
+	UserID    int64
+	PublicKey string
+	UpdatedAt time.Time
+}
+
+type CallKeyEnvelope struct {
+	CallID             int64
+	Epoch              int64
+	RecipientSessionID uuid.UUID
+	SenderSessionID    uuid.UUID
+	SenderUserID       int64
+	Enc                string
+	Ciphertext         string
+	CreatedAt          time.Time
+}
+
+type CallParticipant struct {
+	CallID         int64
+	UserID         int64
+	Position       int32
+	State          string
+	SessionID      *uuid.UUID
+	IdentityKey    *string
+	JoinedAt       *time.Time
+	LeftAt         *time.Time
+	DisconnectedAt *time.Time
+}
+
+type CallStartRequest struct {
+	UserID          int64
+	ClientRequestID uuid.UUID
+	CallID          int64
+	Created         bool
+	CreatedAt       time.Time
+}
+
 type Chat struct {
 	ID                 int64
 	Type               string
@@ -271,6 +330,7 @@ type UserPrivacySetting struct {
 	DirectMessages      string
 	GroupInvites        string
 	SearchVisibility    string
+	CallsEnabled        bool
 }
 
 type UserRecoveryKey struct {

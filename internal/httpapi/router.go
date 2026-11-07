@@ -31,7 +31,8 @@ type Options struct {
 	Authenticator Authenticator
 	// WebSocket serves <base path>/ws (the realtime gateway). It authenticates with a ticket, not a bearer
 	// token, so it is mounted outside the contract's routes. Optional.
-	WebSocket http.Handler
+	WebSocket   http.Handler
+	CallWebhook http.Handler
 	// UploadMaxBytes is the body limit of POST /attachments (0: HTTP_MAX_BODY_BYTES like everything else).
 	UploadMaxBytes int64
 	// MinClientAPIVersion is the oldest contract version served (empty: the server's own major version only).
@@ -59,6 +60,9 @@ func NewRouter(o Options) *Router {
 	mux.Handle("GET /metrics", o.Metrics.Handler())
 	if o.WebSocket != nil {
 		mux.Handle("GET "+o.HTTP.BasePath+"/ws", o.WebSocket)
+	}
+	if o.CallWebhook != nil {
+		mux.Handle("POST "+o.HTTP.BasePath+"/calls/media-webhook", o.CallWebhook)
 	}
 	HandlerWithOptions(api, StdHTTPServerOptions{
 		BaseURL:          o.HTTP.BasePath,

@@ -19,6 +19,20 @@ client suppresses alerts in the focused conversation and elects one visible brow
 focused client with a healthy socket reports activity every ten seconds; its push is suppressed for 25 seconds.
 Closing a browser abruptly can therefore leave a short suppression window. Different devices remain independent.
 
+## Call pushes
+
+Call invitations do not use this queue ([calls.md](calls.md#push)). When a call starts, the API looks up the web
+destinations of the rung users' active sessions (`CallRepository.PushDevices`, native destinations skipped, users with
+notifications turned off skipped) and sends each one at once, in the background after the commit:
+`notifications.Sender.SendCall` with `TTL` = remaining ring time, `Urgency: high` and `Topic: call-<call_id>`, so a
+later push of the same call replaces it. When ringing stops (answered, declined, missed, ended) the same users get an
+`action: cancel` push with the same topic. Previews decide the title (caller or group name, else `Messenger`) and add
+`sender_id` and an avatar token; `expires_at` is in unix seconds. The chat id is sent as `call_chat_id`, not
+`chat_id`, so older service workers, which treat any push with a numeric `chat_id` as a new message, reject call
+pushes. `cancel` pushes carry `reason`: `answered`, `declined`, `missed` or `ended` ([calls.md](calls.md#push)).
+Chat mutes do not apply. An expired destination is
+removed like in the queue. Payloads and destinations are never logged.
+
 ## Configuration
 
 Current setup: a web VAPID key pair has been generated into the Git-ignored root `.env.notifications` file.

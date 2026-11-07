@@ -1,0 +1,55 @@
+# Example: LiveKit signalling for audio calls (wss://calls.<domain>) through the host's existing nginx.
+# Copy to /etc/nginx/conf.d/messenger-calls.conf (http context), replace calls.example.com, then
+# `nginx -t && systemctl reload nginx`. See docs/calls.md#deployment.
+#
+# Only signalling (WebSocket, HTTP) passes here. Media goes straight to LiveKit over UDP 50000-50100,
+# TCP 7881 and TURN, which nginx's http module cannot carry.
+
+# Browsers send the access token in the query string: log the path only.
+log_format messenger_calls '$remote_addr [$time_local] "$request_method $uri $server_protocol" '
+                           '$status $body_bytes_sent $request_time';
+
+map $http_upgrade $messenger_calls_connection {
+    default upgrade;
+    ''      close;
+}
+
+server {
+    # With TURN/TLS on 443 through the stream block (nginx-turn-443-stream.conf.example), use instead:
+    #   listen 127.0.0.1:8443 ssl proxy_protocol;
+    #   set_real_ip_from 127.0.0.1;
+    #   real_ip_header proxy_protocol;
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name calls.example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/calls.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/calls.example.com/privkey.pem;
+
+    access_log /var/log/nginx/messenger-calls.access.log messenger_calls;
+    # Error lines quote the whole request line, access token included: log only what nginx cannot serve at all.
+    error_log /var/log/nginx/messenger-calls.error.log crit;
+
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    add_header X-Content-Type-Options "nosniff" always;
+
+    # LiveKit's room API is for the backend only; it reaches it inside the compose network.
+    location /twirp/ {
+        return 404;
+    }
+
+    location / {
+        # CALLS_HTTP_PORT, published on loopback by deploy/go/compose.yaml.
+        proxy_pass http://127.0.0.1:7880;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $messenger_calls_connection;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_buffering off;
+        # A signalling connection lives as long as the call.
+        proxy_read_timeout 1h;
+        proxy_send_timeout 1h;
+    }
+}

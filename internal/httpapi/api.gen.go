@@ -86,6 +86,117 @@ func (e AttachmentKind) Valid() bool {
 	}
 }
 
+// Defines values for CallKind.
+const (
+	CallKindDirect CallKind = "direct"
+	CallKindGroup  CallKind = "group"
+)
+
+// Valid indicates whether the value is a known member of the CallKind enum.
+func (e CallKind) Valid() bool {
+	switch e {
+	case CallKindDirect:
+		return true
+	case CallKindGroup:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CallEndReason.
+const (
+	CallEndReasonCancelled CallEndReason = "cancelled"
+	CallEndReasonCompleted CallEndReason = "completed"
+	CallEndReasonDeclined  CallEndReason = "declined"
+	CallEndReasonFailed    CallEndReason = "failed"
+	CallEndReasonMissed    CallEndReason = "missed"
+)
+
+// Valid indicates whether the value is a known member of the CallEndReason enum.
+func (e CallEndReason) Valid() bool {
+	switch e {
+	case CallEndReasonCancelled:
+		return true
+	case CallEndReasonCompleted:
+		return true
+	case CallEndReasonDeclined:
+		return true
+	case CallEndReasonFailed:
+		return true
+	case CallEndReasonMissed:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CallParticipantState.
+const (
+	CallParticipantStateDeclined CallParticipantState = "declined"
+	CallParticipantStateJoined   CallParticipantState = "joined"
+	CallParticipantStateLeft     CallParticipantState = "left"
+	CallParticipantStateMissed   CallParticipantState = "missed"
+	CallParticipantStateRinging  CallParticipantState = "ringing"
+)
+
+// Valid indicates whether the value is a known member of the CallParticipantState enum.
+func (e CallParticipantState) Valid() bool {
+	switch e {
+	case CallParticipantStateDeclined:
+		return true
+	case CallParticipantStateJoined:
+		return true
+	case CallParticipantStateLeft:
+		return true
+	case CallParticipantStateMissed:
+		return true
+	case CallParticipantStateRinging:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CallState.
+const (
+	CallStateActive  CallState = "active"
+	CallStateEnded   CallState = "ended"
+	CallStateRinging CallState = "ringing"
+)
+
+// Valid indicates whether the value is a known member of the CallState enum.
+func (e CallState) Valid() bool {
+	switch e {
+	case CallStateActive:
+		return true
+	case CallStateEnded:
+		return true
+	case CallStateRinging:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CallSummaryKind.
+const (
+	CallSummaryKindDirect CallSummaryKind = "direct"
+	CallSummaryKindGroup  CallSummaryKind = "group"
+)
+
+// Valid indicates whether the value is a known member of the CallSummaryKind enum.
+func (e CallSummaryKind) Valid() bool {
+	switch e {
+	case CallSummaryKindDirect:
+		return true
+	case CallSummaryKindGroup:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ChatType.
 const (
 	ChatTypeDirect ChatType = "direct"
@@ -173,8 +284,14 @@ func (e DirectMessagePolicy) Valid() bool {
 // Defines values for ErrorCode.
 const (
 	ErrorCodeAlreadyExists        ErrorCode = "already_exists"
+	ErrorCodeAlreadyInCall        ErrorCode = "already_in_call"
 	ErrorCodeApprovalRequired     ErrorCode = "approval_required"
 	ErrorCodeBlockedByUser        ErrorCode = "blocked_by_user"
+	ErrorCodeCallEnded            ErrorCode = "call_ended"
+	ErrorCodeCallFull             ErrorCode = "call_full"
+	ErrorCodeCallIdentityRequired ErrorCode = "call_identity_required"
+	ErrorCodeCallsNotAllowed      ErrorCode = "calls_not_allowed"
+	ErrorCodeCallsUnavailable     ErrorCode = "calls_unavailable"
 	ErrorCodeClientOutdated       ErrorCode = "client_outdated"
 	ErrorCodeConflict             ErrorCode = "conflict"
 	ErrorCodeForbidden            ErrorCode = "forbidden"
@@ -186,6 +303,7 @@ const (
 	ErrorCodeNotFound             ErrorCode = "not_found"
 	ErrorCodePayloadTooLarge      ErrorCode = "payload_too_large"
 	ErrorCodeRateLimited          ErrorCode = "rate_limited"
+	ErrorCodeStaleEpoch           ErrorCode = "stale_epoch"
 	ErrorCodeTokenExpired         ErrorCode = "token_expired"
 	ErrorCodeTwoFactorRequired    ErrorCode = "two_factor_required"
 	ErrorCodeUnauthenticated      ErrorCode = "unauthenticated"
@@ -198,9 +316,21 @@ func (e ErrorCode) Valid() bool {
 	switch e {
 	case ErrorCodeAlreadyExists:
 		return true
+	case ErrorCodeAlreadyInCall:
+		return true
 	case ErrorCodeApprovalRequired:
 		return true
 	case ErrorCodeBlockedByUser:
+		return true
+	case ErrorCodeCallEnded:
+		return true
+	case ErrorCodeCallFull:
+		return true
+	case ErrorCodeCallIdentityRequired:
+		return true
+	case ErrorCodeCallsNotAllowed:
+		return true
+	case ErrorCodeCallsUnavailable:
 		return true
 	case ErrorCodeClientOutdated:
 		return true
@@ -223,6 +353,8 @@ func (e ErrorCode) Valid() bool {
 	case ErrorCodePayloadTooLarge:
 		return true
 	case ErrorCodeRateLimited:
+		return true
+	case ErrorCodeStaleEpoch:
 		return true
 	case ErrorCodeTokenExpired:
 		return true
@@ -538,25 +670,28 @@ func (e SendMessageRequestType) Valid() bool {
 
 // Defines values for SystemEventKind.
 const (
-	GroupCreated  SystemEventKind = "group_created"
-	MemberAdded   SystemEventKind = "member_added"
-	MemberJoined  SystemEventKind = "member_joined"
-	MemberLeft    SystemEventKind = "member_left"
-	MemberRemoved SystemEventKind = "member_removed"
+	SystemEventKindCall          SystemEventKind = "call"
+	SystemEventKindGroupCreated  SystemEventKind = "group_created"
+	SystemEventKindMemberAdded   SystemEventKind = "member_added"
+	SystemEventKindMemberJoined  SystemEventKind = "member_joined"
+	SystemEventKindMemberLeft    SystemEventKind = "member_left"
+	SystemEventKindMemberRemoved SystemEventKind = "member_removed"
 )
 
 // Valid indicates whether the value is a known member of the SystemEventKind enum.
 func (e SystemEventKind) Valid() bool {
 	switch e {
-	case GroupCreated:
+	case SystemEventKindCall:
 		return true
-	case MemberAdded:
+	case SystemEventKindGroupCreated:
 		return true
-	case MemberJoined:
+	case SystemEventKindMemberAdded:
 		return true
-	case MemberLeft:
+	case SystemEventKindMemberJoined:
 		return true
-	case MemberRemoved:
+	case SystemEventKindMemberLeft:
+		return true
+	case SystemEventKindMemberRemoved:
 		return true
 	default:
 		return false
@@ -797,6 +932,173 @@ type AvatarVersion struct {
 	Url string `json:"url"`
 }
 
+// Call defines model for Call.
+type Call struct {
+	// ChatId Decimal ID as a string (Snowflake IDs exceed 2^53).
+	//
+	// Examples: 7217400317439950848
+	ChatId    Id             `json:"chat_id"`
+	CreatedAt Timestamp      `json:"created_at"`
+	EndReason *CallEndReason `json:"end_reason"`
+	EndedAt   *Timestamp     `json:"ended_at"`
+
+	// Epoch Key epoch; increases whenever the set of joined sessions or their identity keys change.
+	Epoch int `json:"epoch"`
+
+	// Id Decimal ID as a string (Snowflake IDs exceed 2^53).
+	//
+	// Examples: 7217400317439950848
+	Id Id `json:"id"`
+
+	// InitiatorId Decimal ID as a string (Snowflake IDs exceed 2^53).
+	//
+	// Examples: 7217400317439950848
+	InitiatorId     Id       `json:"initiator_id"`
+	Kind            CallKind `json:"kind"`
+	MaxParticipants int      `json:"max_participants"`
+
+	// Participants Everyone invited or joined, the initiator first.
+	Participants []CallParticipant `json:"participants"`
+
+	// RingExpiresAt When ringing invitations of this call turn into `missed`.
+	RingExpiresAt Timestamp `json:"ring_expires_at"`
+
+	// StartedAt First answer; `null` while nobody answered.
+	StartedAt *Timestamp `json:"started_at"`
+
+	// State `ringing` until someone answers, `active` while people are in it, `ended` afterwards.
+	State CallState `json:"state"`
+
+	// Version Increases with every change of the call; ignore events with a lower version than one already seen.
+	Version int `json:"version"`
+}
+
+// CallKind defines model for Call.Kind.
+type CallKind string
+
+// CallConfig defines model for CallConfig.
+type CallConfig struct {
+	Enabled bool `json:"enabled"`
+
+	// MaxParticipants Most sessions joined to one call at the same time.
+	MaxParticipants int `json:"max_participants"`
+
+	// RingTimeoutSeconds How long an invitation rings before it counts as missed.
+	RingTimeoutSeconds int `json:"ring_timeout_seconds"`
+}
+
+// CallEndReason Why the call ended: `completed` (people talked), `missed` (nobody answered in time), `declined` (the peer of a
+// direct call declined), `cancelled` (the caller hung up before an answer), `failed` (the media service lost
+// the call).
+type CallEndReason string
+
+// CallGrant defines model for CallGrant.
+type CallGrant struct {
+	ExpiresAt Timestamp `json:"expires_at"`
+
+	// Identity The participant identity inside the media room (`<user_id>:<session_id>`).
+	Identity string `json:"identity"`
+
+	// Token Media access token for this call and session only; microphone audio only.
+	Token string `json:"token"`
+
+	// Url WebSocket URL of the media server (`wss://`).
+	Url string `json:"url"`
+}
+
+// CallIdentityKey P-256 public key as an uncompressed point (65 bytes, first byte `0x04`), base64url without padding.
+type CallIdentityKey = string
+
+// CallIdentityRequest defines model for CallIdentityRequest.
+type CallIdentityRequest struct {
+	// PublicKey P-256 public key as an uncompressed point (65 bytes, first byte `0x04`), base64url without padding.
+	PublicKey CallIdentityKey `json:"public_key"`
+}
+
+// CallJoin defines model for CallJoin.
+type CallJoin struct {
+	Call  Call      `json:"call"`
+	Grant CallGrant `json:"grant"`
+}
+
+// CallKeyEnvelope An HPKE Auth-mode envelope carrying one sender key (see `docs/calls-e2ee.md`).
+type CallKeyEnvelope struct {
+	// Ciphertext Sealed sender key, base64url without padding.
+	Ciphertext string `json:"ciphertext"`
+
+	// Enc HPKE encapsulated key, base64url without padding.
+	Enc                string             `json:"enc"`
+	Epoch              int                `json:"epoch"`
+	RecipientSessionId openapi_types.UUID `json:"recipient_session_id"`
+	SenderSessionId    openapi_types.UUID `json:"sender_session_id"`
+
+	// SenderUserId Decimal ID as a string (Snowflake IDs exceed 2^53).
+	//
+	// Examples: 7217400317439950848
+	SenderUserId Id `json:"sender_user_id"`
+}
+
+// CallKeyEnvelopeList defines model for CallKeyEnvelopeList.
+type CallKeyEnvelopeList struct {
+	// CallId Decimal ID as a string (Snowflake IDs exceed 2^53).
+	//
+	// Examples: 7217400317439950848
+	CallId Id                `json:"call_id"`
+	Epoch  int               `json:"epoch"`
+	Items  []CallKeyEnvelope `json:"items"`
+}
+
+// CallList defines model for CallList.
+type CallList struct {
+	Items []Call `json:"items"`
+}
+
+// CallParticipant defines model for CallParticipant.
+type CallParticipant struct {
+	// IdentityKey Call identity of the joined session; `null` unless `state` is `joined`.
+	IdentityKey *CallIdentityKey `json:"identity_key"`
+
+	// JoinedAt When the participant last joined; `null` if never.
+	JoinedAt *Timestamp `json:"joined_at"`
+
+	// SessionId The session that joined; `null` unless `state` is `joined`.
+	SessionId *openapi_types.UUID `json:"session_id"`
+
+	// State `left` and `declined` can become `joined` again in a group call.
+	State CallParticipantState `json:"state"`
+
+	// UserId Decimal ID as a string (Snowflake IDs exceed 2^53).
+	//
+	// Examples: 7217400317439950848
+	UserId Id `json:"user_id"`
+}
+
+// CallParticipantState `left` and `declined` can become `joined` again in a group call.
+type CallParticipantState string
+
+// CallState `ringing` until someone answers, `active` while people are in it, `ended` afterwards.
+type CallState string
+
+// CallSummary The call a `call` system message records.
+type CallSummary struct {
+	// CallId Decimal ID as a string (Snowflake IDs exceed 2^53).
+	//
+	// Examples: 7217400317439950848
+	CallId Id `json:"call_id"`
+
+	// DurationSeconds From the first answer to the end; `null` if nobody answered.
+	DurationSeconds *int            `json:"duration_seconds"`
+	Kind            CallSummaryKind `json:"kind"`
+
+	// Outcome Why the call ended: `completed` (people talked), `missed` (nobody answered in time), `declined` (the peer of a
+	// direct call declined), `cancelled` (the caller hung up before an answer), `failed` (the media service lost
+	// the call).
+	Outcome CallEndReason `json:"outcome"`
+}
+
+// CallSummaryKind defines model for CallSummary.Kind.
+type CallSummaryKind string
+
 // ChangePasswordRequest defines model for ChangePasswordRequest.
 type ChangePasswordRequest struct {
 	CurrentPassword *string `json:"current_password,omitempty"`
@@ -1033,6 +1335,12 @@ type GroupRoleLog struct {
 // Examples: 7217400317439950848
 type Id = string
 
+// JoinCallRequest defines model for JoinCallRequest.
+type JoinCallRequest struct {
+	// Takeover Move the user's participation from another session to this one.
+	Takeover *bool `json:"takeover,omitempty"`
+}
+
 // LinkPreview defines model for LinkPreview.
 type LinkPreview struct {
 	Description *string           `json:"description"`
@@ -1148,7 +1456,8 @@ type Message struct {
 
 	// SystemEvent What a `system` message records; set on system messages only, whose `content` is then `null`. The names
 	// are the display names at the time of the event. `target` fields are set for `member_added` and
-	// `member_removed`.
+	// `member_removed`. `call` is set for `call` messages: one per call, posted when the call ends, `actor` is the
+	// initiator.
 	SystemEvent *SystemEvent `json:"system_event,omitempty"`
 	Type        MessageType  `json:"type"`
 }
@@ -1245,6 +1554,13 @@ type NotificationSettings struct {
 	WebPush        bool                    `json:"web_push"`
 }
 
+// OutgoingCallKeyEnvelope defines model for OutgoingCallKeyEnvelope.
+type OutgoingCallKeyEnvelope struct {
+	Ciphertext         string             `json:"ciphertext"`
+	Enc                string             `json:"enc"`
+	RecipientSessionId openapi_types.UUID `json:"recipient_session_id"`
+}
+
 // Passkey defines model for Passkey.
 type Passkey struct {
 	CreatedAt  time.Time  `json:"created_at"`
@@ -1312,8 +1628,11 @@ type PrivacyExceptionsRequest struct {
 type PrivacySettings struct {
 	// AvatarVisibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
 	// `contacts` are the users you share a group with, or a direct chat that you opened or read in.
-	AvatarVisibility Visibility          `json:"avatar_visibility"`
-	DirectMessages   DirectMessagePolicy `json:"direct_messages"`
+	AvatarVisibility Visibility `json:"avatar_visibility"`
+
+	// CallsEnabled Whether others may ring this user. Calls are only possible from an existing direct chat or a shared group.
+	CallsEnabled   bool                `json:"calls_enabled"`
+	DirectMessages DirectMessagePolicy `json:"direct_messages"`
 
 	// Exceptions User IDs per setting. An exception wins over the setting whatever its value; `allow` always lets the user in, `deny` always keeps them out.
 	Exceptions   PrivacyExceptions `json:"exceptions"`
@@ -1580,6 +1899,12 @@ type SecuritySettings struct {
 	TwoFactorEnabled    bool `json:"two_factor_enabled"`
 }
 
+// SendCallKeysRequest defines model for SendCallKeysRequest.
+type SendCallKeysRequest struct {
+	Envelopes []OutgoingCallKeyEnvelope `json:"envelopes"`
+	Epoch     int                       `json:"epoch"`
+}
+
 // SendMessageRequest defines model for SendMessageRequest.
 type SendMessageRequest struct {
 	// AttachmentId Required and not null for `file` and `voice`; never a URL.
@@ -1625,13 +1950,23 @@ type SetRecoveryEmail struct {
 	Password *string             `json:"password,omitempty"`
 }
 
+// StartCallRequest defines model for StartCallRequest.
+type StartCallRequest struct {
+	// ClientRequestId Idempotency key chosen by the client.
+	ClientRequestId openapi_types.UUID `json:"client_request_id"`
+}
+
 // SystemEvent What a `system` message records; set on system messages only, whose `content` is then `null`. The names
 // are the display names at the time of the event. `target` fields are set for `member_added` and
-// `member_removed`.
+// `member_removed`. `call` is set for `call` messages: one per call, posted when the call ends, `actor` is the
+// initiator.
 type SystemEvent struct {
-	ActorId   *Id             `json:"actor_id"`
-	ActorName string          `json:"actor_name"`
-	Kind      SystemEventKind `json:"kind"`
+	ActorId   *Id    `json:"actor_id"`
+	ActorName string `json:"actor_name"`
+
+	// Call The call a `call` system message records.
+	Call *CallSummary    `json:"call,omitempty"`
+	Kind SystemEventKind `json:"kind"`
 
 	// TargetId Decimal ID as a string (Snowflake IDs exceed 2^53).
 	//
@@ -1716,6 +2051,7 @@ type UpdatePrivacySettingsRequest struct {
 	// AvatarVisibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
 	// `contacts` are the users you share a group with, or a direct chat that you opened or read in.
 	AvatarVisibility *Visibility          `json:"avatar_visibility,omitempty"`
+	CallsEnabled     *bool                `json:"calls_enabled,omitempty"`
 	DirectMessages   *DirectMessagePolicy `json:"direct_messages,omitempty"`
 	GroupInvites     *GroupInvitePolicy   `json:"group_invites,omitempty"`
 
@@ -1813,6 +2149,11 @@ type After = Cursor
 // Examples: 5f0c8a64-2f2b-4c7e-9d0e-6b1f3a2c4d5e
 type AttachmentId = AttachmentRef
 
+// CallId Decimal ID as a string (Snowflake IDs exceed 2^53).
+//
+// Examples: 7217400317439950848
+type CallId = Id
+
 // ChatId Decimal ID as a string (Snowflake IDs exceed 2^53).
 //
 // Examples: 7217400317439950848
@@ -1850,6 +2191,9 @@ type UserId = Id
 
 // BadRequest RFC 9457 problem details. `426 Upgrade Required` (`client_outdated`) uses the same format.
 type BadRequest = Problem
+
+// CallsUnavailable RFC 9457 problem details. `426 Upgrade Required` (`client_outdated`) uses the same format.
+type CallsUnavailable = Problem
 
 // ClientOutdated RFC 9457 problem details. `426 Upgrade Required` (`client_outdated`) uses the same format.
 type ClientOutdated = Problem
@@ -2150,6 +2494,96 @@ type RegisterParams struct {
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
 }
 
+// ListMyCallsParams defines parameters for ListMyCalls.
+type ListMyCallsParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// GetCallConfigParams defines parameters for GetCallConfig.
+type GetCallConfigParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// GetCallParams defines parameters for GetCall.
+type GetCallParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// DeclineCallParams defines parameters for DeclineCall.
+type DeclineCallParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// EndCallParams defines parameters for EndCall.
+type EndCallParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// RenewCallGrantParams defines parameters for RenewCallGrant.
+type RenewCallGrantParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// JoinCallParams defines parameters for JoinCall.
+type JoinCallParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// GetCallKeysParams defines parameters for GetCallKeys.
+type GetCallKeysParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// SendCallKeysParams defines parameters for SendCallKeys.
+type SendCallKeysParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// LeaveCallParams defines parameters for LeaveCall.
+type LeaveCallParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
 // ListChatsParams defines parameters for ListChats.
 type ListChatsParams struct {
 	// Limit Page size
@@ -2185,6 +2619,24 @@ type DeleteChatParams struct {
 
 // GetChatParams defines parameters for GetChat.
 type GetChatParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// GetChatCallParams defines parameters for GetChatCall.
+type GetChatCallParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// StartChatCallParams defines parameters for StartChatCall.
+type StartChatCallParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
@@ -2536,6 +2988,15 @@ type UnblockUserParams struct {
 
 // BlockUserParams defines parameters for BlockUser.
 type BlockUserParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// SetCallIdentityParams defines parameters for SetCallIdentity.
+type SetCallIdentityParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
@@ -2934,11 +3395,20 @@ type CompleteDeviceRecoveryJSONRequestBody = DeviceRecoveryComplete
 // RegisterJSONRequestBody defines body for Register for application/json ContentType.
 type RegisterJSONRequestBody = RegisterRequest
 
+// JoinCallJSONRequestBody defines body for JoinCall for application/json ContentType.
+type JoinCallJSONRequestBody = JoinCallRequest
+
+// SendCallKeysJSONRequestBody defines body for SendCallKeys for application/json ContentType.
+type SendCallKeysJSONRequestBody = SendCallKeysRequest
+
 // CreateChatJSONRequestBody defines body for CreateChat for application/json ContentType.
 type CreateChatJSONRequestBody = CreateChatRequest
 
 // SetNotificationMuteJSONRequestBody defines body for SetNotificationMute for application/json ContentType.
 type SetNotificationMuteJSONRequestBody = NotificationMuteRequest
+
+// StartChatCallJSONRequestBody defines body for StartChatCall for application/json ContentType.
+type StartChatCallJSONRequestBody = StartCallRequest
 
 // SendMessageJSONRequestBody defines body for SendMessage for application/json ContentType.
 type SendMessageJSONRequestBody = SendMessageRequest
@@ -2987,6 +3457,9 @@ type SetupTwoFactorJSONRequestBody = PasswordConfirmation
 
 // SetMyAvatarJSONRequestBody defines body for SetMyAvatar for application/json ContentType.
 type SetMyAvatarJSONRequestBody = SetAvatarRequest
+
+// SetCallIdentityJSONRequestBody defines body for SetCallIdentity for application/json ContentType.
+type SetCallIdentityJSONRequestBody = CallIdentityRequest
 
 // RemoveRecoveryEmailJSONRequestBody defines body for RemoveRecoveryEmail for application/json ContentType.
 type RemoveRecoveryEmailJSONRequestBody = RemoveRecoveryEmail
@@ -3420,6 +3893,36 @@ type ServerInterface interface {
 	// Register Create an account
 	// (POST /auth/register)
 	Register(w http.ResponseWriter, r *http.Request, params RegisterParams)
+	// ListMyCalls Calls that are not over and involve the current user
+	// (GET /calls)
+	ListMyCalls(w http.ResponseWriter, r *http.Request, params ListMyCallsParams)
+	// GetCallConfig Whether audio calls are available and their limits
+	// (GET /calls/config)
+	GetCallConfig(w http.ResponseWriter, r *http.Request, params GetCallConfigParams)
+	// GetCall A call of one of the user's chats
+	// (GET /calls/{call_id})
+	GetCall(w http.ResponseWriter, r *http.Request, callId CallId, params GetCallParams)
+	// DeclineCall Decline a ringing call
+	// (POST /calls/{call_id}/decline)
+	DeclineCall(w http.ResponseWriter, r *http.Request, callId CallId, params DeclineCallParams)
+	// EndCall End the call for everyone
+	// (POST /calls/{call_id}/end)
+	EndCall(w http.ResponseWriter, r *http.Request, callId CallId, params EndCallParams)
+	// RenewCallGrant A fresh media grant for the session that joined
+	// (POST /calls/{call_id}/grant)
+	RenewCallGrant(w http.ResponseWriter, r *http.Request, callId CallId, params RenewCallGrantParams)
+	// JoinCall Answer or join a call with this session
+	// (POST /calls/{call_id}/join)
+	JoinCall(w http.ResponseWriter, r *http.Request, callId CallId, params JoinCallParams)
+	// GetCallKeys Key envelopes addressed to this session in the current epoch
+	// (GET /calls/{call_id}/keys)
+	GetCallKeys(w http.ResponseWriter, r *http.Request, callId CallId, params GetCallKeysParams)
+	// SendCallKeys Send this session's sealed sender key to the other participants
+	// (POST /calls/{call_id}/keys)
+	SendCallKeys(w http.ResponseWriter, r *http.Request, callId CallId, params SendCallKeysParams)
+	// LeaveCall Leave the call
+	// (POST /calls/{call_id}/leave)
+	LeaveCall(w http.ResponseWriter, r *http.Request, callId CallId, params LeaveCallParams)
 	// ListChats My chats with last message and unread count
 	// (GET /chats)
 	ListChats(w http.ResponseWriter, r *http.Request, params ListChatsParams)
@@ -3435,6 +3938,12 @@ type ServerInterface interface {
 	// GetChat One chat
 	// (GET /chats/{chat_id})
 	GetChat(w http.ResponseWriter, r *http.Request, chatId ChatId, params GetChatParams)
+	// GetChatCall The chat's call that is not over
+	// (GET /chats/{chat_id}/call)
+	GetChatCall(w http.ResponseWriter, r *http.Request, chatId ChatId, params GetChatCallParams)
+	// StartChatCall Start a call in the chat, or get the one already running
+	// (POST /chats/{chat_id}/call)
+	StartChatCall(w http.ResponseWriter, r *http.Request, chatId ChatId, params StartChatCallParams)
 	// ListChatMedia Photos or audio of a chat
 	// (GET /chats/{chat_id}/media)
 	ListChatMedia(w http.ResponseWriter, r *http.Request, chatId ChatId, params ListChatMediaParams)
@@ -3537,6 +4046,9 @@ type ServerInterface interface {
 	// BlockUser Block a user
 	// (PUT /me/blocked-users/{user_id})
 	BlockUser(w http.ResponseWriter, r *http.Request, userId UserId, params BlockUserParams)
+	// SetCallIdentity Register this session's call identity public key
+	// (PUT /me/call-identity)
+	SetCallIdentity(w http.ResponseWriter, r *http.Request, params SetCallIdentityParams)
 	// RemoveRecoveryEmail Remove the recovery email after password verification
 	// (DELETE /me/email)
 	RemoveRecoveryEmail(w http.ResponseWriter, r *http.Request, params RemoveRecoveryEmailParams)
@@ -5526,6 +6038,678 @@ func (siw *ServerInterfaceWrapper) Register(w http.ResponseWriter, r *http.Reque
 	handler.ServeHTTP(w, r)
 }
 
+// ListMyCalls operation middleware
+func (siw *ServerInterfaceWrapper) ListMyCalls(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListMyCallsParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListMyCalls(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetCallConfig operation middleware
+func (siw *ServerInterfaceWrapper) GetCallConfig(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetCallConfigParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCallConfig(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetCall operation middleware
+func (siw *ServerInterfaceWrapper) GetCall(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "call_id" -------------
+	var callId CallId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "call_id", r.PathValue("call_id"), &callId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "call_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetCallParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCall(w, r, callId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeclineCall operation middleware
+func (siw *ServerInterfaceWrapper) DeclineCall(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "call_id" -------------
+	var callId CallId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "call_id", r.PathValue("call_id"), &callId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "call_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeclineCallParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeclineCall(w, r, callId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// EndCall operation middleware
+func (siw *ServerInterfaceWrapper) EndCall(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "call_id" -------------
+	var callId CallId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "call_id", r.PathValue("call_id"), &callId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "call_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params EndCallParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.EndCall(w, r, callId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RenewCallGrant operation middleware
+func (siw *ServerInterfaceWrapper) RenewCallGrant(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "call_id" -------------
+	var callId CallId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "call_id", r.PathValue("call_id"), &callId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "call_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RenewCallGrantParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RenewCallGrant(w, r, callId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// JoinCall operation middleware
+func (siw *ServerInterfaceWrapper) JoinCall(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "call_id" -------------
+	var callId CallId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "call_id", r.PathValue("call_id"), &callId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "call_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params JoinCallParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.JoinCall(w, r, callId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetCallKeys operation middleware
+func (siw *ServerInterfaceWrapper) GetCallKeys(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "call_id" -------------
+	var callId CallId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "call_id", r.PathValue("call_id"), &callId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "call_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetCallKeysParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCallKeys(w, r, callId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SendCallKeys operation middleware
+func (siw *ServerInterfaceWrapper) SendCallKeys(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "call_id" -------------
+	var callId CallId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "call_id", r.PathValue("call_id"), &callId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "call_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SendCallKeysParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SendCallKeys(w, r, callId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// LeaveCall operation middleware
+func (siw *ServerInterfaceWrapper) LeaveCall(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "call_id" -------------
+	var callId CallId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "call_id", r.PathValue("call_id"), &callId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "call_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params LeaveCallParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.LeaveCall(w, r, callId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListChats operation middleware
 func (siw *ServerInterfaceWrapper) ListChats(w http.ResponseWriter, r *http.Request) {
 
@@ -5827,6 +7011,144 @@ func (siw *ServerInterfaceWrapper) GetChat(w http.ResponseWriter, r *http.Reques
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetChat(w, r, chatId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetChatCall operation middleware
+func (siw *ServerInterfaceWrapper) GetChatCall(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetChatCallParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetChatCall(w, r, chatId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// StartChatCall operation middleware
+func (siw *ServerInterfaceWrapper) StartChatCall(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params StartChatCallParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StartChatCall(w, r, chatId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -8304,6 +9626,66 @@ func (siw *ServerInterfaceWrapper) BlockUser(w http.ResponseWriter, r *http.Requ
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.BlockUser(w, r, userId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetCallIdentity operation middleware
+func (siw *ServerInterfaceWrapper) SetCallIdentity(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SetCallIdentityParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetCallIdentity(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -10920,11 +12302,33 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/email/verify", wrapper.VerifyRecoveryEmail)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/password-reset/request", wrapper.RequestEmailReset)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/password-reset/confirm", wrapper.ConfirmEmailReset)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/calls/config", wrapper.GetCallConfig)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/me/call-identity", wrapper.SetCallIdentity)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/calls", wrapper.ListMyCalls)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/chats/{chat_id}/call", wrapper.GetChatCall)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/chats/{chat_id}/call", wrapper.StartChatCall)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/calls/{call_id}", wrapper.GetCall)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/calls/{call_id}/join", wrapper.JoinCall)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/calls/{call_id}/grant", wrapper.RenewCallGrant)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/calls/{call_id}/decline", wrapper.DeclineCall)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/calls/{call_id}/leave", wrapper.LeaveCall)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/calls/{call_id}/end", wrapper.EndCall)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/calls/{call_id}/keys", wrapper.GetCallKeys)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/calls/{call_id}/keys", wrapper.SendCallKeys)
 
 	return m
 }
 
 type BadRequestApplicationProblemPlusJSONResponse Problem
+
+type CallsUnavailableResponseHeaders struct {
+	RetryAfter *int
+}
+type CallsUnavailableApplicationProblemPlusJSONResponse struct {
+	Body Problem
+
+	Headers CallsUnavailableResponseHeaders
+}
 
 type ClientOutdatedApplicationProblemPlusJSONResponse Problem
 
@@ -14603,6 +16007,1176 @@ func (response Register429ApplicationProblemPlusJSONResponse) VisitRegisterRespo
 	return err
 }
 
+type ListMyCallsRequestObject struct {
+	Params ListMyCallsParams
+}
+
+type ListMyCallsResponseObject interface {
+	VisitListMyCallsResponse(w http.ResponseWriter) error
+}
+
+type ListMyCalls200JSONResponse CallList
+
+func (response ListMyCalls200JSONResponse) VisitListMyCallsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListMyCalls400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response ListMyCalls400ApplicationProblemPlusJSONResponse) VisitListMyCallsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListMyCalls401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ListMyCalls401ApplicationProblemPlusJSONResponse) VisitListMyCallsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListMyCalls426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response ListMyCalls426ApplicationProblemPlusJSONResponse) VisitListMyCallsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListMyCalls503ApplicationProblemPlusJSONResponse struct {
+	CallsUnavailableApplicationProblemPlusJSONResponse
+}
+
+func (response ListMyCalls503ApplicationProblemPlusJSONResponse) VisitListMyCallsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCallConfigRequestObject struct {
+	Params GetCallConfigParams
+}
+
+type GetCallConfigResponseObject interface {
+	VisitGetCallConfigResponse(w http.ResponseWriter) error
+}
+
+type GetCallConfig200JSONResponse CallConfig
+
+func (response GetCallConfig200JSONResponse) VisitGetCallConfigResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCallConfig400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response GetCallConfig400ApplicationProblemPlusJSONResponse) VisitGetCallConfigResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCallConfig401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response GetCallConfig401ApplicationProblemPlusJSONResponse) VisitGetCallConfigResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCallConfig426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetCallConfig426ApplicationProblemPlusJSONResponse) VisitGetCallConfigResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCallRequestObject struct {
+	CallId CallId `json:"call_id"`
+	Params GetCallParams
+}
+
+type GetCallResponseObject interface {
+	VisitGetCallResponse(w http.ResponseWriter) error
+}
+
+type GetCall200JSONResponse Call
+
+func (response GetCall200JSONResponse) VisitGetCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCall400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response GetCall400ApplicationProblemPlusJSONResponse) VisitGetCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCall401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response GetCall401ApplicationProblemPlusJSONResponse) VisitGetCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCall404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetCall404ApplicationProblemPlusJSONResponse) VisitGetCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCall426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetCall426ApplicationProblemPlusJSONResponse) VisitGetCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCall503ApplicationProblemPlusJSONResponse struct {
+	CallsUnavailableApplicationProblemPlusJSONResponse
+}
+
+func (response GetCall503ApplicationProblemPlusJSONResponse) VisitGetCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeclineCallRequestObject struct {
+	CallId CallId `json:"call_id"`
+	Params DeclineCallParams
+}
+
+type DeclineCallResponseObject interface {
+	VisitDeclineCallResponse(w http.ResponseWriter) error
+}
+
+type DeclineCall204Response struct {
+}
+
+func (response DeclineCall204Response) VisitDeclineCallResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeclineCall400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response DeclineCall400ApplicationProblemPlusJSONResponse) VisitDeclineCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeclineCall401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response DeclineCall401ApplicationProblemPlusJSONResponse) VisitDeclineCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeclineCall404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response DeclineCall404ApplicationProblemPlusJSONResponse) VisitDeclineCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeclineCall426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response DeclineCall426ApplicationProblemPlusJSONResponse) VisitDeclineCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeclineCall503ApplicationProblemPlusJSONResponse struct {
+	CallsUnavailableApplicationProblemPlusJSONResponse
+}
+
+func (response DeclineCall503ApplicationProblemPlusJSONResponse) VisitDeclineCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EndCallRequestObject struct {
+	CallId CallId `json:"call_id"`
+	Params EndCallParams
+}
+
+type EndCallResponseObject interface {
+	VisitEndCallResponse(w http.ResponseWriter) error
+}
+
+type EndCall204Response struct {
+}
+
+func (response EndCall204Response) VisitEndCallResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type EndCall400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response EndCall400ApplicationProblemPlusJSONResponse) VisitEndCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EndCall401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response EndCall401ApplicationProblemPlusJSONResponse) VisitEndCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EndCall403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response EndCall403ApplicationProblemPlusJSONResponse) VisitEndCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EndCall404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response EndCall404ApplicationProblemPlusJSONResponse) VisitEndCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EndCall426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response EndCall426ApplicationProblemPlusJSONResponse) VisitEndCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EndCall503ApplicationProblemPlusJSONResponse struct {
+	CallsUnavailableApplicationProblemPlusJSONResponse
+}
+
+func (response EndCall503ApplicationProblemPlusJSONResponse) VisitEndCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenewCallGrantRequestObject struct {
+	CallId CallId `json:"call_id"`
+	Params RenewCallGrantParams
+}
+
+type RenewCallGrantResponseObject interface {
+	VisitRenewCallGrantResponse(w http.ResponseWriter) error
+}
+
+type RenewCallGrant200JSONResponse CallGrant
+
+func (response RenewCallGrant200JSONResponse) VisitRenewCallGrantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenewCallGrant400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response RenewCallGrant400ApplicationProblemPlusJSONResponse) VisitRenewCallGrantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenewCallGrant401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response RenewCallGrant401ApplicationProblemPlusJSONResponse) VisitRenewCallGrantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenewCallGrant404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response RenewCallGrant404ApplicationProblemPlusJSONResponse) VisitRenewCallGrantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenewCallGrant409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response RenewCallGrant409ApplicationProblemPlusJSONResponse) VisitRenewCallGrantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenewCallGrant426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response RenewCallGrant426ApplicationProblemPlusJSONResponse) VisitRenewCallGrantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenewCallGrant429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response RenewCallGrant429ApplicationProblemPlusJSONResponse) VisitRenewCallGrantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenewCallGrant503ApplicationProblemPlusJSONResponse struct {
+	CallsUnavailableApplicationProblemPlusJSONResponse
+}
+
+func (response RenewCallGrant503ApplicationProblemPlusJSONResponse) VisitRenewCallGrantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type JoinCallRequestObject struct {
+	CallId CallId `json:"call_id"`
+	Params JoinCallParams
+	Body   *JoinCallJSONRequestBody
+}
+
+type JoinCallResponseObject interface {
+	VisitJoinCallResponse(w http.ResponseWriter) error
+}
+
+type JoinCall200JSONResponse CallJoin
+
+func (response JoinCall200JSONResponse) VisitJoinCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type JoinCall400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response JoinCall400ApplicationProblemPlusJSONResponse) VisitJoinCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type JoinCall401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response JoinCall401ApplicationProblemPlusJSONResponse) VisitJoinCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type JoinCall403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response JoinCall403ApplicationProblemPlusJSONResponse) VisitJoinCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type JoinCall404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response JoinCall404ApplicationProblemPlusJSONResponse) VisitJoinCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type JoinCall409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response JoinCall409ApplicationProblemPlusJSONResponse) VisitJoinCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type JoinCall422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response JoinCall422ApplicationProblemPlusJSONResponse) VisitJoinCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type JoinCall426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response JoinCall426ApplicationProblemPlusJSONResponse) VisitJoinCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type JoinCall429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response JoinCall429ApplicationProblemPlusJSONResponse) VisitJoinCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type JoinCall503ApplicationProblemPlusJSONResponse struct {
+	CallsUnavailableApplicationProblemPlusJSONResponse
+}
+
+func (response JoinCall503ApplicationProblemPlusJSONResponse) VisitJoinCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCallKeysRequestObject struct {
+	CallId CallId `json:"call_id"`
+	Params GetCallKeysParams
+}
+
+type GetCallKeysResponseObject interface {
+	VisitGetCallKeysResponse(w http.ResponseWriter) error
+}
+
+type GetCallKeys200JSONResponse CallKeyEnvelopeList
+
+func (response GetCallKeys200JSONResponse) VisitGetCallKeysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCallKeys400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response GetCallKeys400ApplicationProblemPlusJSONResponse) VisitGetCallKeysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCallKeys401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response GetCallKeys401ApplicationProblemPlusJSONResponse) VisitGetCallKeysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCallKeys404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetCallKeys404ApplicationProblemPlusJSONResponse) VisitGetCallKeysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCallKeys409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response GetCallKeys409ApplicationProblemPlusJSONResponse) VisitGetCallKeysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCallKeys426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetCallKeys426ApplicationProblemPlusJSONResponse) VisitGetCallKeysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCallKeys503ApplicationProblemPlusJSONResponse struct {
+	CallsUnavailableApplicationProblemPlusJSONResponse
+}
+
+func (response GetCallKeys503ApplicationProblemPlusJSONResponse) VisitGetCallKeysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SendCallKeysRequestObject struct {
+	CallId CallId `json:"call_id"`
+	Params SendCallKeysParams
+	Body   *SendCallKeysJSONRequestBody
+}
+
+type SendCallKeysResponseObject interface {
+	VisitSendCallKeysResponse(w http.ResponseWriter) error
+}
+
+type SendCallKeys204Response struct {
+}
+
+func (response SendCallKeys204Response) VisitSendCallKeysResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type SendCallKeys400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response SendCallKeys400ApplicationProblemPlusJSONResponse) VisitSendCallKeysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SendCallKeys401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response SendCallKeys401ApplicationProblemPlusJSONResponse) VisitSendCallKeysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SendCallKeys404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response SendCallKeys404ApplicationProblemPlusJSONResponse) VisitSendCallKeysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SendCallKeys409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response SendCallKeys409ApplicationProblemPlusJSONResponse) VisitSendCallKeysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SendCallKeys422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response SendCallKeys422ApplicationProblemPlusJSONResponse) VisitSendCallKeysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SendCallKeys426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response SendCallKeys426ApplicationProblemPlusJSONResponse) VisitSendCallKeysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SendCallKeys429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response SendCallKeys429ApplicationProblemPlusJSONResponse) VisitSendCallKeysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SendCallKeys503ApplicationProblemPlusJSONResponse struct {
+	CallsUnavailableApplicationProblemPlusJSONResponse
+}
+
+func (response SendCallKeys503ApplicationProblemPlusJSONResponse) VisitSendCallKeysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LeaveCallRequestObject struct {
+	CallId CallId `json:"call_id"`
+	Params LeaveCallParams
+}
+
+type LeaveCallResponseObject interface {
+	VisitLeaveCallResponse(w http.ResponseWriter) error
+}
+
+type LeaveCall204Response struct {
+}
+
+func (response LeaveCall204Response) VisitLeaveCallResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type LeaveCall400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response LeaveCall400ApplicationProblemPlusJSONResponse) VisitLeaveCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LeaveCall401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response LeaveCall401ApplicationProblemPlusJSONResponse) VisitLeaveCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LeaveCall404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response LeaveCall404ApplicationProblemPlusJSONResponse) VisitLeaveCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LeaveCall426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response LeaveCall426ApplicationProblemPlusJSONResponse) VisitLeaveCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LeaveCall503ApplicationProblemPlusJSONResponse struct {
+	CallsUnavailableApplicationProblemPlusJSONResponse
+}
+
+func (response LeaveCall503ApplicationProblemPlusJSONResponse) VisitLeaveCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListChatsRequestObject struct {
 	Params ListChatsParams
 }
@@ -15100,6 +17674,284 @@ func (response GetChat426ApplicationProblemPlusJSONResponse) VisitGetChatRespons
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetChatCallRequestObject struct {
+	ChatId ChatId `json:"chat_id"`
+	Params GetChatCallParams
+}
+
+type GetChatCallResponseObject interface {
+	VisitGetChatCallResponse(w http.ResponseWriter) error
+}
+
+type GetChatCall200JSONResponse Call
+
+func (response GetChatCall200JSONResponse) VisitGetChatCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetChatCall400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response GetChatCall400ApplicationProblemPlusJSONResponse) VisitGetChatCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetChatCall401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response GetChatCall401ApplicationProblemPlusJSONResponse) VisitGetChatCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetChatCall404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetChatCall404ApplicationProblemPlusJSONResponse) VisitGetChatCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetChatCall426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetChatCall426ApplicationProblemPlusJSONResponse) VisitGetChatCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetChatCall503ApplicationProblemPlusJSONResponse struct {
+	CallsUnavailableApplicationProblemPlusJSONResponse
+}
+
+func (response GetChatCall503ApplicationProblemPlusJSONResponse) VisitGetChatCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartChatCallRequestObject struct {
+	ChatId ChatId `json:"chat_id"`
+	Params StartChatCallParams
+	Body   *StartChatCallJSONRequestBody
+}
+
+type StartChatCallResponseObject interface {
+	VisitStartChatCallResponse(w http.ResponseWriter) error
+}
+
+type StartChatCall200JSONResponse Call
+
+func (response StartChatCall200JSONResponse) VisitStartChatCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartChatCall201JSONResponse Call
+
+func (response StartChatCall201JSONResponse) VisitStartChatCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartChatCall400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response StartChatCall400ApplicationProblemPlusJSONResponse) VisitStartChatCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartChatCall401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response StartChatCall401ApplicationProblemPlusJSONResponse) VisitStartChatCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartChatCall403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response StartChatCall403ApplicationProblemPlusJSONResponse) VisitStartChatCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartChatCall404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response StartChatCall404ApplicationProblemPlusJSONResponse) VisitStartChatCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartChatCall422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response StartChatCall422ApplicationProblemPlusJSONResponse) VisitStartChatCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartChatCall426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response StartChatCall426ApplicationProblemPlusJSONResponse) VisitStartChatCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartChatCall429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response StartChatCall429ApplicationProblemPlusJSONResponse) VisitStartChatCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartChatCall503ApplicationProblemPlusJSONResponse struct {
+	CallsUnavailableApplicationProblemPlusJSONResponse
+}
+
+func (response StartChatCall503ApplicationProblemPlusJSONResponse) VisitStartChatCallResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(503)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -18600,6 +21452,125 @@ func (response BlockUser426ApplicationProblemPlusJSONResponse) VisitBlockUserRes
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetCallIdentityRequestObject struct {
+	Params SetCallIdentityParams
+	Body   *SetCallIdentityJSONRequestBody
+}
+
+type SetCallIdentityResponseObject interface {
+	VisitSetCallIdentityResponse(w http.ResponseWriter) error
+}
+
+type SetCallIdentity204Response struct {
+}
+
+func (response SetCallIdentity204Response) VisitSetCallIdentityResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type SetCallIdentity400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response SetCallIdentity400ApplicationProblemPlusJSONResponse) VisitSetCallIdentityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetCallIdentity401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response SetCallIdentity401ApplicationProblemPlusJSONResponse) VisitSetCallIdentityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetCallIdentity422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response SetCallIdentity422ApplicationProblemPlusJSONResponse) VisitSetCallIdentityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetCallIdentity426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response SetCallIdentity426ApplicationProblemPlusJSONResponse) VisitSetCallIdentityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetCallIdentity429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response SetCallIdentity429ApplicationProblemPlusJSONResponse) VisitSetCallIdentityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetCallIdentity503ApplicationProblemPlusJSONResponse struct {
+	CallsUnavailableApplicationProblemPlusJSONResponse
+}
+
+func (response SetCallIdentity503ApplicationProblemPlusJSONResponse) VisitSetCallIdentityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(503)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -22587,6 +25558,36 @@ type StrictServerInterface interface {
 	// Register Create an account
 	// (POST /auth/register)
 	Register(ctx context.Context, request RegisterRequestObject) (RegisterResponseObject, error)
+	// ListMyCalls Calls that are not over and involve the current user
+	// (GET /calls)
+	ListMyCalls(ctx context.Context, request ListMyCallsRequestObject) (ListMyCallsResponseObject, error)
+	// GetCallConfig Whether audio calls are available and their limits
+	// (GET /calls/config)
+	GetCallConfig(ctx context.Context, request GetCallConfigRequestObject) (GetCallConfigResponseObject, error)
+	// GetCall A call of one of the user's chats
+	// (GET /calls/{call_id})
+	GetCall(ctx context.Context, request GetCallRequestObject) (GetCallResponseObject, error)
+	// DeclineCall Decline a ringing call
+	// (POST /calls/{call_id}/decline)
+	DeclineCall(ctx context.Context, request DeclineCallRequestObject) (DeclineCallResponseObject, error)
+	// EndCall End the call for everyone
+	// (POST /calls/{call_id}/end)
+	EndCall(ctx context.Context, request EndCallRequestObject) (EndCallResponseObject, error)
+	// RenewCallGrant A fresh media grant for the session that joined
+	// (POST /calls/{call_id}/grant)
+	RenewCallGrant(ctx context.Context, request RenewCallGrantRequestObject) (RenewCallGrantResponseObject, error)
+	// JoinCall Answer or join a call with this session
+	// (POST /calls/{call_id}/join)
+	JoinCall(ctx context.Context, request JoinCallRequestObject) (JoinCallResponseObject, error)
+	// GetCallKeys Key envelopes addressed to this session in the current epoch
+	// (GET /calls/{call_id}/keys)
+	GetCallKeys(ctx context.Context, request GetCallKeysRequestObject) (GetCallKeysResponseObject, error)
+	// SendCallKeys Send this session's sealed sender key to the other participants
+	// (POST /calls/{call_id}/keys)
+	SendCallKeys(ctx context.Context, request SendCallKeysRequestObject) (SendCallKeysResponseObject, error)
+	// LeaveCall Leave the call
+	// (POST /calls/{call_id}/leave)
+	LeaveCall(ctx context.Context, request LeaveCallRequestObject) (LeaveCallResponseObject, error)
 	// ListChats My chats with last message and unread count
 	// (GET /chats)
 	ListChats(ctx context.Context, request ListChatsRequestObject) (ListChatsResponseObject, error)
@@ -22602,6 +25603,12 @@ type StrictServerInterface interface {
 	// GetChat One chat
 	// (GET /chats/{chat_id})
 	GetChat(ctx context.Context, request GetChatRequestObject) (GetChatResponseObject, error)
+	// GetChatCall The chat's call that is not over
+	// (GET /chats/{chat_id}/call)
+	GetChatCall(ctx context.Context, request GetChatCallRequestObject) (GetChatCallResponseObject, error)
+	// StartChatCall Start a call in the chat, or get the one already running
+	// (POST /chats/{chat_id}/call)
+	StartChatCall(ctx context.Context, request StartChatCallRequestObject) (StartChatCallResponseObject, error)
 	// ListChatMedia Photos or audio of a chat
 	// (GET /chats/{chat_id}/media)
 	ListChatMedia(ctx context.Context, request ListChatMediaRequestObject) (ListChatMediaResponseObject, error)
@@ -22704,6 +25711,9 @@ type StrictServerInterface interface {
 	// BlockUser Block a user
 	// (PUT /me/blocked-users/{user_id})
 	BlockUser(ctx context.Context, request BlockUserRequestObject) (BlockUserResponseObject, error)
+	// SetCallIdentity Register this session's call identity public key
+	// (PUT /me/call-identity)
+	SetCallIdentity(ctx context.Context, request SetCallIdentityRequestObject) (SetCallIdentityResponseObject, error)
 	// RemoveRecoveryEmail Remove the recovery email after password verification
 	// (DELETE /me/email)
 	RemoveRecoveryEmail(ctx context.Context, request RemoveRecoveryEmailRequestObject) (RemoveRecoveryEmailResponseObject, error)
@@ -23764,6 +26774,291 @@ func (sh *strictHandler) Register(w http.ResponseWriter, r *http.Request, params
 	}
 }
 
+// ListMyCalls operation middleware
+func (sh *strictHandler) ListMyCalls(w http.ResponseWriter, r *http.Request, params ListMyCallsParams) {
+	var request ListMyCallsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListMyCalls(ctx, request.(ListMyCallsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListMyCalls")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListMyCallsResponseObject); ok {
+		if err := validResponse.VisitListMyCallsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetCallConfig operation middleware
+func (sh *strictHandler) GetCallConfig(w http.ResponseWriter, r *http.Request, params GetCallConfigParams) {
+	var request GetCallConfigRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetCallConfig(ctx, request.(GetCallConfigRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetCallConfig")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetCallConfigResponseObject); ok {
+		if err := validResponse.VisitGetCallConfigResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetCall operation middleware
+func (sh *strictHandler) GetCall(w http.ResponseWriter, r *http.Request, callId CallId, params GetCallParams) {
+	var request GetCallRequestObject
+
+	request.CallId = callId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetCall(ctx, request.(GetCallRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetCall")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetCallResponseObject); ok {
+		if err := validResponse.VisitGetCallResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeclineCall operation middleware
+func (sh *strictHandler) DeclineCall(w http.ResponseWriter, r *http.Request, callId CallId, params DeclineCallParams) {
+	var request DeclineCallRequestObject
+
+	request.CallId = callId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeclineCall(ctx, request.(DeclineCallRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeclineCall")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeclineCallResponseObject); ok {
+		if err := validResponse.VisitDeclineCallResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// EndCall operation middleware
+func (sh *strictHandler) EndCall(w http.ResponseWriter, r *http.Request, callId CallId, params EndCallParams) {
+	var request EndCallRequestObject
+
+	request.CallId = callId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.EndCall(ctx, request.(EndCallRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "EndCall")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(EndCallResponseObject); ok {
+		if err := validResponse.VisitEndCallResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RenewCallGrant operation middleware
+func (sh *strictHandler) RenewCallGrant(w http.ResponseWriter, r *http.Request, callId CallId, params RenewCallGrantParams) {
+	var request RenewCallGrantRequestObject
+
+	request.CallId = callId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RenewCallGrant(ctx, request.(RenewCallGrantRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RenewCallGrant")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RenewCallGrantResponseObject); ok {
+		if err := validResponse.VisitRenewCallGrantResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// JoinCall operation middleware
+func (sh *strictHandler) JoinCall(w http.ResponseWriter, r *http.Request, callId CallId, params JoinCallParams) {
+	var request JoinCallRequestObject
+
+	request.CallId = callId
+	request.Params = params
+
+	var body JoinCallJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+			return
+		}
+	} else {
+		request.Body = &body
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.JoinCall(ctx, request.(JoinCallRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "JoinCall")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(JoinCallResponseObject); ok {
+		if err := validResponse.VisitJoinCallResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetCallKeys operation middleware
+func (sh *strictHandler) GetCallKeys(w http.ResponseWriter, r *http.Request, callId CallId, params GetCallKeysParams) {
+	var request GetCallKeysRequestObject
+
+	request.CallId = callId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetCallKeys(ctx, request.(GetCallKeysRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetCallKeys")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetCallKeysResponseObject); ok {
+		if err := validResponse.VisitGetCallKeysResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SendCallKeys operation middleware
+func (sh *strictHandler) SendCallKeys(w http.ResponseWriter, r *http.Request, callId CallId, params SendCallKeysParams) {
+	var request SendCallKeysRequestObject
+
+	request.CallId = callId
+	request.Params = params
+
+	var body SendCallKeysJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SendCallKeys(ctx, request.(SendCallKeysRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SendCallKeys")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SendCallKeysResponseObject); ok {
+		if err := validResponse.VisitSendCallKeysResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// LeaveCall operation middleware
+func (sh *strictHandler) LeaveCall(w http.ResponseWriter, r *http.Request, callId CallId, params LeaveCallParams) {
+	var request LeaveCallRequestObject
+
+	request.CallId = callId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.LeaveCall(ctx, request.(LeaveCallRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "LeaveCall")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(LeaveCallResponseObject); ok {
+		if err := validResponse.VisitLeaveCallResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListChats operation middleware
 func (sh *strictHandler) ListChats(w http.ResponseWriter, r *http.Request, params ListChatsParams) {
 	var request ListChatsRequestObject
@@ -23903,6 +27198,67 @@ func (sh *strictHandler) GetChat(w http.ResponseWriter, r *http.Request, chatId 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetChatResponseObject); ok {
 		if err := validResponse.VisitGetChatResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetChatCall operation middleware
+func (sh *strictHandler) GetChatCall(w http.ResponseWriter, r *http.Request, chatId ChatId, params GetChatCallParams) {
+	var request GetChatCallRequestObject
+
+	request.ChatId = chatId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetChatCall(ctx, request.(GetChatCallRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetChatCall")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetChatCallResponseObject); ok {
+		if err := validResponse.VisitGetChatCallResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// StartChatCall operation middleware
+func (sh *strictHandler) StartChatCall(w http.ResponseWriter, r *http.Request, chatId ChatId, params StartChatCallParams) {
+	var request StartChatCallRequestObject
+
+	request.ChatId = chatId
+	request.Params = params
+
+	var body StartChatCallJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.StartChatCall(ctx, request.(StartChatCallRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "StartChatCall")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(StartChatCallResponseObject); ok {
+		if err := validResponse.VisitStartChatCallResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -24923,6 +28279,39 @@ func (sh *strictHandler) BlockUser(w http.ResponseWriter, r *http.Request, userI
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(BlockUserResponseObject); ok {
 		if err := validResponse.VisitBlockUserResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SetCallIdentity operation middleware
+func (sh *strictHandler) SetCallIdentity(w http.ResponseWriter, r *http.Request, params SetCallIdentityParams) {
+	var request SetCallIdentityRequestObject
+
+	request.Params = params
+
+	var body SetCallIdentityJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SetCallIdentity(ctx, request.(SetCallIdentityRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SetCallIdentity")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SetCallIdentityResponseObject); ok {
+		if err := validResponse.VisitSetCallIdentityResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

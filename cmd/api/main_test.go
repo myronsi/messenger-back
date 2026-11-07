@@ -62,7 +62,7 @@ func TestShutdownKeepsBackgroundWorkUntilRequestsFinish(t *testing.T) {
 
 	result := make(chan error, 1)
 	go func() {
-		result <- shutdown(log, config.HTTP{ShutdownTimeout: 5 * time.Second}, srv.Config, func() {}, st)
+		result <- shutdown(log, config.HTTP{ShutdownTimeout: 5 * time.Second}, srv.Config, func() {}, st, nil)
 	}()
 	select {
 	case <-released:

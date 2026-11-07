@@ -398,7 +398,7 @@ func (q *Queries) ListPrivacyExceptionsOfOwnerFor(ctx context.Context, arg ListP
 
 const listPrivacySettings = `-- name: ListPrivacySettings :many
 
-SELECT user_id, avatar_visibility, profile_visibility, presence_visibility, read_receipts_enabled, direct_messages, group_invites, search_visibility FROM user_privacy_settings WHERE user_id = ANY($1::BIGINT[])
+SELECT user_id, avatar_visibility, profile_visibility, presence_visibility, read_receipts_enabled, direct_messages, group_invites, search_visibility, calls_enabled FROM user_privacy_settings WHERE user_id = ANY($1::BIGINT[])
 `
 
 // Privacy settings, exceptions, blocks and contact names: what one user lets others see and do.
@@ -420,6 +420,7 @@ func (q *Queries) ListPrivacySettings(ctx context.Context, userIds []int64) ([]U
 			&i.DirectMessages,
 			&i.GroupInvites,
 			&i.SearchVisibility,
+			&i.CallsEnabled,
 		); err != nil {
 			return nil, err
 		}
@@ -439,9 +440,10 @@ SET avatar_visibility = COALESCE($1, avatar_visibility),
     read_receipts_enabled = COALESCE($4::bool, read_receipts_enabled),
     direct_messages = COALESCE($5, direct_messages),
     group_invites = COALESCE($6, group_invites),
-    search_visibility = COALESCE($7, search_visibility)
-WHERE user_id = $8
-RETURNING user_id, avatar_visibility, profile_visibility, presence_visibility, read_receipts_enabled, direct_messages, group_invites, search_visibility
+    search_visibility = COALESCE($7, search_visibility),
+    calls_enabled = COALESCE($8::bool, calls_enabled)
+WHERE user_id = $9
+RETURNING user_id, avatar_visibility, profile_visibility, presence_visibility, read_receipts_enabled, direct_messages, group_invites, search_visibility, calls_enabled
 `
 
 type PatchPrivacySettingsParams struct {
@@ -452,6 +454,7 @@ type PatchPrivacySettingsParams struct {
 	DirectMessages      *string
 	GroupInvites        *string
 	SearchVisibility    *string
+	CallsEnabled        *bool
 	UserID              int64
 }
 
@@ -465,6 +468,7 @@ func (q *Queries) PatchPrivacySettings(ctx context.Context, arg PatchPrivacySett
 		arg.DirectMessages,
 		arg.GroupInvites,
 		arg.SearchVisibility,
+		arg.CallsEnabled,
 		arg.UserID,
 	)
 	var i UserPrivacySetting
@@ -477,6 +481,7 @@ func (q *Queries) PatchPrivacySettings(ctx context.Context, arg PatchPrivacySett
 		&i.DirectMessages,
 		&i.GroupInvites,
 		&i.SearchVisibility,
+		&i.CallsEnabled,
 	)
 	return i, err
 }
@@ -729,10 +734,10 @@ func (q *Queries) UnblockUser(ctx context.Context, arg UnblockUserParams) (int64
 const updatePrivacySettings = `-- name: UpdatePrivacySettings :one
 INSERT INTO user_privacy_settings (
     user_id, avatar_visibility, profile_visibility, presence_visibility, read_receipts_enabled,
-    direct_messages, group_invites, search_visibility
+    direct_messages, group_invites, search_visibility, calls_enabled
 ) VALUES (
     $1, $2, $3, $4, $5,
-    $6, $7, $8
+    $6, $7, $8, $9
 )
 ON CONFLICT (user_id) DO UPDATE SET
     avatar_visibility = EXCLUDED.avatar_visibility,
@@ -741,8 +746,9 @@ ON CONFLICT (user_id) DO UPDATE SET
     read_receipts_enabled = EXCLUDED.read_receipts_enabled,
     direct_messages = EXCLUDED.direct_messages,
     group_invites = EXCLUDED.group_invites,
-    search_visibility = EXCLUDED.search_visibility
-RETURNING user_id, avatar_visibility, profile_visibility, presence_visibility, read_receipts_enabled, direct_messages, group_invites, search_visibility
+    search_visibility = EXCLUDED.search_visibility,
+    calls_enabled = EXCLUDED.calls_enabled
+RETURNING user_id, avatar_visibility, profile_visibility, presence_visibility, read_receipts_enabled, direct_messages, group_invites, search_visibility, calls_enabled
 `
 
 type UpdatePrivacySettingsParams struct {
@@ -754,6 +760,7 @@ type UpdatePrivacySettingsParams struct {
 	DirectMessages      string
 	GroupInvites        string
 	SearchVisibility    string
+	CallsEnabled        bool
 }
 
 func (q *Queries) UpdatePrivacySettings(ctx context.Context, arg UpdatePrivacySettingsParams) (UserPrivacySetting, error) {
@@ -766,6 +773,7 @@ func (q *Queries) UpdatePrivacySettings(ctx context.Context, arg UpdatePrivacySe
 		arg.DirectMessages,
 		arg.GroupInvites,
 		arg.SearchVisibility,
+		arg.CallsEnabled,
 	)
 	var i UserPrivacySetting
 	err := row.Scan(
@@ -777,6 +785,7 @@ func (q *Queries) UpdatePrivacySettings(ctx context.Context, arg UpdatePrivacySe
 		&i.DirectMessages,
 		&i.GroupInvites,
 		&i.SearchVisibility,
+		&i.CallsEnabled,
 	)
 	return i, err
 }

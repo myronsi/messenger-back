@@ -14,6 +14,7 @@ type Server struct {
 	linkPreviews  *LinkPreviewServer
 	meta          MetaInfo
 	notifications *NotificationOptions
+	calls         *CallServer
 }
 
 // WithMessages adds history, sending, editing, deleting and forwarding over HTTP, and the media lists.

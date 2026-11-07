@@ -43,6 +43,7 @@ type AccountOptions struct {
 	Deleter   AccountDeleter
 	// AfterDeletion runs after an account was deleted. Optional.
 	AfterDeletion AfterAccountDeletion
+	OnBlocked     func(ctx context.Context, blockerID, blockedID int64)
 	Events        EventEmitter
 	Limiter       RateAllower
 	BasePath      string
@@ -224,6 +225,7 @@ func (a *AccountServer) privacy(ctx context.Context, userID int64) (PrivacySetti
 		DirectMessages:      DirectMessagePolicy(s.DirectMessages),
 		GroupInvites:        GroupInvitePolicy(visibilityFromDB(s.GroupInvites)),
 		SearchVisibility:    SearchVisibility(s.SearchVisibility),
+		CallsEnabled:        s.CallsEnabled,
 		Exceptions:          PrivacyExceptions{},
 	}
 	for _, k := range exceptionSettings {
@@ -311,6 +313,9 @@ func (a *AccountServer) UpdatePrivacySettings(w http.ResponseWriter, r *http.Req
 			return
 		}
 		set(&s.SearchVisibility, string(*body.SearchVisibility))
+	}
+	if body.CallsEnabled != nil {
+		s.CallsEnabled, changed = body.CallsEnabled, true
 	}
 	if !changed {
 		WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "body", Message: "send at least one setting"})
@@ -452,6 +457,9 @@ func (a *AccountServer) BlockUser(w http.ResponseWriter, r *http.Request, userID
 	if err != nil {
 		a.internal(w, r, "block user", err)
 		return
+	}
+	if a.o.OnBlocked != nil {
+		a.o.OnBlocked(context.WithoutCancel(r.Context()), p.UserID, target)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

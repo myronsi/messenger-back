@@ -1,0 +1,29 @@
+# LiveKit for the development stack only (compose.dev.yaml, profile calls). No TURN, no TLS, every port on
+# 127.0.0.1. The keys come from compose.dev.yaml (development values unless .env sets CALLS_API_KEY and
+# CALLS_API_SECRET). Production uses deploy/go/livekit/livekit.yaml.
+port: 7880
+
+rtc:
+  tcp_port: 7881
+  udp_port: 50000-50001
+  node_ip: 127.0.0.1
+  use_external_ip: false
+  allow_tcp_fallback: true
+
+turn:
+  enabled: false
+
+room:
+  auto_create: false
+  max_participants: 10
+  empty_timeout: 120
+  departure_timeout: 20
+
+webhook:
+  urls:
+    - http://api:8080/api/v2/calls/media-webhook
+
+logging:
+  level: debug
+  json: false
+  pion_level: error
