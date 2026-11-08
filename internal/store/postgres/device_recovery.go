@@ -37,7 +37,7 @@ type RecoveryDecision struct {
 	Passkey         *PasskeyLoginProof
 	PasskeysEnabled bool
 	MaxAge          time.Duration
-	MinSessionAge   time.Duration
+	SettledBefore   time.Time
 	Deny            bool
 }
 
@@ -147,16 +147,16 @@ func verifyApprover(ctx context.Context, tx pgx.Tx, uid int64, d RecoveryDecisio
 		return nil
 	}
 	if d.PasskeysEnabled {
-		var passkeys int
-		if err := tx.QueryRow(ctx, `SELECT count(*) FROM user_passkeys WHERE user_id=$1`, uid).Scan(&passkeys); err != nil {
+		var hasPasskeys bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM user_passkeys WHERE user_id=$1)`, uid).Scan(&hasPasskeys); err != nil {
 			return err
 		}
-		if passkeys > 0 {
+		if hasPasskeys {
 			return ErrVerificationRequired
 		}
 	}
 	var settled bool
-	if err := tx.QueryRow(ctx, `SELECT created_at<=now()-($3*interval '1 second') FROM user_sessions WHERE id=$1 AND user_id=$2`, d.SessionID, uid, d.MinSessionAge.Seconds()).Scan(&settled); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT created_at<=$3 FROM user_sessions WHERE id=$1 AND user_id=$2`, d.SessionID, uid, d.SettledBefore).Scan(&settled); err != nil {
 		return err
 	}
 	if !settled {

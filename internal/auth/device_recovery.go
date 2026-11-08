@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"math/big"
+	"strings"
 	"time"
 
 	"github.com/go-webauthn/webauthn/protocol"
@@ -151,8 +152,7 @@ func (s *Service) approverHasPasskeys(ctx context.Context, uid int64) (bool, err
 	if s.passkeys == nil {
 		return false, nil
 	}
-	keys, err := s.store.Passkeys().List(ctx, uid)
-	return len(keys) > 0, err
+	return s.store.Passkeys().Exists(ctx, uid)
 }
 
 func (s *Service) approvableFrom(ctx context.Context, p Principal) (time.Time, error) {
@@ -263,8 +263,11 @@ func (s *Service) verifyApprovalPasskey(ctx context.Context, c Client, p Princip
 }
 
 func (s *Service) DecideDeviceRecovery(ctx context.Context, c Client, p Principal, id string, a RecoveryApproval, deny bool) (string, error) {
-	if len(a.Code) > 128 || len(a.ChallengeID) > 128 || len(a.Credential) > 64*1024 {
+	if len(a.Code) > 128 {
 		return "", ErrRecoveryRequestNotFound
+	}
+	if len(a.ChallengeID) > 128 || len(a.Credential) > 64*1024 {
+		return "", ErrInvalidChallenge
 	}
 	r, err := s.pendingApproval(ctx, p, id)
 	if err != nil {
@@ -274,9 +277,15 @@ func (s *Service) DecideDeviceRecovery(ctx context.Context, c Client, p Principa
 	if err != nil {
 		return "", err
 	}
-	decision := postgres.RecoveryDecision{SessionID: p.SessionID, Match: a.Match, Deny: deny, MaxAge: s.recoveryApprovalMaxAge, MinSessionAge: s.recoveryApprovalMinSessionAge, PasskeysEnabled: s.passkeys != nil}
+	decision := postgres.RecoveryDecision{
+		SessionID: p.SessionID, Match: a.Match, Deny: deny, MaxAge: s.recoveryApprovalMaxAge,
+		SettledBefore: s.now().Add(-s.recoveryApprovalMinSessionAge), PasskeysEnabled: s.passkeys != nil,
+	}
 	decision.Proof = postgres.RecoveryProof{TwoFactorEnabled: st.TwoFactorEnabled, TwoFactorSecret: st.TwoFactorSecret}
 	if !deny && r.Match == a.Match {
+		if st.TwoFactorEnabled && strings.TrimSpace(a.Code) == "" {
+			return "", ErrTwoFactorRequired
+		}
 		if err = s.verifyApprover(ctx, c, p, r, a, &decision); err != nil {
 			return "", err
 		}

@@ -56,8 +56,9 @@ lock the owner out. The approval therefore proves that the account owner is pres
      A session that was just phished (for example through a fake QR sign-in) or created on a stolen device
      cannot reset the password at once, and the owner can see and revoke it under Security & devices meanwhile.
      Such a user can still recover with the recovery key or a verified email.
-3. Any enabled second factor (`401 two_factor_required` without `code`). The passkey challenge is consumed by the
-   first attempt, so the device asks for new options before it repeats the approval with the code.
+3. Any enabled second factor. A missing `code` answers `401 two_factor_required` before the passkey challenge is
+   used, so the device can repeat the approval with the same assertion and the code. A wrong code is checked after
+   the passkey, which uses up the challenge; the device then asks for new options.
 
 Unchanged: the approving session must be active, not revoked and used within `RECOVERY_APPROVAL_MAX_AGE`; the
 request expires after ten minutes; rate limits and the fifteen-minute block after a denial apply. The current
@@ -65,7 +66,16 @@ password and second-factor state are still pinned at approval, so a password cha
 the approval. Completion revokes every session, rotates the recovery key and starts the 24-hour recovery delay.
 The `recovery_request_approved` security event records `verification` (`passkey` or `session`).
 
-Remaining risk: a person who knows the device PIN of an unlocked phone with a passkey can approve. This is the
+Every approval sends a `security_alert` (`recovery_request_approved`) to all of the user's signed-in devices, so the
+owner sees it even when someone else approved.
+
+Remaining risk, accepted on purpose: on an account without passkeys and without a second factor, whoever holds a
+session that is older than `RECOVERY_APPROVAL_MIN_SESSION_AGE` (for example a refresh token stolen by malware) can
+approve a recovery they started themselves and reset the password, which also signs the owner out. Before this
+change they also needed the current password. The minimum session age, the alert above, the session list under
+Security & devices and the 24-hour recovery delay limit this; a passkey or two-factor authentication closes it.
+
+A person who knows the device PIN of an unlocked phone with a passkey can approve. This is the
 same trust the platform places in that PIN for every other passkey use.
 
 ## Passkeys

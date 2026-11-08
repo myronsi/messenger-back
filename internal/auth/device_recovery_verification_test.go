@@ -154,7 +154,7 @@ func TestDeviceRecoveryNewSessionMustWaitWithoutPasskey(t *testing.T) {
 		t.Fatal("rejected approval changed the request", got)
 	}
 	hash := f.e.svc.recoveryHash(f.request.ID)
-	decision := postgres.RecoveryDecision{SessionID: f.owner.SessionID, Match: f.request.Match, MaxAge: time.Hour, MinSessionAge: 72 * time.Hour}
+	decision := postgres.RecoveryDecision{SessionID: f.owner.SessionID, Match: f.request.Match, MaxAge: time.Hour, SettledBefore: time.Now().Add(-72 * time.Hour)}
 	if _, err = f.e.store.RecoveryRequests().Decide(f.ctx, hash, f.owner.User.ID, decision); !errors.Is(err, postgres.ErrSessionTooNew) {
 		t.Fatal("the store accepted a new session", err)
 	}
@@ -283,11 +283,22 @@ func TestDeviceRecoveryPasskeyThenSecondFactor(t *testing.T) {
 		t.Fatal(err)
 	}
 	options := f.passkeyOptions(t, f.owner)
-	if _, err = f.e.svc.DecideDeviceRecovery(f.ctx, f.c, principal(f.owner), f.approval, RecoveryApproval{Match: f.request.Match, ChallengeID: options.ChallengeID, Credential: device.assert(options, handle)}, false); !errors.Is(err, ErrTwoFactorRequired) {
+	assertion := device.assert(options, handle)
+	if _, err = f.e.svc.DecideDeviceRecovery(f.ctx, f.c, principal(f.owner), f.approval, RecoveryApproval{Match: f.request.Match, ChallengeID: options.ChallengeID, Credential: assertion}, false); !errors.Is(err, ErrTwoFactorRequired) {
 		t.Fatal("second factor skipped after the passkey", err)
 	}
-	options = f.passkeyOptions(t, f.owner)
-	if status, err := f.e.svc.DecideDeviceRecovery(f.ctx, f.c, principal(f.owner), f.approval, RecoveryApproval{Match: f.request.Match, Code: codes[1], ChallengeID: options.ChallengeID, Credential: device.assert(options, handle)}, false); err != nil || status != "approved" {
-		t.Fatal(status, err)
+	if status, err := f.e.svc.DecideDeviceRecovery(f.ctx, f.c, principal(f.owner), f.approval, RecoveryApproval{Match: f.request.Match, Code: codes[1], ChallengeID: options.ChallengeID, Credential: assertion}, false); err != nil || status != "approved" {
+		t.Fatal("a missing code used up the passkey challenge", status, err)
+	}
+}
+
+func TestDeviceRecoveryOversizedPasskeyIsInvalidRequest(t *testing.T) {
+	f := newApprovalFixture(t, "oversized", "10.0.1.9")
+	long := RecoveryApproval{Match: f.request.Match, ChallengeID: string(make([]byte, 129))}
+	if _, err := f.e.svc.DecideDeviceRecovery(f.ctx, f.c, principal(f.owner), f.approval, long, false); !errors.Is(err, ErrInvalidChallenge) {
+		t.Fatal("oversized challenge id", err)
+	}
+	if got := f.status(t); got != "pending" {
+		t.Fatal("oversized approval changed the request", got)
 	}
 }

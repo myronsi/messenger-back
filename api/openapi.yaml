@@ -2181,8 +2181,9 @@ paths:
         User verification follows `POST /auth/recovery-requests/{requestId}/approve/options`. When the account
         has passkeys, `passkey` must carry an assertion with user verification for the challenge from that call
         (`403 user_verification_required` without it, `403 invalid_credentials` for a failed assertion,
-        `400 invalid_request` for an unknown, used or expired challenge). The challenge is single use, so a
-        `401 two_factor_required` answer needs a new challenge before the request is repeated with `code`.
+        `400 invalid_request` for an unknown, used or expired challenge). A missing `code` answers
+        `401 two_factor_required` before the challenge is used, so the request can be repeated with the same
+        assertion and the code. A wrong code is checked after the passkey and uses up the challenge.
         Without passkeys the approving session must be at least as old as the minimum session age
         (`RECOVERY_APPROVAL_MIN_SESSION_AGE`, 72 hours by default), otherwise `403 session_too_new`.
 
