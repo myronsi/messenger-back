@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.9.0-alpha.1...v1.10.0-alpha.1) (2026-11-08)
+
+
+### Features
+
+* **auth:** approve device recovery without the old password ([#169](https://github.com/myronsi/messenger-back/issues/169)) ([783bf96](https://github.com/myronsi/messenger-back/commit/783bf96756112f0d2694085cd6f3c60e467aabc1))
+
 ## [1.9.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.8.0-alpha.1...v1.9.0-alpha.1) (2026-11-07)
 
 
