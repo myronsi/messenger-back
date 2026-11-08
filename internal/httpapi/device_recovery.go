@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/myronsi/messenger-back/internal/auth"
@@ -38,14 +39,21 @@ func (a *AuthServer) ApproveDeviceRecovery(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	var body struct {
-		Match    int    `json:"match_number"`
-		Password string `json:"password"`
-		Code     string `json:"code"`
+		Match   int    `json:"match_number"`
+		Code    string `json:"code"`
+		Passkey *struct {
+			ChallengeID string          `json:"challenge_id"`
+			Credential  json.RawMessage `json:"credential"`
+		} `json:"passkey"`
 	}
 	if !decode(w, r, &body) {
 		return
 	}
-	status, err := a.svc.DecideDeviceRecovery(r.Context(), a.clientOf(r), p, requestId, body.Match, body.Password, body.Code, false)
+	approval := auth.RecoveryApproval{Match: body.Match, Code: body.Code}
+	if body.Passkey != nil {
+		approval.ChallengeID, approval.Credential = body.Passkey.ChallengeID, body.Passkey.Credential
+	}
+	status, err := a.svc.DecideDeviceRecovery(r.Context(), a.clientOf(r), p, requestId, approval, false)
 	if err != nil {
 		a.fail(w, r, err, true)
 		return
@@ -54,12 +62,26 @@ func (a *AuthServer) ApproveDeviceRecovery(w http.ResponseWriter, r *http.Reques
 	writeJSONStatus(w, http.StatusOK, map[string]string{"status": status})
 }
 
+func (a *AuthServer) DeviceRecoveryApprovalOptions(w http.ResponseWriter, r *http.Request, requestId string, _ DeviceRecoveryApprovalOptionsParams) {
+	p, ok := a.principal(w, r)
+	if !ok {
+		return
+	}
+	options, err := a.svc.DeviceRecoveryApprovalOptions(r.Context(), a.clientOf(r), p, requestId)
+	if err != nil {
+		a.fail(w, r, err, true)
+		return
+	}
+	noStore(w)
+	writeJSONStatus(w, http.StatusOK, options)
+}
+
 func (a *AuthServer) DenyDeviceRecovery(w http.ResponseWriter, r *http.Request, requestId string, _ DenyDeviceRecoveryParams) {
 	p, ok := a.principal(w, r)
 	if !ok {
 		return
 	}
-	status, err := a.svc.DecideDeviceRecovery(r.Context(), a.clientOf(r), p, requestId, 0, "", "", true)
+	status, err := a.svc.DecideDeviceRecovery(r.Context(), a.clientOf(r), p, requestId, auth.RecoveryApproval{}, true)
 	if err != nil {
 		a.fail(w, r, err, true)
 		return

@@ -233,6 +233,24 @@ func (e DeleteMessagesRequestScope) Valid() bool {
 	}
 }
 
+// Defines values for DeviceRecoveryApprovalOptionsMethod.
+const (
+	DeviceRecoveryApprovalOptionsMethodPasskey DeviceRecoveryApprovalOptionsMethod = "passkey"
+	DeviceRecoveryApprovalOptionsMethodSession DeviceRecoveryApprovalOptionsMethod = "session"
+)
+
+// Valid indicates whether the value is a known member of the DeviceRecoveryApprovalOptionsMethod enum.
+func (e DeviceRecoveryApprovalOptionsMethod) Valid() bool {
+	switch e {
+	case DeviceRecoveryApprovalOptionsMethodPasskey:
+		return true
+	case DeviceRecoveryApprovalOptionsMethodSession:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for DeviceRecoveryStatusStatus.
 const (
 	DeviceRecoveryStatusStatusApproved DeviceRecoveryStatusStatus = "approved"
@@ -283,32 +301,34 @@ func (e DirectMessagePolicy) Valid() bool {
 
 // Defines values for ErrorCode.
 const (
-	ErrorCodeAlreadyExists        ErrorCode = "already_exists"
-	ErrorCodeAlreadyInCall        ErrorCode = "already_in_call"
-	ErrorCodeApprovalRequired     ErrorCode = "approval_required"
-	ErrorCodeBlockedByUser        ErrorCode = "blocked_by_user"
-	ErrorCodeCallEnded            ErrorCode = "call_ended"
-	ErrorCodeCallFull             ErrorCode = "call_full"
-	ErrorCodeCallIdentityRequired ErrorCode = "call_identity_required"
-	ErrorCodeCallsNotAllowed      ErrorCode = "calls_not_allowed"
-	ErrorCodeCallsUnavailable     ErrorCode = "calls_unavailable"
-	ErrorCodeClientOutdated       ErrorCode = "client_outdated"
-	ErrorCodeConflict             ErrorCode = "conflict"
-	ErrorCodeForbidden            ErrorCode = "forbidden"
-	ErrorCodeInternalError        ErrorCode = "internal_error"
-	ErrorCodeInvalidClientVersion ErrorCode = "invalid_client_version"
-	ErrorCodeInvalidCredentials   ErrorCode = "invalid_credentials"
-	ErrorCodeInvalidRequest       ErrorCode = "invalid_request"
-	ErrorCodeInvalidTwoFactorCode ErrorCode = "invalid_two_factor_code"
-	ErrorCodeNotFound             ErrorCode = "not_found"
-	ErrorCodePayloadTooLarge      ErrorCode = "payload_too_large"
-	ErrorCodeRateLimited          ErrorCode = "rate_limited"
-	ErrorCodeStaleEpoch           ErrorCode = "stale_epoch"
-	ErrorCodeTokenExpired         ErrorCode = "token_expired"
-	ErrorCodeTwoFactorRequired    ErrorCode = "two_factor_required"
-	ErrorCodeUnauthenticated      ErrorCode = "unauthenticated"
-	ErrorCodeUnsupportedMediaType ErrorCode = "unsupported_media_type"
-	ErrorCodeValidationFailed     ErrorCode = "validation_failed"
+	ErrorCodeAlreadyExists            ErrorCode = "already_exists"
+	ErrorCodeAlreadyInCall            ErrorCode = "already_in_call"
+	ErrorCodeApprovalRequired         ErrorCode = "approval_required"
+	ErrorCodeBlockedByUser            ErrorCode = "blocked_by_user"
+	ErrorCodeCallEnded                ErrorCode = "call_ended"
+	ErrorCodeCallFull                 ErrorCode = "call_full"
+	ErrorCodeCallIdentityRequired     ErrorCode = "call_identity_required"
+	ErrorCodeCallsNotAllowed          ErrorCode = "calls_not_allowed"
+	ErrorCodeCallsUnavailable         ErrorCode = "calls_unavailable"
+	ErrorCodeClientOutdated           ErrorCode = "client_outdated"
+	ErrorCodeConflict                 ErrorCode = "conflict"
+	ErrorCodeForbidden                ErrorCode = "forbidden"
+	ErrorCodeInternalError            ErrorCode = "internal_error"
+	ErrorCodeInvalidClientVersion     ErrorCode = "invalid_client_version"
+	ErrorCodeInvalidCredentials       ErrorCode = "invalid_credentials"
+	ErrorCodeInvalidRequest           ErrorCode = "invalid_request"
+	ErrorCodeInvalidTwoFactorCode     ErrorCode = "invalid_two_factor_code"
+	ErrorCodeNotFound                 ErrorCode = "not_found"
+	ErrorCodePayloadTooLarge          ErrorCode = "payload_too_large"
+	ErrorCodeRateLimited              ErrorCode = "rate_limited"
+	ErrorCodeSessionTooNew            ErrorCode = "session_too_new"
+	ErrorCodeStaleEpoch               ErrorCode = "stale_epoch"
+	ErrorCodeTokenExpired             ErrorCode = "token_expired"
+	ErrorCodeTwoFactorRequired        ErrorCode = "two_factor_required"
+	ErrorCodeUnauthenticated          ErrorCode = "unauthenticated"
+	ErrorCodeUnsupportedMediaType     ErrorCode = "unsupported_media_type"
+	ErrorCodeUserVerificationRequired ErrorCode = "user_verification_required"
+	ErrorCodeValidationFailed         ErrorCode = "validation_failed"
 )
 
 // Valid indicates whether the value is a known member of the ErrorCode enum.
@@ -354,6 +374,8 @@ func (e ErrorCode) Valid() bool {
 		return true
 	case ErrorCodeRateLimited:
 		return true
+	case ErrorCodeSessionTooNew:
+		return true
 	case ErrorCodeStaleEpoch:
 		return true
 	case ErrorCodeTokenExpired:
@@ -363,6 +385,8 @@ func (e ErrorCode) Valid() bool {
 	case ErrorCodeUnauthenticated:
 		return true
 	case ErrorCodeUnsupportedMediaType:
+		return true
+	case ErrorCodeUserVerificationRequired:
 		return true
 	case ErrorCodeValidationFailed:
 		return true
@@ -1179,10 +1203,30 @@ type DeleteMessagesRequestScope string
 
 // DeviceRecoveryApproval defines model for DeviceRecoveryApproval.
 type DeviceRecoveryApproval struct {
-	Code        *string `json:"code,omitempty"`
-	MatchNumber int     `json:"match_number"`
-	Password    string  `json:"password"`
+	Code        *string              `json:"code,omitempty"`
+	MatchNumber int                  `json:"match_number"`
+	Passkey     *PasskeyVerification `json:"passkey,omitempty"`
+
+	// Password Ignored. Older clients still send it.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	Password *string `json:"password,omitempty"`
 }
+
+// DeviceRecoveryApprovalOptions defines model for DeviceRecoveryApprovalOptions.
+type DeviceRecoveryApprovalOptions struct {
+	// ApprovableFrom Present with `method: session` while the session is too new to approve.
+	ApprovableFrom *time.Time `json:"approvable_from,omitempty"`
+
+	// ChallengeId Present with `method: passkey`.
+	ChallengeId *string                             `json:"challenge_id,omitempty"`
+	Method      DeviceRecoveryApprovalOptionsMethod `json:"method"`
+
+	// PublicKey WebAuthn request options, present with `method: passkey`.
+	PublicKey *map[string]interface{} `json:"public_key,omitempty"`
+}
+
+// DeviceRecoveryApprovalOptionsMethod defines model for DeviceRecoveryApprovalOptions.Method.
+type DeviceRecoveryApprovalOptionsMethod string
 
 // DeviceRecoveryComplete defines model for DeviceRecoveryComplete.
 type DeviceRecoveryComplete struct {
@@ -2442,6 +2486,15 @@ type DeviceRecoveryStatusParams struct {
 
 // ApproveDeviceRecoveryParams defines parameters for ApproveDeviceRecovery.
 type ApproveDeviceRecoveryParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// DeviceRecoveryApprovalOptionsParams defines parameters for DeviceRecoveryApprovalOptions.
+type DeviceRecoveryApprovalOptionsParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
@@ -3875,9 +3928,12 @@ type ServerInterface interface {
 	// DeviceRecoveryStatus Poll the status of a secret recovery request
 	// (GET /auth/recovery-requests/{requestId})
 	DeviceRecoveryStatus(w http.ResponseWriter, r *http.Request, requestId string, params DeviceRecoveryStatusParams)
-	// ApproveDeviceRecovery Approve a recovery request using number matching, the password and the second factor
+	// ApproveDeviceRecovery Approve a recovery request using number matching, user verification and the second factor
 	// (POST /auth/recovery-requests/{requestId}/approve)
 	ApproveDeviceRecovery(w http.ResponseWriter, r *http.Request, requestId string, params ApproveDeviceRecoveryParams)
+	// DeviceRecoveryApprovalOptions Tell the approving device how to verify its user
+	// (POST /auth/recovery-requests/{requestId}/approve/options)
+	DeviceRecoveryApprovalOptions(w http.ResponseWriter, r *http.Request, requestId string, params DeviceRecoveryApprovalOptionsParams)
 	// CancelDeviceRecovery Withdraw a pending recovery request from the requesting browser
 	// (POST /auth/recovery-requests/{requestId}/cancel)
 	CancelDeviceRecovery(w http.ResponseWriter, r *http.Request, requestId string, params CancelDeviceRecoveryParams)
@@ -5702,6 +5758,75 @@ func (siw *ServerInterfaceWrapper) ApproveDeviceRecovery(w http.ResponseWriter, 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ApproveDeviceRecovery(w, r, requestId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeviceRecoveryApprovalOptions operation middleware
+func (siw *ServerInterfaceWrapper) DeviceRecoveryApprovalOptions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "requestId" -------------
+	var requestId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "requestId", r.PathValue("requestId"), &requestId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "requestId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeviceRecoveryApprovalOptionsParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeviceRecoveryApprovalOptions(w, r, requestId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -12280,6 +12405,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/recovery-requests", wrapper.StartDeviceRecovery)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/auth/recovery-requests/{requestId}", wrapper.DeviceRecoveryStatus)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/recovery-requests/{requestId}/approve", wrapper.ApproveDeviceRecovery)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/recovery-requests/{requestId}/approve/options", wrapper.DeviceRecoveryApprovalOptions)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/recovery-requests/{requestId}/deny", wrapper.DenyDeviceRecovery)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/recovery-requests/{requestId}/complete", wrapper.CompleteDeviceRecovery)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/recovery-requests/{requestId}/cancel", wrapper.CancelDeviceRecovery)
@@ -15417,6 +15543,128 @@ type ApproveDeviceRecovery429ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response ApproveDeviceRecovery429ApplicationProblemPlusJSONResponse) VisitApproveDeviceRecoveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeviceRecoveryApprovalOptionsRequestObject struct {
+	RequestId string `json:"requestId"`
+	Params    DeviceRecoveryApprovalOptionsParams
+}
+
+type DeviceRecoveryApprovalOptionsResponseObject interface {
+	VisitDeviceRecoveryApprovalOptionsResponse(w http.ResponseWriter) error
+}
+
+type DeviceRecoveryApprovalOptions200JSONResponse DeviceRecoveryApprovalOptions
+
+func (response DeviceRecoveryApprovalOptions200JSONResponse) VisitDeviceRecoveryApprovalOptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeviceRecoveryApprovalOptions400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response DeviceRecoveryApprovalOptions400ApplicationProblemPlusJSONResponse) VisitDeviceRecoveryApprovalOptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeviceRecoveryApprovalOptions401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response DeviceRecoveryApprovalOptions401ApplicationProblemPlusJSONResponse) VisitDeviceRecoveryApprovalOptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeviceRecoveryApprovalOptions403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response DeviceRecoveryApprovalOptions403ApplicationProblemPlusJSONResponse) VisitDeviceRecoveryApprovalOptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeviceRecoveryApprovalOptions404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response DeviceRecoveryApprovalOptions404ApplicationProblemPlusJSONResponse) VisitDeviceRecoveryApprovalOptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeviceRecoveryApprovalOptions426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response DeviceRecoveryApprovalOptions426ApplicationProblemPlusJSONResponse) VisitDeviceRecoveryApprovalOptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeviceRecoveryApprovalOptions429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response DeviceRecoveryApprovalOptions429ApplicationProblemPlusJSONResponse) VisitDeviceRecoveryApprovalOptionsResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -25540,9 +25788,12 @@ type StrictServerInterface interface {
 	// DeviceRecoveryStatus Poll the status of a secret recovery request
 	// (GET /auth/recovery-requests/{requestId})
 	DeviceRecoveryStatus(ctx context.Context, request DeviceRecoveryStatusRequestObject) (DeviceRecoveryStatusResponseObject, error)
-	// ApproveDeviceRecovery Approve a recovery request using number matching, the password and the second factor
+	// ApproveDeviceRecovery Approve a recovery request using number matching, user verification and the second factor
 	// (POST /auth/recovery-requests/{requestId}/approve)
 	ApproveDeviceRecovery(ctx context.Context, request ApproveDeviceRecoveryRequestObject) (ApproveDeviceRecoveryResponseObject, error)
+	// DeviceRecoveryApprovalOptions Tell the approving device how to verify its user
+	// (POST /auth/recovery-requests/{requestId}/approve/options)
+	DeviceRecoveryApprovalOptions(ctx context.Context, request DeviceRecoveryApprovalOptionsRequestObject) (DeviceRecoveryApprovalOptionsResponseObject, error)
 	// CancelDeviceRecovery Withdraw a pending recovery request from the requesting browser
 	// (POST /auth/recovery-requests/{requestId}/cancel)
 	CancelDeviceRecovery(ctx context.Context, request CancelDeviceRecoveryRequestObject) (CancelDeviceRecoveryResponseObject, error)
@@ -26620,6 +26871,33 @@ func (sh *strictHandler) ApproveDeviceRecovery(w http.ResponseWriter, r *http.Re
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ApproveDeviceRecoveryResponseObject); ok {
 		if err := validResponse.VisitApproveDeviceRecoveryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeviceRecoveryApprovalOptions operation middleware
+func (sh *strictHandler) DeviceRecoveryApprovalOptions(w http.ResponseWriter, r *http.Request, requestId string, params DeviceRecoveryApprovalOptionsParams) {
+	var request DeviceRecoveryApprovalOptionsRequestObject
+
+	request.RequestId = requestId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeviceRecoveryApprovalOptions(ctx, request.(DeviceRecoveryApprovalOptionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeviceRecoveryApprovalOptions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeviceRecoveryApprovalOptionsResponseObject); ok {
+		if err := validResponse.VisitDeviceRecoveryApprovalOptionsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

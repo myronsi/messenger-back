@@ -33,6 +33,7 @@ type PasskeyRepository interface {
 	Handle(context.Context, int64, []byte) ([]byte, error)
 	UserByHandle(context.Context, []byte) (int64, error)
 	List(context.Context, int64) ([]Passkey, error)
+	Exists(context.Context, int64) (bool, error)
 	Get(context.Context, []byte) (Passkey, error)
 	Challenge(context.Context, WebAuthnChallenge) error
 	TakeChallenge(context.Context, string, string, *int64, *uuid.UUID) (WebAuthnChallenge, error)
@@ -63,6 +64,14 @@ func scanPasskey(row pgx.Row) (Passkey, error) {
 	err := row.Scan(&out.ID, &out.UserID, &out.Credential, &out.Name, &out.CreatedAt, &out.LastUsedAt)
 	return out, mapError(err)
 }
+func (r passkeyRepo) Exists(ctx context.Context, uid int64) (bool, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	var exists bool
+	err := r.s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM user_passkeys WHERE user_id=$1)`, uid).Scan(&exists)
+	return exists, err
+}
+
 func (r passkeyRepo) List(ctx context.Context, uid int64) ([]Passkey, error) {
 	ctx, cancel := r.s.call(ctx)
 	defer cancel()

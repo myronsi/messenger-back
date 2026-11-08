@@ -79,19 +79,19 @@ func TestDeviceRecoveryApprovalAsksForMissingSecondFactor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = e.svc.DecideDeviceRecovery(ctx, c, principal(other), approval, r.Match, "correct horse", "", false); !errors.Is(err, ErrRecoveryRequestNotFound) {
+	if _, err = e.svc.DecideDeviceRecovery(ctx, c, principal(other), approval, RecoveryApproval{Match: r.Match}, false); !errors.Is(err, ErrRecoveryRequestNotFound) {
 		t.Fatal("foreign session revealed the second factor", err)
 	}
-	if _, err = e.svc.DecideDeviceRecovery(ctx, c, principal(owner), approval, r.Match, "correct horse", "", false); !errors.Is(err, ErrTwoFactorRequired) {
+	if _, err = e.svc.DecideDeviceRecovery(ctx, c, principal(owner), approval, RecoveryApproval{Match: r.Match}, false); !errors.Is(err, ErrTwoFactorRequired) {
 		t.Fatal("missing code", err)
 	}
 	if status, err := e.svc.DeviceRecoveryStatus(ctx, c, r.ID); err != nil || status != "pending" {
 		t.Fatal("two_factor_required changed the request", status, err)
 	}
-	if _, err = e.svc.DecideDeviceRecovery(ctx, c, principal(owner), approval, r.Match, "correct horse", "000000", false); !errors.Is(err, ErrRecoveryKey) {
+	if _, err = e.svc.DecideDeviceRecovery(ctx, c, principal(owner), approval, RecoveryApproval{Match: r.Match, Code: "000000"}, false); !errors.Is(err, ErrRecoveryKey) {
 		t.Fatal("wrong code", err)
 	}
-	if status, err := e.svc.DecideDeviceRecovery(ctx, c, principal(owner), approval, r.Match, "correct horse", codes[0], false); err != nil || status != "approved" {
+	if status, err := e.svc.DecideDeviceRecovery(ctx, c, principal(owner), approval, RecoveryApproval{Match: r.Match, Code: codes[0]}, false); err != nil || status != "approved" {
 		t.Fatal("request not usable after two_factor_required", status, err)
 	}
 	if _, err = e.svc.CompleteDeviceRecovery(ctx, c, r.ID, "brand new password"); err != nil {
@@ -115,7 +115,7 @@ func TestDeviceRecoveryWrongNumberStillDeniesWithTwoFactor(t *testing.T) {
 	if wrong == r.Match {
 		wrong = 11
 	}
-	if status, err := e.svc.DecideDeviceRecovery(ctx, c, principal(owner), approval, wrong, "", "", false); err != nil || status != "denied" {
+	if status, err := e.svc.DecideDeviceRecovery(ctx, c, principal(owner), approval, RecoveryApproval{Match: wrong}, false); err != nil || status != "denied" {
 		t.Fatal("wrong number must deny, not ask for a code", status, err)
 	}
 }

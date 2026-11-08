@@ -25,12 +25,28 @@ type DeviceRecovery struct {
 	Proof              PinnedProof
 }
 
+var (
+	ErrVerificationRequired = errors.New("approver must verify with a passkey")
+	ErrSessionTooNew        = errors.New("approving session is too new")
+)
+
+type RecoveryDecision struct {
+	SessionID       uuid.UUID
+	Match           int
+	Proof           RecoveryProof
+	Passkey         *PasskeyLoginProof
+	PasskeysEnabled bool
+	MaxAge          time.Duration
+	SettledBefore   time.Time
+	Deny            bool
+}
+
 type RecoveryRequestRepository interface {
 	Create(context.Context, DeviceRecovery) (bool, error)
 	Get(context.Context, string) (DeviceRecovery, error)
 	GetForApproval(context.Context, string) (DeviceRecovery, error)
 	Cancel(context.Context, string) error
-	Decide(context.Context, string, int64, uuid.UUID, int, RecoveryProof, time.Duration, bool) (string, error)
+	Decide(context.Context, string, int64, RecoveryDecision) (string, error)
 	Complete(context.Context, DeviceRecovery, string, string, time.Duration) (PasswordReset, error)
 }
 
@@ -119,13 +135,43 @@ func recentRecoverySession(ctx context.Context, tx rowQuerier, uid int64, sid uu
 	return nil
 }
 
-func (r recoveryRequestRepo) Decide(ctx context.Context, hash string, uid int64, sid uuid.UUID, match int, proof RecoveryProof, maxAge time.Duration, deny bool) (string, error) {
-	status := ""
-	err := r.s.inRawTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
-		if _, err := lockRecoveryState(ctx, tx, uid, proof); err != nil {
+func verifyApprover(ctx context.Context, tx pgx.Tx, uid int64, d RecoveryDecision) error {
+	if d.Passkey != nil {
+		changed, err := sqlcdb.New(tx).UpdatePasskeyForLogin(ctx, sqlcdb.UpdatePasskeyForLoginParams{CredentialID: d.Passkey.ID, UserID: uid, ExpectedCredential: d.Passkey.ExpectedCredential, Credential: d.Passkey.Credential})
+		if err != nil {
 			return err
 		}
-		if err := recentRecoverySession(ctx, tx, uid, sid, maxAge); err != nil {
+		if changed != 1 {
+			return ErrConflict
+		}
+		return nil
+	}
+	if d.PasskeysEnabled {
+		var hasPasskeys bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM user_passkeys WHERE user_id=$1)`, uid).Scan(&hasPasskeys); err != nil {
+			return err
+		}
+		if hasPasskeys {
+			return ErrVerificationRequired
+		}
+	}
+	var settled bool
+	if err := tx.QueryRow(ctx, `SELECT created_at<=$3 FROM user_sessions WHERE id=$1 AND user_id=$2`, d.SessionID, uid, d.SettledBefore).Scan(&settled); err != nil {
+		return err
+	}
+	if !settled {
+		return ErrSessionTooNew
+	}
+	return nil
+}
+
+func (r recoveryRequestRepo) Decide(ctx context.Context, hash string, uid int64, d RecoveryDecision) (string, error) {
+	status := ""
+	err := r.s.inRawTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		if _, err := lockRecoveryState(ctx, tx, uid, d.Proof); err != nil {
+			return err
+		}
+		if err := recentRecoverySession(ctx, tx, uid, d.SessionID, d.MaxAge); err != nil {
 			if errors.Is(err, ErrNotFound) {
 				return ErrStaleApproval
 			}
@@ -138,13 +184,16 @@ func (r recoveryRequestRepo) Decide(ctx context.Context, hash string, uid int64,
 		if request.Status != "pending" || !request.ExpiresAt.After(time.Now()) {
 			return ErrNotFound
 		}
-		if deny || request.Match != match {
+		if d.Deny || request.Match != d.Match {
 			status = "denied"
 			if _, err = tx.Exec(ctx, `UPDATE user_security_settings SET recovery_requests_blocked_until=now()+interval '15 minutes' WHERE user_id=$1`, uid); err != nil {
 				return err
 			}
 		} else {
-			if err = consumeRecoveryFactor(ctx, tx, uid, proof.BackupCodeHash); err != nil {
+			if err = verifyApprover(ctx, tx, uid, d); err != nil {
+				return err
+			}
+			if err = consumeRecoveryFactor(ctx, tx, uid, d.Proof.BackupCodeHash); err != nil {
 				if errors.Is(err, ErrNotFound) {
 					return ErrInvalid
 				}
@@ -152,11 +201,11 @@ func (r recoveryRequestRepo) Decide(ctx context.Context, hash string, uid int64,
 			}
 			status = "approved"
 		}
-		encoded, err := json.Marshal(proof.Pin())
+		encoded, err := json.Marshal(d.Proof.Pin())
 		if err != nil {
 			return err
 		}
-		_, err = tx.Exec(ctx, `UPDATE recovery_requests SET status=$2,approved_by_session=$3,approved_proof=$4 WHERE id_hash=$1`, hash, status, sid, encoded)
+		_, err = tx.Exec(ctx, `UPDATE recovery_requests SET status=$2,approved_by_session=$3,approved_proof=$4 WHERE id_hash=$1`, hash, status, d.SessionID, encoded)
 		return err
 	})
 	return status, mapError(err)

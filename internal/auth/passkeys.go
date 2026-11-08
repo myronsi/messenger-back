@@ -105,6 +105,7 @@ type passkeyCeremony struct {
 	Proof    postgres.PinnedProof
 	Backup   *string
 	Username string
+	Request  string
 }
 type PasskeyOptions struct {
 	ChallengeID string `json:"challenge_id"`

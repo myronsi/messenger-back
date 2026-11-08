@@ -3,15 +3,40 @@ package auth
 import (
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"math/big"
+	"strings"
 	"time"
+
+	"github.com/go-webauthn/webauthn/protocol"
+	"github.com/go-webauthn/webauthn/webauthn"
 
 	"github.com/myronsi/messenger-back/internal/geoip"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 )
 
-var ErrRecoveryRequestNotFound = errors.New("recovery request not found or no longer pending")
+var (
+	ErrRecoveryRequestNotFound  = errors.New("recovery request not found or no longer pending")
+	ErrUserVerificationRequired = errors.New("approval needs a passkey with user verification")
+	ErrApprovalSessionTooNew    = errors.New("session too new to approve a recovery request")
+)
+
+const recoveryApprovalPurpose = "recovery_approval"
+
+type RecoveryApproval struct {
+	Match       int
+	Code        string
+	ChallengeID string
+	Credential  json.RawMessage
+}
+
+type RecoveryApprovalOptions struct {
+	Method         string     `json:"method"`
+	ChallengeID    string     `json:"challenge_id,omitempty"`
+	PublicKey      any        `json:"public_key,omitempty"`
+	ApprovableFrom *time.Time `json:"approvable_from,omitempty"`
+}
 
 type RecoveryRequestResult struct {
 	ID        string    `json:"request_id"`
@@ -112,14 +137,139 @@ func (s *Service) DeviceRecoveryStatus(ctx context.Context, c Client, id string)
 	return r.Status, nil
 }
 
-func (s *Service) DecideDeviceRecovery(ctx context.Context, c Client, p Principal, id string, match int, password, code string, deny bool) (string, error) {
-	if len(id) < 32 || len(id) > 128 || len(code) > 128 {
-		return "", ErrRecoveryRequestNotFound
+func (s *Service) pendingApproval(ctx context.Context, p Principal, id string) (postgres.DeviceRecovery, error) {
+	if len(id) < 32 || len(id) > 128 {
+		return postgres.DeviceRecovery{}, ErrRecoveryRequestNotFound
 	}
 	r, err := s.store.RecoveryRequests().GetForApproval(ctx, s.recoveryHash(id))
 	if errors.Is(err, postgres.ErrNotFound) || err == nil && (r.UserID != p.UserID || r.Status != "pending" || !r.ExpiresAt.After(s.now())) {
+		return postgres.DeviceRecovery{}, ErrRecoveryRequestNotFound
+	}
+	return r, err
+}
+
+func (s *Service) approverHasPasskeys(ctx context.Context, uid int64) (bool, error) {
+	if s.passkeys == nil {
+		return false, nil
+	}
+	return s.store.Passkeys().Exists(ctx, uid)
+}
+
+func (s *Service) approvableFrom(ctx context.Context, p Principal) (time.Time, error) {
+	session, err := s.store.Sessions().Get(ctx, p.SessionID)
+	if errors.Is(err, postgres.ErrNotFound) || err == nil && (session.UserID != p.UserID || !session.Active(s.now())) {
+		return time.Time{}, ErrApprovalSessionStale
+	}
+	return session.CreatedAt.Add(s.recoveryApprovalMinSessionAge), err
+}
+
+func (s *Service) DeviceRecoveryApprovalOptions(ctx context.Context, c Client, p Principal, id string) (RecoveryApprovalOptions, error) {
+	r, err := s.pendingApproval(ctx, p, id)
+	if err != nil {
+		return RecoveryApprovalOptions{}, err
+	}
+	withPasskey, err := s.approverHasPasskeys(ctx, p.UserID)
+	if err != nil {
+		return RecoveryApprovalOptions{}, err
+	}
+	if !withPasskey {
+		from, err := s.approvableFrom(ctx, p)
+		if err != nil {
+			return RecoveryApprovalOptions{}, err
+		}
+		out := RecoveryApprovalOptions{Method: "session"}
+		if from.After(s.now()) {
+			from = from.UTC()
+			out.ApprovableFrom = &from
+		}
+		return out, nil
+	}
+	if err = s.take(ctx, RulePasskeyBegin, c.ipString()); err != nil {
+		return RecoveryApprovalOptions{}, err
+	}
+	user, err := s.loadPasskeyUser(ctx, p.UserID)
+	if err != nil {
+		return RecoveryApprovalOptions{}, err
+	}
+	options, session, err := s.passkeys.BeginLogin(user, webauthn.WithUserVerification(protocol.VerificationRequired))
+	if err != nil {
+		return RecoveryApprovalOptions{}, err
+	}
+	session.Expires = s.now().Add(5 * time.Minute)
+	if r.ExpiresAt.Before(session.Expires) {
+		session.Expires = r.ExpiresAt
+	}
+	challenge, err := randomToken(32)
+	if err != nil {
+		return RecoveryApprovalOptions{}, err
+	}
+	payload, err := json.Marshal(passkeyCeremony{Session: *session, Request: r.Hash})
+	if err != nil {
+		return RecoveryApprovalOptions{}, err
+	}
+	err = s.store.Passkeys().Challenge(ctx, postgres.WebAuthnChallenge{Hash: s.recoveryHash(challenge), Purpose: recoveryApprovalPurpose, UserID: &p.UserID, SessionID: &p.SessionID, Payload: payload, ExpiresAt: session.Expires})
+	return RecoveryApprovalOptions{Method: "passkey", ChallengeID: challenge, PublicKey: options.Response}, err
+}
+
+func (s *Service) verifyApprovalPasskey(ctx context.Context, c Client, p Principal, request string, a RecoveryApproval) (*postgres.PasskeyLoginProof, error) {
+	if a.ChallengeID == "" || len(a.Credential) == 0 {
+		return nil, ErrUserVerificationRequired
+	}
+	if len(a.ChallengeID) < 32 {
+		return nil, ErrInvalidChallenge
+	}
+	challenge, err := s.store.Passkeys().TakeChallenge(ctx, s.recoveryHash(a.ChallengeID), recoveryApprovalPurpose, &p.UserID, &p.SessionID)
+	if errors.Is(err, postgres.ErrNotFound) {
+		return nil, ErrInvalidChallenge
+	}
+	if err != nil {
+		return nil, err
+	}
+	var ceremony passkeyCeremony
+	if err = json.Unmarshal(challenge.Payload, &ceremony); err != nil {
+		return nil, err
+	}
+	if ceremony.Request != request {
+		return nil, ErrInvalidChallenge
+	}
+	parsed, err := protocol.ParseCredentialRequestResponseBytes(a.Credential)
+	if err != nil {
+		return nil, ErrInvalidCredentials
+	}
+	user, err := s.loadPasskeyUser(ctx, p.UserID)
+	if err != nil {
+		return nil, err
+	}
+	credential, err := s.passkeys.ValidateLogin(user, ceremony.Session, parsed)
+	if err != nil || credential == nil || !credential.Flags.UserVerified {
+		return nil, ErrInvalidCredentials
+	}
+	if credential.Authenticator.CloneWarning {
+		s.event(ctx, p.UserID, "passkey_counter_warning", c, nil)
+		return nil, ErrInvalidCredentials
+	}
+	stored, err := s.store.Passkeys().Get(ctx, credential.ID)
+	if errors.Is(err, postgres.ErrNotFound) || err == nil && stored.UserID != p.UserID {
+		return nil, ErrInvalidCredentials
+	}
+	if err != nil {
+		return nil, err
+	}
+	sealed, err := s.sealCredential(p.UserID, credential)
+	if err != nil {
+		return nil, err
+	}
+	return &postgres.PasskeyLoginProof{ID: stored.ID, ExpectedCredential: stored.Credential, Credential: sealed}, nil
+}
+
+func (s *Service) DecideDeviceRecovery(ctx context.Context, c Client, p Principal, id string, a RecoveryApproval, deny bool) (string, error) {
+	if len(a.Code) > 128 {
 		return "", ErrRecoveryRequestNotFound
 	}
+	if len(a.ChallengeID) > 128 || len(a.Credential) > 64*1024 {
+		return "", ErrInvalidChallenge
+	}
+	r, err := s.pendingApproval(ctx, p, id)
 	if err != nil {
 		return "", err
 	}
@@ -127,29 +277,71 @@ func (s *Service) DecideDeviceRecovery(ctx context.Context, c Client, p Principa
 	if err != nil {
 		return "", err
 	}
-	proof := postgres.RecoveryProof{TwoFactorEnabled: st.TwoFactorEnabled, TwoFactorSecret: st.TwoFactorSecret}
-	if !deny && r.Match == match {
-		if proof.PasswordHash, err = s.verifyPassword(ctx, p.UserID, password); err != nil {
+	decision := postgres.RecoveryDecision{
+		SessionID: p.SessionID, Match: a.Match, Deny: deny, MaxAge: s.recoveryApprovalMaxAge,
+		SettledBefore: s.now().Add(-s.recoveryApprovalMinSessionAge), PasskeysEnabled: s.passkeys != nil,
+	}
+	decision.Proof = postgres.RecoveryProof{TwoFactorEnabled: st.TwoFactorEnabled, TwoFactorSecret: st.TwoFactorSecret}
+	if !deny && r.Match == a.Match {
+		if st.TwoFactorEnabled && strings.TrimSpace(a.Code) == "" {
+			return "", ErrTwoFactorRequired
+		}
+		if err = s.verifyApprover(ctx, c, p, r, a, &decision); err != nil {
 			return "", err
 		}
-		if proof.BackupCodeHash, err = s.limitedRecoveryFactor(ctx, p.UserID, st, code); err != nil {
+		if decision.Proof.BackupCodeHash, err = s.limitedRecoveryFactor(ctx, p.UserID, st, a.Code); err != nil {
 			return "", err
 		}
 	}
-	status, err := s.store.RecoveryRequests().Decide(ctx, r.Hash, p.UserID, p.SessionID, match, proof, s.recoveryApprovalMaxAge, deny)
+	status, err := s.store.RecoveryRequests().Decide(ctx, r.Hash, p.UserID, decision)
 	switch {
 	case errors.Is(err, postgres.ErrNotFound):
 		return "", ErrRecoveryRequestNotFound
 	case errors.Is(err, postgres.ErrStaleApproval):
 		return "", ErrApprovalSessionStale
+	case errors.Is(err, postgres.ErrVerificationRequired):
+		return "", ErrUserVerificationRequired
+	case errors.Is(err, postgres.ErrSessionTooNew):
+		return "", ErrApprovalSessionTooNew
 	case errors.Is(err, postgres.ErrInvalid):
 		return "", ErrRecoveryKey
 	case errors.Is(err, postgres.ErrConflict):
 		return "", ErrConflict
 	case err == nil:
-		s.event(ctx, p.UserID, "recovery_request_"+status, c, nil)
+		var details map[string]any
+		if status == "approved" {
+			details = map[string]any{"verification": "session"}
+			if decision.Passkey != nil {
+				details["verification"] = "passkey"
+			}
+		}
+		s.event(ctx, p.UserID, "recovery_request_"+status, c, details)
 	}
 	return status, err
+}
+
+func (s *Service) verifyApprover(ctx context.Context, c Client, p Principal, r postgres.DeviceRecovery, a RecoveryApproval, decision *postgres.RecoveryDecision) error {
+	creds, err := s.store.Users().CredentialsByID(ctx, p.UserID)
+	if err != nil {
+		return err
+	}
+	decision.Proof.PasswordHash = creds.PasswordHash
+	withPasskey, err := s.approverHasPasskeys(ctx, p.UserID)
+	if err != nil {
+		return err
+	}
+	if withPasskey {
+		decision.Passkey, err = s.verifyApprovalPasskey(ctx, c, p, r.Hash, a)
+		return err
+	}
+	from, err := s.approvableFrom(ctx, p)
+	if err != nil {
+		return err
+	}
+	if from.After(s.now()) {
+		return ErrApprovalSessionTooNew
+	}
+	return nil
 }
 
 func (s *Service) CancelDeviceRecovery(ctx context.Context, c Client, id string) error {

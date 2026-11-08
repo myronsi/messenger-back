@@ -62,6 +62,9 @@ func (Unimplemented) DeviceRecoveryStatus(w http.ResponseWriter, r *http.Request
 func (Unimplemented) ApproveDeviceRecovery(w http.ResponseWriter, r *http.Request, requestId string, params ApproveDeviceRecoveryParams) {
 	notImplemented(w, r)
 }
+func (Unimplemented) DeviceRecoveryApprovalOptions(w http.ResponseWriter, r *http.Request, requestId string, params DeviceRecoveryApprovalOptionsParams) {
+	notImplemented(w, r)
+}
 func (Unimplemented) DenyDeviceRecovery(w http.ResponseWriter, r *http.Request, requestId string, params DenyDeviceRecoveryParams) {
 	notImplemented(w, r)
 }

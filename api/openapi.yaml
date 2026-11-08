@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.15
+  version: 2.1.0-alpha.16
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -2172,7 +2172,22 @@ paths:
       tags:
         - auth
       operationId: approveDeviceRecovery
-      summary: Approve a recovery request using number matching, the password and the second factor
+      summary: Approve a recovery request using number matching, user verification and the second factor
+      description: |
+        Approval does not need the current password, which the user may have forgotten. The checks run in this
+        order: the request must belong to the caller and `match_number` must match (a wrong number denies the
+        request), then user verification, then the second factor.
+
+        User verification follows `POST /auth/recovery-requests/{requestId}/approve/options`. When the account
+        has passkeys, `passkey` must carry an assertion with user verification for the challenge from that call
+        (`403 user_verification_required` without it, `403 invalid_credentials` for a failed assertion,
+        `400 invalid_request` for an unknown, used or expired challenge). A missing `code` answers
+        `401 two_factor_required` before the challenge is used, so the request can be repeated with the same
+        assertion and the code. A wrong code is checked after the passkey and uses up the challenge.
+        Without passkeys the approving session must be at least as old as the minimum session age
+        (`RECOVERY_APPROVAL_MIN_SESSION_AGE`, 72 hours by default), otherwise `403 session_too_new`.
+
+        `password` is ignored and only accepted so that older clients keep working.
       requestBody:
         required: true
         content:
@@ -2197,6 +2212,41 @@ paths:
           $ref: "#/components/responses/Conflict"
         "422":
           $ref: "#/components/responses/ValidationFailed"
+        "426":
+          $ref: "#/components/responses/ClientOutdated"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /auth/recovery-requests/{requestId}/approve/options:
+    parameters:
+      - *a1
+      - *a2
+      - *a4
+    post:
+      tags:
+        - auth
+      operationId: deviceRecoveryApprovalOptions
+      summary: Tell the approving device how to verify its user
+      description: |
+        `method: passkey` when the account has passkeys: `challenge_id` and `public_key` (WebAuthn request
+        options with `userVerification: required`) are for `navigator.credentials.get`, and the result goes to
+        the approval as `passkey`. The challenge is bound to this session and request, is single use and expires
+        after 5 minutes or with the request. `method: session` otherwise; `approvable_from` is set while the
+        session is younger than the minimum session age and tells when it may approve.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceRecoveryApprovalOptions"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "426":
           $ref: "#/components/responses/ClientOutdated"
         "429":
@@ -4020,6 +4070,8 @@ components:
         - invalid_client_version
         - blocked_by_user
         - approval_required
+        - user_verification_required
+        - session_too_new
         - calls_unavailable
         - calls_not_allowed
         - call_identity_required
@@ -4933,18 +4985,42 @@ components:
       type: object
       required:
         - match_number
-        - password
       properties:
         match_number:
           type: integer
           minimum: 10
           maximum: 99
-        password:
-          type: string
-          maxLength: 1024
+        passkey:
+          $ref: "#/components/schemas/PasskeyVerification"
         code:
           type: string
           maxLength: 128
+        password:
+          type: string
+          maxLength: 1024
+          deprecated: true
+          description: Ignored. Older clients still send it.
+    DeviceRecoveryApprovalOptions:
+      type: object
+      required:
+        - method
+      properties:
+        method:
+          type: string
+          enum: [passkey, session]
+        challenge_id:
+          type: string
+          minLength: 32
+          maxLength: 128
+          description: "Present with `method: passkey`."
+        public_key:
+          type: object
+          additionalProperties: true
+          description: "WebAuthn request options, present with `method: passkey`."
+        approvable_from:
+          type: string
+          format: date-time
+          description: "Present with `method: session` while the session is too new to approve."
     DeviceRecoveryComplete:
       type: object
       required:
