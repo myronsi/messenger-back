@@ -91,11 +91,15 @@ func (a *softAuthenticator) register(options PasskeyOptions) json.RawMessage {
 }
 
 func (a *softAuthenticator) assert(options PasskeyOptions, handle []byte) json.RawMessage {
+	return a.assertWithFlags(options, handle, 0x05)
+}
+
+func (a *softAuthenticator) assertWithFlags(options PasskeyOptions, handle []byte, flags byte) json.RawMessage {
 	request, ok := options.PublicKey.(protocol.PublicKeyCredentialRequestOptions)
 	if !ok {
 		a.t.Fatalf("unexpected login options %T", options.PublicKey)
 	}
-	data := a.authData(0x05, nil)
+	data := a.authData(flags, nil)
 	client := a.clientData("webauthn.get", request.Challenge)
 	clientHash := sha256.Sum256(client)
 	digest := sha256.Sum256(append(append([]byte{}, data...), clientHash[:]...))

@@ -184,9 +184,10 @@ type HTTP struct {
 
 // Auth configures sessions and the refresh cookie.
 type Auth struct {
-	RPID                   string        `env:"RP_ID"`
-	RPOrigins              []string      `env:"RP_ORIGINS" envSeparator:","`
-	RecoveryApprovalMaxAge time.Duration `env:"RECOVERY_APPROVAL_MAX_AGE" envDefault:"720h"`
+	RPID                          string        `env:"RP_ID"`
+	RPOrigins                     []string      `env:"RP_ORIGINS" envSeparator:","`
+	RecoveryApprovalMaxAge        time.Duration `env:"RECOVERY_APPROVAL_MAX_AGE" envDefault:"720h"`
+	RecoveryApprovalMinSessionAge time.Duration `env:"RECOVERY_APPROVAL_MIN_SESSION_AGE" envDefault:"72h"`
 	// CookieSecure marks the refresh cookie Secure. Only turn it off for plain-HTTP local development;
 	// production refuses to start without it.
 	CookieSecure bool `env:"COOKIE_SECURE" envDefault:"true"`
@@ -445,6 +446,9 @@ func (a Auth) validate(production bool) []string {
 	var problems []string
 	if a.RecoveryApprovalMaxAge <= 0 {
 		problems = append(problems, "RECOVERY_APPROVAL_MAX_AGE must be positive")
+	}
+	if a.RecoveryApprovalMinSessionAge < 0 {
+		problems = append(problems, "RECOVERY_APPROVAL_MIN_SESSION_AGE must not be negative")
 	}
 	if production && !a.CookieSecure {
 		problems = append(problems, "COOKIE_SECURE must be true in production")

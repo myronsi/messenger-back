@@ -126,6 +126,10 @@ func (a *AuthServer) fail(w http.ResponseWriter, r *http.Request, err error, wit
 		WriteProblem(w, http.StatusConflict, ErrorCodeConflict)
 	case errors.Is(err, auth.ErrApprovalSessionStale):
 		WriteProblem(w, http.StatusForbidden, ErrorCodeForbidden)
+	case errors.Is(err, auth.ErrUserVerificationRequired):
+		WriteProblem(w, http.StatusForbidden, ErrorCodeUserVerificationRequired)
+	case errors.Is(err, auth.ErrApprovalSessionTooNew):
+		WriteProblem(w, http.StatusForbidden, ErrorCodeSessionTooNew)
 	case errors.Is(err, auth.ErrRecoveryKey):
 		WriteProblem(w, http.StatusBadRequest, ErrorCodeInvalidCredentials)
 	case errors.Is(err, auth.ErrRecoveryLocked):

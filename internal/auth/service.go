@@ -58,12 +58,13 @@ type Config struct {
 	Namespace string
 	// OnRevoked is told about every revoked session, so open WebSockets of those sessions can be closed.
 	// Optional; it must not block.
-	OnRevoked              func(ctx context.Context, sessionIDs []uuid.UUID)
-	OnRecovery             func(ctx context.Context, sessionIDs []uuid.UUID)
-	OnRecoveryRequest      func(context.Context, int64, RecoveryRequestNotice)
-	OnSecurityEvent        func(context.Context, int64, string, Client)
-	RecoveryApprovalMaxAge time.Duration
-	GeoIP                  *geoip.Locator
+	OnRevoked                     func(ctx context.Context, sessionIDs []uuid.UUID)
+	OnRecovery                    func(ctx context.Context, sessionIDs []uuid.UUID)
+	OnRecoveryRequest             func(context.Context, int64, RecoveryRequestNotice)
+	OnSecurityEvent               func(context.Context, int64, string, Client)
+	RecoveryApprovalMaxAge        time.Duration
+	RecoveryApprovalMinSessionAge time.Duration
+	GeoIP                         *geoip.Locator
 }
 
 // Client describes who is calling, for rate limits and the security log.
@@ -219,13 +220,14 @@ type Service struct {
 	grace               time.Duration
 	now                 func() time.Time
 	// onRevoked is Config.OnRevoked.
-	onRevoked              func(ctx context.Context, sessionIDs []uuid.UUID)
-	onRecovery             func(ctx context.Context, sessionIDs []uuid.UUID)
-	onRecoveryRequest      func(context.Context, int64, RecoveryRequestNotice)
-	onSecurityEvent        func(context.Context, int64, string, Client)
-	recoveryApprovalMaxAge time.Duration
-	dummy                  func() (string, error)
-	geo                    *geoip.Locator
+	onRevoked                     func(ctx context.Context, sessionIDs []uuid.UUID)
+	onRecovery                    func(ctx context.Context, sessionIDs []uuid.UUID)
+	onRecoveryRequest             func(context.Context, int64, RecoveryRequestNotice)
+	onSecurityEvent               func(context.Context, int64, string, Client)
+	recoveryApprovalMaxAge        time.Duration
+	recoveryApprovalMinSessionAge time.Duration
+	dummy                         func() (string, error)
+	geo                           *geoip.Locator
 }
 
 // NewService wires the service.
@@ -277,12 +279,13 @@ func NewService(store Store, rdb Redis, cfg Config, log *slog.Logger) (*Service,
 		grace:               cfg.RefreshReuseGrace,
 		now:                 time.Now,
 
-		onRevoked:              cfg.OnRevoked,
-		onRecovery:             cfg.OnRecovery,
-		onRecoveryRequest:      cfg.OnRecoveryRequest,
-		onSecurityEvent:        cfg.OnSecurityEvent,
-		recoveryApprovalMaxAge: cfg.RecoveryApprovalMaxAge,
-		geo:                    cfg.GeoIP,
+		onRevoked:                     cfg.OnRevoked,
+		onRecovery:                    cfg.OnRecovery,
+		onRecoveryRequest:             cfg.OnRecoveryRequest,
+		onSecurityEvent:               cfg.OnSecurityEvent,
+		recoveryApprovalMaxAge:        cfg.RecoveryApprovalMaxAge,
+		recoveryApprovalMinSessionAge: cfg.RecoveryApprovalMinSessionAge,
+		geo:                           cfg.GeoIP,
 	}
 	s.dummy = sync.OnceValues(func() (string, error) { return s.hasher.dummyHash(context.Background()) })
 	return s, nil

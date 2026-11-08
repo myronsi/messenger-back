@@ -2,6 +2,15 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.16
+
+- Trusted-device recovery no longer needs the current password. `DeviceRecoveryApproval.password` is no longer
+  required, is deprecated and ignored. New optional `passkey` (`PasskeyVerification`).
+- `POST /auth/recovery-requests/{requestId}/approve/options` (`DeviceRecoveryApprovalOptions`: `method` `passkey`
+  with `challenge_id` and `public_key`, or `session` with `approvable_from` while the session is too new).
+- New error codes `user_verification_required` (account has passkeys, no assertion sent) and `session_too_new`
+  (no passkeys and the session is younger than the minimum session age), both `403` on the approval.
+
 ## 2.1.0-alpha.15
 
 - End-to-end encrypted audio calls in direct chats and groups (tag `calls`, see `docs/calls.md` and

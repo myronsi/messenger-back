@@ -32,19 +32,16 @@ func TestDeviceRecoveryLifecycle(t *testing.T) {
 	if err = e.store.Pool().QueryRow(ctx, `SELECT count(*) FROM recovery_requests WHERE id_hash=$1`, r.ID).Scan(&plain); err != nil || plain != 0 {
 		t.Fatal("capability stored in plaintext", err)
 	}
-	if _, err = e.svc.DecideDeviceRecovery(ctx, c, principal(other), notice.ID, r.Match, "correct horse", "", false); !errors.Is(err, ErrRecoveryRequestNotFound) {
+	if _, err = e.svc.DecideDeviceRecovery(ctx, c, principal(other), notice.ID, RecoveryApproval{Match: r.Match}, false); !errors.Is(err, ErrRecoveryRequestNotFound) {
 		t.Fatal("foreign user approved", err)
 	}
-	if _, err = e.svc.DecideDeviceRecovery(ctx, c, principal(owner), r.ID, r.Match, "correct horse", "", false); !errors.Is(err, ErrRecoveryRequestNotFound) {
+	if _, err = e.svc.DecideDeviceRecovery(ctx, c, principal(owner), r.ID, RecoveryApproval{Match: r.Match}, false); !errors.Is(err, ErrRecoveryRequestNotFound) {
 		t.Fatal("the requester capability approved its own request", err)
-	}
-	if _, err = e.svc.DecideDeviceRecovery(ctx, c, principal(owner), notice.ID, r.Match, "wrong horse", "", false); !errors.Is(err, ErrInvalidCredentials) {
-		t.Fatal("approved without the password", err)
 	}
 	if _, err = e.svc.CompleteDeviceRecovery(ctx, c, r.ID, "brand new password"); !errors.Is(err, ErrRecoveryKey) {
 		t.Fatal("pending request completed", err)
 	}
-	if status, err := e.svc.DecideDeviceRecovery(ctx, c, principal(owner), notice.ID, r.Match, "correct horse", "", false); err != nil || status != "approved" {
+	if status, err := e.svc.DecideDeviceRecovery(ctx, c, principal(owner), notice.ID, RecoveryApproval{Match: r.Match}, false); err != nil || status != "approved" {
 		t.Fatal(status, err)
 	}
 	if status, err := e.svc.DeviceRecoveryStatus(ctx, c, notice.ID); err != nil || status != "expired" {
@@ -96,7 +93,7 @@ func TestDeviceRecoveryWrongNumberDenyExpiryAndSpam(t *testing.T) {
 				if wrong == r.Match {
 					wrong = 11
 				}
-				status, err := e.svc.DecideDeviceRecovery(ctx, c, principal(owner), approval, wrong, "", "", kind == "deny")
+				status, err := e.svc.DecideDeviceRecovery(ctx, c, principal(owner), approval, RecoveryApproval{Match: wrong}, kind == "deny")
 				if err != nil || status != "denied" {
 					t.Fatal(status, err)
 				}
@@ -112,7 +109,7 @@ func TestDeviceRecoveryWrongNumberDenyExpiryAndSpam(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if _, err = e.svc.DecideDeviceRecovery(ctx, c, principal(owner), approval, r.Match, "correct horse", "", false); !errors.Is(err, ErrRecoveryRequestNotFound) {
+				if _, err = e.svc.DecideDeviceRecovery(ctx, c, principal(owner), approval, RecoveryApproval{Match: r.Match}, false); !errors.Is(err, ErrRecoveryRequestNotFound) {
 					t.Fatal("expired request approved", err)
 				}
 			case "stale-session":
@@ -120,11 +117,11 @@ func TestDeviceRecoveryWrongNumberDenyExpiryAndSpam(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if _, err = e.svc.DecideDeviceRecovery(ctx, c, principal(owner), approval, r.Match, "correct horse", "", false); !errors.Is(err, ErrApprovalSessionStale) {
+				if _, err = e.svc.DecideDeviceRecovery(ctx, c, principal(owner), approval, RecoveryApproval{Match: r.Match}, false); !errors.Is(err, ErrApprovalSessionStale) {
 					t.Fatal("old inactive session approved", err)
 				}
 			case "revoked-session":
-				if _, err = e.svc.DecideDeviceRecovery(ctx, c, principal(owner), approval, r.Match, "correct horse", "", false); err != nil {
+				if _, err = e.svc.DecideDeviceRecovery(ctx, c, principal(owner), approval, RecoveryApproval{Match: r.Match}, false); err != nil {
 					t.Fatal(err)
 				}
 				if err = e.svc.Logout(ctx, c, principal(owner)); err != nil {
@@ -150,10 +147,10 @@ func TestDeviceRecoveryRequiresSecondFactor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = e.svc.DecideDeviceRecovery(ctx, c, principal(owner), approval, r.Match, "correct horse", "", false); !errors.Is(err, ErrTwoFactorRequired) {
+	if _, err = e.svc.DecideDeviceRecovery(ctx, c, principal(owner), approval, RecoveryApproval{Match: r.Match}, false); !errors.Is(err, ErrTwoFactorRequired) {
 		t.Fatal("2FA bypassed", err)
 	}
-	if _, err = e.svc.DecideDeviceRecovery(ctx, c, principal(owner), approval, r.Match, "correct horse", codes[0], false); err != nil {
+	if _, err = e.svc.DecideDeviceRecovery(ctx, c, principal(owner), approval, RecoveryApproval{Match: r.Match, Code: codes[0]}, false); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = e.svc.CompleteDeviceRecovery(ctx, c, r.ID, "brand new password"); err != nil {
@@ -190,7 +187,7 @@ func TestDeviceRecoveryUnknownAndPendingCap(t *testing.T) {
 		}
 	}
 	for _, r := range []RecoveryRequestResult{unknown, capped} {
-		if _, err = e.svc.DecideDeviceRecovery(ctx, c, principal(owner), r.ID, r.Match, "correct horse", "", false); !errors.Is(err, ErrRecoveryRequestNotFound) {
+		if _, err = e.svc.DecideDeviceRecovery(ctx, c, principal(owner), r.ID, RecoveryApproval{Match: r.Match}, false); !errors.Is(err, ErrRecoveryRequestNotFound) {
 			t.Fatal("decoy request approved", err)
 		}
 		if _, err = e.svc.CompleteDeviceRecovery(ctx, c, r.ID, "brand new password"); !errors.Is(err, ErrRecoveryKey) {
@@ -245,7 +242,7 @@ func TestDeviceRecoveryCancelFreesSlotAndStoresNoSecrets(t *testing.T) {
 	if wrong == requests[1].Match {
 		wrong = 11
 	}
-	if _, err := e.svc.DecideDeviceRecovery(ctx, c, principal(owner), approval, wrong, "", "", true); err != nil {
+	if _, err := e.svc.DecideDeviceRecovery(ctx, c, principal(owner), approval, RecoveryApproval{Match: wrong}, true); err != nil {
 		t.Fatal(err)
 	}
 	var proof string

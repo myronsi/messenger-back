@@ -16,8 +16,9 @@ a code answers `401` `two_factor_required` once the other credentials are proven
 [Missing second factor on other operations](auth.md#missing-second-factor-on-other-operations).
 
 Device requests expire after ten minutes. An eligible logged-in session must select the matching
-number from three choices and confirm with the account password and any enabled second factor; the
-requesting browser displays that number. The `recovery_request` event carries a separate approval handle,
+number from three choices, prove that its user is present (see [Trusted-device approval](#trusted-device-approval))
+and give any enabled second factor; the requesting browser displays that number. The current password is
+not needed, because the user may have forgotten it; the requesting browser sets the new password after approval. The `recovery_request` event carries a separate approval handle,
 so signed-in devices can approve or deny but cannot poll or complete the request: only the requesting
 browser holds that capability. A wrong number or denial
 blocks new requests for fifteen minutes. At most three active requests are allowed; the requesting browser
@@ -32,6 +33,40 @@ never approved.
 The approving device sees the requester's sanitised user agent and approximate location (city and country
 from the offline DB-IP Lite database, `null` when unknown; see [GeoIP](geoip.md)), never its IP address
 or network. IP geolocation by [DB-IP](https://db-ip.com).
+
+### Trusted-device approval
+
+Asking the approving device for the current password defeated the purpose of the flow: a user who forgot the
+password could not recover through a device that was still signed in. Removing every check instead would let
+anyone holding an unlocked, signed-in device (or a stolen or phished session) turn it into a password reset and
+lock the owner out. The approval therefore proves that the account owner is present, in this order:
+
+1. The request belongs to the caller and `match_number` matches. A wrong number denies the request.
+2. User verification. The device first calls `POST /auth/recovery-requests/{requestId}/approve/options`.
+   - **Account with passkeys:** the answer is `method: passkey` with WebAuthn request options for the account's
+     passkeys and `userVerification: required`. The user confirms with fingerprint, face or device PIN, and the
+     assertion goes to the approval as `passkey`. The challenge is single use, expires after five minutes (or with
+     the request) and is bound to the approving session and to this request; the assertion must carry the user
+     verified flag, and a counter clone warning rejects it. The credential update is committed with the approval.
+     A passkey on another device can be used through the platform's cross-device sign-in. Without the assertion
+     the answer is `403 user_verification_required`.
+   - **Account without passkeys (fallback):** the answer is `method: session`. The approving session must have
+     existed for at least `RECOVERY_APPROVAL_MIN_SESSION_AGE` (72 hours by default; `0` turns the rule off).
+     While it is younger, the options carry `approvable_from` and the approval answers `403 session_too_new`.
+     A session that was just phished (for example through a fake QR sign-in) or created on a stolen device
+     cannot reset the password at once, and the owner can see and revoke it under Security & devices meanwhile.
+     Such a user can still recover with the recovery key or a verified email.
+3. Any enabled second factor (`401 two_factor_required` without `code`). The passkey challenge is consumed by the
+   first attempt, so the device asks for new options before it repeats the approval with the code.
+
+Unchanged: the approving session must be active, not revoked and used within `RECOVERY_APPROVAL_MAX_AGE`; the
+request expires after ten minutes; rate limits and the fifteen-minute block after a denial apply. The current
+password and second-factor state are still pinned at approval, so a password change before completion voids
+the approval. Completion revokes every session, rotates the recovery key and starts the 24-hour recovery delay.
+The `recovery_request_approved` security event records `verification` (`passkey` or `session`).
+
+Remaining risk: a person who knows the device PIN of an unlocked phone with a passkey can approve. This is the
+same trust the platform places in that PIN for every other passkey use.
 
 ## Passkeys
 
@@ -87,3 +122,6 @@ Migration 22 replaces the network hint of recovery requests (`ip_hint`) with a `
 `location` to sessions and security events; its down migration restores the empty column shapes.
 
 Migration 24 adds the approval handle (`approval_hash`) of device recovery requests.
+
+Migration 26 allows the WebAuthn challenge purpose `recovery_approval`. Its down migration deletes such
+challenges first.
