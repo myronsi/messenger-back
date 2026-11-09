@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.11.0-alpha.1...v1.12.0-alpha.1) (2026-11-09)
+
+
+### Features
+
+* **media:** draw on images before and after sending ([#173](https://github.com/myronsi/messenger-back/issues/173)) ([1cd27ea](https://github.com/myronsi/messenger-back/commit/1cd27ea7af7d336159d67b2e67ac47b09c13bdd9))
+
 ## [1.11.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.10.0-alpha.1...v1.11.0-alpha.1) (2026-11-09)
 
 
