@@ -86,7 +86,7 @@ func PresentAttachment(a postgres.Attachment, messageType, basePath string) Atta
 	if a.Kind == KindVoiceString {
 		out.Kind = AttachmentKindVoice
 	}
-	if a.ThumbnailKey != nil {
+	if a.ThumbnailKey != nil || out.Kind == AttachmentKindVideo {
 		thumb := url + "?variant=thumbnail"
 		out.ThumbnailUrl = &thumb
 	}
@@ -126,6 +126,7 @@ type MessageParts struct {
 	// Sender as the recipient sees them; nil for system messages.
 	Sender     *users.View
 	Attachment *postgres.Attachment
+	Album      []postgres.Attachment
 	Reactions  []scylla.Reaction
 	ReadBy     []ReadReceipt
 	// ClientTempID is set on the sender's own copy of a new message.
@@ -188,6 +189,16 @@ func PresentMessage(m scylla.Message, p MessageParts) Message {
 	if !m.Deleted && p.Attachment != nil {
 		a := PresentAttachment(*p.Attachment, m.Type, p.BasePath)
 		out.Attachment = &a
+	}
+	if !m.Deleted && len(p.Album) > 0 {
+		album := make([]Attachment, 0, len(p.Album))
+		for _, a := range p.Album {
+			album = append(album, PresentAttachment(a, m.Type, p.BasePath))
+		}
+		out.Attachment = &album[0]
+		if len(album) > 1 {
+			out.Attachments = &album
+		}
 	}
 	if p.Reply != nil && m.ReplyTo != nil && !m.Deleted {
 		r := PresentReplyPreview(*p.Reply, p.BasePath)

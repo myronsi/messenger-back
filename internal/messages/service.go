@@ -166,6 +166,16 @@ func (s *Service) IsMember(ctx context.Context, chatID, userID int64) (bool, err
 // Visible reports whether the viewer can see the message: a member of its chat, the message exists, is not
 // deleted for everyone and not hidden for the viewer.
 func (s *Service) Visible(ctx context.Context, viewerID, chatID, messageID int64) (bool, error) {
+	return s.visible(ctx, viewerID, chatID, messageID, nil)
+}
+
+// VisibleAttachment also verifies that the stored message references this attachment.
+func (s *Service) VisibleAttachment(ctx context.Context, viewerID, chatID, messageID int64, id uuid.UUID) (bool, error) {
+	attachment := gocql.UUID(id)
+	return s.visible(ctx, viewerID, chatID, messageID, &attachment)
+}
+
+func (s *Service) visible(ctx context.Context, viewerID, chatID, messageID int64, attachment *gocql.UUID) (bool, error) {
 	ok, err := s.IsMember(ctx, chatID, viewerID)
 	if err != nil || !ok {
 		return false, err
@@ -174,7 +184,7 @@ func (s *Service) Visible(ctx context.Context, viewerID, chatID, messageID int64
 	if errors.Is(err, ErrNotFound) {
 		return false, nil
 	}
-	if err != nil || m.Deleted {
+	if err != nil || m.Deleted || (attachment != nil && !slices.Contains(m.AttachmentIDs(), *attachment)) {
 		return false, err
 	}
 	hidden, err := s.d.Messages.Hidden(ctx, viewerID, chatID, messageID)
@@ -221,6 +231,7 @@ type SendRequest struct {
 	Type         string // text, file or voice
 	Content      *string
 	AttachmentID *uuid.UUID
+	AlbumIDs     []uuid.UUID
 	ReplyTo      *int64
 }
 
@@ -231,12 +242,18 @@ type Sent struct {
 	Duplicate bool
 }
 
+// MaxAlbumItems bounds attachment lookups and the size of one chat message.
+const MaxAlbumItems = 10
+
 func (s *Service) validateSend(r SendRequest) error {
 	if n := utf8.RuneCountInString(r.ClientTempID); n == 0 || n > 64 || !utf8.ValidString(r.ClientTempID) {
 		return invalid("client_temp_id must be 1 to 64 characters")
 	}
 	if r.Content != nil && !validText(*r.Content, MaxContent) {
 		return invalid("content must be at most %d characters", MaxContent)
+	}
+	if r.AlbumIDs != nil && (r.Type != scylla.TypeFile || r.AttachmentID != nil || len(r.AlbumIDs) < 2 || len(r.AlbumIDs) > MaxAlbumItems) {
+		return invalid("attachment_ids must contain 2 to %d items and is only valid for a file message without attachment_id", MaxAlbumItems)
 	}
 	switch r.Type {
 	case scylla.TypeText:
@@ -247,7 +264,7 @@ func (s *Service) validateSend(r SendRequest) error {
 			return invalid("a text message has no attachment")
 		}
 	case scylla.TypeFile, scylla.TypeVoice:
-		if r.AttachmentID == nil {
+		if r.AttachmentID == nil && len(r.AlbumIDs) == 0 {
 			return invalid("a %s message needs attachment_id", r.Type)
 		}
 	default:
@@ -280,13 +297,9 @@ func (s *Service) Send(ctx context.Context, r SendRequest) (Sent, error) {
 			return Sent{}, err
 		}
 	}
-	var attachment *gocql.UUID
-	if r.AttachmentID != nil {
-		a, err := s.checkAttachment(ctx, r)
-		if err != nil {
-			return Sent{}, err
-		}
-		attachment = &a
+	attachments, err := s.checkAttachments(ctx, r)
+	if err != nil {
+		return Sent{}, err
 	}
 	if r.ReplyTo != nil {
 		if _, err := s.message(ctx, r.ChatID, *r.ReplyTo); errors.Is(err, ErrNotFound) {
@@ -318,14 +331,17 @@ func (s *Service) Send(ctx context.Context, r SendRequest) (Sent, error) {
 	sender := r.SenderID
 	m := scylla.Message{
 		ChatID: r.ChatID, ID: id, SenderID: &sender, Type: r.Type, Content: r.Content,
-		AttachmentID: attachment, ReplyTo: r.ReplyTo, CreatedAt: ids.Time(id),
+		ReplyTo: r.ReplyTo, CreatedAt: ids.Time(id),
 	}
-	if attachment != nil {
-		// Linked before the message is stored, so recipients can download the file as soon as they see it.
-		if err := s.d.Store.Attachments().Link(ctx, uuid.UUID(*attachment), r.ChatID, id); err != nil {
-			s.abandon(ctx, r, id, resumed)
-			return Sent{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
-		}
+	if len(attachments) > 0 {
+		m.AttachmentID = &attachments[0]
+	}
+	if len(attachments) > 1 {
+		m.AlbumIDs = attachments
+	}
+	if err := s.linkAttachments(ctx, m); err != nil {
+		s.abandon(ctx, r, id, resumed)
+		return Sent{}, err
 	}
 	if !resumed {
 		if err := s.queueNotification(ctx, m, members); err != nil {
@@ -428,23 +444,48 @@ func (s *Service) checkNotBlocked(ctx context.Context, sender int64, members []i
 	return nil
 }
 
-// checkAttachment allows only a message upload of the sender (a v1 attachment only in its own chat); a voice
-// message needs a voice or audio upload.
-func (s *Service) checkAttachment(ctx context.Context, r SendRequest) (gocql.UUID, error) {
-	a, err := s.d.Store.Attachments().Get(ctx, *r.AttachmentID)
-	if errors.Is(err, postgres.ErrNotFound) {
-		return gocql.UUID{}, invalid("attachment_id is not one of your uploads")
+// checkAttachments validates all uploads before a message can be claimed or linked.
+func (s *Service) checkAttachments(ctx context.Context, r SendRequest) ([]gocql.UUID, error) {
+	ids := r.AlbumIDs
+	if r.AttachmentID != nil {
+		ids = []uuid.UUID{*r.AttachmentID}
 	}
-	if err != nil {
-		return gocql.UUID{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
+	seen := make(map[uuid.UUID]bool, len(ids))
+	out := make([]gocql.UUID, 0, len(ids))
+	for _, id := range ids {
+		if seen[id] {
+			return nil, invalid("attachment_ids must be unique")
+		}
+		seen[id] = true
+		a, err := s.d.Store.Attachments().Get(ctx, id)
+		if errors.Is(err, postgres.ErrNotFound) {
+			return nil, invalid("attachment is not one of your uploads")
+		}
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrUnavailable, err)
+		}
+		if a.UploaderID == nil || *a.UploaderID != r.SenderID || a.Purpose != postgres.PurposeMessage || (a.ChatID != nil && *a.ChatID != r.ChatID) {
+			return nil, invalid("attachment is not one of your uploads")
+		}
+		if r.Type == scylla.TypeVoice && !strings.HasPrefix(a.MimeType, "audio/") {
+			return nil, invalid("a voice message needs an audio attachment")
+		}
+		if len(ids) > 1 && a.Kind != "image" && a.Kind != "video" {
+			return nil, invalid("an album can only contain images and videos")
+		}
+		out = append(out, gocql.UUID(id))
 	}
-	if a.UploaderID == nil || *a.UploaderID != r.SenderID || a.Purpose != postgres.PurposeMessage || (a.ChatID != nil && *a.ChatID != r.ChatID) {
-		return gocql.UUID{}, invalid("attachment_id is not one of your uploads")
+	return out, nil
+}
+
+// Link before storing the message so all items are accessible as soon as recipients see it.
+func (s *Service) linkAttachments(ctx context.Context, m scylla.Message) error {
+	for _, id := range m.AttachmentIDs() {
+		if err := s.d.Store.Attachments().Link(ctx, uuid.UUID(id), m.ChatID, m.ID); err != nil {
+			return fmt.Errorf("%w: %w", ErrUnavailable, err)
+		}
 	}
-	if r.Type == scylla.TypeVoice && !strings.HasPrefix(a.MimeType, "audio/") {
-		return gocql.UUID{}, invalid("a voice message needs an audio attachment")
-	}
-	return gocql.UUID(a.ID), nil
+	return nil
 }
 
 // Edit replaces the text of the user's own text message.

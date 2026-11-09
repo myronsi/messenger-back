@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"image/jpeg"
 	"io"
 	"log/slog"
 	"mime"
@@ -55,7 +56,7 @@ var (
 
 // Visibility tells whether a viewer can see a message: it exists, is not deleted and not hidden for them.
 type Visibility interface {
-	Visible(ctx context.Context, viewerID, chatID, messageID int64) (bool, error)
+	VisibleAttachment(ctx context.Context, viewerID, chatID, messageID int64, id uuid.UUID) (bool, error)
 }
 
 // Membership tells whether a user is in a chat.
@@ -221,6 +222,16 @@ func (s *Service) Upload(ctx context.Context, u Upload) (postgres.Attachment, er
 		w, h := int32(img.Width), int32(img.Height) //nolint:gosec // bounded by MaxImageSide
 		rec.Width, rec.Height, rec.MimeType, rec.Size = &w, &h, img.ContentType, int64(len(img.Data))
 		body, thumb, display = bytes.NewReader(img.Data), img.Thumbnail, img.Display
+	case KindVideo:
+		thumb = s.processVideoThumbnail(ctx, tmp.Name(), det.ContentType)
+		if frame, err := jpeg.DecodeConfig(bytes.NewReader(thumb)); err == nil {
+			w, h := int32(frame.Width), int32(frame.Height) //nolint:gosec // bounded by the thumbnail filter
+			rec.Width, rec.Height = &w, &h
+		}
+		if _, err := tmp.Seek(0, io.SeekStart); err != nil {
+			return postgres.Attachment{}, err
+		}
+		body = tmp
 	case KindAudio, KindVoice:
 		info := ClientAudio(u.DurationMS, u.Waveform)
 		if s.o.Prober.Available() {
@@ -335,7 +346,7 @@ func (s *Service) CanSee(ctx context.Context, viewerID int64, a postgres.Attachm
 		return false, err
 	}
 	for _, l := range links {
-		ok, err := s.o.Visibility.Visible(ctx, viewerID, l.ChatID, l.MessageID)
+		ok, err := s.o.Visibility.VisibleAttachment(ctx, viewerID, l.ChatID, l.MessageID, a.ID)
 		if err != nil {
 			return false, err
 		}
@@ -411,7 +422,7 @@ const (
 )
 
 func HasDisplay(a postgres.Attachment) bool {
-	return a.Width != nil && a.Height != nil && NeedsDisplay(a.MimeType, int(*a.Width), int(*a.Height))
+	return a.Kind != KindVideo && a.Width != nil && a.Height != nil && NeedsDisplay(a.MimeType, int(*a.Width), int(*a.Height))
 }
 
 func (s *Service) content(ctx context.Context, a postgres.Attachment, v Variant) (Download, error) {
@@ -419,7 +430,7 @@ func (s *Service) content(ctx context.Context, a postgres.Attachment, v Variant)
 	switch {
 	case v == VariantThumbnail:
 		if a.ThumbnailKey == nil {
-			return Download{}, ErrNoAccess
+			return s.legacyVideoThumbnail(ctx, a)
 		}
 		key, ctype, name = *a.ThumbnailKey, "image/jpeg", "thumbnail.jpg"
 	case v == VariantDisplay && HasDisplay(a):

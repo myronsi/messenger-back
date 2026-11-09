@@ -1253,7 +1253,7 @@ paths:
     get:
       tags: [chats]
       operationId: listChatMedia
-      summary: Photos or audio of a chat
+      summary: Photos, videos or audio of a chat
       description: Replaces `GET /messages/photos/{chat_id}` and `GET /messages/audios/{chat_id}`.
       parameters:
         - name: kind
@@ -4501,7 +4501,7 @@ components:
           items: { type: integer, minimum: 0, maximum: 255 }
     MediaKind:
       type: string
-      enum: [image, audio]
+      enum: [image, audio, visual]
 
     # -------------------------------------------------------- messages
     MessageType:
@@ -4595,6 +4595,12 @@ components:
           oneOf:
             - $ref: "#/components/schemas/ForwardedFrom"
             - type: "null"
+        attachments:
+          type: array
+          description: Ordered images and videos of an album. The first item is also returned as attachment for older clients.
+          minItems: 2
+          maxItems: 10
+          items: { $ref: "#/components/schemas/Attachment" }
         reactions:
           type: array
           items: { $ref: "#/components/schemas/Reaction" }
@@ -4706,10 +4712,17 @@ components:
           type: [string, "null"]
           maxLength: 4096
         attachment_id:
-          description: Required and not null for `file` and `voice`; never a URL.
+          description: Single upload ID for a file or voice message. Omit for albums.
           oneOf:
             - $ref: "#/components/schemas/AttachmentRef"
             - type: "null"
+        attachment_ids:
+          type: array
+          description: Ordered IDs of two to ten image or video uploads for one file message.
+          minItems: 2
+          maxItems: 10
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/AttachmentRef" }
         reply_to:
           oneOf:
             - $ref: "#/components/schemas/Id"
@@ -4718,14 +4731,22 @@ components:
         properties:
           type: { enum: [file, voice] }
       then:
-        required: [attachment_id]
-        properties:
-          attachment_id: { $ref: "#/components/schemas/AttachmentRef" }
+        oneOf:
+          - required: [attachment_id]
+            properties:
+              attachment_id: { $ref: "#/components/schemas/AttachmentRef" }
+              attachment_ids: { not: {} }
+          - required: [attachment_ids]
+            properties:
+              type: { const: file }
+              attachment_id: { not: {} }
+              attachment_ids: { type: array }
       else:
         required: [content]
         properties:
           content: { type: string, minLength: 1, maxLength: 4096 }
           attachment_id: { not: {} }
+          attachment_ids: { not: {} }
     EditMessageRequest:
       type: object
       required: [content]

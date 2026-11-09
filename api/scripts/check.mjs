@@ -58,6 +58,7 @@ const negative = [
 ];
 const sendMessage = (body) => ({ client_temp_id: "c-1", ...body });
 const ATTACHMENT = "5f0c8a64-2f2b-4c7e-9d0e-6b1f3a2c4d5e";
+const ALBUM = [ATTACHMENT, "5f0c8a64-2f2b-4c7e-9d0e-6b1f3a2c4d5f"];
 negative.push(
   ["ServerAckEvent", { type: "ack", event_id: "1", chat_id: "42", client_temp_id: "c-1", data: { message_id: "7" } }],
   ["ServerAckEvent", { type: "ack", event_id: "1", chat_id: "42", client_temp_id: "c-1", data: { message_id: "7", created_at: null } }],
@@ -69,12 +70,17 @@ negative.push(
   ["SendMessageRequest", sendMessage({ type: "file" })],
   ["SendMessageRequest", sendMessage({ type: "file", attachment_id: null })],
   ["SendMessageRequest", sendMessage({ type: "file", attachment_id: "5" })],
+  ["SendMessageRequest", sendMessage({ type: "file", attachment_ids: [ATTACHMENT] })],
+  ["SendMessageRequest", sendMessage({ type: "file", attachment_ids: [ATTACHMENT, ATTACHMENT] })],
+  ["SendMessageRequest", sendMessage({ type: "file", attachment_id: ATTACHMENT, attachment_ids: ALBUM })],
+  ["SendMessageRequest", sendMessage({ type: "voice", attachment_ids: ALBUM })],
 );
 // Compatible MINOR releases add fields to server events; clients must be able to ignore them.
 const positive = [
   ["ServerAckEvent", { type: "ack", event_id: "1", chat_id: "42", client_temp_id: "c-1", data: {} }],
   ["SendMessageRequest", sendMessage({ type: "text", content: "x" })],
   ["SendMessageRequest", sendMessage({ type: "file", attachment_id: ATTACHMENT })],
+  ["SendMessageRequest", sendMessage({ type: "file", attachment_ids: ALBUM, content: "Trip" })],
   ["SendMessageRequest", sendMessage({ type: "voice", attachment_id: ATTACHMENT, content: null })],
   ["ServerHelloEvent", { type: "hello", event_id: "1", chat_id: null, new_envelope_field: 1, data: { api_version: "2.1.0", min_client_api_version: "2.0.0", user_id: "1", new_field: true } }],
 ];

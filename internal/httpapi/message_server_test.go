@@ -352,6 +352,104 @@ func TestEditClearsTheCaptionOfAFileOverHTTP(t *testing.T) {
 	}
 }
 
+func TestMixedAlbumOverHTTP(t *testing.T) {
+	e := newChatEnv(t)
+	alice, bob, carol := e.register(t, "alice"), e.register(t, "bob"), e.register(t, "carol")
+	aliceID, _ := strconv.ParseInt(e.uid(t, alice), 10, 64)
+	bobID, _ := strconv.ParseInt(e.uid(t, bob), 10, 64)
+	chat := e.create(t, alice, e.uid(t, bob), "").json()["id"].(string)
+	target := e.create(t, bob, e.uid(t, carol), "").json()["id"].(string)
+	makeUpload := func(owner int64, kind, mime string) string {
+		t.Helper()
+		a, err := e.store.Attachments().Create(t.Context(), postgres.NewAttachment{
+			UploaderID: &owner, Purpose: "message", Kind: kind, Filename: kind,
+			StorageKey: "attachments/" + uuid.NewString(), MimeType: mime, Size: 1,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return a.ID.String()
+	}
+	video := makeUpload(aliceID, "video", "video/mp4")
+	photo := makeUpload(aliceID, "image", "image/png")
+	secondPhoto := makeUpload(aliceID, "image", "image/png")
+	foreign := makeUpload(bobID, "image", "image/png")
+	sendAlbum := func(ids ...string) reply {
+		t.Helper()
+		return e.do(t, request{method: http.MethodPost, path: "/chats/" + chat + "/messages", token: alice.access,
+			body: map[string]any{"client_temp_id": "album-1", "type": "file", "attachment_ids": ids, "content": "Trip"}})
+	}
+	if r := sendAlbum(video, foreign); r.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("album containing another user's upload: %d %s", r.Code, r.Body)
+	}
+	if r := sendAlbum(video, video); r.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("album containing duplicate IDs: %d %s", r.Code, r.Body)
+	}
+	want := []string{video, photo, secondPhoto}
+	assertAlbum := func(m map[string]any) {
+		t.Helper()
+		got, ok := m["attachments"].([]any)
+		if !ok || len(got) != len(want) || m["content"] != "Trip" {
+			t.Fatalf("album: %v", m)
+		}
+		for i, item := range got {
+			if item.(map[string]any)["id"] != want[i] {
+				t.Fatalf("attachment %d: %v", i, item)
+			}
+		}
+		if m["attachment"].(map[string]any)["id"] != want[0] {
+			t.Fatalf("primary attachment: %v", m["attachment"])
+		}
+	}
+	created := sendAlbum(want...)
+	if created.Code != http.StatusCreated {
+		t.Fatalf("send album: %d %s", created.Code, created.Body)
+	}
+	assertAlbum(created.json())
+	id := created.json()["id"].(string)
+	if retry := sendAlbum(want...); retry.Code != http.StatusOK || retry.json()["id"] != id {
+		t.Fatalf("retry album: %d %s", retry.Code, retry.Body)
+	}
+	history, _ := e.history(t, bob, chat, "")
+	if len(history) != 1 {
+		t.Fatalf("history should contain one album: %v", history)
+	}
+	assertAlbum(history[0])
+	page := e.do(t, request{method: http.MethodGet, path: "/chats/" + chat + "/media?kind=image&limit=1", token: bob.access})
+	found := map[string]bool{}
+	for _, item := range items(t, page) {
+		message := item["message"].(map[string]any)
+		found[message["attachment"].(map[string]any)["id"].(string)] = true
+	}
+	if len(found) != 2 || !found[photo] || !found[secondPhoto] {
+		t.Fatalf("album photos split by the page boundary: %s", page.Body)
+	}
+	visual := e.do(t, request{method: http.MethodGet, path: "/chats/" + chat + "/media?kind=visual", token: bob.access})
+	entries := items(t, visual)
+	if len(entries) != 3 {
+		t.Fatalf("visual gallery must include the video and both photos: %s", visual.Body)
+	}
+	for _, item := range entries {
+		a := item["message"].(map[string]any)["attachment"].(map[string]any)
+		if a["id"] == video && a["kind"] == "video" {
+			found[video] = true
+		}
+	}
+	if !found[video] {
+		t.Fatalf("visual gallery is missing the video: %s", visual.Body)
+	}
+	forward := e.do(t, request{method: http.MethodPost, path: "/messages/" + id + "/forward", token: bob.access,
+		body: map[string]any{"chat_ids": []string{target}}})
+	if forward.Code != http.StatusCreated {
+		t.Fatalf("forwarded album: %d %s", forward.Code, forward.Body)
+	}
+	copies := forward.json()["items"].([]any)
+	if len(copies) != 1 {
+		t.Fatalf("forwarded copies: %v", copies)
+	}
+	assertAlbum(copies[0].(map[string]any))
+}
+
 func TestChatMediaLists(t *testing.T) {
 	e := newChatEnv(t)
 	alice, bob := e.register(t, "alice"), e.register(t, "bob")

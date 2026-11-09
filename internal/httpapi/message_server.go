@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/gocql/gocql"
 	"github.com/google/uuid"
 
 	"github.com/myronsi/messenger-back/internal/messages"
@@ -76,8 +77,8 @@ func (m *MessageServer) renderWith(ctx context.Context, viewer, chatID int64, ms
 		if msg.SenderID != nil {
 			senders = append(senders, *msg.SenderID)
 		}
-		if msg.AttachmentID != nil && !msg.Deleted {
-			id := uuid.UUID(*msg.AttachmentID)
+		for _, attachmentID := range msg.AttachmentIDs() {
+			id := uuid.UUID(attachmentID)
 			if a, ok := known[id]; ok {
 				files[id] = &a
 			} else {
@@ -112,6 +113,11 @@ func (m *MessageServer) renderWith(ctx context.Context, viewer, chatID int64, ms
 		}
 		if msg.AttachmentID != nil {
 			parts.Attachment = files[uuid.UUID(*msg.AttachmentID)]
+		}
+		for _, id := range msg.AlbumIDs {
+			if a := files[uuid.UUID(id)]; a != nil {
+				parts.Album = append(parts.Album, *a)
+			}
 		}
 		if msg.ReplyTo != nil {
 			if o, ok := deco.Replies[*msg.ReplyTo]; ok {
@@ -235,6 +241,9 @@ func (m *MessageServer) SendMessage(w http.ResponseWriter, r *http.Request, chat
 	if body.AttachmentId != nil {
 		a := *body.AttachmentId
 		req.AttachmentID = &a
+	}
+	if body.AttachmentIds != nil {
+		req.AlbumIDs = *body.AttachmentIds
 	}
 	if reply != 0 {
 		req.ReplyTo = &reply
@@ -463,7 +472,7 @@ func (m *MessageServer) ListChatMedia(w http.ResponseWriter, r *http.Request, ch
 	}
 	kinds, known := messages.MediaKinds[string(params.Kind)]
 	if !known {
-		WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "kind", Message: "image or audio"})
+		WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "kind", Message: "image, video gallery (visual), or audio"})
 		return
 	}
 	var before int64
@@ -480,7 +489,11 @@ func (m *MessageServer) ListChatMedia(w http.ResponseWriter, r *http.Request, ch
 	msgs := make([]scylla.Message, len(found))
 	files := make(map[uuid.UUID]postgres.Attachment, len(found))
 	for i, it := range found {
-		msgs[i], files[it.Attachment.ID] = it.Message, it.Attachment
+		// Each media-list entry represents one matching file, even when its chat message is an album.
+		msgs[i] = it.Message
+		id := gocql.UUID(it.Attachment.ID)
+		msgs[i].AttachmentID, msgs[i].AlbumIDs = &id, nil
+		files[it.Attachment.ID] = it.Attachment
 	}
 	rendered, err := m.renderWith(r.Context(), p.UserID, id, msgs, "", files)
 	if err != nil {

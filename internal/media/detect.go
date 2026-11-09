@@ -84,6 +84,8 @@ func Detect(head []byte, purpose, kind string) (Detected, error) {
 		return Detected{Kind: KindImage, ContentType: sniffed}, nil
 	case sniffed == "video/mp4" || sniffed == "video/webm":
 		return Detected{Kind: KindVideo, ContentType: sniffed}, nil
+	case len(head) >= 16 && string(head[4:12]) == "ftypqt  ":
+		return Detected{Kind: KindVideo, ContentType: "video/quicktime"}, nil
 	}
 	if at := audioType(head, sniffed); at != "" && at != "audio/webm" {
 		return Detected{Kind: KindAudio, ContentType: at}, nil
