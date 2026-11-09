@@ -394,7 +394,7 @@ func (s *Service) Media(ctx context.Context, userID, chatID int64, kinds []strin
 		if err != nil {
 			return nil, 0, err
 		}
-		if !slices.Contains(m.AttachmentIDs(), gocql.UUID(l.Attachment.ID)) {
+		if !slices.Contains(m.AttachmentIDs(), gocql.UUID(l.ID)) {
 			continue
 		}
 		hidden, err := s.d.Messages.Hidden(ctx, userID, chatID, l.MessageID)
