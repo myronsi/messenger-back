@@ -299,6 +299,24 @@ func (e DirectMessagePolicy) Valid() bool {
 	}
 }
 
+// Defines values for DrawingItemType.
+const (
+	DrawingItemTypeStroke DrawingItemType = "stroke"
+	DrawingItemTypeText   DrawingItemType = "text"
+)
+
+// Valid indicates whether the value is a known member of the DrawingItemType enum.
+func (e DrawingItemType) Valid() bool {
+	switch e {
+	case DrawingItemTypeStroke:
+		return true
+	case DrawingItemTypeText:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ErrorCode.
 const (
 	ErrorCodeAlreadyExists            ErrorCode = "already_exists"
@@ -920,9 +938,14 @@ type Attachment struct {
 
 	// DisplayUrl A JPEG of at most 1600 px to show in an image viewer instead of the original; `null` for small images and GIFs, which are shown as they are.
 	DisplayUrl *string `json:"display_url,omitempty"`
-	DurationMs *int    `json:"duration_ms,omitempty"`
-	Filename   string  `json:"filename"`
-	Height     *int    `json:"height,omitempty"`
+
+	// Drawing What the sender drew on this image of this message. Clients show the image with the drawing on top
+	// and never without it. Absent when the image has no drawing. The same image can carry another drawing
+	// in another message.
+	Drawing    *Drawing `json:"drawing,omitempty"`
+	DurationMs *int     `json:"duration_ms,omitempty"`
+	Filename   string   `json:"filename"`
+	Height     *int     `json:"height,omitempty"`
 
 	// Id ID of an uploaded attachment (a UUID, unlike the decimal IDs of messages, users and chats).
 	//
@@ -938,6 +961,19 @@ type Attachment struct {
 	Url      *string `json:"url,omitempty"`
 	Waveform *[]int  `json:"waveform,omitempty"`
 	Width    *int    `json:"width,omitempty"`
+}
+
+// AttachmentDrawing defines model for AttachmentDrawing.
+type AttachmentDrawing struct {
+	// AttachmentId ID of an uploaded attachment (a UUID, unlike the decimal IDs of messages, users and chats).
+	//
+	// Examples: 5f0c8a64-2f2b-4c7e-9d0e-6b1f3a2c4d5e
+	AttachmentId AttachmentRef `json:"attachment_id"`
+
+	// Drawing Strokes and text labels on an image. Coordinates, widths and sizes are fractions of the image as it is
+	// shown (0 is the left or top edge, 1 the right or bottom edge), so the drawing fits any display size.
+	// Items are drawn in order. The server rounds numbers to four decimals.
+	Drawing Drawing `json:"drawing"`
 }
 
 // AttachmentKind defines model for AttachmentKind.
@@ -1265,6 +1301,41 @@ type DisableTwoFactorRequest struct {
 	Code     *string `json:"code,omitempty"`
 	Password *string `json:"password,omitempty"`
 }
+
+// Drawing Strokes and text labels on an image. Coordinates, widths and sizes are fractions of the image as it is
+// shown (0 is the left or top edge, 1 the right or bottom edge), so the drawing fits any display size.
+// Items are drawn in order. The server rounds numbers to four decimals.
+type Drawing struct {
+	Items   []DrawingItem `json:"items"`
+	Version int           `json:"version"`
+}
+
+// DrawingItem defines model for DrawingItem.
+type DrawingItem struct {
+	Color string `json:"color"`
+
+	// Points Stroke only. Flat list of x, y pairs. A drawing has at most 10000 numbers in all its strokes.
+	Points *[]float64 `json:"points,omitempty"`
+
+	// Size Text only. Font height as a fraction of the image height.
+	Size *float64 `json:"size,omitempty"`
+
+	// Text Text only.
+	Text *string         `json:"text,omitempty"`
+	Type DrawingItemType `json:"type"`
+
+	// Width Stroke only. Line width as a fraction of the image width.
+	Width *float64 `json:"width,omitempty"`
+
+	// X Text only. Left edge of the label.
+	X *float64 `json:"x,omitempty"`
+
+	// Y Text only. Top edge of the label.
+	Y *float64 `json:"y,omitempty"`
+}
+
+// DrawingItemType defines model for DrawingItem.Type.
+type DrawingItemType string
 
 // EditMessageRequest defines model for EditMessageRequest.
 type EditMessageRequest struct {
@@ -1964,10 +2035,15 @@ type SendMessageRequest struct {
 	AttachmentIds *[]AttachmentRef `json:"attachment_ids,omitempty"`
 
 	// ClientTempId Client-generated ID that makes sending idempotent and ties acks and errors to the send.
-	ClientTempId ClientTempId           `json:"client_temp_id"`
-	Content      *string                `json:"content,omitempty"`
-	ReplyTo      *Id                    `json:"reply_to,omitempty"`
-	Type         SendMessageRequestType `json:"type"`
+	ClientTempId ClientTempId `json:"client_temp_id"`
+	Content      *string      `json:"content,omitempty"`
+
+	// Drawings Drawings on images of a `file` message, at most one per image. Each `attachment_id` must be one of the
+	// message's attachments. An image with a drawing may also be an image of the message in `reply_to`
+	// instead of the sender's own upload: that is how a member draws on an image someone sent.
+	Drawings *[]AttachmentDrawing   `json:"drawings,omitempty"`
+	ReplyTo  *Id                    `json:"reply_to,omitempty"`
+	Type     SendMessageRequestType `json:"type"`
 }
 
 // SendMessageRequestType defines model for SendMessageRequest.Type.

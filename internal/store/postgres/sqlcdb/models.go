@@ -46,6 +46,7 @@ type AttachmentLink struct {
 	ChatID       int64
 	MessageID    int64
 	CreatedAt    time.Time
+	Drawing      []byte
 }
 
 type Call struct {

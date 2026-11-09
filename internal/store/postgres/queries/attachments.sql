@@ -27,8 +27,13 @@ SELECT k::text FROM (
 ORDER BY k;
 
 -- name: LinkAttachment :exec
-INSERT INTO attachment_links (attachment_id, chat_id, message_id) VALUES (@attachment_id, @chat_id, @message_id)
-ON CONFLICT DO NOTHING;
+INSERT INTO attachment_links (attachment_id, chat_id, message_id, drawing) VALUES (@attachment_id, @chat_id, @message_id, sqlc.narg(drawing))
+ON CONFLICT (attachment_id, chat_id, message_id) DO UPDATE SET drawing = EXCLUDED.drawing;
+
+-- name: ListMessageDrawings :many
+SELECT attachment_id, message_id, drawing
+FROM attachment_links
+WHERE chat_id = @chat_id AND message_id = ANY(@message_ids::bigint[]) AND drawing IS NOT NULL;
 
 -- name: UnlinkMessageAttachments :exec
 DELETE FROM attachment_links WHERE chat_id = @chat_id AND message_id = @message_id;

@@ -196,7 +196,7 @@ func TestUploadAndDownloadOverHTTP(t *testing.T) {
 	if r := get(bob.access, ""); r.Code != http.StatusNotFound {
 		t.Fatalf("bob before the message: %d", r.Code)
 	}
-	if err := e.store.Attachments().Link(context.Background(), uuid.MustParse(id), chat.ID, 1); err != nil {
+	if err := e.store.Attachments().Link(context.Background(), uuid.MustParse(id), chat.ID, 1, nil); err != nil {
 		t.Fatal(err)
 	}
 	r := get(bob.access, "")

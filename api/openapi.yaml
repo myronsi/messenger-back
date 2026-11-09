@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.17
+  version: 2.1.0-alpha.18
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -4499,6 +4499,87 @@ components:
         waveform:
           type: [array, "null"]
           items: { type: integer, minimum: 0, maximum: 255 }
+        drawing:
+          description: |
+            What the sender drew on this image of this message. Clients show the image with the drawing on top
+            and never without it. Absent when the image has no drawing. The same image can carry another drawing
+            in another message.
+          $ref: "#/components/schemas/Drawing"
+    Drawing:
+      type: object
+      description: |
+        Strokes and text labels on an image. Coordinates, widths and sizes are fractions of the image as it is
+        shown (0 is the left or top edge, 1 the right or bottom edge), so the drawing fits any display size.
+        Items are drawn in order. The server rounds numbers to four decimals.
+      required: [version, items]
+      additionalProperties: false
+      properties:
+        version: { type: integer, minimum: 1, maximum: 1 }
+        items:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items: { $ref: "#/components/schemas/DrawingItem" }
+    DrawingItem:
+      type: object
+      required: [type, color]
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          enum: [stroke, text]
+        color:
+          type: string
+          pattern: "^#[0-9a-fA-F]{6}$"
+        width:
+          type: number
+          format: double
+          minimum: 0.001
+          maximum: 0.2
+          description: Stroke only. Line width as a fraction of the image width.
+        points:
+          type: array
+          minItems: 2
+          maxItems: 10000
+          description: Stroke only. Flat list of x, y pairs. A drawing has at most 10000 numbers in all its strokes.
+          items: { type: number, format: double, minimum: 0, maximum: 1 }
+        x: { type: number, format: double, minimum: 0, maximum: 1, description: Text only. Left edge of the label. }
+        y: { type: number, format: double, minimum: 0, maximum: 1, description: Text only. Top edge of the label. }
+        size:
+          type: number
+          format: double
+          minimum: 0.01
+          maximum: 0.5
+          description: Text only. Font height as a fraction of the image height.
+        text: { type: string, minLength: 1, maxLength: 200, description: Text only. }
+      if:
+        properties:
+          type: { const: stroke }
+      then:
+        required: [width, points]
+        properties:
+          width: { type: number }
+          points: { type: array }
+          x: { not: {} }
+          y: { not: {} }
+          size: { not: {} }
+          text: { not: {} }
+      else:
+        required: [x, y, size, text]
+        properties:
+          x: { type: number }
+          y: { type: number }
+          size: { type: number }
+          text: { type: string }
+          width: { not: {} }
+          points: { not: {} }
+    AttachmentDrawing:
+      type: object
+      required: [attachment_id, drawing]
+      additionalProperties: false
+      properties:
+        attachment_id: { $ref: "#/components/schemas/AttachmentRef" }
+        drawing: { $ref: "#/components/schemas/Drawing" }
     MediaKind:
       type: string
       enum: [image, audio, visual]
@@ -4727,6 +4808,14 @@ components:
           oneOf:
             - $ref: "#/components/schemas/Id"
             - type: "null"
+        drawings:
+          type: array
+          description: |
+            Drawings on images of a `file` message, at most one per image. Each `attachment_id` must be one of the
+            message's attachments. An image with a drawing may also be an image of the message in `reply_to`
+            instead of the sender's own upload: that is how a member draws on an image someone sent.
+          maxItems: 10
+          items: { $ref: "#/components/schemas/AttachmentDrawing" }
       if:
         properties:
           type: { enum: [file, voice] }
@@ -4747,6 +4836,7 @@ components:
           content: { type: string, minLength: 1, maxLength: 4096 }
           attachment_id: { not: {} }
           attachment_ids: { not: {} }
+          drawings: { not: {} }
     EditMessageRequest:
       type: object
       required: [content]

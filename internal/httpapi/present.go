@@ -1,10 +1,13 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"math"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/myronsi/messenger-back/internal/media"
 	"github.com/myronsi/messenger-back/internal/messages"
@@ -133,12 +136,36 @@ type MessageParts struct {
 	ClientTempID string
 	BasePath     string
 	Reply        *ReplyOrigin
+	Drawings     map[uuid.UUID][]byte
 }
 
 type ReplyOrigin struct {
 	Message    scylla.Message
 	Sender     *users.View
 	Attachment *postgres.Attachment
+	Drawing    []byte
+}
+
+func GroupDrawings(found []postgres.LinkDrawing) map[int64]map[uuid.UUID][]byte {
+	out := make(map[int64]map[uuid.UUID][]byte)
+	for _, d := range found {
+		if out[d.MessageID] == nil {
+			out[d.MessageID] = make(map[uuid.UUID][]byte)
+		}
+		out[d.MessageID][d.AttachmentID] = d.Drawing
+	}
+	return out
+}
+
+func withDrawing(a Attachment, raw []byte) Attachment {
+	if len(raw) == 0 {
+		return a
+	}
+	var d Drawing
+	if err := json.Unmarshal(raw, &d); err == nil {
+		a.Drawing = &d
+	}
+	return a
 }
 
 const replyExcerpt = 100
@@ -159,7 +186,7 @@ func PresentReplyPreview(o ReplyOrigin, basePath string) ReplyPreview {
 		out.Content = &excerpt
 	}
 	if o.Attachment != nil {
-		a := PresentAttachment(*o.Attachment, m.Type, basePath)
+		a := withDrawing(PresentAttachment(*o.Attachment, m.Type, basePath), o.Drawing)
 		out.Attachment = &a
 	}
 	return out
@@ -187,13 +214,13 @@ func PresentMessage(m scylla.Message, p MessageParts) Message {
 		out.Content = nil
 	}
 	if !m.Deleted && p.Attachment != nil {
-		a := PresentAttachment(*p.Attachment, m.Type, p.BasePath)
+		a := withDrawing(PresentAttachment(*p.Attachment, m.Type, p.BasePath), p.Drawings[p.Attachment.ID])
 		out.Attachment = &a
 	}
 	if !m.Deleted && len(p.Album) > 0 {
 		album := make([]Attachment, 0, len(p.Album))
 		for _, a := range p.Album {
-			album = append(album, PresentAttachment(a, m.Type, p.BasePath))
+			album = append(album, withDrawing(PresentAttachment(a, m.Type, p.BasePath), p.Drawings[a.ID]))
 		}
 		out.Attachment = &album[0]
 		if len(album) > 1 {

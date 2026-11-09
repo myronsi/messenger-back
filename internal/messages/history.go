@@ -322,7 +322,11 @@ func (s *Service) forwardCopy(ctx context.Context, sender, chatID int64, members
 		ChatID: chatID, ID: id, SenderID: &sender, Type: src.msg.Type, Content: src.msg.Content,
 		AttachmentID: src.msg.AttachmentID, AlbumIDs: src.msg.AlbumIDs, Forwarded: src.origin, CreatedAt: ids.Time(id),
 	}
-	if err := s.linkAttachments(ctx, m); err != nil {
+	drawings, err := s.messageDrawings(ctx, src.msg)
+	if err != nil {
+		return scylla.Message{}, err
+	}
+	if err := s.linkAttachments(ctx, m, drawings); err != nil {
 		return scylla.Message{}, err
 	}
 	if err := s.queueNotification(ctx, m, members); err != nil {

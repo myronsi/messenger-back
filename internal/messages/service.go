@@ -17,6 +17,7 @@ import (
 	"github.com/gocql/gocql"
 	"github.com/google/uuid"
 
+	"github.com/myronsi/messenger-back/internal/drawing"
 	"github.com/myronsi/messenger-back/internal/events"
 	"github.com/myronsi/messenger-back/internal/ids"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
@@ -233,6 +234,7 @@ type SendRequest struct {
 	AttachmentID *uuid.UUID
 	AlbumIDs     []uuid.UUID
 	ReplyTo      *int64
+	Drawings     map[uuid.UUID][]byte
 }
 
 // Sent is the result of Send. Duplicate means the client_temp_id was used before; Message then carries the id
@@ -254,6 +256,12 @@ func (s *Service) validateSend(r SendRequest) error {
 	}
 	if r.AlbumIDs != nil && (r.Type != scylla.TypeFile || r.AttachmentID != nil || len(r.AlbumIDs) < 2 || len(r.AlbumIDs) > MaxAlbumItems) {
 		return invalid("attachment_ids must contain 2 to %d items and is only valid for a file message without attachment_id", MaxAlbumItems)
+	}
+	if len(r.Drawings) > 0 && r.Type != scylla.TypeFile {
+		return invalid("only the images of a file message can have drawings")
+	}
+	if len(r.Drawings) > MaxAlbumItems {
+		return invalid("drawings must contain at most %d items", MaxAlbumItems)
 	}
 	switch r.Type {
 	case scylla.TypeText:
@@ -297,16 +305,16 @@ func (s *Service) Send(ctx context.Context, r SendRequest) (Sent, error) {
 			return Sent{}, err
 		}
 	}
-	attachments, err := s.checkAttachments(ctx, r)
-	if err != nil {
-		return Sent{}, err
-	}
 	if r.ReplyTo != nil {
 		if _, err := s.message(ctx, r.ChatID, *r.ReplyTo); errors.Is(err, ErrNotFound) {
 			return Sent{}, invalid("reply_to is not a message of this chat")
 		} else if err != nil {
 			return Sent{}, err
 		}
+	}
+	attachments, drawings, err := s.checkAttachments(ctx, r)
+	if err != nil {
+		return Sent{}, err
 	}
 
 	id, err := s.d.IDs.Next()
@@ -339,7 +347,7 @@ func (s *Service) Send(ctx context.Context, r SendRequest) (Sent, error) {
 	if len(attachments) > 1 {
 		m.AlbumIDs = attachments
 	}
-	if err := s.linkAttachments(ctx, m); err != nil {
+	if err := s.linkAttachments(ctx, m, drawings); err != nil {
 		s.abandon(ctx, r, id, resumed)
 		return Sent{}, err
 	}
@@ -445,47 +453,93 @@ func (s *Service) checkNotBlocked(ctx context.Context, sender int64, members []i
 }
 
 // checkAttachments validates all uploads before a message can be claimed or linked.
-func (s *Service) checkAttachments(ctx context.Context, r SendRequest) ([]gocql.UUID, error) {
+func (s *Service) checkAttachments(ctx context.Context, r SendRequest) ([]gocql.UUID, map[gocql.UUID][]byte, error) {
 	ids := r.AlbumIDs
 	if r.AttachmentID != nil {
 		ids = []uuid.UUID{*r.AttachmentID}
 	}
 	seen := make(map[uuid.UUID]bool, len(ids))
 	out := make([]gocql.UUID, 0, len(ids))
+	drawings := make(map[gocql.UUID][]byte, len(r.Drawings))
 	for _, id := range ids {
 		if seen[id] {
-			return nil, invalid("attachment_ids must be unique")
+			return nil, nil, invalid("attachment_ids must be unique")
 		}
 		seen[id] = true
 		a, err := s.d.Store.Attachments().Get(ctx, id)
 		if errors.Is(err, postgres.ErrNotFound) {
-			return nil, invalid("attachment is not one of your uploads")
+			return nil, nil, invalid("attachment is not one of your uploads")
 		}
 		if err != nil {
-			return nil, fmt.Errorf("%w: %w", ErrUnavailable, err)
+			return nil, nil, fmt.Errorf("%w: %w", ErrUnavailable, err)
 		}
-		if a.UploaderID == nil || *a.UploaderID != r.SenderID || a.Purpose != postgres.PurposeMessage || (a.ChatID != nil && *a.ChatID != r.ChatID) {
-			return nil, invalid("attachment is not one of your uploads")
+		raw, drawn := r.Drawings[id]
+		ok, err := s.mayAttach(ctx, r, a, drawn)
+		if err != nil {
+			return nil, nil, err
+		}
+		if !ok {
+			return nil, nil, invalid("attachment is not one of your uploads")
 		}
 		if r.Type == scylla.TypeVoice && !strings.HasPrefix(a.MimeType, "audio/") {
-			return nil, invalid("a voice message needs an audio attachment")
+			return nil, nil, invalid("a voice message needs an audio attachment")
 		}
 		if len(ids) > 1 && a.Kind != "image" && a.Kind != "video" {
-			return nil, invalid("an album can only contain images and videos")
+			return nil, nil, invalid("an album can only contain images and videos")
+		}
+		if drawn {
+			if a.Kind != "image" {
+				return nil, nil, invalid("only images can have a drawing")
+			}
+			normalized, err := drawing.Normalize(raw)
+			if err != nil {
+				return nil, nil, invalid("%s", err.Error())
+			}
+			drawings[gocql.UUID(id)] = normalized
 		}
 		out = append(out, gocql.UUID(id))
 	}
-	return out, nil
+	for id := range r.Drawings {
+		if !seen[id] {
+			return nil, nil, invalid("a drawing must belong to an attachment of the message")
+		}
+	}
+	return out, drawings, nil
+}
+
+func (s *Service) mayAttach(ctx context.Context, r SendRequest, a postgres.Attachment, drawn bool) (bool, error) {
+	if a.UploaderID != nil && *a.UploaderID == r.SenderID && a.Purpose == postgres.PurposeMessage && (a.ChatID == nil || *a.ChatID == r.ChatID) {
+		return true, nil
+	}
+	if !drawn || r.ReplyTo == nil {
+		return false, nil
+	}
+	return s.VisibleAttachment(ctx, r.SenderID, r.ChatID, *r.ReplyTo, a.ID)
 }
 
 // Link before storing the message so all items are accessible as soon as recipients see it.
-func (s *Service) linkAttachments(ctx context.Context, m scylla.Message) error {
+func (s *Service) linkAttachments(ctx context.Context, m scylla.Message, drawings map[gocql.UUID][]byte) error {
 	for _, id := range m.AttachmentIDs() {
-		if err := s.d.Store.Attachments().Link(ctx, uuid.UUID(id), m.ChatID, m.ID); err != nil {
+		if err := s.d.Store.Attachments().Link(ctx, uuid.UUID(id), m.ChatID, m.ID, drawings[id]); err != nil {
 			return fmt.Errorf("%w: %w", ErrUnavailable, err)
 		}
 	}
 	return nil
+}
+
+func (s *Service) messageDrawings(ctx context.Context, m scylla.Message) (map[gocql.UUID][]byte, error) {
+	if len(m.AttachmentIDs()) == 0 {
+		return nil, nil
+	}
+	found, err := s.d.Store.Attachments().Drawings(ctx, m.ChatID, []int64{m.ID})
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrUnavailable, err)
+	}
+	out := make(map[gocql.UUID][]byte, len(found))
+	for _, d := range found {
+		out[gocql.UUID(d.AttachmentID)] = d.Drawing
+	}
+	return out, nil
 }
 
 // Edit replaces the text of the user's own text message.
