@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.11.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.10.0-alpha.1...v1.11.0-alpha.1) (2026-11-09)
+
+
+### Features
+
+* **media:** albums of photos and videos with video previews ([#171](https://github.com/myronsi/messenger-back/issues/171)) ([3c6ea2f](https://github.com/myronsi/messenger-back/commit/3c6ea2f7e3b1ddde681dfaf48aadab7fda711e9c))
+
 ## [1.10.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.9.0-alpha.1...v1.10.0-alpha.1) (2026-11-08)
 
 
