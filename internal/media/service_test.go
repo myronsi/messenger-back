@@ -169,7 +169,7 @@ func TestUploadLinkAndAccess(t *testing.T) {
 		t.Fatalf("bob before the message: %v", err)
 	}
 	// Sent in the chat: members who can see the message may download it.
-	if err := pg.Attachments().Link(ctx, a.ID, chat.ID, 77); err != nil {
+	if err := pg.Attachments().Link(ctx, a.ID, chat.ID, 77, nil); err != nil {
 		t.Fatal(err)
 	}
 	r.visible[[3]int64{bob, chat.ID, 77}] = true
@@ -459,7 +459,7 @@ func TestUnusedUploadsAreCollected(t *testing.T) {
 		return a
 	}
 	unused, used, avatar := mk(), mk(), mk()
-	if err := pg.Attachments().Link(ctx, used.ID, chat.ID, 1); err != nil {
+	if err := pg.Attachments().Link(ctx, used.ID, chat.ID, 1, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := pg.Attachments().SetUserAvatar(ctx, u.ID, &avatar.ID); err != nil {

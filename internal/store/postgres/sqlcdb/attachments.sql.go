@@ -270,18 +270,24 @@ func (q *Queries) GetAvatarHistoryEntry(ctx context.Context, arg GetAvatarHistor
 }
 
 const linkAttachment = `-- name: LinkAttachment :exec
-INSERT INTO attachment_links (attachment_id, chat_id, message_id) VALUES ($1, $2, $3)
-ON CONFLICT DO NOTHING
+INSERT INTO attachment_links (attachment_id, chat_id, message_id, drawing) VALUES ($1, $2, $3, $4)
+ON CONFLICT (attachment_id, chat_id, message_id) DO UPDATE SET drawing = EXCLUDED.drawing
 `
 
 type LinkAttachmentParams struct {
 	AttachmentID uuid.UUID
 	ChatID       int64
 	MessageID    int64
+	Drawing      []byte
 }
 
 func (q *Queries) LinkAttachment(ctx context.Context, arg LinkAttachmentParams) error {
-	_, err := q.db.Exec(ctx, linkAttachment, arg.AttachmentID, arg.ChatID, arg.MessageID)
+	_, err := q.db.Exec(ctx, linkAttachment,
+		arg.AttachmentID,
+		arg.ChatID,
+		arg.MessageID,
+		arg.Drawing,
+	)
 	return err
 }
 
@@ -484,6 +490,43 @@ func (q *Queries) ListLinkedAttachments(ctx context.Context, arg ListLinkedAttac
 			&i.MessageID,
 			&i.LinkedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMessageDrawings = `-- name: ListMessageDrawings :many
+SELECT attachment_id, message_id, drawing
+FROM attachment_links
+WHERE chat_id = $1 AND message_id = ANY($2::bigint[]) AND drawing IS NOT NULL
+`
+
+type ListMessageDrawingsParams struct {
+	ChatID     int64
+	MessageIds []int64
+}
+
+type ListMessageDrawingsRow struct {
+	AttachmentID uuid.UUID
+	MessageID    int64
+	Drawing      []byte
+}
+
+func (q *Queries) ListMessageDrawings(ctx context.Context, arg ListMessageDrawingsParams) ([]ListMessageDrawingsRow, error) {
+	rows, err := q.db.Query(ctx, listMessageDrawings, arg.ChatID, arg.MessageIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListMessageDrawingsRow{}
+	for rows.Next() {
+		var i ListMessageDrawingsRow
+		if err := rows.Scan(&i.AttachmentID, &i.MessageID, &i.Drawing); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -111,10 +111,27 @@ func (r attachmentRepo) Delete(ctx context.Context, id uuid.UUID) ([]string, err
 	return keysOf(row.StorageKey, row.ThumbnailKey), nil
 }
 
-func (r attachmentRepo) Link(ctx context.Context, attachmentID uuid.UUID, chatID, messageID int64) error {
+func (r attachmentRepo) Link(ctx context.Context, attachmentID uuid.UUID, chatID, messageID int64, drawing []byte) error {
 	ctx, cancel := r.s.call(ctx)
 	defer cancel()
-	return mapError(r.s.q.LinkAttachment(ctx, sqlcdb.LinkAttachmentParams{AttachmentID: attachmentID, ChatID: chatID, MessageID: messageID}))
+	return mapError(r.s.q.LinkAttachment(ctx, sqlcdb.LinkAttachmentParams{AttachmentID: attachmentID, ChatID: chatID, MessageID: messageID, Drawing: drawing}))
+}
+
+func (r attachmentRepo) Drawings(ctx context.Context, chatID int64, messageIDs []int64) ([]LinkDrawing, error) {
+	if len(messageIDs) == 0 {
+		return nil, nil
+	}
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	rows, err := r.s.q.ListMessageDrawings(ctx, sqlcdb.ListMessageDrawingsParams{ChatID: chatID, MessageIds: messageIDs})
+	if err != nil {
+		return nil, mapError(err)
+	}
+	out := make([]LinkDrawing, len(rows))
+	for i, d := range rows {
+		out[i] = LinkDrawing{AttachmentID: d.AttachmentID, MessageID: d.MessageID, Drawing: d.Drawing}
+	}
+	return out, nil
 }
 
 func (r attachmentRepo) UnlinkMessage(ctx context.Context, chatID, messageID int64) error {

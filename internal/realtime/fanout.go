@@ -174,10 +174,11 @@ func (f *Fanout) renderMessage(ctx context.Context, m scylla.Message, recipients
 			f.log.WarnContext(ctx, "render attachment", "error", err)
 		}
 	}
+	drawings := f.drawings(ctx, m)
 	replies := f.replyOrigins(ctx, m, recipients)
 	out := make(map[int64]httpapi.Message, len(recipients))
 	for _, uid := range recipients {
-		parts := httpapi.MessageParts{Attachment: att, Album: album, Reactions: reactions, BasePath: f.basePath, Reply: replies[uid]}
+		parts := httpapi.MessageParts{Attachment: att, Album: album, Reactions: reactions, BasePath: f.basePath, Reply: replies[uid], Drawings: drawings}
 		if m.SenderID != nil {
 			v, ok := senders[uid]
 			if !ok {
@@ -192,6 +193,18 @@ func (f *Fanout) renderMessage(ctx context.Context, m scylla.Message, recipients
 		out[uid] = httpapi.PresentMessage(m, parts)
 	}
 	return out
+}
+
+func (f *Fanout) drawings(ctx context.Context, m scylla.Message) map[uuid.UUID][]byte {
+	if len(m.AttachmentIDs()) == 0 {
+		return nil
+	}
+	found, err := f.store.Attachments().Drawings(ctx, m.ChatID, []int64{m.ID})
+	if err != nil {
+		f.log.WarnContext(ctx, "render drawings", "error", err)
+		return nil
+	}
+	return httpapi.GroupDrawings(found)[m.ID]
 }
 
 func (f *Fanout) replyOrigins(ctx context.Context, m scylla.Message, recipients []int64) map[int64]*httpapi.ReplyOrigin {
@@ -217,9 +230,11 @@ func (f *Fanout) replyOrigins(ctx context.Context, m scylla.Message, recipients 
 		}
 	}
 	var att *postgres.Attachment
+	var drawing []byte
 	if o.AttachmentID != nil && !o.Deleted {
 		if a, err := f.store.Attachments().Get(ctx, uuid.UUID(*o.AttachmentID)); err == nil {
 			att = &a
+			drawing = f.drawings(ctx, o)[a.ID]
 		}
 	}
 	out := make(map[int64]*httpapi.ReplyOrigin, len(recipients))
@@ -227,7 +242,7 @@ func (f *Fanout) replyOrigins(ctx context.Context, m scylla.Message, recipients 
 		if hidden[uid] {
 			continue
 		}
-		origin := &httpapi.ReplyOrigin{Message: o, Attachment: att}
+		origin := &httpapi.ReplyOrigin{Message: o, Attachment: att, Drawing: drawing}
 		if v, ok := senders[uid]; ok {
 			origin.Sender = &v
 		}

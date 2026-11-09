@@ -362,6 +362,12 @@ type AttachmentLink struct {
 	MessageID int64
 }
 
+type LinkDrawing struct {
+	AttachmentID uuid.UUID
+	MessageID    int64
+	Drawing      []byte
+}
+
 // LinkedAttachment is an attachment as it appears in a chat's media list.
 type LinkedAttachment struct {
 	Attachment
@@ -393,7 +399,8 @@ type AttachmentRepository interface {
 	// Delete removes the row and returns the storage keys (file and thumbnail), so the caller can delete the objects.
 	Delete(ctx context.Context, id uuid.UUID) (keys []string, err error)
 	// Link records that a message uses the attachment (idempotent).
-	Link(ctx context.Context, attachmentID uuid.UUID, chatID, messageID int64) error
+	Link(ctx context.Context, attachmentID uuid.UUID, chatID, messageID int64, drawing []byte) error
+	Drawings(ctx context.Context, chatID int64, messageIDs []int64) ([]LinkDrawing, error)
 	UnlinkMessage(ctx context.Context, chatID, messageID int64) error
 	// LinksForViewer returns the messages using the attachment in chats the viewer is a member of (at most 50).
 	LinksForViewer(ctx context.Context, attachmentID uuid.UUID, viewerID int64) ([]AttachmentLink, error)

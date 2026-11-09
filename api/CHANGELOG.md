@@ -2,6 +2,15 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.18
+
+- Drawings on images: `SendMessageRequest.drawings` adds strokes and text labels to images of a `file` message.
+  The image file stays unchanged; the drawing is stored with the message.
+- To draw on an image someone else sent, reply to that message with `reply_to`, reuse its image ID in
+  `attachment_id` and send a drawing for it.
+- `Attachment.drawing` returns the drawing. Clients show the image with it. Older clients ignore it and show the
+  plain image.
+
 ## 2.1.0-alpha.17
 
 - Media albums: `SendMessageRequest.attachment_ids` sends two to ten image or video uploads as one `file` message

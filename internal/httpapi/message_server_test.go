@@ -531,3 +531,76 @@ func TestSearchOverHTTP(t *testing.T) {
 		t.Fatalf("bad cursor: %d", r.Code)
 	}
 }
+
+func TestDrawingOnImagesOverHTTP(t *testing.T) {
+	e := newChatEnv(t)
+	alice, bob := e.register(t, "alice"), e.register(t, "bob")
+	aliceID, _ := strconv.ParseInt(e.uid(t, alice), 10, 64)
+	chat := e.create(t, alice, e.uid(t, bob), "").json()["id"].(string)
+	a, err := e.store.Attachments().Create(t.Context(), postgres.NewAttachment{
+		UploaderID: &aliceID, Purpose: "message", Kind: "image", Filename: "photo.png",
+		StorageKey: "attachments/" + uuid.NewString(), MimeType: "image/png", Size: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	photo := a.ID.String()
+	circle := map[string]any{"version": 1, "items": []any{
+		map[string]any{"type": "stroke", "color": "#FF0000", "width": 0.01, "points": []float64{0.1, 0.1, 0.9, 0.9}},
+	}}
+	label := map[string]any{"version": 1, "items": []any{
+		map[string]any{"type": "stroke", "color": "#ff0000", "width": 0.01, "points": []float64{0.1, 0.1, 0.9, 0.9}},
+		map[string]any{"type": "text", "color": "#0000ff", "x": 0.5, "y": 0.5, "size": 0.05, "text": "here"},
+	}}
+	drawingOf := func(m map[string]any) map[string]any {
+		t.Helper()
+		d, _ := m["attachment"].(map[string]any)["drawing"].(map[string]any)
+		return d
+	}
+	count := func(d map[string]any) int { return len(d["items"].([]any)) }
+
+	sent := e.do(t, request{method: http.MethodPost, path: "/chats/" + chat + "/messages", token: alice.access,
+		body: map[string]any{"client_temp_id": "drawn-1", "type": "file", "attachment_id": photo,
+			"drawings": []any{map[string]any{"attachment_id": photo, "drawing": circle}}}})
+	if sent.Code != http.StatusCreated {
+		t.Fatalf("send with drawing: %d %s", sent.Code, sent.Body)
+	}
+	d := drawingOf(sent.json())
+	if d == nil || count(d) != 1 || d["items"].([]any)[0].(map[string]any)["color"] != "#ff0000" {
+		t.Fatalf("sent drawing: %s", sent.Body)
+	}
+	original := sent.json()["id"].(string)
+
+	bad := e.do(t, request{method: http.MethodPost, path: "/chats/" + chat + "/messages", token: bob.access,
+		body: map[string]any{"client_temp_id": "reuse-1", "type": "file", "attachment_id": photo, "reply_to": original}})
+	if bad.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("reusing someone's image without a drawing: %d %s", bad.Code, bad.Body)
+	}
+	replied := e.do(t, request{method: http.MethodPost, path: "/chats/" + chat + "/messages", token: bob.access,
+		body: map[string]any{"client_temp_id": "reuse-2", "type": "file", "attachment_id": photo, "reply_to": original,
+			"drawings": []any{map[string]any{"attachment_id": photo, "drawing": label}}}})
+	if replied.Code != http.StatusCreated {
+		t.Fatalf("drawing on someone's image: %d %s", replied.Code, replied.Body)
+	}
+	if d := drawingOf(replied.json()); d == nil || count(d) != 2 {
+		t.Fatalf("reply drawing: %s", replied.Body)
+	}
+	preview := replied.json()["reply_preview"].(map[string]any)
+	if d := drawingOf(preview); d == nil || count(d) != 1 {
+		t.Fatalf("reply preview must show the original drawing: %v", preview)
+	}
+
+	history, _ := e.history(t, alice, chat, "")
+	if len(history) != 2 {
+		t.Fatalf("history: %v", history)
+	}
+	for _, m := range history {
+		want := 1
+		if m["id"] != original {
+			want = 2
+		}
+		if d := drawingOf(m); d == nil || count(d) != want {
+			t.Fatalf("history drawing of %v: %v", m["id"], m)
+		}
+	}
+}

@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -90,6 +91,10 @@ func (m *MessageServer) renderWith(ctx context.Context, viewer, chatID int64, ms
 	if err != nil {
 		return nil, err
 	}
+	drawings, err := m.drawings(ctx, chatID, append(slices.Clone(msgs), origins...))
+	if err != nil {
+		return nil, err
+	}
 	for id, have := range files {
 		if have != nil {
 			continue
@@ -103,7 +108,7 @@ func (m *MessageServer) renderWith(ctx context.Context, viewer, chatID int64, ms
 	}
 	out := make([]Message, len(msgs))
 	for i, msg := range msgs {
-		parts := MessageParts{Reactions: deco.Reactions[msg.ID], BasePath: m.o.BasePath}
+		parts := MessageParts{Reactions: deco.Reactions[msg.ID], BasePath: m.o.BasePath, Drawings: drawings[msg.ID]}
 		if msg.SenderID != nil {
 			v := people[*msg.SenderID]
 			parts.Sender = &v
@@ -128,6 +133,7 @@ func (m *MessageServer) renderWith(ctx context.Context, viewer, chatID int64, ms
 				}
 				if o.AttachmentID != nil {
 					parts.Reply.Attachment = files[uuid.UUID(*o.AttachmentID)]
+					parts.Reply.Drawing = drawings[o.ID][uuid.UUID(*o.AttachmentID)]
 				}
 			}
 		}
@@ -213,6 +219,20 @@ func (m *MessageServer) ListMessages(w http.ResponseWriter, r *http.Request, cha
 	writeJSONStatus(w, http.StatusOK, out)
 }
 
+func (m *MessageServer) drawings(ctx context.Context, chatID int64, msgs []scylla.Message) (map[int64]map[uuid.UUID][]byte, error) {
+	var withFiles []int64
+	for _, msg := range msgs {
+		if len(msg.AttachmentIDs()) > 0 {
+			withFiles = append(withFiles, msg.ID)
+		}
+	}
+	found, err := m.o.Store.Attachments().Drawings(ctx, chatID, uniq(withFiles))
+	if err != nil {
+		return nil, err
+	}
+	return GroupDrawings(found), nil
+}
+
 // SendMessage implements POST /chats/{id}/messages: 201 for a new message, 200 when this client_temp_id was
 // used before.
 func (m *MessageServer) SendMessage(w http.ResponseWriter, r *http.Request, chatID ChatId, _ SendMessageParams) {
@@ -244,6 +264,21 @@ func (m *MessageServer) SendMessage(w http.ResponseWriter, r *http.Request, chat
 	}
 	if body.AttachmentIds != nil {
 		req.AlbumIDs = *body.AttachmentIds
+	}
+	if body.Drawings != nil {
+		req.Drawings = make(map[uuid.UUID][]byte, len(*body.Drawings))
+		for _, d := range *body.Drawings {
+			if _, dup := req.Drawings[d.AttachmentId]; dup {
+				WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "drawings", Message: "at most one drawing per attachment"})
+				return
+			}
+			raw, err := json.Marshal(d.Drawing)
+			if err != nil {
+				WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "drawings", Message: "not a drawing"})
+				return
+			}
+			req.Drawings[d.AttachmentId] = raw
+		}
 	}
 	if reply != 0 {
 		req.ReplyTo = &reply
