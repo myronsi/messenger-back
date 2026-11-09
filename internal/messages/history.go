@@ -7,7 +7,7 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/google/uuid"
+	"github.com/gocql/gocql"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/myronsi/messenger-back/internal/ids"
@@ -320,12 +320,10 @@ func (s *Service) forwardCopy(ctx context.Context, sender, chatID int64, members
 	}
 	m := scylla.Message{
 		ChatID: chatID, ID: id, SenderID: &sender, Type: src.msg.Type, Content: src.msg.Content,
-		AttachmentID: src.msg.AttachmentID, Forwarded: src.origin, CreatedAt: ids.Time(id),
+		AttachmentID: src.msg.AttachmentID, AlbumIDs: src.msg.AlbumIDs, Forwarded: src.origin, CreatedAt: ids.Time(id),
 	}
-	if m.AttachmentID != nil {
-		if err := s.d.Store.Attachments().Link(ctx, uuid.UUID(*m.AttachmentID), chatID, id); err != nil {
-			return scylla.Message{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
-		}
+	if err := s.linkAttachments(ctx, m); err != nil {
+		return scylla.Message{}, err
 	}
 	if err := s.queueNotification(ctx, m, members); err != nil {
 		return scylla.Message{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
@@ -355,8 +353,9 @@ func (s *Service) senderName(ctx context.Context, senderID *int64) (string, erro
 
 // MediaKinds are the attachment kinds of each media list.
 var MediaKinds = map[string][]string{
-	"image": {"image"},
-	"audio": {"audio", "voice"},
+	"image":  {"image"},
+	"visual": {"image", "video"},
+	"audio":  {"audio", "voice"},
 }
 
 // MediaItem is a message of a media list with its file.
@@ -379,16 +378,13 @@ func (s *Service) Media(ctx context.Context, userID, chatID int64, kinds []strin
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
-	links, err := s.d.Store.Attachments().ListLinked(ctx, chatID, kinds, before, limit*mediaScan+1)
+	links, err := s.d.Store.Attachments().ListLinked(ctx, chatID, kinds, before, limit*mediaScan+MaxAlbumItems)
 	if err != nil {
 		return nil, 0, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
-	more := len(links) > limit*mediaScan
-	if more {
-		links = links[:limit*mediaScan]
-	}
 	for i, l := range links {
-		if len(items) == limit {
+		// The cursor is a message ID, so include all matching items of the last album.
+		if i > 0 && l.MessageID != links[i-1].MessageID && (len(items) >= limit || i >= limit*mediaScan) {
 			return items, links[i-1].MessageID, nil
 		}
 		m, err := s.message(ctx, chatID, l.MessageID)
@@ -398,7 +394,7 @@ func (s *Service) Media(ctx context.Context, userID, chatID int64, kinds []strin
 		if err != nil {
 			return nil, 0, err
 		}
-		if m.Deleted {
+		if !slices.Contains(m.AttachmentIDs(), gocql.UUID(l.ID)) {
 			continue
 		}
 		hidden, err := s.d.Messages.Hidden(ctx, userID, chatID, l.MessageID)
@@ -408,9 +404,6 @@ func (s *Service) Media(ctx context.Context, userID, chatID int64, kinds []strin
 		if !hidden {
 			items = append(items, MediaItem{Message: m, Attachment: l.Attachment})
 		}
-	}
-	if more && len(links) > 0 {
-		return items, links[len(links)-1].MessageID, nil
 	}
 	return items, 0, nil
 }

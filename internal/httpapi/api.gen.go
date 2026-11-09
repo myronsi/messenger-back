@@ -451,8 +451,9 @@ func (e GroupRole) Valid() bool {
 
 // Defines values for MediaKind.
 const (
-	MediaKindAudio MediaKind = "audio"
-	MediaKindImage MediaKind = "image"
+	MediaKindAudio  MediaKind = "audio"
+	MediaKindImage  MediaKind = "image"
+	MediaKindVisual MediaKind = "visual"
 )
 
 // Valid indicates whether the value is a known member of the MediaKind enum.
@@ -461,6 +462,8 @@ func (e MediaKind) Valid() bool {
 	case MediaKindAudio:
 		return true
 	case MediaKindImage:
+		return true
+	case MediaKindVisual:
 		return true
 	default:
 		return false
@@ -1467,6 +1470,9 @@ type MediaKind string
 type Message struct {
 	Attachment *Attachment `json:"attachment"`
 
+	// Attachments Ordered images and videos of an album. The first item is also returned as attachment for older clients.
+	Attachments *[]Attachment `json:"attachments,omitempty"`
+
 	// ChatId Decimal ID as a string (Snowflake IDs exceed 2^53).
 	//
 	// Examples: 7217400317439950848
@@ -1951,8 +1957,11 @@ type SendCallKeysRequest struct {
 
 // SendMessageRequest defines model for SendMessageRequest.
 type SendMessageRequest struct {
-	// AttachmentId Required and not null for `file` and `voice`; never a URL.
+	// AttachmentId Single upload ID for a file or voice message. Omit for albums.
 	AttachmentId *AttachmentRef `json:"attachment_id,omitempty"`
+
+	// AttachmentIds Ordered IDs of two to ten image or video uploads for one file message.
+	AttachmentIds *[]AttachmentRef `json:"attachment_ids,omitempty"`
 
 	// ClientTempId Client-generated ID that makes sending idempotent and ties acks and errors to the send.
 	ClientTempId ClientTempId           `json:"client_temp_id"`
@@ -4000,7 +4009,7 @@ type ServerInterface interface {
 	// StartChatCall Start a call in the chat, or get the one already running
 	// (POST /chats/{chat_id}/call)
 	StartChatCall(w http.ResponseWriter, r *http.Request, chatId ChatId, params StartChatCallParams)
-	// ListChatMedia Photos or audio of a chat
+	// ListChatMedia Photos, videos or audio of a chat
 	// (GET /chats/{chat_id}/media)
 	ListChatMedia(w http.ResponseWriter, r *http.Request, chatId ChatId, params ListChatMediaParams)
 	// ListMessages Message history
@@ -25860,7 +25869,7 @@ type StrictServerInterface interface {
 	// StartChatCall Start a call in the chat, or get the one already running
 	// (POST /chats/{chat_id}/call)
 	StartChatCall(ctx context.Context, request StartChatCallRequestObject) (StartChatCallResponseObject, error)
-	// ListChatMedia Photos or audio of a chat
+	// ListChatMedia Photos, videos or audio of a chat
 	// (GET /chats/{chat_id}/media)
 	ListChatMedia(ctx context.Context, request ListChatMediaRequestObject) (ListChatMediaResponseObject, error)
 	// ListMessages Message history

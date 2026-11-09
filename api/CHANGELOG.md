@@ -2,6 +2,14 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.17
+
+- Media albums: `SendMessageRequest.attachment_ids` sends two to ten image or video uploads as one `file` message
+  with one caption. `attachment_id` and `attachment_ids` are mutually exclusive; albums are `file` only.
+- `Message.attachments` lists the album items in order. `Message.attachment` still carries the first item, so
+  older clients show the first photo or video.
+- `MediaKind` gains `visual` for `GET /chats/{chat_id}/media`: images and videos together.
+
 ## 2.1.0-alpha.16
 
 - Trusted-device recovery no longer needs the current password. `DeviceRecoveryApproval.password` is no longer

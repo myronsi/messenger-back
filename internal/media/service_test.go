@@ -6,6 +6,7 @@ import (
 	"errors"
 	"image"
 	"image/color"
+	"image/jpeg"
 	"image/png"
 	"io"
 	"os"
@@ -15,6 +16,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/myronsi/messenger-back/internal/media"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
@@ -27,7 +30,79 @@ type rules struct {
 	members map[[2]int64]bool
 }
 
-func (r rules) Visible(_ context.Context, viewer, chat, msg int64) (bool, error) {
+func TestVideoUploadStoresAPlayablePreview(t *testing.T) {
+	prober := media.NewProber("", "")
+	if !prober.Available() {
+		t.Skip("ffmpeg and ffprobe are required")
+	}
+	pg := testenv.Postgres(t)
+	ctx := t.Context()
+	user, err := pg.Users().Create(ctx, "videopreview", "Preview", "hash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	videoPath := dir + "/preview.mp4"
+	cmd := exec.CommandContext(ctx, "ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=red:s=960x540:d=0.2",
+		"-c:v", "mpeg4", "-threads", "1", videoPath)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("create video fixture: %v %s", err, output)
+	}
+	video, err := os.ReadFile(videoPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	disk, err := media.NewDisk(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := media.NewService(media.Options{Storage: disk, Attachments: pg.Attachments(), Prober: prober})
+	file, err := svc.Upload(ctx, media.Upload{UploaderID: user.ID, Purpose: media.PurposeMessage, Filename: "preview.mp4", Body: bytes.NewReader(video)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if file.ThumbnailKey == nil || file.Width == nil || file.Height == nil || file.Kind != media.KindVideo {
+		t.Fatalf("missing video preview metadata: %+v", file)
+	}
+	thumb, err := svc.Open(ctx, user.ID, file.ID, media.VariantThumbnail)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer thumb.Object.Body.Close()
+	frame, err := jpeg.DecodeConfig(thumb.Object.Body)
+	if err != nil || frame.Width != 640 || frame.Height != 360 {
+		t.Fatalf("video frame = %+v, %v", frame, err)
+	}
+	original, err := svc.Open(ctx, user.ID, file.ID, media.VariantOriginal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer original.Object.Body.Close()
+	data, err := io.ReadAll(original.Object.Body)
+	if err != nil || !bytes.Equal(video, data) {
+		t.Fatalf("original video was changed: %v", err)
+	}
+	legacy, err := pg.Attachments().Create(ctx, postgres.NewAttachment{
+		UploaderID: &user.ID, Purpose: media.PurposeMessage, Kind: media.KindVideo,
+		StorageKey: "attachments/legacy-video", Filename: "legacy.mp4", MimeType: "video/mp4", Size: int64(len(video)),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := disk.Put(ctx, legacy.StorageKey, bytes.NewReader(video), int64(len(video)), legacy.MimeType); err != nil {
+		t.Fatal(err)
+	}
+	legacyPreview, err := svc.Open(ctx, user.ID, legacy.ID, media.VariantThumbnail)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer legacyPreview.Object.Body.Close()
+	if _, err := jpeg.DecodeConfig(legacyPreview.Object.Body); err != nil {
+		t.Fatalf("legacy video preview: %v", err)
+	}
+}
+
+func (r rules) VisibleAttachment(_ context.Context, viewer, chat, msg int64, _ uuid.UUID) (bool, error) {
 	return r.visible[[3]int64{viewer, chat, msg}], nil
 }
 

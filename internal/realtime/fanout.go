@@ -161,10 +161,15 @@ func (f *Fanout) renderMessage(ctx context.Context, m scylla.Message, recipients
 		}
 	}
 	var att *postgres.Attachment
-	if m.AttachmentID != nil && !m.Deleted {
-		a, err := f.store.Attachments().Get(ctx, uuid.UUID(*m.AttachmentID))
+	var album []postgres.Attachment
+	for _, id := range m.AttachmentIDs() {
+		a, err := f.store.Attachments().Get(ctx, uuid.UUID(id))
 		if err == nil {
-			att = &a
+			if len(m.AlbumIDs) > 0 {
+				album = append(album, a)
+			} else {
+				att = &a
+			}
 		} else if !errors.Is(err, postgres.ErrNotFound) {
 			f.log.WarnContext(ctx, "render attachment", "error", err)
 		}
@@ -172,7 +177,7 @@ func (f *Fanout) renderMessage(ctx context.Context, m scylla.Message, recipients
 	replies := f.replyOrigins(ctx, m, recipients)
 	out := make(map[int64]httpapi.Message, len(recipients))
 	for _, uid := range recipients {
-		parts := httpapi.MessageParts{Attachment: att, Reactions: reactions, BasePath: f.basePath, Reply: replies[uid]}
+		parts := httpapi.MessageParts{Attachment: att, Album: album, Reactions: reactions, BasePath: f.basePath, Reply: replies[uid]}
 		if m.SenderID != nil {
 			v, ok := senders[uid]
 			if !ok {

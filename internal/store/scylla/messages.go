@@ -52,11 +52,26 @@ type Message struct {
 	Type         string
 	Content      *string
 	AttachmentID *gocql.UUID
+	AlbumIDs     []gocql.UUID
 	ReplyTo      *int64
 	Forwarded    *Forwarded
 	EditedAt     *time.Time
 	Deleted      bool
 	CreatedAt    time.Time
+}
+
+// AttachmentIDs returns the attachments in display order, including legacy single-file messages.
+func (m Message) AttachmentIDs() []gocql.UUID {
+	if m.Deleted {
+		return nil
+	}
+	if len(m.AlbumIDs) != 0 {
+		return m.AlbumIDs
+	}
+	if m.AttachmentID != nil {
+		return []gocql.UUID{*m.AttachmentID}
+	}
+	return nil
 }
 
 // Reaction is one user's reaction to a message.
@@ -160,7 +175,7 @@ func (r *Messages) session(ctx context.Context) (context.Context, context.Cancel
 }
 
 const messageColumns = `message_id, sender_id, type, content, attachment_id, reply_to, forwarded_from_message_id,
-forwarded_from_sender_id, forwarded_from_sender_name, edited_at, deleted, created_at`
+forwarded_from_sender_id, forwarded_from_sender_name, edited_at, deleted, created_at, album_ids`
 
 func scanMessage(chatID int64, scan func(dest ...any) bool) (Message, bool) {
 	var (
@@ -174,7 +189,7 @@ func scanMessage(chatID int64, scan func(dest ...any) bool) (Message, bool) {
 		edited     *time.Time
 		deleted    *bool
 	)
-	if !scan(&m.ID, &sender, &m.Type, &content, &attachment, &m.ReplyTo, &fwdID, &fwdSender, &fwdName, &edited, &deleted, &m.CreatedAt) {
+	if !scan(&m.ID, &sender, &m.Type, &content, &attachment, &m.ReplyTo, &fwdID, &fwdSender, &fwdName, &edited, &deleted, &m.CreatedAt, &m.AlbumIDs) {
 		return Message{}, false
 	}
 	m.SenderID, m.Content, m.AttachmentID, m.EditedAt = sender, content, attachment, edited
@@ -186,7 +201,7 @@ func scanMessage(chatID int64, scan func(dest ...any) bool) (Message, bool) {
 		}
 	}
 	if m.Deleted {
-		m.Content, m.AttachmentID = nil, nil
+		m.Content, m.AttachmentID, m.AlbumIDs = nil, nil, nil
 	}
 	return m, true
 }
@@ -268,9 +283,9 @@ func (r *Messages) Insert(ctx context.Context, m Message) error {
 	if f := m.Forwarded; f != nil {
 		fwdID, fwdSender, fwdName = &f.MessageID, f.SenderID, &f.SenderName
 	}
-	err = sess.Query(`INSERT INTO messages (chat_id, bucket, `+messageColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) USING TIMESTAMP ?`,
+	err = sess.Query(`INSERT INTO messages (chat_id, bucket, `+messageColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) USING TIMESTAMP ?`,
 		m.ChatID, bucket, m.ID, m.SenderID, m.Type, m.Content, m.AttachmentID, m.ReplyTo,
-		fwdID, fwdSender, fwdName, m.EditedAt, m.Deleted, m.CreatedAt, ts,
+		fwdID, fwdSender, fwdName, m.EditedAt, m.Deleted, m.CreatedAt, m.AlbumIDs, ts,
 	).WithContext(ctx).Idempotent(true).Exec()
 	if err != nil {
 		return fmt.Errorf("insert message: %w", err)
@@ -373,7 +388,7 @@ func (r *Messages) Delete(ctx context.Context, chatID, messageID int64) error {
 	}
 	// A lightweight transaction like Edit, so the two are serialized (mixing them with plain writes would
 	// order them by client timestamps instead). Deleting twice is harmless.
-	_, err = sess.Query(`UPDATE messages SET deleted = true, content = null, attachment_id = null WHERE chat_id = ? AND bucket = ? AND message_id = ? IF EXISTS`,
+	_, err = sess.Query(`UPDATE messages SET deleted = true, content = null, attachment_id = null, album_ids = null WHERE chat_id = ? AND bucket = ? AND message_id = ? IF EXISTS`,
 		chatID, bucket, messageID).WithContext(ctx).SerialConsistency(gocql.LocalSerial).MapScanCAS(map[string]any{})
 	if err != nil {
 		return fmt.Errorf("delete message: %w", err)

@@ -43,7 +43,7 @@ func (m memberRules) IsMember(ctx context.Context, chatID, userID int64) (bool, 
 	return err == nil, err
 }
 
-func (m memberRules) Visible(ctx context.Context, viewer, chatID, _ int64) (bool, error) {
+func (m memberRules) VisibleAttachment(ctx context.Context, viewer, chatID, _ int64, _ uuid.UUID) (bool, error) {
 	return m.IsMember(ctx, chatID, viewer)
 }
 
