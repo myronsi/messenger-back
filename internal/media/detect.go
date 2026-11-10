@@ -67,6 +67,12 @@ func Detect(head []byte, purpose, kind string) (Detected, error) {
 		}
 		return Detected{Kind: KindImage, ContentType: sniffed}, nil
 	}
+	if purpose == PurposeSticker {
+		if !stickerTypes[sniffed] {
+			return Detected{}, ErrUnsupported
+		}
+		return Detected{Kind: KindImage, ContentType: sniffed}, nil
+	}
 	switch kind {
 	case KindVoice, KindAudio:
 		at := audioType(head, sniffed)

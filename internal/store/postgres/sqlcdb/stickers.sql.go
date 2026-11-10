@@ -12,8 +12,79 @@ import (
 	"github.com/google/uuid"
 )
 
+const clearStickerPackReports = `-- name: ClearStickerPackReports :exec
+DELETE FROM sticker_pack_reports WHERE pack_id = $1
+`
+
+func (q *Queries) ClearStickerPackReports(ctx context.Context, packID int64) error {
+	_, err := q.db.Exec(ctx, clearStickerPackReports, packID)
+	return err
+}
+
+const countOwnedStickerPacks = `-- name: CountOwnedStickerPacks :one
+SELECT count(*)::int FROM sticker_packs WHERE owner_id = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) CountOwnedStickerPacks(ctx context.Context, ownerID *int64) (int32, error) {
+	row := q.db.QueryRow(ctx, countOwnedStickerPacks, ownerID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const countStickerReportsSince = `-- name: CountStickerReportsSince :one
+SELECT count(*)::int FROM sticker_pack_reports WHERE reporter_id = $1 AND created_at > $2
+`
+
+type CountStickerReportsSinceParams struct {
+	ReporterID int64
+	Since      time.Time
+}
+
+func (q *Queries) CountStickerReportsSince(ctx context.Context, arg CountStickerReportsSinceParams) (int32, error) {
+	row := q.db.QueryRow(ctx, countStickerReportsSince, arg.ReporterID, arg.Since)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const deleteSticker = `-- name: DeleteSticker :execrows
+UPDATE stickers SET deleted_at = now() WHERE id = $1 AND pack_id = $2 AND deleted_at IS NULL
+`
+
+type DeleteStickerParams struct {
+	ID     int64
+	PackID int64
+}
+
+func (q *Queries) DeleteSticker(ctx context.Context, arg DeleteStickerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteSticker, arg.ID, arg.PackID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteStickerPack = `-- name: DeleteStickerPack :exec
+UPDATE sticker_packs SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) DeleteStickerPack(ctx context.Context, id int64) error {
+	_, err := q.db.Exec(ctx, deleteStickerPack, id)
+	return err
+}
+
+const deleteStickerPacksOfOwner = `-- name: DeleteStickerPacksOfOwner :exec
+UPDATE sticker_packs SET deleted_at = now() WHERE owner_id = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) DeleteStickerPacksOfOwner(ctx context.Context, ownerID *int64) error {
+	_, err := q.db.Exec(ctx, deleteStickerPacksOfOwner, ownerID)
+	return err
+}
+
 const getStickerPack = `-- name: GetStickerPack :one
-SELECT id, owner_id, builtin_key, title, is_default, deleted_at, created_at FROM sticker_packs WHERE id = $1
+SELECT id, owner_id, builtin_key, title, is_default, deleted_at, created_at, slug, hidden_at FROM sticker_packs WHERE id = $1
 `
 
 func (q *Queries) GetStickerPack(ctx context.Context, id int64) (StickerPack, error) {
@@ -27,6 +98,29 @@ func (q *Queries) GetStickerPack(ctx context.Context, id int64) (StickerPack, er
 		&i.IsDefault,
 		&i.DeletedAt,
 		&i.CreatedAt,
+		&i.Slug,
+		&i.HiddenAt,
+	)
+	return i, err
+}
+
+const getStickerPackBySlug = `-- name: GetStickerPackBySlug :one
+SELECT id, owner_id, builtin_key, title, is_default, deleted_at, created_at, slug, hidden_at FROM sticker_packs WHERE slug = $1
+`
+
+func (q *Queries) GetStickerPackBySlug(ctx context.Context, slug *string) (StickerPack, error) {
+	row := q.db.QueryRow(ctx, getStickerPackBySlug, slug)
+	var i StickerPack
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.BuiltinKey,
+		&i.Title,
+		&i.IsDefault,
+		&i.DeletedAt,
+		&i.CreatedAt,
+		&i.Slug,
+		&i.HiddenAt,
 	)
 	return i, err
 }
@@ -45,6 +139,25 @@ func (q *Queries) GetStickerPackInstallation(ctx context.Context, arg GetSticker
 	var installed bool
 	err := row.Scan(&installed)
 	return installed, err
+}
+
+const hideReportedStickerPack = `-- name: HideReportedStickerPack :execrows
+UPDATE sticker_packs SET hidden_at = now()
+WHERE id = $1 AND hidden_at IS NULL
+  AND (SELECT count(*) FROM sticker_pack_reports r WHERE r.pack_id = $1) >= $2::int
+`
+
+type HideReportedStickerPackParams struct {
+	ID        int64
+	Threshold int32
+}
+
+func (q *Queries) HideReportedStickerPack(ctx context.Context, arg HideReportedStickerPackParams) (int64, error) {
+	result, err := q.db.Exec(ctx, hideReportedStickerPack, arg.ID, arg.Threshold)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const insertBuiltinSticker = `-- name: InsertBuiltinSticker :exec
@@ -71,6 +184,73 @@ func (q *Queries) InsertBuiltinSticker(ctx context.Context, arg InsertBuiltinSti
 		arg.Position,
 		arg.IsAnimated,
 	)
+	return err
+}
+
+const insertOwnedSticker = `-- name: InsertOwnedSticker :one
+INSERT INTO stickers (pack_id, attachment_id, emoji, position) VALUES ($1, $2, $3, $4)
+RETURNING id
+`
+
+type InsertOwnedStickerParams struct {
+	PackID       int64
+	AttachmentID uuid.UUID
+	Emoji        string
+	Position     int32
+}
+
+func (q *Queries) InsertOwnedSticker(ctx context.Context, arg InsertOwnedStickerParams) (int64, error) {
+	row := q.db.QueryRow(ctx, insertOwnedSticker,
+		arg.PackID,
+		arg.AttachmentID,
+		arg.Emoji,
+		arg.Position,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const insertOwnedStickerPack = `-- name: InsertOwnedStickerPack :one
+INSERT INTO sticker_packs (owner_id, title, slug) VALUES ($1, $2, $3) RETURNING id, owner_id, builtin_key, title, is_default, deleted_at, created_at, slug, hidden_at
+`
+
+type InsertOwnedStickerPackParams struct {
+	OwnerID *int64
+	Title   string
+	Slug    *string
+}
+
+func (q *Queries) InsertOwnedStickerPack(ctx context.Context, arg InsertOwnedStickerPackParams) (StickerPack, error) {
+	row := q.db.QueryRow(ctx, insertOwnedStickerPack, arg.OwnerID, arg.Title, arg.Slug)
+	var i StickerPack
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.BuiltinKey,
+		&i.Title,
+		&i.IsDefault,
+		&i.DeletedAt,
+		&i.CreatedAt,
+		&i.Slug,
+		&i.HiddenAt,
+	)
+	return i, err
+}
+
+const insertStickerPackReport = `-- name: InsertStickerPackReport :exec
+INSERT INTO sticker_pack_reports (pack_id, reporter_id, reason) VALUES ($1, $2, $3)
+ON CONFLICT (pack_id, reporter_id) DO NOTHING
+`
+
+type InsertStickerPackReportParams struct {
+	PackID     int64
+	ReporterID int64
+	Reason     string
+}
+
+func (q *Queries) InsertStickerPackReport(ctx context.Context, arg InsertStickerPackReportParams) error {
+	_, err := q.db.Exec(ctx, insertStickerPackReport, arg.PackID, arg.ReporterID, arg.Reason)
 	return err
 }
 
@@ -104,10 +284,11 @@ func (q *Queries) ListBuiltinStickerKeys(ctx context.Context, packID int64) ([]L
 }
 
 const listInstalledStickerPacks = `-- name: ListInstalledStickerPacks :many
-SELECT p.id, p.owner_id, p.builtin_key, p.title, p.is_default, p.deleted_at, p.created_at
+SELECT p.id, p.owner_id, p.builtin_key, p.title, p.is_default, p.deleted_at, p.created_at, p.slug, p.hidden_at
 FROM sticker_packs p
 LEFT JOIN user_sticker_packs u ON u.pack_id = p.id AND u.user_id = $1
-WHERE p.deleted_at IS NULL AND (u.installed OR (u.installed IS NULL AND p.is_default))
+WHERE p.deleted_at IS NULL AND (p.hidden_at IS NULL OR p.owner_id = $1)
+  AND (u.installed OR (u.installed IS NULL AND p.is_default))
 ORDER BY (u.installed IS NULL), u.changed_at DESC, p.id
 LIMIT $2
 `
@@ -134,6 +315,71 @@ func (q *Queries) ListInstalledStickerPacks(ctx context.Context, arg ListInstall
 			&i.IsDefault,
 			&i.DeletedAt,
 			&i.CreatedAt,
+			&i.Slug,
+			&i.HiddenAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLiveStickerIDs = `-- name: ListLiveStickerIDs :many
+SELECT id FROM stickers WHERE pack_id = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) ListLiveStickerIDs(ctx context.Context, packID int64) ([]int64, error) {
+	rows, err := q.db.Query(ctx, listLiveStickerIDs, packID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int64{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOwnedStickerPacks = `-- name: ListOwnedStickerPacks :many
+SELECT id, owner_id, builtin_key, title, is_default, deleted_at, created_at, slug, hidden_at FROM sticker_packs WHERE owner_id = $1 AND deleted_at IS NULL ORDER BY id DESC LIMIT $2
+`
+
+type ListOwnedStickerPacksParams struct {
+	OwnerID *int64
+	MaxRows int32
+}
+
+func (q *Queries) ListOwnedStickerPacks(ctx context.Context, arg ListOwnedStickerPacksParams) ([]StickerPack, error) {
+	rows, err := q.db.Query(ctx, listOwnedStickerPacks, arg.OwnerID, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []StickerPack{}
+	for rows.Next() {
+		var i StickerPack
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.BuiltinKey,
+			&i.Title,
+			&i.IsDefault,
+			&i.DeletedAt,
+			&i.CreatedAt,
+			&i.Slug,
+			&i.HiddenAt,
 		); err != nil {
 			return nil, err
 		}
@@ -209,7 +455,7 @@ FROM user_recent_stickers r
 JOIN stickers s ON s.id = r.sticker_id
 JOIN sticker_packs p ON p.id = s.pack_id
 JOIN attachments a ON a.id = s.attachment_id
-WHERE r.user_id = $1 AND s.deleted_at IS NULL AND p.deleted_at IS NULL
+WHERE r.user_id = $1 AND s.deleted_at IS NULL AND p.deleted_at IS NULL AND p.hidden_at IS NULL
 ORDER BY r.used_at DESC, r.sticker_id DESC
 LIMIT $2
 `
@@ -270,7 +516,7 @@ func (q *Queries) ListRecentStickers(ctx context.Context, arg ListRecentStickers
 }
 
 const listStickersByID = `-- name: ListStickersByID :many
-SELECT s.id, s.pack_id, s.attachment_id, s.builtin_key, s.emoji, s.position, s.is_animated, s.deleted_at, s.created_at, p.deleted_at AS pack_deleted_at, a.id, a.uploader_id, a.chat_id, a.storage_key, a.mime_type, a.size, a.width, a.height, a.duration, a.waveform, a.created_at, a.purpose, a.kind, a.filename, a.thumbnail_key
+SELECT s.id, s.pack_id, s.attachment_id, s.builtin_key, s.emoji, s.position, s.is_animated, s.deleted_at, s.created_at, p.deleted_at AS pack_deleted_at, p.hidden_at AS pack_hidden_at, a.id, a.uploader_id, a.chat_id, a.storage_key, a.mime_type, a.size, a.width, a.height, a.duration, a.waveform, a.created_at, a.purpose, a.kind, a.filename, a.thumbnail_key
 FROM stickers s
 JOIN sticker_packs p ON p.id = s.pack_id
 JOIN attachments a ON a.id = s.attachment_id
@@ -280,6 +526,7 @@ WHERE s.id = ANY($1::bigint[])
 type ListStickersByIDRow struct {
 	Sticker       Sticker
 	PackDeletedAt *time.Time
+	PackHiddenAt  *time.Time
 	Attachment    Attachment
 }
 
@@ -303,6 +550,7 @@ func (q *Queries) ListStickersByID(ctx context.Context, ids []int64) ([]ListStic
 			&i.Sticker.DeletedAt,
 			&i.Sticker.CreatedAt,
 			&i.PackDeletedAt,
+			&i.PackHiddenAt,
 			&i.Attachment.ID,
 			&i.Attachment.UploaderID,
 			&i.Attachment.ChatID,
@@ -329,6 +577,81 @@ func (q *Queries) ListStickersByID(ctx context.Context, ids []int64) ([]ListStic
 	return items, nil
 }
 
+const lockStickerPack = `-- name: LockStickerPack :one
+SELECT id, owner_id, builtin_key, title, is_default, deleted_at, created_at, slug, hidden_at FROM sticker_packs WHERE id = $1 FOR NO KEY UPDATE
+`
+
+func (q *Queries) LockStickerPack(ctx context.Context, id int64) (StickerPack, error) {
+	row := q.db.QueryRow(ctx, lockStickerPack, id)
+	var i StickerPack
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.BuiltinKey,
+		&i.Title,
+		&i.IsDefault,
+		&i.DeletedAt,
+		&i.CreatedAt,
+		&i.Slug,
+		&i.HiddenAt,
+	)
+	return i, err
+}
+
+const lockStickerPackOwner = `-- name: LockStickerPackOwner :one
+SELECT id FROM users WHERE id = $1 FOR NO KEY UPDATE
+`
+
+func (q *Queries) LockStickerPackOwner(ctx context.Context, id int64) (int64, error) {
+	row := q.db.QueryRow(ctx, lockStickerPackOwner, id)
+	var id_2 int64
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
+const packStickerStats = `-- name: PackStickerStats :one
+SELECT count(*)::int AS live, coalesce(max(position) + 1, 0)::int AS next_position
+FROM stickers WHERE pack_id = $1 AND deleted_at IS NULL
+`
+
+type PackStickerStatsRow struct {
+	Live         int32
+	NextPosition int32
+}
+
+func (q *Queries) PackStickerStats(ctx context.Context, packID int64) (PackStickerStatsRow, error) {
+	row := q.db.QueryRow(ctx, packStickerStats, packID)
+	var i PackStickerStatsRow
+	err := row.Scan(&i.Live, &i.NextPosition)
+	return i, err
+}
+
+const renameStickerPack = `-- name: RenameStickerPack :one
+UPDATE sticker_packs SET title = $1 WHERE id = $2 AND deleted_at IS NULL RETURNING id, owner_id, builtin_key, title, is_default, deleted_at, created_at, slug, hidden_at
+`
+
+type RenameStickerPackParams struct {
+	Title string
+	ID    int64
+}
+
+func (q *Queries) RenameStickerPack(ctx context.Context, arg RenameStickerPackParams) (StickerPack, error) {
+	row := q.db.QueryRow(ctx, renameStickerPack, arg.Title, arg.ID)
+	var i StickerPack
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.BuiltinKey,
+		&i.Title,
+		&i.IsDefault,
+		&i.DeletedAt,
+		&i.CreatedAt,
+		&i.Slug,
+		&i.HiddenAt,
+	)
+	return i, err
+}
+
 const retireBuiltinStickers = `-- name: RetireBuiltinStickers :exec
 UPDATE stickers SET deleted_at = now()
 WHERE pack_id = $1 AND builtin_key IS NOT NULL AND deleted_at IS NULL AND NOT (builtin_key = ANY($2::text[]))
@@ -344,6 +667,24 @@ func (q *Queries) RetireBuiltinStickers(ctx context.Context, arg RetireBuiltinSt
 	return err
 }
 
+const setStickerEmoji = `-- name: SetStickerEmoji :execrows
+UPDATE stickers SET emoji = $1 WHERE id = $2 AND pack_id = $3 AND deleted_at IS NULL
+`
+
+type SetStickerEmojiParams struct {
+	Emoji  string
+	ID     int64
+	PackID int64
+}
+
+func (q *Queries) SetStickerEmoji(ctx context.Context, arg SetStickerEmojiParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setStickerEmoji, arg.Emoji, arg.ID, arg.PackID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setStickerPackInstalled = `-- name: SetStickerPackInstalled :exec
 INSERT INTO user_sticker_packs (user_id, pack_id, installed) VALUES ($1, $2, $3)
 ON CONFLICT (user_id, pack_id) DO UPDATE SET installed = EXCLUDED.installed, changed_at = now()
@@ -357,6 +698,22 @@ type SetStickerPackInstalledParams struct {
 
 func (q *Queries) SetStickerPackInstalled(ctx context.Context, arg SetStickerPackInstalledParams) error {
 	_, err := q.db.Exec(ctx, setStickerPackInstalled, arg.UserID, arg.PackID, arg.Installed)
+	return err
+}
+
+const setStickerPositions = `-- name: SetStickerPositions :exec
+UPDATE stickers s SET position = (o.ord - 1)::int
+FROM unnest($2::bigint[]) WITH ORDINALITY AS o(id, ord)
+WHERE s.id = o.id AND s.pack_id = $1
+`
+
+type SetStickerPositionsParams struct {
+	PackID int64
+	Ids    []int64
+}
+
+func (q *Queries) SetStickerPositions(ctx context.Context, arg SetStickerPositionsParams) error {
+	_, err := q.db.Exec(ctx, setStickerPositions, arg.PackID, arg.Ids)
 	return err
 }
 
@@ -390,6 +747,18 @@ type TrimRecentStickersParams struct {
 func (q *Queries) TrimRecentStickers(ctx context.Context, arg TrimRecentStickersParams) error {
 	_, err := q.db.Exec(ctx, trimRecentStickers, arg.UserID, arg.Keep)
 	return err
+}
+
+const unhideStickerPack = `-- name: UnhideStickerPack :execrows
+UPDATE sticker_packs SET hidden_at = NULL WHERE id = $1 AND hidden_at IS NOT NULL
+`
+
+func (q *Queries) UnhideStickerPack(ctx context.Context, id int64) (int64, error) {
+	result, err := q.db.Exec(ctx, unhideStickerPack, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateBuiltinSticker = `-- name: UpdateBuiltinSticker :exec

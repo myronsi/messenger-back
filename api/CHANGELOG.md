@@ -2,6 +2,22 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.21
+
+- User sticker packs: `POST /attachments` takes `purpose: sticker` (PNG, JPEG or still WebP up to 5 MB, stored as a
+  512 x 512 WebP of at most 512 KB). `POST /stickers/packs` creates a pack; `PATCH` and `DELETE
+  /stickers/packs/{pack_id}` rename and delete it; `POST /stickers/packs/{pack_id}/stickers`, `PATCH` and `DELETE
+  /stickers/packs/{pack_id}/stickers/{sticker_id}` and `PUT /stickers/packs/{pack_id}/order` manage its stickers.
+  Only the owner may change a pack (`403`). Limits: 50 packs per user and 120 stickers per pack
+  (`409 limit_reached`).
+- `GET /stickers/packs?owned=true` lists the packs the user made. `GET /stickers/links/{slug}` opens a pack by its
+  share link.
+- `StickerPack` gains the required `is_mine` and `is_hidden` and the optional `owner_id` and `slug`.
+- `POST /stickers/packs/{pack_id}/report` reports a pack; after 5 reports it is hidden for everybody but its owner
+  and stickers cannot be sent from it.
+- `ErrorCode` gains `limit_reached`.
+- A sticker upload not yet in a pack can be loaded only by its uploader.
+
 ## 2.1.0-alpha.20
 
 - Stickers: `MessageType` and `SendMessageRequest.type` gain `sticker`. A sticker message is sent with `sticker_id`

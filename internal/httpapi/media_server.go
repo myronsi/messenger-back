@@ -212,7 +212,7 @@ func readUploadForm(r *http.Request, limit int64) (*uploadForm, error) {
 			}
 		}
 	}
-	if f.file == nil || (f.purpose != string(UploadPurposeMessage) && f.purpose != string(UploadPurposeAvatar)) {
+	if f.file == nil || (f.purpose != string(UploadPurposeMessage) && f.purpose != string(UploadPurposeAvatar) && f.purpose != string(UploadPurposeSticker)) {
 		f.close()
 		return nil, errFormInvalid
 	}

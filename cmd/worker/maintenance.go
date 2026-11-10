@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"log/slog"
+	"strconv"
 	"time"
 
 	"github.com/myronsi/messenger-back/internal/calls"
@@ -166,4 +168,17 @@ func seedStickers(ctx context.Context, log *slog.Logger, store *postgres.Store, 
 		case <-time.After(time.Minute):
 		}
 	}
+}
+
+func unhideStickerPack(ctx context.Context, log *slog.Logger, store *postgres.Store, arg string) error {
+	id, err := strconv.ParseInt(arg, 10, 64)
+	if err != nil || id <= 0 {
+		return fmt.Errorf("unhide-sticker-pack: %q is not a pack id", arg)
+	}
+	changed, err := stickers.New(store.Stickers()).Unhide(ctx, id)
+	if err != nil {
+		return err
+	}
+	log.InfoContext(ctx, "sticker pack unhidden", "pack_id", id, "changed", changed)
+	return nil
 }

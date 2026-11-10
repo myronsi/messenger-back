@@ -73,6 +73,9 @@ func (s *Service) Pack(ctx context.Context, userID, packID int64) (Pack, error) 
 	if err != nil {
 		return Pack{}, err
 	}
+	if !visible(p, userID) {
+		return Pack{}, ErrNotFound
+	}
 	installed, err := s.store.Installation(ctx, userID, packID)
 	if err != nil {
 		return Pack{}, unavailable(err)
@@ -89,8 +92,12 @@ func (s *Service) Pack(ctx context.Context, userID, packID int64) (Pack, error) 
 }
 
 func (s *Service) SetInstalled(ctx context.Context, userID, packID int64, installed bool) error {
-	if _, err := s.livePack(ctx, packID); err != nil {
+	p, err := s.livePack(ctx, packID)
+	if err != nil {
 		return err
+	}
+	if !visible(p, userID) {
+		return ErrNotFound
 	}
 	if err := s.store.SetInstalled(ctx, userID, packID, installed); err != nil {
 		return unavailable(err)

@@ -290,3 +290,10 @@ func (r attachmentRepo) ChatsWithAvatar(ctx context.Context, attachmentID uuid.U
 	ids, err := r.s.q.ChatsWithAvatar(ctx, &attachmentID)
 	return ids, mapError(err)
 }
+
+func (r attachmentRepo) IsStickerImage(ctx context.Context, attachmentID uuid.UUID) (bool, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	ok, err := r.s.q.IsStickerImage(ctx, attachmentID)
+	return ok, mapError(err)
+}

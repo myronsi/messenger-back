@@ -400,3 +400,39 @@ func (Unimplemented) RemoveStickerPack(w http.ResponseWriter, r *http.Request, _
 func (Unimplemented) ListRecentStickers(w http.ResponseWriter, r *http.Request, _ ListRecentStickersParams) {
 	notImplemented(w, r)
 }
+
+func (Unimplemented) GetStickerPackByLink(w http.ResponseWriter, r *http.Request, _ StickerPackSlug, _ GetStickerPackByLinkParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) CreateStickerPack(w http.ResponseWriter, r *http.Request, _ CreateStickerPackParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) UpdateStickerPack(w http.ResponseWriter, r *http.Request, _ StickerPackId, _ UpdateStickerPackParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) DeleteStickerPack(w http.ResponseWriter, r *http.Request, _ StickerPackId, _ DeleteStickerPackParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) AddSticker(w http.ResponseWriter, r *http.Request, _ StickerPackId, _ AddStickerParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) UpdateSticker(w http.ResponseWriter, r *http.Request, _ StickerPackId, _ StickerId, _ UpdateStickerParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) DeleteSticker(w http.ResponseWriter, r *http.Request, _ StickerPackId, _ StickerId, _ DeleteStickerParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) ReorderStickers(w http.ResponseWriter, r *http.Request, _ StickerPackId, _ ReorderStickersParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) ReportStickerPack(w http.ResponseWriter, r *http.Request, _ StickerPackId, _ ReportStickerPackParams) {
+	notImplemented(w, r)
+}

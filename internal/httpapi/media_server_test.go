@@ -95,7 +95,7 @@ func newMediaEnv(t *testing.T) *mediaEnv {
 	}
 	rules := memberRules{store}
 	msvc := media.NewService(media.Options{Storage: disk, Attachments: store.Attachments(), Visibility: rules, Membership: rules,
-		Prober: media.NewProber("/none", "/none"), Limits: media.Limits{Image: 1 << 20, Audio: 1 << 20, Video: 1 << 20, File: 1 << 20, Avatar: 1 << 20}})
+		Prober: media.NewProber("/none", "/none"), Limits: media.Limits{Image: 1 << 20, Audio: 1 << 20, Video: 1 << 20, File: 1 << 20, Avatar: 1 << 20, Sticker: 1 << 20}})
 	tokens := notifications.NewActionTokens("test-secret")
 	emitted := &mediaEvents{}
 	r := NewRouter(Options{
@@ -560,5 +560,28 @@ func TestConcurrentAvatarDeletesKeepTheOldest(t *testing.T) {
 		if r := e.do(t, request{method: http.MethodDelete, path: "/me/avatars/" + v[2], token: alice.access}); r.Code != http.StatusOK {
 			t.Fatalf("round %d: reset: %d", round, r.Code)
 		}
+	}
+}
+
+func TestStickerUploadOverHTTP(t *testing.T) {
+	e := newMediaEnv(t)
+	alice, bob := e.register(t, "alice"), e.register(t, "bob")
+	r := e.upload(t, alice.access, map[string]string{"purpose": "sticker"}, "cat.png", smallPNG(t))
+	if r.Code != http.StatusCreated {
+		t.Fatalf("upload: %d %s", r.Code, r.Body)
+	}
+	a := r.json()
+	if a["width"] != float64(512) || a["height"] != float64(512) || a["content_type"] != "image/png" || a["filename"] != "sticker.png" {
+		t.Fatalf("sticker: %v", a)
+	}
+	path := "/attachments/" + a["id"].(string) + "/content"
+	if got := e.do(t, request{method: http.MethodGet, path: path, token: alice.access}); got.Code != http.StatusOK {
+		t.Fatalf("uploader: %d", got.Code)
+	}
+	if got := e.do(t, request{method: http.MethodGet, path: path, token: bob.access}); got.Code != http.StatusNotFound {
+		t.Fatalf("someone else before it is in a pack: %d", got.Code)
+	}
+	if r := e.upload(t, alice.access, map[string]string{"purpose": "sticker"}, "notes.txt", []byte("not an image at all")); r.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("text as a sticker: %d %s", r.Code, r.Body)
 	}
 }

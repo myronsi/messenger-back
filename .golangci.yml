@@ -38,6 +38,10 @@ linters:
           - errcheck
           - noctx
           - sloglint
+      - path: internal/media/sticker_image\.go
+        linters:
+          - gosec
+        text: G204
 
 formatters:
   enable:

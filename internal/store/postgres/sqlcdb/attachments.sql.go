@@ -270,6 +270,17 @@ func (q *Queries) GetAvatarHistoryEntry(ctx context.Context, arg GetAvatarHistor
 	return i, err
 }
 
+const isStickerImage = `-- name: IsStickerImage :one
+SELECT EXISTS (SELECT 1 FROM stickers WHERE attachment_id = $1)
+`
+
+func (q *Queries) IsStickerImage(ctx context.Context, attachmentID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, isStickerImage, attachmentID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const linkAttachment = `-- name: LinkAttachment :exec
 INSERT INTO attachment_links (attachment_id, chat_id, message_id, drawing) VALUES ($1, $2, $3, $4)
 ON CONFLICT (attachment_id, chat_id, message_id) DO UPDATE SET drawing = EXCLUDED.drawing

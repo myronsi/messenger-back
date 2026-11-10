@@ -124,3 +124,6 @@ UPDATE chats SET avatar_attachment_id = sqlc.narg(attachment_id) WHERE id = @cha
 
 -- name: ChatsWithAvatar :many
 SELECT id FROM chats WHERE avatar_attachment_id = @attachment_id;
+
+-- name: IsStickerImage :one
+SELECT EXISTS (SELECT 1 FROM stickers WHERE attachment_id = @attachment_id);

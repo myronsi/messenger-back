@@ -22,18 +22,21 @@ import (
 
 // Limits are the largest uploads per kind, in bytes.
 type Limits struct {
-	Image, Audio, Video, File, Avatar int64
+	Image, Audio, Video, File, Avatar, Sticker int64
 }
 
 // DefaultLimits are used for zero fields.
-var DefaultLimits = Limits{Image: 20 << 20, Audio: 25 << 20, Video: 100 << 20, File: 100 << 20, Avatar: 10 << 20}
+var DefaultLimits = Limits{Image: 20 << 20, Audio: 25 << 20, Video: 100 << 20, File: 100 << 20, Avatar: 10 << 20, Sticker: 5 << 20}
 
 // Max is the largest limit, the most an upload request may carry.
-func (l Limits) Max() int64 { return max(l.Image, l.Audio, l.Video, l.File, l.Avatar) }
+func (l Limits) Max() int64 { return max(l.Image, l.Audio, l.Video, l.File, l.Avatar, l.Sticker) }
 
 func (l Limits) of(purpose, kind string) int64 {
-	if purpose == PurposeAvatar {
+	switch purpose {
+	case PurposeAvatar:
 		return l.Avatar
+	case PurposeSticker:
+		return l.Sticker
 	}
 	switch kind {
 	case KindImage:
@@ -95,7 +98,7 @@ var ErrBusy = errors.New("media: too many uploads are being processed")
 // NewService returns the service.
 func NewService(o Options) *Service {
 	d := DefaultLimits
-	for _, f := range []struct{ v, def *int64 }{{&o.Limits.Image, &d.Image}, {&o.Limits.Audio, &d.Audio}, {&o.Limits.Video, &d.Video}, {&o.Limits.File, &d.File}, {&o.Limits.Avatar, &d.Avatar}} {
+	for _, f := range []struct{ v, def *int64 }{{&o.Limits.Image, &d.Image}, {&o.Limits.Audio, &d.Audio}, {&o.Limits.Video, &d.Video}, {&o.Limits.File, &d.File}, {&o.Limits.Avatar, &d.Avatar}, {&o.Limits.Sticker, &d.Sticker}} {
 		if *f.v <= 0 {
 			*f.v = *f.def
 		}
@@ -170,8 +173,14 @@ func cleanName(name, contentType string) string {
 // Upload checks and stores a file and records it. Nothing about the result depends on the file name or the
 // client's content type.
 func (s *Service) Upload(ctx context.Context, u Upload) (postgres.Attachment, error) {
-	if u.Purpose != PurposeMessage && u.Purpose != PurposeAvatar {
-		return postgres.Attachment{}, fmt.Errorf("%w: purpose must be message or avatar", ErrInvalid)
+	switch u.Purpose {
+	case PurposeMessage, PurposeAvatar:
+	case PurposeSticker:
+		if u.Kind != "" && u.Kind != KindImage {
+			return postgres.Attachment{}, fmt.Errorf("%w: a sticker is an image", ErrInvalid)
+		}
+	default:
+		return postgres.Attachment{}, fmt.Errorf("%w: purpose must be message, avatar or sticker", ErrInvalid)
 	}
 	switch u.Kind {
 	case "", KindImage, KindAudio, KindVoice, KindVideo, KindFile:
@@ -204,8 +213,11 @@ func (s *Service) Upload(ctx context.Context, u Upload) (postgres.Attachment, er
 
 	id := uuid.New()
 	prefix := "attachments/"
-	if u.Purpose == PurposeAvatar {
+	switch u.Purpose {
+	case PurposeAvatar:
 		prefix = "avatars/"
+	case PurposeSticker:
+		prefix = "stickers/"
 	}
 	rec := postgres.NewAttachment{
 		UploaderID: &u.UploaderID, Purpose: u.Purpose, Kind: det.Kind, Filename: cleanName(u.Filename, det.ContentType),
@@ -213,8 +225,17 @@ func (s *Service) Upload(ctx context.Context, u Upload) (postgres.Attachment, er
 	}
 	var thumb, display []byte
 	var body io.Reader
-	switch det.Kind {
-	case KindImage:
+	switch {
+	case u.Purpose == PurposeSticker:
+		img, err := s.processSticker(ctx, tmp, size, det.ContentType)
+		if err != nil {
+			return postgres.Attachment{}, err
+		}
+		w, h := int32(StickerSide), int32(StickerSide)
+		rec.Width, rec.Height, rec.MimeType, rec.Size = &w, &h, img.ContentType, int64(len(img.Data))
+		rec.Filename = "sticker" + map[string]string{"image/webp": ".webp", "image/png": ".png"}[img.ContentType]
+		body = bytes.NewReader(img.Data)
+	case det.Kind == KindImage:
 		img, err := s.processImage(ctx, tmp.Name(), det.ContentType)
 		if err != nil {
 			return postgres.Attachment{}, err
@@ -222,7 +243,7 @@ func (s *Service) Upload(ctx context.Context, u Upload) (postgres.Attachment, er
 		w, h := int32(img.Width), int32(img.Height) //nolint:gosec // bounded by MaxImageSide
 		rec.Width, rec.Height, rec.MimeType, rec.Size = &w, &h, img.ContentType, int64(len(img.Data))
 		body, thumb, display = bytes.NewReader(img.Data), img.Thumbnail, img.Display
-	case KindVideo:
+	case det.Kind == KindVideo:
 		thumb = s.processVideoThumbnail(ctx, tmp.Name(), det.ContentType)
 		if frame, err := jpeg.DecodeConfig(bytes.NewReader(thumb)); err == nil {
 			w, h := int32(frame.Width), int32(frame.Height) //nolint:gosec // bounded by the thumbnail filter
@@ -232,7 +253,7 @@ func (s *Service) Upload(ctx context.Context, u Upload) (postgres.Attachment, er
 			return postgres.Attachment{}, err
 		}
 		body = tmp
-	case KindAudio, KindVoice:
+	case det.Kind == KindAudio || det.Kind == KindVoice:
 		info := ClientAudio(u.DurationMS, u.Waveform)
 		if s.o.Prober.Available() {
 			if info, err = s.o.Prober.Probe(ctx, tmp.Name(), det.Kind == KindVoice); err != nil {
@@ -370,7 +391,7 @@ func (s *Service) Open(ctx context.Context, viewerID int64, id uuid.UUID, v Vari
 	var ok bool
 	switch a.Purpose {
 	case PurposeSticker:
-		ok = true
+		ok, err = s.canSeeSticker(ctx, viewerID, a)
 	case PurposeAvatar:
 		ok, err = s.canSeeAvatar(ctx, viewerID, a)
 	default:
@@ -402,6 +423,13 @@ func (s *Service) canSeeAvatar(ctx context.Context, viewerID int64, a postgres.A
 		}
 	}
 	return false, nil
+}
+
+func (s *Service) canSeeSticker(ctx context.Context, viewerID int64, a postgres.Attachment) (bool, error) {
+	if a.UploaderID != nil && *a.UploaderID == viewerID {
+		return true, nil
+	}
+	return s.o.Attachments.IsStickerImage(ctx, a.ID)
 }
 
 // OpenUnchecked serves an attachment whose access was decided by the caller (avatars).

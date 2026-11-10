@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/myronsi/messenger-back/internal/store/postgres/sqlcdb"
 )
@@ -18,6 +19,8 @@ type StickerPack struct {
 	BuiltinKey *string
 	Title      string
 	IsDefault  bool
+	Slug       *string
+	Hidden     bool
 	Deleted    bool
 	CreatedAt  time.Time
 }
@@ -53,6 +56,26 @@ type StickerRepository interface {
 	PackStickers(ctx context.Context, packIDs []int64) (map[int64][]Sticker, error)
 	UseSticker(ctx context.Context, userID, stickerID int64, keep int) error
 	Recent(ctx context.Context, userID int64, limit int) ([]Sticker, error)
+	CreatePack(ctx context.Context, ownerID int64, title, slug string, maxPacks int) (StickerPack, error)
+	OwnedPacks(ctx context.Context, ownerID int64, limit int) ([]StickerPack, error)
+	PackBySlug(ctx context.Context, slug string) (StickerPack, error)
+	RenamePack(ctx context.Context, ownerID, packID int64, title string) (StickerPack, error)
+	DeletePack(ctx context.Context, ownerID, packID int64) error
+	AddSticker(ctx context.Context, ownerID, packID int64, image uuid.UUID, emoji string, maxStickers int) (int64, error)
+	SetStickerEmoji(ctx context.Context, ownerID, packID, stickerID int64, emoji string) error
+	DeleteSticker(ctx context.Context, ownerID, packID, stickerID int64) error
+	ReorderStickers(ctx context.Context, ownerID, packID int64, ids []int64) error
+	Report(ctx context.Context, r PackReport) (hidden bool, err error)
+	Unhide(ctx context.Context, packID int64) (bool, error)
+}
+
+type PackReport struct {
+	PackID     int64
+	ReporterID int64
+	Reason     string
+	Since      time.Time
+	MaxReports int
+	HideAfter  int
 }
 
 type stickerRepo struct{ s *Store }
@@ -64,7 +87,7 @@ func (s *Store) Stickers() StickerRepository { return stickerRepo{s} }
 func packFrom(p sqlcdb.StickerPack) StickerPack {
 	return StickerPack{
 		ID: p.ID, OwnerID: p.OwnerID, BuiltinKey: p.BuiltinKey, Title: p.Title, IsDefault: p.IsDefault,
-		Deleted: p.DeletedAt != nil, CreatedAt: p.CreatedAt,
+		Slug: p.Slug, Hidden: p.HiddenAt != nil, Deleted: p.DeletedAt != nil, CreatedAt: p.CreatedAt,
 	}
 }
 
@@ -152,11 +175,7 @@ func (r stickerRepo) InstalledPacks(ctx context.Context, userID int64, limit int
 	if err != nil {
 		return nil, mapError(err)
 	}
-	out := make([]StickerPack, len(rows))
-	for i, p := range rows {
-		out[i] = packFrom(p)
-	}
-	return out, nil
+	return packsFrom(rows), nil
 }
 
 func (r stickerRepo) SetInstalled(ctx context.Context, userID, packID int64, installed bool) error {
@@ -178,7 +197,7 @@ func (r stickerRepo) Stickers(ctx context.Context, ids []int64) (map[int64]Stick
 	out := make(map[int64]Sticker, len(rows))
 	for _, row := range rows {
 		s := stickerFrom(row.Sticker, row.Attachment)
-		s.Deleted = s.Deleted || row.PackDeletedAt != nil
+		s.Deleted = s.Deleted || row.PackDeletedAt != nil || row.PackHiddenAt != nil
 		out[s.ID] = s
 	}
 	return out, nil
@@ -222,4 +241,216 @@ func (r stickerRepo) Recent(ctx context.Context, userID int64, limit int) ([]Sti
 		out[i] = stickerFrom(row.Sticker, row.Attachment)
 	}
 	return out, nil
+}
+
+func packsFrom(rows []sqlcdb.StickerPack) []StickerPack {
+	out := make([]StickerPack, len(rows))
+	for i, p := range rows {
+		out[i] = packFrom(p)
+	}
+	return out
+}
+
+func (r stickerRepo) CreatePack(ctx context.Context, ownerID int64, title, slug string, maxPacks int) (StickerPack, error) {
+	var out StickerPack
+	err := r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
+		if _, err := q.LockStickerPackOwner(ctx, ownerID); err != nil {
+			return err
+		}
+		n, err := q.CountOwnedStickerPacks(ctx, &ownerID)
+		if err != nil {
+			return err
+		}
+		if int(n) >= maxPacks {
+			return ErrLimit
+		}
+		p, err := q.InsertOwnedStickerPack(ctx, sqlcdb.InsertOwnedStickerPackParams{OwnerID: &ownerID, Title: title, Slug: &slug})
+		if err != nil {
+			return err
+		}
+		if err := q.SetStickerPackInstalled(ctx, sqlcdb.SetStickerPackInstalledParams{UserID: ownerID, PackID: p.ID, Installed: true}); err != nil {
+			return err
+		}
+		out = packFrom(p)
+		return nil
+	})
+	return out, err
+}
+
+func (r stickerRepo) OwnedPacks(ctx context.Context, ownerID int64, limit int) ([]StickerPack, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	rows, err := r.s.q.ListOwnedStickerPacks(ctx, sqlcdb.ListOwnedStickerPacksParams{OwnerID: &ownerID, MaxRows: clampLimit(limit)})
+	if err != nil {
+		return nil, mapError(err)
+	}
+	return packsFrom(rows), nil
+}
+
+func (r stickerRepo) PackBySlug(ctx context.Context, slug string) (StickerPack, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	p, err := r.s.q.GetStickerPackBySlug(ctx, &slug)
+	if err != nil {
+		return StickerPack{}, mapError(err)
+	}
+	return packFrom(p), nil
+}
+
+func ownPack(ctx context.Context, q *sqlcdb.Queries, ownerID, packID int64) error {
+	p, err := q.LockStickerPack(ctx, packID)
+	if err != nil {
+		return err
+	}
+	if p.DeletedAt != nil {
+		return ErrNotFound
+	}
+	if p.OwnerID == nil || *p.OwnerID != ownerID {
+		return ErrForbidden
+	}
+	return nil
+}
+
+func (r stickerRepo) RenamePack(ctx context.Context, ownerID, packID int64, title string) (StickerPack, error) {
+	var out StickerPack
+	err := r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
+		if err := ownPack(ctx, q, ownerID, packID); err != nil {
+			return err
+		}
+		p, err := q.RenameStickerPack(ctx, sqlcdb.RenameStickerPackParams{ID: packID, Title: title})
+		out = packFrom(p)
+		return err
+	})
+	return out, err
+}
+
+func (r stickerRepo) DeletePack(ctx context.Context, ownerID, packID int64) error {
+	return r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
+		if err := ownPack(ctx, q, ownerID, packID); err != nil {
+			return err
+		}
+		return q.DeleteStickerPack(ctx, packID)
+	})
+}
+
+func (r stickerRepo) AddSticker(ctx context.Context, ownerID, packID int64, image uuid.UUID, emoji string, maxStickers int) (int64, error) {
+	var id int64
+	err := r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
+		if err := ownPack(ctx, q, ownerID, packID); err != nil {
+			return err
+		}
+		a, err := q.GetAttachment(ctx, image)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrInvalid
+		}
+		if err != nil {
+			return err
+		}
+		if a.Purpose != PurposeSticker || a.UploaderID == nil || *a.UploaderID != ownerID {
+			return ErrInvalid
+		}
+		stats, err := q.PackStickerStats(ctx, packID)
+		if err != nil {
+			return err
+		}
+		if int(stats.Live) >= maxStickers {
+			return ErrLimit
+		}
+		id, err = q.InsertOwnedSticker(ctx, sqlcdb.InsertOwnedStickerParams{
+			PackID: packID, AttachmentID: image, Emoji: emoji, Position: stats.NextPosition,
+		})
+		return err
+	})
+	return id, err
+}
+
+func (r stickerRepo) changeSticker(ctx context.Context, ownerID, packID int64, fn func(ctx context.Context, q *sqlcdb.Queries) (int64, error)) error {
+	return r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
+		if err := ownPack(ctx, q, ownerID, packID); err != nil {
+			return err
+		}
+		return affected(fn(ctx, q))
+	})
+}
+
+func (r stickerRepo) SetStickerEmoji(ctx context.Context, ownerID, packID, stickerID int64, emoji string) error {
+	return r.changeSticker(ctx, ownerID, packID, func(ctx context.Context, q *sqlcdb.Queries) (int64, error) {
+		return q.SetStickerEmoji(ctx, sqlcdb.SetStickerEmojiParams{ID: stickerID, PackID: packID, Emoji: emoji})
+	})
+}
+
+func (r stickerRepo) DeleteSticker(ctx context.Context, ownerID, packID, stickerID int64) error {
+	return r.changeSticker(ctx, ownerID, packID, func(ctx context.Context, q *sqlcdb.Queries) (int64, error) {
+		return q.DeleteSticker(ctx, sqlcdb.DeleteStickerParams{ID: stickerID, PackID: packID})
+	})
+}
+
+func (r stickerRepo) ReorderStickers(ctx context.Context, ownerID, packID int64, ids []int64) error {
+	return r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
+		if err := ownPack(ctx, q, ownerID, packID); err != nil {
+			return err
+		}
+		live, err := q.ListLiveStickerIDs(ctx, packID)
+		if err != nil {
+			return err
+		}
+		if len(ids) != len(live) {
+			return ErrInvalid
+		}
+		want := make(map[int64]bool, len(live))
+		for _, id := range live {
+			want[id] = true
+		}
+		for _, id := range ids {
+			if !want[id] {
+				return ErrInvalid
+			}
+			delete(want, id)
+		}
+		return q.SetStickerPositions(ctx, sqlcdb.SetStickerPositionsParams{Ids: ids, PackID: packID})
+	})
+}
+
+func (r stickerRepo) Report(ctx context.Context, rep PackReport) (bool, error) {
+	var hidden bool
+	err := r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
+		p, err := q.LockStickerPack(ctx, rep.PackID)
+		if err != nil {
+			return err
+		}
+		if p.DeletedAt != nil {
+			return ErrNotFound
+		}
+		if p.BuiltinKey != nil || (p.OwnerID != nil && *p.OwnerID == rep.ReporterID) {
+			return ErrForbidden
+		}
+		n, err := q.CountStickerReportsSince(ctx, sqlcdb.CountStickerReportsSinceParams{ReporterID: rep.ReporterID, Since: rep.Since})
+		if err != nil {
+			return err
+		}
+		if int(n) >= rep.MaxReports {
+			return ErrLimit
+		}
+		if err := q.InsertStickerPackReport(ctx, sqlcdb.InsertStickerPackReportParams{
+			PackID: rep.PackID, ReporterID: rep.ReporterID, Reason: rep.Reason,
+		}); err != nil {
+			return err
+		}
+		changed, err := q.HideReportedStickerPack(ctx, sqlcdb.HideReportedStickerPackParams{ID: rep.PackID, Threshold: clampLimit(rep.HideAfter)})
+		hidden = changed > 0
+		return err
+	})
+	return hidden, err
+}
+
+func (r stickerRepo) Unhide(ctx context.Context, packID int64) (bool, error) {
+	var changed int64
+	err := r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
+		var err error
+		if changed, err = q.UnhideStickerPack(ctx, packID); err != nil {
+			return err
+		}
+		return q.ClearStickerPackReports(ctx, packID)
+	})
+	return changed > 0, err
 }
