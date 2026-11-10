@@ -1,12 +1,17 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/myronsi/messenger-back/internal/search"
+	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/redis"
 	"github.com/myronsi/messenger-back/internal/store/scylla"
 )
@@ -94,9 +99,14 @@ func (m *MessageServer) search(w http.ResponseWriter, r *http.Request, q search.
 	for _, h := range hits {
 		byChat[h.Message.ChatID] = append(byChat[h.Message.ChatID], h.Message)
 	}
+	files, err := m.searchFiles(r.Context(), hits)
+	if err != nil {
+		serviceError(w, r, m.o.Log, "render search hits", err)
+		return
+	}
 	rendered := map[int64]Message{}
 	for chatID, msgs := range byChat {
-		items, err := m.render(r.Context(), p.UserID, chatID, msgs, "")
+		items, err := m.renderWith(r.Context(), p.UserID, chatID, msgs, "", files)
 		if err != nil {
 			serviceError(w, r, m.o.Log, "render search hits", err)
 			return
@@ -114,4 +124,43 @@ func (m *MessageServer) search(w http.ResponseWriter, r *http.Request, q search.
 	}
 	noStore(w)
 	writeJSONStatus(w, http.StatusOK, out)
+}
+
+const searchFileWorkers = 4
+
+func (m *MessageServer) searchFiles(ctx context.Context, hits []search.Hit) (map[uuid.UUID]postgres.Attachment, error) {
+	seen := map[uuid.UUID]bool{}
+	var wanted []uuid.UUID
+	for _, h := range hits {
+		for _, a := range h.Message.AttachmentIDs() {
+			if id := uuid.UUID(a); !seen[id] {
+				seen[id] = true
+				wanted = append(wanted, id)
+			}
+		}
+	}
+	out := make(map[uuid.UUID]postgres.Attachment, len(wanted))
+	var (
+		wg       sync.WaitGroup
+		mu       sync.Mutex
+		firstErr error
+	)
+	slots := make(chan struct{}, searchFileWorkers)
+	for _, id := range wanted {
+		wg.Go(func() {
+			slots <- struct{}{}
+			defer func() { <-slots }()
+			a, err := m.o.Store.Attachments().Get(ctx, id)
+			mu.Lock()
+			defer mu.Unlock()
+			switch {
+			case err == nil:
+				out[id] = a
+			case !errors.Is(err, postgres.ErrNotFound) && firstErr == nil:
+				firstErr = err
+			}
+		})
+	}
+	wg.Wait()
+	return out, firstErr
 }

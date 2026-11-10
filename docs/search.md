@@ -10,7 +10,9 @@
 Both answer a `MessageSearchPage`:
 - **Order and paging:** newest first, paged with `search_after` on (creation time, message id). The cursor is opaque; one that is not ours is `400`.
 - **Excerpt:** `highlight` is a plain-text excerpt in which the matched words are wrapped in U+E000 and U+E001 (private-use characters, never HTML).
-- **Limits:** queries are 2 to 128 characters, pages at most 50 hits. Searches are rate limited per user (60 per minute, bursts of 20). Elasticsearch being away is `503`.
+- **Matching:** every word of the query must match (AND), as a whole word (folded, or stemmed in English, Russian or German) or, from 2 characters on, as the start of a word: `lore` finds `Lorem`. A dot, underscore or colon next to a letter splits words, so `eschbach` finds `https://www.eschbach.com`.
+- **Full pages:** hits that the ScyllaDB check drops (deleted, hidden) are made up for from further results, up to 4 Elasticsearch queries per page. Only after that can a page be shorter than `limit` while `next_cursor` is set.
+- **Limits:** queries are 2 to 256 characters, pages at most 100 hits. Searches are rate limited per user (60 per minute, bursts of 20). Elasticsearch being away is `503`.
 
 ## Index
 
@@ -23,12 +25,12 @@ Both answer a `MessageSearchPage`:
 |---|---|
 | `message_id` | `keyword` (also the document id) |
 | `chat_id`, `sender_id`, `type` | `keyword` |
-| `content` | `text` (folded: lower case, accents removed), with `content.en` and `content.ru` (English and Russian stemming) |
-| `file_name` | `text` (folded) and `file_name.raw` (`keyword`) |
+| `content` | `text` (folded: lower case, accents removed, URLs split into parts), with `content.en`, `content.ru` and `content.de` (English, Russian and German stemming) and `content.prefix` (edge n-grams of 2 to 20 characters; the query side cuts words to 20) |
+| `file_name` | `text` (folded), `file_name.prefix` (as `content.prefix`) and `file_name.raw` (`keyword`) |
 | `hidden_for` | `keyword` array: users who deleted the message for themselves |
 | `created_at` | `date` |
 
-The mapping is strict, with 1 shard and `SEARCH_REPLICAS` replicas (1 by default; the dev stack, a single node, uses 0).
+The mapping is strict, with 1 shard and `SEARCH_REPLICAS` replicas (1 by default; the dev stack, a single node, uses 0). Its version (`MappingVersion` in `internal/search/index.go`, now 2) is stored in `_meta.mapping_version` of the template and of each index. The worker installs the newest template on start, but an existing index keeps its mapping: the worker logs a warning when the index behind the alias is older, and `worker reindex` builds a new index with the new mapping. Searches keep working on the older index meanwhile, without what the newer mapping adds.
 
 ## Keeping it current
 
