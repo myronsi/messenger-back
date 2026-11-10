@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.12.0-alpha.1...v1.13.0-alpha.1) (2026-11-10)
+
+
+### Features
+
+* **realtime:** typing status for voice messages and a privacy switch ([#175](https://github.com/myronsi/messenger-back/issues/175)) ([bcb0904](https://github.com/myronsi/messenger-back/commit/bcb090472efb17a6386fc2334b537dd88fa9b22f))
+
 ## [1.12.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.11.0-alpha.1...v1.12.0-alpha.1) (2026-11-09)
 
 
