@@ -100,6 +100,13 @@ func Detect(head []byte, purpose, kind string) (Detected, error) {
 	return Detected{Kind: KindFile, ContentType: fileType(sniffed)}, nil
 }
 
+func refineWebM(d Detected, hasVideo, hasAudio bool) Detected {
+	if d.Kind == KindVideo && d.ContentType == "video/webm" && !hasVideo && hasAudio {
+		return Detected{Kind: KindAudio, ContentType: "audio/webm"}
+	}
+	return d
+}
+
 // fileType keeps a few harmless types and turns everything else into application/octet-stream, so no stored
 // type can make a browser render or run a file.
 func fileType(sniffed string) string {
