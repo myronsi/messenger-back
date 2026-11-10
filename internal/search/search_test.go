@@ -293,3 +293,41 @@ func TestChatDeletionReportsTheDroppedDocuments(t *testing.T) {
 		t.Fatal("a failed report must be retried")
 	}
 }
+
+func TestSearchFindsPrefixesPartsAndStems(t *testing.T) {
+	e := newEnv(t)
+	alice, bob := e.user("alice"), e.user("bob")
+	ab := e.chat(alice, bob)
+	e.send(ab, alice, "Lorem ipsum dolor sit amet")
+	e.send(ab, alice, "Die Donaudampfschifffahrtsgesellschaft fährt")
+	e.send(ab, bob, "see https://www.eschbach.com/de/produkte")
+	e.send(ab, bob, "Ein Haus am See")
+	for q, want := range map[string]string{
+		"lore":                                "Lorem",
+		"LOREM IPS":                           "Lorem",
+		"Donaudampf":                          "Donaudampf",
+		"donaudampfschifffahrtsgesellschaft":  "Donaudampf",
+		"Donaudampfschifffahrtsgesellschafte": "Donaudampf",
+		"eschbach":                            "eschbach",
+		"www.eschbach.com":                    "eschbach",
+		"Häuser":                              "Haus",
+		"fahrt Donau":                         "Donaudampf",
+	} {
+		hits := e.find(alice, search.Query{Text: q, ChatID: ab})
+		if got := contents(hits); len(got) != 1 || !strings.Contains(got[0], want) {
+			t.Errorf("%q: %v", q, got)
+			continue
+		}
+		if q == "lore" && (hits[0].Highlight == nil || !strings.Contains(*hits[0].Highlight, search.MarkStart+"Lorem"+search.MarkEnd)) {
+			t.Errorf("%q: highlight %v", q, hits[0].Highlight)
+		}
+	}
+	for _, q := range []string{"lore xyz", "orem", "eschbachs"} {
+		if got := contents(e.find(alice, search.Query{Text: q, ChatID: ab})); len(got) != 0 {
+			t.Errorf("%q: %v", q, got)
+		}
+	}
+	if outdated, err := e.ix.Outdated(context.Background()); err != nil || outdated {
+		t.Fatalf("outdated %v, %v", outdated, err)
+	}
+}
