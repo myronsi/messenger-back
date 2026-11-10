@@ -16,6 +16,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 )
@@ -207,6 +208,9 @@ func (s *Service) Upload(ctx context.Context, u Upload) (postgres.Attachment, er
 	if err != nil {
 		return postgres.Attachment{}, err
 	}
+	if det.ContentType == "video/webm" {
+		det = s.webmKind(ctx, tmp.Name(), det)
+	}
 	if size > s.o.Limits.of(u.Purpose, det.Kind) {
 		return postgres.Attachment{}, ErrTooLarge
 	}
@@ -223,7 +227,7 @@ func (s *Service) Upload(ctx context.Context, u Upload) (postgres.Attachment, er
 		UploaderID: &u.UploaderID, Purpose: u.Purpose, Kind: det.Kind, Filename: cleanName(u.Filename, det.ContentType),
 		StorageKey: prefix + id.String(), MimeType: det.ContentType, Size: size,
 	}
-	var thumb, display []byte
+	var thumb []byte
 	var body io.Reader
 	switch {
 	case u.Purpose == PurposeSticker:
@@ -242,7 +246,7 @@ func (s *Service) Upload(ctx context.Context, u Upload) (postgres.Attachment, er
 		}
 		w, h := int32(img.Width), int32(img.Height) //nolint:gosec // bounded by MaxImageSide
 		rec.Width, rec.Height, rec.MimeType, rec.Size = &w, &h, img.ContentType, int64(len(img.Data))
-		body, thumb, display = bytes.NewReader(img.Data), img.Thumbnail, img.Display
+		body, thumb = bytes.NewReader(img.Data), img.Thumbnail
 	case det.Kind == KindVideo:
 		thumb = s.processVideoThumbnail(ctx, tmp.Name(), det.ContentType)
 		if frame, err := jpeg.DecodeConfig(bytes.NewReader(thumb)); err == nil {
@@ -275,37 +279,57 @@ func (s *Service) Upload(ctx context.Context, u Upload) (postgres.Attachment, er
 		}
 		body = tmp
 	}
-	if err := s.o.Storage.Put(ctx, rec.StorageKey, body, rec.Size, rec.MimeType); err != nil {
-		return postgres.Attachment{}, err
-	}
+	puts := []put{{rec.StorageKey, body, rec.Size, rec.MimeType}}
 	if thumb != nil {
 		key := rec.StorageKey + ".thumb.jpg"
-		if err := s.o.Storage.Put(ctx, key, bytes.NewReader(thumb), int64(len(thumb)), "image/jpeg"); err != nil {
-			_ = s.o.Storage.Delete(context.WithoutCancel(ctx), rec.StorageKey)
-			return postgres.Attachment{}, err
-		}
+		puts = append(puts, put{key, bytes.NewReader(thumb), int64(len(thumb)), "image/jpeg"})
 		rec.ThumbnailKey = &key
 	}
-	stored := append([]string{rec.StorageKey}, ptrList(rec.ThumbnailKey)...)
-	if display != nil {
-		key := postgres.DisplayKey(rec.StorageKey)
-		if err := s.o.Storage.Put(ctx, key, bytes.NewReader(display), int64(len(display)), "image/jpeg"); err != nil {
-			for _, k := range stored {
-				_ = s.o.Storage.Delete(context.WithoutCancel(ctx), k)
-			}
-			return postgres.Attachment{}, err
-		}
-		stored = append(stored, key)
+	if err := s.putAll(ctx, puts); err != nil {
+		return postgres.Attachment{}, err
 	}
 	a, err := s.o.Attachments.Create(ctx, rec)
 	if err != nil {
 		// The objects are unreferenced; remove them now rather than leaving them to nobody.
-		for _, k := range stored {
-			_ = s.o.Storage.Delete(context.WithoutCancel(ctx), k)
-		}
+		s.remove(ctx, puts)
 		return postgres.Attachment{}, err
 	}
 	return a, nil
+}
+
+type put struct {
+	key         string
+	body        io.Reader
+	size        int64
+	contentType string
+}
+
+func (s *Service) putAll(ctx context.Context, puts []put) error {
+	g, gctx := errgroup.WithContext(ctx)
+	for _, p := range puts {
+		g.Go(func() error { return s.o.Storage.Put(gctx, p.key, p.body, p.size, p.contentType) })
+	}
+	if err := g.Wait(); err != nil {
+		s.remove(ctx, puts)
+		return err
+	}
+	return nil
+}
+
+func (s *Service) remove(ctx context.Context, puts []put) {
+	for _, p := range puts {
+		if err := s.o.Storage.Delete(context.WithoutCancel(ctx), p.key); err != nil {
+			s.o.Log.WarnContext(ctx, "delete object of a failed upload", "key", p.key, "error", err)
+		}
+	}
+}
+
+func (s *Service) webmKind(ctx context.Context, path string, det Detected) Detected {
+	video, audio, ok := s.o.Prober.Streams(ctx, path)
+	if !ok {
+		return det
+	}
+	return refineWebM(det, video, audio)
 }
 
 // spool gives the upload a file: a file the caller already spooled is used as it is (the caller removes it),
@@ -332,13 +356,6 @@ func spool(body io.Reader, limit int64) (*os.File, int64, func(), error) {
 		return nil, 0, nil, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
 	return tmp, size, cleanup, nil
-}
-
-func ptrList(s *string) []string {
-	if s == nil {
-		return nil
-	}
-	return []string{*s}
 }
 
 // Download is how a client gets the bytes: a short-lived redirect to object storage, or the object to stream.
