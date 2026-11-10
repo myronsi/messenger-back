@@ -9,6 +9,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+
+	"github.com/myronsi/messenger-back/internal/messages"
 )
 
 // Close codes of the protocol (api/websocket.md) besides CloseServiceRestart.
@@ -81,7 +83,10 @@ type reactionData struct {
 	Emoji     string
 }
 
-type typingData struct{ IsTyping bool }
+type typingData struct {
+	IsTyping bool
+	Action   string
+}
 
 // protocolError is a malformed client event; Code is a contract error code.
 type protocolError struct {
@@ -274,12 +279,20 @@ func decodeClientEvent(frame []byte) (clientEvent, error) {
 		ev.Reaction = &reactionData{MessageID: id, Emoji: *d.Emoji}
 	case "typing":
 		var d struct {
-			IsTyping *bool `json:"is_typing"`
+			IsTyping *bool   `json:"is_typing"`
+			Action   *string `json:"action"`
 		}
 		if err := decodeStrict(env.Data, &d); err != nil || d.IsTyping == nil {
 			return clientEvent{}, fail("data does not match the typing event")
 		}
-		ev.Typing = &typingData{IsTyping: *d.IsTyping}
+		action := messages.TypingText
+		if d.Action != nil {
+			action = *d.Action
+		}
+		if action != messages.TypingText && action != messages.TypingVoice {
+			return clientEvent{}, fail("action must be typing or recording_voice")
+		}
+		ev.Typing = &typingData{IsTyping: *d.IsTyping, Action: action}
 	default:
 		return clientEvent{}, fail("unknown event type")
 	}

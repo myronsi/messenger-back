@@ -36,6 +36,20 @@ type recorder struct {
 	recipients []int64
 	deleted    []string
 	reads      [][]int64
+	typing     []typingCall
+}
+
+type typingCall struct {
+	userID     int64
+	typing     bool
+	action     string
+	recipients []int64
+}
+
+func (r *recorder) Typing(_ context.Context, _, userID int64, typing bool, action string, recipients []int64) {
+	r.mu.Lock()
+	r.typing = append(r.typing, typingCall{userID: userID, typing: typing, action: action, recipients: recipients})
+	r.mu.Unlock()
 }
 
 func (r *recorder) MessageCreated(_ context.Context, m scylla.Message, recipients []int64, _ string) {
@@ -554,12 +568,11 @@ func TestBlocksCoverEveryAction(t *testing.T) {
 	if err := f.svc.Resend(ctx, alice, chat.ID, m.ID); !errors.Is(err, messages.ErrBlocked) {
 		t.Fatalf("resend: %v", err)
 	}
-	before := len(f.rec.created)
-	if err := f.svc.Typing(ctx, alice, chat.ID, true); err != nil {
+	if err := f.svc.Typing(ctx, alice, chat.ID, true, messages.TypingText); err != nil {
 		t.Fatalf("typing is dropped silently: %v", err)
 	}
-	if len(f.rec.created) != before {
-		t.Fatal("something was delivered")
+	if len(f.rec.typing) != 0 {
+		t.Fatal("typing was delivered across a block")
 	}
 	f.rec.reads = nil
 	if _, err := f.svc.Read(ctx, bob, chat.ID, m.ID); err != nil {
@@ -661,5 +674,57 @@ func TestChangesAreRecordedAsEvents(t *testing.T) {
 	}
 	if hid := f.events.got[3]; hid.UserID != bob {
 		t.Fatalf("message.hidden: %+v", hid)
+	}
+}
+
+func TestTypingReachesTheOtherMembersUnlessTurnedOff(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	alice, bob, carol := f.user("alice"), f.user("bob"), f.user("carol")
+	chat, _, _ := f.pg.Chats().CreateDirect(ctx, alice, bob)
+
+	if err := f.svc.Typing(ctx, alice, chat.ID, true, messages.TypingVoice); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.svc.Typing(ctx, alice, chat.ID, false, messages.TypingText); err != nil {
+		t.Fatal(err)
+	}
+	want := []typingCall{
+		{userID: alice, typing: true, action: messages.TypingVoice, recipients: []int64{bob}},
+		{userID: alice, typing: false, action: messages.TypingText, recipients: []int64{bob}},
+	}
+	if len(f.rec.typing) != len(want) {
+		t.Fatalf("typing events: %+v", f.rec.typing)
+	}
+	for i, w := range want {
+		got := f.rec.typing[i]
+		if got.userID != w.userID || got.typing != w.typing || got.action != w.action || !slices.Equal(got.recipients, w.recipients) {
+			t.Fatalf("typing event %d: %+v, want %+v", i, got, w)
+		}
+	}
+
+	if err := f.svc.Typing(ctx, carol, chat.ID, true, messages.TypingText); !errors.Is(err, messages.ErrNotFound) {
+		t.Fatalf("typing in a chat the user is not in: %v", err)
+	}
+	if err := f.svc.Typing(ctx, alice, chat.ID, true, "dancing"); !errors.Is(err, messages.ErrInvalid) {
+		t.Fatalf("unknown action: %v", err)
+	}
+
+	off := false
+	if _, err := f.pg.Social().PatchPrivacy(ctx, alice, postgres.PrivacyPatch{TypingIndicatorsEnabled: &off}); err != nil {
+		t.Fatal(err)
+	}
+	f.rec.typing = nil
+	if err := f.svc.Typing(ctx, alice, chat.ID, true, messages.TypingText); err != nil {
+		t.Fatalf("typing with the setting off is dropped silently: %v", err)
+	}
+	if len(f.rec.typing) != 0 {
+		t.Fatalf("typing was delivered with the setting off: %+v", f.rec.typing)
+	}
+	if err := f.svc.Typing(ctx, bob, chat.ID, true, messages.TypingText); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.rec.typing) != 1 || !slices.Equal(f.rec.typing[0].recipients, []int64{alice}) {
+		t.Fatalf("the user with the setting off still sees others typing: %+v", f.rec.typing)
 	}
 }

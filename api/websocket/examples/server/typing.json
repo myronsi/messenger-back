@@ -4,6 +4,7 @@
   "chat_id": "42",
   "data": {
     "user_id": "1002",
-    "is_typing": true
+    "is_typing": true,
+    "action": "recording_voice"
   }
 }

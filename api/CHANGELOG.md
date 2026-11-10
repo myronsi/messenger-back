@@ -2,6 +2,14 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.19
+
+- Typing status for voice messages: the WebSocket `typing` event gains `data.action` (`typing` or
+  `recording_voice`). It is optional in the client event (default `typing`) and always set in the server event.
+  Clients show an unknown value like `typing`.
+- `PrivacySettings` has a required `typing_indicators_enabled` (default `true`) and `UpdatePrivacySettingsRequest`
+  an optional one: with `false` the server drops the user's `typing` events, so nobody sees them typing.
+
 ## 2.1.0-alpha.18
 
 - Drawings on images: `SendMessageRequest.drawings` adds strokes and text labels to images of a `file` message.

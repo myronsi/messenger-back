@@ -6,10 +6,10 @@ SELECT * FROM user_privacy_settings WHERE user_id = ANY(@user_ids::BIGINT[]);
 -- name: UpdatePrivacySettings :one
 INSERT INTO user_privacy_settings (
     user_id, avatar_visibility, profile_visibility, presence_visibility, read_receipts_enabled,
-    direct_messages, group_invites, search_visibility, calls_enabled
+    direct_messages, group_invites, search_visibility, calls_enabled, typing_indicators_enabled
 ) VALUES (
     @user_id, @avatar_visibility, @profile_visibility, @presence_visibility, @read_receipts_enabled,
-    @direct_messages, @group_invites, @search_visibility, @calls_enabled
+    @direct_messages, @group_invites, @search_visibility, @calls_enabled, @typing_indicators_enabled
 )
 ON CONFLICT (user_id) DO UPDATE SET
     avatar_visibility = EXCLUDED.avatar_visibility,
@@ -19,7 +19,8 @@ ON CONFLICT (user_id) DO UPDATE SET
     direct_messages = EXCLUDED.direct_messages,
     group_invites = EXCLUDED.group_invites,
     search_visibility = EXCLUDED.search_visibility,
-    calls_enabled = EXCLUDED.calls_enabled
+    calls_enabled = EXCLUDED.calls_enabled,
+    typing_indicators_enabled = EXCLUDED.typing_indicators_enabled
 RETURNING *;
 
 -- name: ListPrivacyExceptions :many
@@ -128,7 +129,8 @@ SET avatar_visibility = COALESCE(sqlc.narg(avatar_visibility), avatar_visibility
     direct_messages = COALESCE(sqlc.narg(direct_messages), direct_messages),
     group_invites = COALESCE(sqlc.narg(group_invites), group_invites),
     search_visibility = COALESCE(sqlc.narg(search_visibility), search_visibility),
-    calls_enabled = COALESCE(sqlc.narg(calls_enabled)::bool, calls_enabled)
+    calls_enabled = COALESCE(sqlc.narg(calls_enabled)::bool, calls_enabled),
+    typing_indicators_enabled = COALESCE(sqlc.narg(typing_indicators_enabled)::bool, typing_indicators_enabled)
 WHERE user_id = @user_id
 RETURNING *;
 

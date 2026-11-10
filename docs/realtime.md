@@ -55,7 +55,7 @@ membership change; the check fails closed when Redis or PostgreSQL cannot answer
 | `reaction_add`/`reaction_remove` | member, message not deleted |
 | `read` | member; the read position only moves forward; an older position changes nothing and is not broadcast; the receipt skips users the reader blocked, and in a direct chat also users who blocked the reader |
 | `resend` | the sender's own message; it goes to the sender's devices and to the members it was hidden from as not delivered, never to those who deleted it for themselves |
-| `typing` | member |
+| `typing` | member; dropped when the sender turned `typing_indicators_enabled` off (or the setting cannot be read); `action` is `typing` (default) or `recording_voice`. Not stored and never repeated by the server: clients repeat it every 3 s and hide it after 6 s without one |
 
 A chat the user is not in looks like a chat that does not exist (`not_found`).
 

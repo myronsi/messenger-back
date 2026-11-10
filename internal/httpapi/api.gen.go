@@ -1768,6 +1768,9 @@ type PrivacySettings struct {
 	ProfileVisibility   Visibility       `json:"profile_visibility"`
 	ReadReceiptsEnabled bool             `json:"read_receipts_enabled"`
 	SearchVisibility    SearchVisibility `json:"search_visibility"`
+
+	// TypingIndicatorsEnabled Whether other members see that this user is typing or recording a voice message. The user still sees theirs.
+	TypingIndicatorsEnabled bool `json:"typing_indicators_enabled"`
 }
 
 // Problem RFC 9457 problem details. `426 Upgrade Required` (`client_outdated`) uses the same format.
@@ -2190,9 +2193,10 @@ type UpdatePrivacySettingsRequest struct {
 
 	// ProfileVisibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
 	// `contacts` are the users you share a group with, or a direct chat that you opened or read in.
-	ProfileVisibility   *Visibility       `json:"profile_visibility,omitempty"`
-	ReadReceiptsEnabled *bool             `json:"read_receipts_enabled,omitempty"`
-	SearchVisibility    *SearchVisibility `json:"search_visibility,omitempty"`
+	ProfileVisibility       *Visibility       `json:"profile_visibility,omitempty"`
+	ReadReceiptsEnabled     *bool             `json:"read_receipts_enabled,omitempty"`
+	SearchVisibility        *SearchVisibility `json:"search_visibility,omitempty"`
+	TypingIndicatorsEnabled *bool             `json:"typing_indicators_enabled,omitempty"`
 }
 
 // UpdateRoleRequest defines model for UpdateRoleRequest.

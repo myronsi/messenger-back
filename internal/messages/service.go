@@ -903,17 +903,24 @@ func (s *Service) Resend(ctx context.Context, userID, chatID, messageID int64) e
 }
 
 // Typing tells the other members that the user is (not) typing.
-func (s *Service) Typing(ctx context.Context, userID, chatID int64, typing bool) error {
+func (s *Service) Typing(ctx context.Context, userID, chatID int64, typing bool, action string) error {
+	if action != TypingText && action != TypingVoice {
+		return ErrInvalid
+	}
 	if err := s.requireMember(ctx, chatID, userID); err != nil {
 		return err
 	}
 	if err := s.requireNotBlocked(ctx, userID, chatID); err != nil {
 		return nil // dropped silently, like every typing indicator that cannot be delivered
 	}
+	settings, err := s.d.Store.Social().Privacy(ctx, []int64{userID})
+	if err != nil || !settings[userID].TypingIndicatorsEnabled {
+		return nil
+	}
 	members, err := s.Members(ctx, chatID)
 	if err != nil {
 		return err
 	}
-	s.d.Notifier.Typing(ctx, chatID, userID, typing, without(members, userID))
+	s.d.Notifier.Typing(ctx, chatID, userID, typing, action, without(members, userID))
 	return nil
 }
