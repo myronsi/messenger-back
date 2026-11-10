@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.15.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.14.0-alpha.1...v1.15.0-alpha.1) (2026-11-10)
+
+
+### Features
+
+* **chats:** unread anchor in chat list, search query limit and default display name ([#180](https://github.com/myronsi/messenger-back/issues/180)) ([ed7e89d](https://github.com/myronsi/messenger-back/commit/ed7e89d8b27ef9d13238b803fdf2b1dce35aefec))
+* **search:** prefix and German search with batched result loading ([#181](https://github.com/myronsi/messenger-back/issues/181)) ([34d4934](https://github.com/myronsi/messenger-back/commit/34d4934b1c4b9877f219d32b4707398f0c29055e))
+
+
+### Performance Improvements
+
+* **media:** faster photo upload and audio-only WebM as audio ([#182](https://github.com/myronsi/messenger-back/issues/182)) ([b5045fe](https://github.com/myronsi/messenger-back/commit/b5045fe4578e0e0439891a37edc5468d1bdb1f8a))
+
 ## [1.14.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.13.0-alpha.1...v1.14.0-alpha.1) (2026-11-10)
 
 
