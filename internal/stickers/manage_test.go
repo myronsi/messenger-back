@@ -239,12 +239,14 @@ func TestReportsAreLimited(t *testing.T) {
 	store := testenv.Postgres(t)
 	svc := stickers.New(store.Stickers())
 	reporter := user(t, store, "reporter")
+	var packs []int64
 	for i := range stickers.MaxReportsPerDay + 1 {
 		owner := user(t, store, fmt.Sprintf("owner%d", i))
 		p, err := svc.Create(ctx, owner, "Pack")
 		if err != nil {
 			t.Fatal(err)
 		}
+		packs = append(packs, p.ID)
 		err = svc.Report(ctx, reporter, p.ID, "other")
 		if i < stickers.MaxReportsPerDay && err != nil {
 			t.Fatal(err)
@@ -252,6 +254,12 @@ func TestReportsAreLimited(t *testing.T) {
 		if i == stickers.MaxReportsPerDay && !errors.Is(err, stickers.ErrRateLimited) {
 			t.Fatalf("report %d: %v", i+1, err)
 		}
+	}
+	if err := svc.Report(ctx, reporter, packs[0], "spam"); err != nil {
+		t.Fatalf("reporting an already reported pack again is no new report: %v", err)
+	}
+	if err := svc.Report(ctx, reporter, packs[len(packs)-1], "spam"); !errors.Is(err, stickers.ErrRateLimited) {
+		t.Fatalf("the refused report was not stored: %v", err)
 	}
 }
 

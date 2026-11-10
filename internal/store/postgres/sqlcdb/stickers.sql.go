@@ -238,7 +238,7 @@ func (q *Queries) InsertOwnedStickerPack(ctx context.Context, arg InsertOwnedSti
 	return i, err
 }
 
-const insertStickerPackReport = `-- name: InsertStickerPackReport :exec
+const insertStickerPackReport = `-- name: InsertStickerPackReport :execrows
 INSERT INTO sticker_pack_reports (pack_id, reporter_id, reason) VALUES ($1, $2, $3)
 ON CONFLICT (pack_id, reporter_id) DO NOTHING
 `
@@ -249,9 +249,12 @@ type InsertStickerPackReportParams struct {
 	Reason     string
 }
 
-func (q *Queries) InsertStickerPackReport(ctx context.Context, arg InsertStickerPackReportParams) error {
-	_, err := q.db.Exec(ctx, insertStickerPackReport, arg.PackID, arg.ReporterID, arg.Reason)
-	return err
+func (q *Queries) InsertStickerPackReport(ctx context.Context, arg InsertStickerPackReportParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertStickerPackReport, arg.PackID, arg.ReporterID, arg.Reason)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const listBuiltinStickerKeys = `-- name: ListBuiltinStickerKeys :many

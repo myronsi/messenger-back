@@ -124,7 +124,7 @@ WHERE s.id = o.id AND s.pack_id = @pack_id;
 -- name: CountStickerReportsSince :one
 SELECT count(*)::int FROM sticker_pack_reports WHERE reporter_id = @reporter_id AND created_at > @since;
 
--- name: InsertStickerPackReport :exec
+-- name: InsertStickerPackReport :execrows
 INSERT INTO sticker_pack_reports (pack_id, reporter_id, reason) VALUES (@pack_id, @reporter_id, @reason)
 ON CONFLICT (pack_id, reporter_id) DO NOTHING;
 

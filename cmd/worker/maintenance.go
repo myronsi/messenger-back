@@ -170,10 +170,13 @@ func seedStickers(ctx context.Context, log *slog.Logger, store *postgres.Store, 
 	}
 }
 
-func unhideStickerPack(ctx context.Context, log *slog.Logger, store *postgres.Store, arg string) error {
-	id, err := strconv.ParseInt(arg, 10, 64)
+func unhideStickerPack(ctx context.Context, log *slog.Logger, store *postgres.Store, args []string) error {
+	if len(args) != 1 {
+		return fmt.Errorf("usage: worker unhide-sticker-pack <pack_id>")
+	}
+	id, err := strconv.ParseInt(args[0], 10, 64)
 	if err != nil || id <= 0 {
-		return fmt.Errorf("unhide-sticker-pack: %q is not a pack id", arg)
+		return fmt.Errorf("unhide-sticker-pack: %q is not a pack id", args[0])
 	}
 	changed, err := stickers.New(store.Stickers()).Unhide(ctx, id)
 	if err != nil {

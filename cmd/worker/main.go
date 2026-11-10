@@ -42,8 +42,8 @@ func run() error {
 		return err
 	}
 	defer pg.Close()
-	if len(os.Args) > 2 && os.Args[1] == "unhide-sticker-pack" {
-		return unhideStickerPack(p.Ctx, log, pg, os.Args[2])
+	if len(os.Args) > 1 && os.Args[1] == "unhide-sticker-pack" {
+		return unhideStickerPack(p.Ctx, log, pg, os.Args[2:])
 	}
 	rd, err := redis.New(cfg.RedisURL.Reveal(), redis.Options{
 		Timeout: cfg.Redis.Timeout,

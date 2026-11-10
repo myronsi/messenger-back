@@ -339,10 +339,12 @@ func (r stickerRepo) AddSticker(ctx context.Context, ownerID, packID int64, imag
 		if err := ownPack(ctx, q, ownerID, packID); err != nil {
 			return err
 		}
-		a, err := q.GetAttachment(ctx, image)
-		if errors.Is(err, pgx.ErrNoRows) {
+		if _, err := q.LockAttachment(ctx, image); errors.Is(err, pgx.ErrNoRows) {
 			return ErrInvalid
+		} else if err != nil {
+			return err
 		}
+		a, err := q.GetAttachment(ctx, image)
 		if err != nil {
 			return err
 		}
@@ -424,17 +426,18 @@ func (r stickerRepo) Report(ctx context.Context, rep PackReport) (bool, error) {
 		if p.BuiltinKey != nil || (p.OwnerID != nil && *p.OwnerID == rep.ReporterID) {
 			return ErrForbidden
 		}
+		added, err := q.InsertStickerPackReport(ctx, sqlcdb.InsertStickerPackReportParams{
+			PackID: rep.PackID, ReporterID: rep.ReporterID, Reason: rep.Reason,
+		})
+		if err != nil || added == 0 {
+			return err
+		}
 		n, err := q.CountStickerReportsSince(ctx, sqlcdb.CountStickerReportsSinceParams{ReporterID: rep.ReporterID, Since: rep.Since})
 		if err != nil {
 			return err
 		}
-		if int(n) >= rep.MaxReports {
+		if int(n) > rep.MaxReports {
 			return ErrLimit
-		}
-		if err := q.InsertStickerPackReport(ctx, sqlcdb.InsertStickerPackReportParams{
-			PackID: rep.PackID, ReporterID: rep.ReporterID, Reason: rep.Reason,
-		}); err != nil {
-			return err
 		}
 		changed, err := q.HideReportedStickerPack(ctx, sqlcdb.HideReportedStickerPackParams{ID: rep.PackID, Threshold: clampLimit(rep.HideAfter)})
 		hidden = changed > 0
