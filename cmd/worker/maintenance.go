@@ -137,6 +137,9 @@ func ensureIndex(ctx context.Context, log *slog.Logger, ix *search.Index) bool {
 	for wait := time.Second; ctx.Err() == nil; wait = min(2*wait, time.Minute) {
 		err := ix.Ensure(ctx)
 		if err == nil {
+			if outdated, err := ix.Outdated(ctx); err == nil && outdated {
+				log.WarnContext(ctx, "the search index has an older mapping: run worker reindex", "mapping_version", search.MappingVersion)
+			}
 			return true
 		}
 		log.WarnContext(ctx, "search index not ready", "err", err)

@@ -97,6 +97,33 @@ func (p *Prober) Probe(ctx context.Context, path string, waveform bool) (AudioIn
 	return info, nil
 }
 
+func (p *Prober) Streams(ctx context.Context, path string) (video, audio, ok bool) {
+	if p == nil || p.ffprobe == "" {
+		return false, false, false
+	}
+	pctx, cancel := context.WithTimeout(ctx, probeTimeout)
+	defer cancel()
+	out, err := exec.CommandContext(pctx, p.ffprobe, "-v", "error", "-protocol_whitelist", "file", //nolint:gosec // see Probe
+		"-show_entries", "stream=codec_type:stream_disposition=attached_pic", "-of", "compact=nokey=0:print_section=0", path).Output()
+	if err != nil {
+		return false, false, false
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		fields := map[string]string{}
+		for _, f := range strings.Split(strings.TrimSpace(line), "|") {
+			k, v, _ := strings.Cut(f, "=")
+			fields[k] = v
+		}
+		switch fields["codec_type"] {
+		case "video":
+			video = video || fields["disposition:attached_pic"] != "1"
+		case "audio":
+			audio = true
+		}
+	}
+	return video, audio, true
+}
+
 // toolFailed tells a timeout or a cancelled request apart from a file the tools cannot read.
 func toolFailed(ctx context.Context, timedOut bool) error {
 	if ctx.Err() != nil {

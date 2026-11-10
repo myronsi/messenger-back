@@ -123,22 +123,20 @@ func TestProcessImageStripsMetadataAndRotates(t *testing.T) {
 	}
 }
 
-func TestProcessImageMakesDisplayCopyOfLargeImagesOnly(t *testing.T) {
+func TestDisplayCopyOfLargeImagesOnly(t *testing.T) {
 	out, err := ProcessImage(pngBytes(t, 1200, 3200), "image/png")
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := jpeg.DecodeConfig(bytes.NewReader(out.Display))
+	display, err := DisplayImage(out.Data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := jpeg.DecodeConfig(bytes.NewReader(display))
 	if err != nil || cfg.Width != 600 || cfg.Height != DisplaySide {
 		t.Fatalf("display copy: %+v %v", cfg, err)
 	}
-	if again, err := DisplayImage(out.Data); err != nil || !bytes.Equal(again, out.Display) {
-		t.Fatalf("display copy from the stored image differs: %v", err)
-	}
-	if small, err := ProcessImage(pngBytes(t, DisplaySide, 900), "image/png"); err != nil || small.Display != nil {
-		t.Fatalf("small image: %d bytes, %v", len(small.Display), err)
-	}
-	if NeedsDisplay("image/gif", 4000, 4000) || !NeedsDisplay("image/jpeg", 1601, 10) || NeedsDisplay("application/pdf", 4000, 4000) {
+	if NeedsDisplay("image/gif", 4000, 4000) || !NeedsDisplay("image/jpeg", 1601, 10) || NeedsDisplay("application/pdf", 4000, 4000) || NeedsDisplay("image/png", DisplaySide, 900) {
 		t.Fatal("NeedsDisplay")
 	}
 }
@@ -274,5 +272,163 @@ func TestGIFFramesAreCountedBeforeDecoding(t *testing.T) {
 	}
 	if _, _, err := scanGIF([]byte("GIF89a\x01\x00\x01\x00\x00\x00\x00\x2C\x00")); err == nil {
 		t.Fatal("truncated descriptor accepted")
+	}
+}
+
+func segment(marker byte, payload []byte) []byte {
+	s := binary.BigEndian.AppendUint16([]byte{0xFF, marker}, uint16(len(payload)+2))
+	return append(s, payload...)
+}
+
+func TestProcessImageStripsExifWithoutReencoding(t *testing.T) {
+	src := jpegWithOrientation(t, 40, 20, 1)
+	jfif := append([]byte("JFIF\x00\x01\x02\x01\x00\x48\x00\x48\x01\x01"), []byte("THUMBPIXELS")...)
+	extra := append(segment(0xE0, jfif), segment(0xE1, []byte("http://ns.adobe.com/xap/1.0/\x00<x:xmpmeta GPSAltitude/>"))...)
+	extra = append(extra, segment(0xED, []byte("Photoshop 3.0\x00IPTC caption"))...)
+	extra = append(extra, segment(0xE2, []byte("ICC_PROFILE\x00\x01\x01profile"))...)
+	extra = append(extra, segment(0xFE, []byte("shot by someone"))...)
+	src = append(append(append([]byte{}, src[:2]...), extra...), src[2:]...)
+	src = append(src, []byte("\xFF\xD8appended picture Exif GPSLatitude\xFF\xD9")...)
+	if jpegOrientation(src) != 1 {
+		t.Fatal("orientation")
+	}
+	out, err := ProcessImage(src, "image/jpeg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.ContentType != "image/jpeg" || out.Width != 40 || out.Height != 20 || len(out.Thumbnail) == 0 {
+		t.Fatalf("result %s %dx%d thumb %d", out.ContentType, out.Width, out.Height, len(out.Thumbnail))
+	}
+	for _, leak := range []string{"Exif", "GPS", "xmpmeta", "IPTC", "ICC_PROFILE", "shot by", "THUMBPIXELS", "appended"} {
+		if bytes.Contains(out.Data, []byte(leak)) {
+			t.Errorf("%q survived", leak)
+		}
+	}
+	if !bytes.HasPrefix(out.Data, []byte("\xFF\xD8\xFF\xE0\x00\x10JFIF\x00\x01\x02\x01\x00\x48\x00\x48\x00\x00")) {
+		t.Errorf("JFIF header not kept without its thumbnail: % x", out.Data[:24])
+	}
+	sos := bytes.Index(src, []byte{0xFF, 0xDA})
+	eoi := bytes.Index(src, []byte("\xFF\xD9\xFF\xD8appended"))
+	if sos < 0 || eoi < 0 || !bytes.HasSuffix(out.Data, src[sos:eoi+2]) {
+		t.Fatal("the compressed pixels were not kept as they are")
+	}
+	want, err := jpeg.Decode(bytes.NewReader(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := jpeg.Decode(bytes.NewReader(out.Data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for y := range 20 {
+		for x := range 40 {
+			if want.At(x, y) != got.At(x, y) {
+				t.Fatalf("pixel %d,%d changed: %v -> %v", x, y, want.At(x, y), got.At(x, y))
+			}
+		}
+	}
+}
+
+func TestStripJPEGSegments(t *testing.T) {
+	scan := []byte{0x12, 0xFF, 0x00, 0x34, 0xFF, 0xD3, 0x56}
+	src := []byte{0xFF, 0xD8}
+	src = append(src, segment(0xE1, []byte("Exif\x00\x00GPS"))...)
+	src = append(src, segment(0xEE, []byte("Adobe\x00\x64\x00\x00\x00\x00\x01"))...)
+	src = append(src, segment(0xDB, []byte{0x00, 0x01})...)
+	src = append(src, segment(0xC2, []byte{0x08, 0x00, 0x01})...)
+	src = append(src, segment(0xDA, []byte{0x01, 0x01, 0x00})...)
+	src = append(src, scan...)
+	src = append(src, segment(0xFE, []byte("between scans"))...)
+	src = append(src, segment(0xC4, []byte{0x00})...)
+	src = append(src, segment(0xDA, []byte{0x01, 0x01, 0x00})...)
+	src = append(src, scan...)
+	src = append(src, 0xFF, 0xFF, 0xD9, 'x')
+	want := []byte{0xFF, 0xD8}
+	want = append(want, segment(0xEE, []byte("Adobe\x00\x64\x00\x00\x00\x00\x01"))...)
+	want = append(want, segment(0xDB, []byte{0x00, 0x01})...)
+	want = append(want, segment(0xC2, []byte{0x08, 0x00, 0x01})...)
+	want = append(want, segment(0xDA, []byte{0x01, 0x01, 0x00})...)
+	want = append(want, scan...)
+	want = append(want, segment(0xC4, []byte{0x00})...)
+	want = append(want, segment(0xDA, []byte{0x01, 0x01, 0x00})...)
+	want = append(want, scan...)
+	want = append(want, 0xFF, 0xD9)
+	got, ok := stripJPEG(src)
+	if !ok || !bytes.Equal(got, want) {
+		t.Fatalf("stripJPEG = %v\n% x\nwant\n% x", ok, got, want)
+	}
+	for name, bad := range map[string][]byte{
+		"no SOI":         src[2:],
+		"truncated":      src[:len(src)-6],
+		"short segment":  {0xFF, 0xD8, 0xFF, 0xDB, 0x00},
+		"unknown marker": append([]byte{0xFF, 0xD8}, segment(0xF7, []byte{0x00})...),
+		"garbage":        {0xFF, 0xD8, 0x00, 0x00},
+	} {
+		if _, ok := stripJPEG(bad); ok {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}
+
+func TestProcessImageRotatedJPEGIsReencodedWithoutMetadata(t *testing.T) {
+	src := jpegWithOrientation(t, 400, 200, 8)
+	out, err := ProcessImage(src, "image/jpeg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Width != 200 || out.Height != 400 || bytes.Contains(out.Data, []byte("GPSLatitude")) || bytes.Contains(out.Data, []byte("Exif")) {
+		t.Fatalf("rotate path: %dx%d", out.Width, out.Height)
+	}
+	if bytes.HasSuffix(out.Data, src[bytes.Index(src, []byte{0xFF, 0xDA}):]) {
+		t.Fatal("a rotated JPEG kept its original pixels")
+	}
+	th, err := jpeg.DecodeConfig(bytes.NewReader(out.Thumbnail))
+	if err != nil || th.Width != 160 || th.Height != ThumbnailSide {
+		t.Fatalf("thumbnail %+v %v", th, err)
+	}
+}
+
+func TestScaledThumbnails(t *testing.T) {
+	black := image.NewYCbCr(image.Rect(0, 0, 4000, 1000), image.YCbCrSubsampleRatio420)
+	for i := range black.Cb {
+		black.Cb[i], black.Cr[i] = 128, 128
+	}
+	for _, c := range []struct {
+		img      image.Image
+		w, h     int
+		wantGray color.Gray
+	}{
+		{black, 320, 80, color.Gray{Y: 0}},
+		{image.NewNRGBA(image.Rect(0, 0, 1000, 3000)), 106, 320, color.Gray{Y: 255}},
+		{image.NewRGBA(image.Rect(0, 0, 100, 50)), 100, 50, color.Gray{Y: 255}},
+	} {
+		data, err := thumbnail(c.img)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := jpeg.Decode(bytes.NewReader(data))
+		if err != nil || got.Bounds().Dx() != c.w || got.Bounds().Dy() != c.h {
+			t.Fatalf("%T: %v %v", c.img, got.Bounds(), err)
+		}
+		if g := color.GrayModel.Convert(got.At(c.w/2, c.h/2)).(color.Gray); int(g.Y) > int(c.wantGray.Y)+8 || int(g.Y)+8 < int(c.wantGray.Y) {
+			t.Errorf("%T: center %v, want about %v", c.img, g, c.wantGray)
+		}
+	}
+}
+
+func TestRefineWebM(t *testing.T) {
+	video := Detected{Kind: KindVideo, ContentType: "video/webm"}
+	if d := refineWebM(video, false, true); d.Kind != KindAudio || d.ContentType != "audio/webm" {
+		t.Errorf("audio only: %+v", d)
+	}
+	if d := refineWebM(video, true, true); d != video {
+		t.Errorf("video with sound: %+v", d)
+	}
+	if d := refineWebM(video, false, false); d != video {
+		t.Errorf("no streams: %+v", d)
+	}
+	mp4 := Detected{Kind: KindVideo, ContentType: "video/mp4"}
+	if d := refineWebM(mp4, false, true); d != mp4 {
+		t.Errorf("mp4: %+v", d)
 	}
 }

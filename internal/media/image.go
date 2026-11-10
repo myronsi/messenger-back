@@ -38,7 +38,6 @@ type ProcessedImage struct {
 	Width       int
 	Height      int
 	Thumbnail   []byte // JPEG
-	Display     []byte
 }
 
 func NeedsDisplay(contentType string, width, height int) bool {
@@ -61,8 +60,9 @@ func DisplayImage(data []byte) ([]byte, error) {
 }
 
 // ProcessImage decodes the image, applies the EXIF orientation of a JPEG, and encodes it again: metadata
-// (location, camera, comments) is gone and a malformed file cannot reach a client. GIFs keep their frames;
-// WebP becomes PNG (with transparency) or JPEG.
+// (location, camera, comments) is gone and a malformed file cannot reach a client. A JPEG that needs no
+// rotation keeps its compressed pixels: only its metadata segments are removed, and the result is decoded
+// once to make sure it is a valid image. GIFs keep their frames; WebP becomes PNG (with transparency) or JPEG.
 func ProcessImage(data []byte, contentType string) (ProcessedImage, error) {
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
@@ -73,6 +73,11 @@ func ProcessImage(data []byte, contentType string) (ProcessedImage, error) {
 	}
 	if contentType == "image/gif" {
 		return processGIF(data, cfg)
+	}
+	if contentType == "image/jpeg" && jpegOrientation(data) == 1 {
+		if stripped, ok := stripJPEG(data); ok {
+			return processStrippedJPEG(stripped)
+		}
 	}
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
@@ -97,12 +102,19 @@ func ProcessImage(data []byte, contentType string) (ProcessedImage, error) {
 	if out.Thumbnail, err = thumbnail(img); err != nil {
 		return ProcessedImage{}, err
 	}
-	if NeedsDisplay(out.ContentType, out.Width, out.Height) {
-		if out.Display, err = scaled(img, DisplaySide, 82); err != nil {
-			return ProcessedImage{}, err
-		}
-	}
 	return out, nil
+}
+
+func processStrippedJPEG(data []byte) (ProcessedImage, error) {
+	img, err := jpeg.Decode(bytes.NewReader(data))
+	if err != nil {
+		return ProcessedImage{}, ErrUnsupported
+	}
+	thumb, err := thumbnail(img)
+	if err != nil {
+		return ProcessedImage{}, err
+	}
+	return ProcessedImage{Data: data, ContentType: "image/jpeg", Width: img.Bounds().Dx(), Height: img.Bounds().Dy(), Thumbnail: thumb}, nil
 }
 
 func processGIF(data []byte, cfg image.Config) (ProcessedImage, error) {
@@ -209,9 +221,19 @@ func scaled(img image.Image, side, quality int) ([]byte, error) {
 			w, h = max(1, w*side/h), side
 		}
 	}
+	src, sr := img, b
+	if b.Dx() > 2*w || b.Dy() > 2*h {
+		mid := image.NewRGBA(image.Rect(0, 0, min(2*w, b.Dx()), min(2*h, b.Dy())))
+		xdraw.ApproxBiLinear.Scale(mid, mid.Bounds(), img, b, draw.Src, nil)
+		src, sr = mid, mid.Bounds()
+	}
 	dst := image.NewRGBA(image.Rect(0, 0, w, h))
-	draw.Draw(dst, dst.Bounds(), &image.Uniform{C: color.White}, image.Point{}, draw.Src)
-	xdraw.CatmullRom.Scale(dst, dst.Bounds(), img, b, draw.Over, nil)
+	op := draw.Src
+	if !opaque(img) {
+		draw.Draw(dst, dst.Bounds(), &image.Uniform{C: color.White}, image.Point{}, draw.Src)
+		op = draw.Over
+	}
+	xdraw.CatmullRom.Scale(dst, dst.Bounds(), src, sr, op, nil)
 	var buf bytes.Buffer
 	if err := jpeg.Encode(&buf, dst, &jpeg.Options{Quality: quality}); err != nil {
 		return nil, err
