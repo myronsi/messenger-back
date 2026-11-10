@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.20
+  version: 2.1.0-alpha.21
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -1814,7 +1814,13 @@ paths:
       summary: The user's sticker packs
       description: |
         The packs of the sticker panel: packs the user added, most recently added first, then the built-in default
-        packs the user has not removed. Each pack lists its stickers in order. At most 200 packs.
+        packs the user has not removed. Each pack lists its stickers in order. At most 200 packs. With
+        `owned=true`, the packs the user made instead, newest first, whether in the panel or not.
+      parameters:
+        - name: owned
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
       responses:
         "426": { $ref: "#/components/responses/ClientOutdated" }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -1824,6 +1830,29 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/StickerPackList" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [stickers]
+      operationId: createStickerPack
+      summary: Create a sticker pack
+      description: |
+        A new, empty pack owned by the user, added to the top of their panel. Its `slug` is the share link
+        (`/stickers/links/{slug}`). At most 50 packs per user (`409 limit_reached`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateStickerPackRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "201":
+          description: The new pack
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StickerPack" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
   /stickers/packs/{pack_id}:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
@@ -1834,8 +1863,10 @@ paths:
       operationId: getStickerPack
       summary: A sticker pack
       description: |
-        Any pack that is not deleted, whether the user has it or not, for example to preview the pack of a sticker
-        someone sent. `is_installed` tells whether it is in the user's panel.
+        A built-in pack, the user's own pack, or a user pack the user opened by its link before (`404` otherwise,
+        so packs cannot be found by guessing IDs). To preview the pack of a sticker someone sent, open
+        `Sticker.pack_slug` with `GET /stickers/links/{slug}` instead. `is_installed` tells whether it is in the
+        user's panel. A hidden pack is found only by its owner.
       responses:
         "426": { $ref: "#/components/responses/ClientOutdated" }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -1846,6 +1877,43 @@ paths:
               schema: { $ref: "#/components/schemas/StickerPack" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [stickers]
+      operationId: updateStickerPack
+      summary: Rename a sticker pack
+      description: Only the owner of the pack (`403` otherwise). Built-in packs cannot be changed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateStickerPackRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: The pack
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StickerPack" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+    delete:
+      tags: [stickers]
+      operationId: deleteStickerPack
+      summary: Delete a sticker pack
+      description: |
+        Only the owner. The pack leaves every panel and its link stops working; stickers already sent from it keep
+        showing in chats.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Deleted
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /stickers/packs/{pack_id}/installation:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
@@ -1855,7 +1923,9 @@ paths:
       tags: [stickers]
       operationId: addStickerPack
       summary: Add a sticker pack to the user's panel
-      description: Adding a pack the user has moves it to the top of the panel.
+      description: |
+        Adding a pack the user has moves it to the top of the panel. User packs can be added only after opening
+        them by their link (`404` otherwise).
       responses:
         "426": { $ref: "#/components/responses/ClientOutdated" }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -1875,6 +1945,156 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "204":
           description: Removed
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /stickers/packs/{pack_id}/stickers:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/StickerPackId"
+    post:
+      tags: [stickers]
+      operationId: addSticker
+      summary: Add a sticker to a pack
+      description: |
+        Only the owner. Upload the image with `POST /attachments` (`purpose: sticker`) first; the server has already
+        fitted it into 512 x 512 px. The sticker goes to the end of the pack. At most 120 stickers per pack
+        (`409 limit_reached`). `422` when the image is not a sticker upload of the caller.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AddStickerRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "201":
+          description: The new sticker
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Sticker" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+  /stickers/packs/{pack_id}/stickers/{sticker_id}:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/StickerPackId"
+      - $ref: "#/components/parameters/StickerId"
+    patch:
+      tags: [stickers]
+      operationId: updateSticker
+      summary: Change the emoji of a sticker
+      description: Only the owner of the pack.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateStickerRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: The sticker
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Sticker" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+    delete:
+      tags: [stickers]
+      operationId: deleteSticker
+      summary: Remove a sticker from a pack
+      description: Only the owner of the pack. Messages that sent the sticker keep showing it.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Removed
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /stickers/packs/{pack_id}/order:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/StickerPackId"
+    put:
+      tags: [stickers]
+      operationId: reorderStickers
+      summary: Reorder the stickers of a pack
+      description: |
+        Only the owner of the pack. `sticker_ids` lists every sticker of the pack exactly once, in the new order
+        (`422` otherwise).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReorderStickersRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Reordered
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+  /stickers/packs/{pack_id}/report:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/StickerPackId"
+    post:
+      tags: [stickers]
+      operationId: reportStickerPack
+      summary: Report a sticker pack
+      description: |
+        One report per user and pack; reporting again changes nothing. After 5 reports from different users the
+        pack is hidden until a moderator restores it: it leaves every panel, cannot be added or sent from, and only
+        its owner still sees it (`is_hidden`). Stickers already sent keep showing. Built-in packs and the user's own
+        packs cannot be reported (`403`). User packs can be reported only after opening them by their link (`404`
+        otherwise). At most 20 new reports per user a day (`429`); reporting a pack again changes nothing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReportStickerPackRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Reported
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /stickers/links/{slug}:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/StickerPackSlug"
+    get:
+      tags: [stickers]
+      operationId: getStickerPackByLink
+      summary: A sticker pack by its share link
+      description: |
+        The same as `GET /stickers/packs/{pack_id}`, found by the pack's `slug`. Opening a link lets the user use
+        the pack by its ID from then on: add it, report it and send its stickers.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: The pack
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StickerPack" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
   /stickers/recent:
@@ -3914,6 +4134,16 @@ components:
       in: path
       required: true
       schema: { $ref: "#/components/schemas/Id" }
+    StickerId:
+      name: sticker_id
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/Id" }
+    StickerPackSlug:
+      name: slug
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/StickerPackSlug" }
     SessionId:
       name: session_id
       in: path
@@ -4177,6 +4407,7 @@ components:
         - call_ended
         - already_in_call
         - stale_epoch
+        - limit_reached
         - internal_error
     Problem:
       type: object
@@ -4554,7 +4785,11 @@ components:
       enum: [image, audio, voice, video, file]
     UploadPurpose:
       type: string
-      enum: [message, avatar]
+      description: |
+        `sticker`: a PNG, JPEG or still WebP of at most 5 MB. The server fits it into 512 x 512 px with a transparent
+        border and stores a WebP (`413` when that is still over 512 KB). Only its uploader can load it until it is
+        added to a pack.
+      enum: [message, avatar, sticker]
     UploadAttachmentRequest:
       type: object
       required: [file, purpose]
@@ -4700,6 +4935,11 @@ components:
       properties:
         id: { $ref: "#/components/schemas/Id" }
         pack_id: { $ref: "#/components/schemas/Id" }
+        pack_slug:
+          allOf: [{ $ref: "#/components/schemas/StickerPackSlug" }]
+          description: |
+            The share link of the sticker's pack when a user made it; missing for built-in packs. A client that
+            shows the pack of a sticker someone sent opens it with `GET /stickers/links/{slug}`.
         emoji:
           type: string
           minLength: 1
@@ -4707,9 +4947,12 @@ components:
           description: The emoji the sticker stands for, for previews, notifications and search.
         is_animated: { type: boolean }
         image: { $ref: "#/components/schemas/Attachment" }
+    StickerPackSlug:
+      type: string
+      pattern: "^[A-Za-z0-9]{8,32}$"
     StickerPack:
       type: object
-      required: [id, title, is_official, is_installed, stickers]
+      required: [id, title, is_official, is_installed, is_mine, is_hidden, stickers]
       properties:
         id: { $ref: "#/components/schemas/Id" }
         title: { type: string, minLength: 1, maxLength: 64 }
@@ -4719,6 +4962,16 @@ components:
         is_installed:
           type: boolean
           description: The pack is in the user's sticker panel.
+        is_mine:
+          type: boolean
+          description: The user made the pack and may change it.
+        is_hidden:
+          type: boolean
+          description: Hidden after reports; only the owner sees such a pack, and nobody can send from it.
+        owner_id: { $ref: "#/components/schemas/Id" }
+        slug:
+          allOf: [{ $ref: "#/components/schemas/StickerPackSlug" }]
+          description: The share link of a pack a user made; missing for built-in packs.
         stickers:
           type: array
           maxItems: 120
@@ -4731,6 +4984,49 @@ components:
           type: array
           maxItems: 200
           items: { $ref: "#/components/schemas/StickerPack" }
+    CreateStickerPackRequest:
+      type: object
+      additionalProperties: false
+      required: [title]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 64 }
+    UpdateStickerPackRequest:
+      type: object
+      additionalProperties: false
+      required: [title]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 64 }
+    AddStickerRequest:
+      type: object
+      additionalProperties: false
+      required: [attachment_id, emoji]
+      properties:
+        attachment_id: { $ref: "#/components/schemas/AttachmentRef" }
+        emoji: { type: string, minLength: 1, maxLength: 32 }
+    UpdateStickerRequest:
+      type: object
+      additionalProperties: false
+      required: [emoji]
+      properties:
+        emoji: { type: string, minLength: 1, maxLength: 32 }
+    ReorderStickersRequest:
+      type: object
+      additionalProperties: false
+      required: [sticker_ids]
+      properties:
+        sticker_ids:
+          type: array
+          maxItems: 120
+          items: { $ref: "#/components/schemas/Id" }
+    StickerPackReportReason:
+      type: string
+      enum: [spam, violence, sexual, hate, copyright, other]
+    ReportStickerPackRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: { $ref: "#/components/schemas/StickerPackReportReason" }
     StickerList:
       type: object
       required: [items]

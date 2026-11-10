@@ -421,6 +421,7 @@ type AttachmentRepository interface {
 	SetChatAvatar(ctx context.Context, chatID int64, attachmentID *uuid.UUID) error
 	// ChatsWithAvatar returns the groups that use the attachment as their avatar.
 	ChatsWithAvatar(ctx context.Context, attachmentID uuid.UUID) ([]int64, error)
+	IsStickerImage(ctx context.Context, attachmentID uuid.UUID) (bool, error)
 }
 
 // SecurityEvent is one entry of the security log of an account.

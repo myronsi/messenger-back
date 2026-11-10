@@ -349,7 +349,7 @@ func (s *Service) Send(ctx context.Context, r SendRequest) (Sent, error) {
 	}
 	var sticker *postgres.Sticker
 	if r.StickerID != nil {
-		found, err := s.sticker(ctx, *r.StickerID)
+		found, err := s.sticker(ctx, r.SenderID, *r.StickerID)
 		if err != nil {
 			s.abandon(ctx, r, id, resumed)
 			return Sent{}, err
@@ -395,7 +395,7 @@ func (s *Service) Send(ctx context.Context, r SendRequest) (Sent, error) {
 
 const RecentStickers = 20
 
-func (s *Service) sticker(ctx context.Context, id int64) (postgres.Sticker, error) {
+func (s *Service) sticker(ctx context.Context, senderID, id int64) (postgres.Sticker, error) {
 	found, err := s.d.Store.Stickers().Stickers(ctx, []int64{id})
 	if err != nil {
 		return postgres.Sticker{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
@@ -403,6 +403,15 @@ func (s *Service) sticker(ctx context.Context, id int64) (postgres.Sticker, erro
 	st, ok := found[id]
 	if !ok || st.Deleted {
 		return postgres.Sticker{}, invalid("sticker_id is not an available sticker")
+	}
+	if st.PackOwnerID != nil && *st.PackOwnerID != senderID {
+		seen, err := s.d.Store.Stickers().Installation(ctx, senderID, st.PackID)
+		if err != nil {
+			return postgres.Sticker{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
+		}
+		if seen == nil {
+			return postgres.Sticker{}, invalid("sticker_id is not an available sticker")
+		}
 	}
 	return st, nil
 }

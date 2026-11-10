@@ -95,6 +95,21 @@ one is retired; messages that sent the old one keep showing it.
 Packs with `default: true` are in every user's panel until the user removes them (`user_sticker_packs`).
 `user_recent_stickers` keeps the last 20 stickers each user sent.
 
+Users make their own packs. The client crops, cuts out and draws on the image itself and uploads the finished picture
+with `purpose: sticker`: a PNG, JPEG or still WebP of at most 5 MB. The server decodes it (dropping all metadata),
+fits it into 512 x 512 px with a transparent border and encodes a WebP with ffmpeg (a PNG when ffmpeg is missing);
+the result must be at most 512 KB. Until the image is added to a pack only its uploader can load it, and an image
+no pack uses is collected like any other unused upload. A user has at most 50 packs of at most 120 stickers; only
+the owner changes a pack, and deleting a pack or a sticker only marks it deleted, so sent stickers keep showing.
+Every user pack has a random `slug`, its share link, and pack IDs are not secret, so a user pack is served by
+its ID (preview, add, report, sending its stickers) only to its owner and to users who opened its link before
+(`user_sticker_packs` remembers them with `installed = false`). `Sticker.pack_slug` carries the link, so whoever
+receives a sticker can open its pack. Deleting an account deletes its packs.
+
+Reports (`sticker_pack_reports`, one per user and pack, at most 20 per user a day) hide a pack after 5 different
+users reported it: `hidden_at` takes it out of every panel but its owner's, it cannot be added, and stickers cannot
+be sent from it. `worker unhide-sticker-pack <pack_id>` restores a pack and clears its reports.
+
 ## Settings
 
 | Variable | Default | |

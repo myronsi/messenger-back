@@ -276,6 +276,15 @@ type StickerPack struct {
 	IsDefault  bool
 	DeletedAt  *time.Time
 	CreatedAt  time.Time
+	Slug       *string
+	HiddenAt   *time.Time
+}
+
+type StickerPackReport struct {
+	PackID     int64
+	ReporterID int64
+	Reason     string
+	CreatedAt  time.Time
 }
 
 type User struct {

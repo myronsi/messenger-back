@@ -68,14 +68,28 @@ func (s *Service) livePack(ctx context.Context, packID int64) (postgres.StickerP
 	return p, nil
 }
 
-func (s *Service) Pack(ctx context.Context, userID, packID int64) (Pack, error) {
+func (s *Service) openPack(ctx context.Context, userID, packID int64) (postgres.StickerPack, *bool, error) {
 	p, err := s.livePack(ctx, packID)
 	if err != nil {
-		return Pack{}, err
+		return p, nil, err
+	}
+	if !visible(p, userID) {
+		return p, nil, ErrNotFound
 	}
 	installed, err := s.store.Installation(ctx, userID, packID)
 	if err != nil {
-		return Pack{}, unavailable(err)
+		return p, nil, unavailable(err)
+	}
+	if p.BuiltinKey == nil && !IsMine(p, userID) && installed == nil {
+		return p, nil, ErrNotFound
+	}
+	return p, installed, nil
+}
+
+func (s *Service) Pack(ctx context.Context, userID, packID int64) (Pack, error) {
+	p, installed, err := s.openPack(ctx, userID, packID)
+	if err != nil {
+		return Pack{}, err
 	}
 	items, err := s.store.PackStickers(ctx, []int64{packID})
 	if err != nil {
@@ -89,7 +103,7 @@ func (s *Service) Pack(ctx context.Context, userID, packID int64) (Pack, error) 
 }
 
 func (s *Service) SetInstalled(ctx context.Context, userID, packID int64, installed bool) error {
-	if _, err := s.livePack(ctx, packID); err != nil {
+	if _, _, err := s.openPack(ctx, userID, packID); err != nil {
 		return err
 	}
 	if err := s.store.SetInstalled(ctx, userID, packID, installed); err != nil {

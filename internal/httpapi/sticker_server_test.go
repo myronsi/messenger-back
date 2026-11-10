@@ -4,10 +4,14 @@ import (
 	"context"
 	"io/fs"
 	"net/http"
+	"strconv"
 	"testing"
 	"testing/fstest"
 
+	"github.com/google/uuid"
+
 	"github.com/myronsi/messenger-back/internal/stickers"
+	"github.com/myronsi/messenger-back/internal/store/postgres"
 )
 
 func seedPartyPack(t *testing.T, e *chatEnv) {
@@ -130,5 +134,139 @@ func TestStickersOverHTTP(t *testing.T) {
 	media := e.do(t, request{method: http.MethodGet, path: "/chats/" + chat + "/media?kind=visual", token: alice.access})
 	if media.Code != http.StatusOK || len(items2(t, media)) != 0 {
 		t.Fatalf("stickers are not chat media: %d %s", media.Code, media.Body)
+	}
+}
+
+func (e *chatEnv) stickerImage(t *testing.T, s session) string {
+	t.Helper()
+	uid, err := strconv.ParseInt(e.uid(t, s), 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	side := int32(512)
+	a, err := e.store.Attachments().Create(t.Context(), postgres.NewAttachment{
+		UploaderID: &uid, Purpose: postgres.PurposeSticker, Kind: "image", Filename: "sticker.webp",
+		StorageKey: "stickers/" + uuid.NewString(), MimeType: "image/webp", Size: 100, Width: &side, Height: &side,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return a.ID.String()
+}
+
+func TestOwnStickerPacksOverHTTP(t *testing.T) {
+	e := newChatEnv(t)
+	alice, bob := e.register(t, "alice"), e.register(t, "bob")
+
+	created := e.do(t, request{method: http.MethodPost, path: "/stickers/packs", token: alice.access, body: map[string]any{"title": "Cats"}})
+	if created.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", created.Code, created.Body)
+	}
+	pack := created.json()
+	packID, slug := pack["id"].(string), pack["slug"].(string)
+	if pack["is_mine"] != true || pack["is_installed"] != true || pack["is_official"] != false || pack["is_hidden"] != false || pack["owner_id"] != e.uid(t, alice) {
+		t.Fatalf("new pack: %v", pack)
+	}
+	if r := e.do(t, request{method: http.MethodPost, path: "/stickers/packs", token: alice.access, body: map[string]any{"title": ""}}); r.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("empty title: %d %s", r.Code, r.Body)
+	}
+
+	base := "/stickers/packs/" + packID
+	add := func(s session, emoji string) reply {
+		return e.do(t, request{method: http.MethodPost, path: base + "/stickers", token: s.access,
+			body: map[string]any{"attachment_id": e.stickerImage(t, s), "emoji": emoji}})
+	}
+	first := add(alice, "🐱")
+	if first.Code != http.StatusCreated || first.json()["emoji"] != "🐱" || first.json()["pack_id"] != packID {
+		t.Fatalf("add: %d %s", first.Code, first.Body)
+	}
+	second := add(alice, "😺")
+	if r := add(bob, "🐶"); r.Code != http.StatusForbidden {
+		t.Fatalf("bob adds: %d %s", r.Code, r.Body)
+	}
+	firstID, secondID := first.json()["id"].(string), second.json()["id"].(string)
+
+	if r := e.do(t, request{method: http.MethodPut, path: base + "/order", token: alice.access, body: map[string]any{"sticker_ids": []string{secondID}}}); r.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("partial order: %d %s", r.Code, r.Body)
+	}
+	if r := e.do(t, request{method: http.MethodPut, path: base + "/order", token: alice.access, body: map[string]any{"sticker_ids": []string{secondID, firstID}}}); r.Code != http.StatusNoContent {
+		t.Fatalf("order: %d %s", r.Code, r.Body)
+	}
+	if r := e.do(t, request{method: http.MethodPatch, path: base + "/stickers/" + firstID, token: alice.access, body: map[string]any{"emoji": "😼"}}); r.Code != http.StatusOK || r.json()["emoji"] != "😼" {
+		t.Fatalf("emoji: %d %s", r.Code, r.Body)
+	}
+	if r := e.do(t, request{method: http.MethodPatch, path: base, token: bob.access, body: map[string]any{"title": "Mine"}}); r.Code != http.StatusForbidden {
+		t.Fatalf("bob renames: %d %s", r.Code, r.Body)
+	}
+	if r := e.do(t, request{method: http.MethodPatch, path: base, token: alice.access, body: map[string]any{"title": "Cats 2"}}); r.Code != http.StatusOK || r.json()["title"] != "Cats 2" {
+		t.Fatalf("rename: %d %s", r.Code, r.Body)
+	}
+
+	if r := e.do(t, request{method: http.MethodGet, path: base, token: bob.access}); r.Code != http.StatusNotFound {
+		t.Fatalf("bob guesses the pack ID: %d %s", r.Code, r.Body)
+	}
+	if r := e.do(t, request{method: http.MethodPut, path: base + "/installation", token: bob.access}); r.Code != http.StatusNotFound {
+		t.Fatalf("bob adds by a guessed ID: %d %s", r.Code, r.Body)
+	}
+	link := e.do(t, request{method: http.MethodGet, path: "/stickers/links/" + slug, token: bob.access})
+	if link.Code != http.StatusOK || link.json()["is_mine"] != false || link.json()["is_installed"] != false {
+		t.Fatalf("bob opens the link: %d %s", link.Code, link.Body)
+	}
+	got := link.json()["stickers"].([]any)
+	if len(got) != 2 || got[0].(map[string]any)["id"] != secondID {
+		t.Fatalf("order seen by bob: %v", got)
+	}
+	if r := e.do(t, request{method: http.MethodGet, path: "/stickers/links/AAAAAAAAAAAA", token: bob.access}); r.Code != http.StatusNotFound {
+		t.Fatalf("unknown link: %d", r.Code)
+	}
+	if r := e.do(t, request{method: http.MethodGet, path: base, token: bob.access}); r.Code != http.StatusOK {
+		t.Fatalf("after the link bob finds it by ID: %d %s", r.Code, r.Body)
+	}
+	if r := e.do(t, request{method: http.MethodPut, path: base + "/installation", token: bob.access}); r.Code != http.StatusNoContent {
+		t.Fatalf("bob adds the pack: %d", r.Code)
+	}
+	carol := e.register(t, "carol")
+	chat := e.create(t, bob, e.uid(t, carol), "").json()["id"].(string)
+	sent := e.do(t, request{method: http.MethodPost, path: "/chats/" + chat + "/messages", token: bob.access,
+		body: map[string]any{"client_temp_id": "own-1", "type": "sticker", "sticker_id": firstID}})
+	if sent.Code != http.StatusCreated || sent.json()["sticker"].(map[string]any)["pack_slug"] != slug {
+		t.Fatalf("bob sends alice's sticker with its pack link: %d %s", sent.Code, sent.Body)
+	}
+	back := e.create(t, carol, e.uid(t, alice), "").json()["id"].(string)
+	if r := e.do(t, request{method: http.MethodPost, path: "/chats/" + back + "/messages", token: carol.access,
+		body: map[string]any{"client_temp_id": "guess-1", "type": "sticker", "sticker_id": secondID}}); r.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("carol sends a sticker of a pack she never opened: %d %s", r.Code, r.Body)
+	}
+
+	if r := e.do(t, request{method: http.MethodPost, path: base + "/report", token: alice.access, body: map[string]any{"reason": "spam"}}); r.Code != http.StatusForbidden {
+		t.Fatalf("the owner reports: %d %s", r.Code, r.Body)
+	}
+	if r := e.do(t, request{method: http.MethodPost, path: base + "/report", token: bob.access, body: map[string]any{"reason": "spam"}}); r.Code != http.StatusNoContent {
+		t.Fatalf("bob reports: %d %s", r.Code, r.Body)
+	}
+
+	owned := packItems(t, e.do(t, request{method: http.MethodGet, path: "/stickers/packs?owned=true", token: alice.access}))
+	if len(owned) != 1 || owned[0]["id"] != packID {
+		t.Fatalf("owned: %v", owned)
+	}
+	if o := packItems(t, e.do(t, request{method: http.MethodGet, path: "/stickers/packs?owned=true", token: bob.access})); len(o) != 0 {
+		t.Fatalf("bob owns nothing: %v", o)
+	}
+
+	if r := e.do(t, request{method: http.MethodDelete, path: base + "/stickers/" + firstID, token: alice.access}); r.Code != http.StatusNoContent {
+		t.Fatalf("delete sticker: %d %s", r.Code, r.Body)
+	}
+	history, _ := e.history(t, carol, chat, "")
+	if len(history) != 1 || history[0]["sticker"] == nil {
+		t.Fatalf("a sent sticker stays after it leaves the pack: %v", history)
+	}
+	if r := e.do(t, request{method: http.MethodDelete, path: base, token: bob.access}); r.Code != http.StatusForbidden {
+		t.Fatalf("bob deletes: %d", r.Code)
+	}
+	if r := e.do(t, request{method: http.MethodDelete, path: base, token: alice.access}); r.Code != http.StatusNoContent {
+		t.Fatalf("delete pack: %d %s", r.Code, r.Body)
+	}
+	if r := e.do(t, request{method: http.MethodGet, path: "/stickers/links/" + slug, token: bob.access}); r.Code != http.StatusNotFound {
+		t.Fatalf("link of a deleted pack: %d", r.Code)
 	}
 }

@@ -57,6 +57,78 @@ func (s *Server) RemoveStickerPack(w http.ResponseWriter, r *http.Request, packI
 	s.stickers.RemoveStickerPack(w, r, packID, params)
 }
 
+func (s *Server) GetStickerPackByLink(w http.ResponseWriter, r *http.Request, slug StickerPackSlug, params GetStickerPackByLinkParams) {
+	if s.stickers == nil {
+		s.AuthServer.GetStickerPackByLink(w, r, slug, params)
+		return
+	}
+	s.stickers.GetStickerPackByLink(w, r, slug, params)
+}
+
+func (s *Server) CreateStickerPack(w http.ResponseWriter, r *http.Request, params CreateStickerPackParams) {
+	if s.stickers == nil {
+		s.AuthServer.CreateStickerPack(w, r, params)
+		return
+	}
+	s.stickers.CreateStickerPack(w, r, params)
+}
+
+func (s *Server) UpdateStickerPack(w http.ResponseWriter, r *http.Request, packID StickerPackId, params UpdateStickerPackParams) {
+	if s.stickers == nil {
+		s.AuthServer.UpdateStickerPack(w, r, packID, params)
+		return
+	}
+	s.stickers.UpdateStickerPack(w, r, packID, params)
+}
+
+func (s *Server) DeleteStickerPack(w http.ResponseWriter, r *http.Request, packID StickerPackId, params DeleteStickerPackParams) {
+	if s.stickers == nil {
+		s.AuthServer.DeleteStickerPack(w, r, packID, params)
+		return
+	}
+	s.stickers.DeleteStickerPack(w, r, packID, params)
+}
+
+func (s *Server) AddSticker(w http.ResponseWriter, r *http.Request, packID StickerPackId, params AddStickerParams) {
+	if s.stickers == nil {
+		s.AuthServer.AddSticker(w, r, packID, params)
+		return
+	}
+	s.stickers.AddSticker(w, r, packID, params)
+}
+
+func (s *Server) UpdateSticker(w http.ResponseWriter, r *http.Request, packID StickerPackId, stickerID StickerId, params UpdateStickerParams) {
+	if s.stickers == nil {
+		s.AuthServer.UpdateSticker(w, r, packID, stickerID, params)
+		return
+	}
+	s.stickers.UpdateSticker(w, r, packID, stickerID, params)
+}
+
+func (s *Server) DeleteSticker(w http.ResponseWriter, r *http.Request, packID StickerPackId, stickerID StickerId, params DeleteStickerParams) {
+	if s.stickers == nil {
+		s.AuthServer.DeleteSticker(w, r, packID, stickerID, params)
+		return
+	}
+	s.stickers.DeleteSticker(w, r, packID, stickerID, params)
+}
+
+func (s *Server) ReorderStickers(w http.ResponseWriter, r *http.Request, packID StickerPackId, params ReorderStickersParams) {
+	if s.stickers == nil {
+		s.AuthServer.ReorderStickers(w, r, packID, params)
+		return
+	}
+	s.stickers.ReorderStickers(w, r, packID, params)
+}
+
+func (s *Server) ReportStickerPack(w http.ResponseWriter, r *http.Request, packID StickerPackId, params ReportStickerPackParams) {
+	if s.stickers == nil {
+		s.AuthServer.ReportStickerPack(w, r, packID, params)
+		return
+	}
+	s.stickers.ReportStickerPack(w, r, packID, params)
+}
+
 func (s *Server) ListRecentStickers(w http.ResponseWriter, r *http.Request, params ListRecentStickersParams) {
 	if s.stickers == nil {
 		s.AuthServer.ListRecentStickers(w, r, params)

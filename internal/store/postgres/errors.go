@@ -28,6 +28,7 @@ var (
 	ErrNotOwner = errors.New("not the group owner")
 	// ErrOwnerMustTransfer: the owner cannot be removed or demoted; transfer ownership first.
 	ErrOwnerMustTransfer = errors.New("transfer ownership first")
+	ErrLimit             = errors.New("limit reached")
 )
 
 // PostgreSQL error classes that carry a meaning for callers.

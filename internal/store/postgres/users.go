@@ -254,6 +254,9 @@ func (r userRepo) DeleteAccount(ctx context.Context, id int64) (DeletedAccount, 
 				out.LeftGroups = append(out.LeftGroups, chatID)
 			}
 		}
+		if err := q.DeleteStickerPacksOfOwner(ctx, &id); err != nil {
+			return err
+		}
 		_, err = q.DeleteUser(ctx, id)
 		return err
 	})

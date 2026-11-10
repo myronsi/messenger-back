@@ -88,6 +88,13 @@ negative.push(
   ["SendMessageRequest", sendMessage({ type: "file", attachment_id: ATTACHMENT, drawings: drawn({ ...LABEL, points: [0, 0] }) })],
   ["SendMessageRequest", sendMessage({ type: "file", attachment_id: ATTACHMENT, drawings: drawn({ ...STROKE, color: "red" }) })],
   ["SendMessageRequest", sendMessage({ type: "file", attachment_id: ATTACHMENT, drawings: drawn({ ...STROKE, points: [0, 2] }) })],
+  ["CreateStickerPackRequest", { title: "" }],
+  ["CreateStickerPackRequest", { title: "Cats", owner_id: "1" }],
+  ["AddStickerRequest", { attachment_id: ATTACHMENT }],
+  ["AddStickerRequest", { attachment_id: "5", emoji: "🐱" }],
+  ["ReportStickerPackRequest", { reason: "boring" }],
+  ["StickerPackSlug", "short"],
+  ["StickerPackSlug", "has-a-dash-in"],
 );
 // Compatible MINOR releases add fields to server events; clients must be able to ignore them.
 const positive = [
@@ -98,6 +105,11 @@ const positive = [
   ["SendMessageRequest", sendMessage({ type: "file", attachment_id: ATTACHMENT, reply_to: "7", drawings: drawn(STROKE, LABEL) })],
   ["SendMessageRequest", sendMessage({ type: "voice", attachment_id: ATTACHMENT, content: null })],
   ["SendMessageRequest", sendMessage({ type: "sticker", sticker_id: "9", reply_to: "7" })],
+  ["CreateStickerPackRequest", { title: "Cats" }],
+  ["AddStickerRequest", { attachment_id: ATTACHMENT, emoji: "🐱" }],
+  ["ReorderStickersRequest", { sticker_ids: ["9", "8"] }],
+  ["ReportStickerPackRequest", { reason: "spam" }],
+  ["StickerPackSlug", "AB3XK9QWERTY"],
   ["ServerHelloEvent", { type: "hello", event_id: "1", chat_id: null, new_envelope_field: 1, data: { api_version: "2.1.0", min_client_api_version: "2.0.0", user_id: "1", new_field: true } }],
 ];
 for (const [title, payload] of positive) {
