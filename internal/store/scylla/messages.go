@@ -110,6 +110,7 @@ type MessageRepository interface {
 	Insert(ctx context.Context, m Message) error
 	// Get returns a message of the chat, or ErrNotFound.
 	Get(ctx context.Context, chatID, messageID int64) (Message, error)
+	GetMany(ctx context.Context, chatID int64, messageIDs []int64) (map[int64]Message, error)
 	// Locate returns the chat of a message, or ErrNotFound.
 	Locate(ctx context.Context, messageID int64) (chatID int64, err error)
 	Page(ctx context.Context, q PageQuery) (Page, error)
@@ -121,6 +122,7 @@ type MessageRepository interface {
 	Hide(ctx context.Context, userID, chatID, messageID int64, reason string) error
 	// Hidden reports whether the message is hidden for the user.
 	Hidden(ctx context.Context, userID, chatID, messageID int64) (bool, error)
+	HiddenOf(ctx context.Context, userID, chatID int64, messageIDs []int64) (map[int64]bool, error)
 	// Unhide shows a message hidden as not delivered once it is delivered; true when it was hidden so.
 	Unhide(ctx context.Context, userID, chatID, messageID int64) (bool, error)
 	// UnhideAll shows the message to every user it was hidden from as not delivered and returns them.

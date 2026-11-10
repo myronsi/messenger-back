@@ -38,9 +38,11 @@ type Doc struct {
 // Messages is what the indexer and the searcher read from the message store.
 type Messages interface {
 	Get(ctx context.Context, chatID, messageID int64) (scylla.Message, error)
+	GetMany(ctx context.Context, chatID int64, messageIDs []int64) (map[int64]scylla.Message, error)
 	Page(ctx context.Context, q scylla.PageQuery) (scylla.Page, error)
 	DeletedForMe(ctx context.Context, chatID int64) (map[int64][]int64, error)
 	Hidden(ctx context.Context, userID, chatID, messageID int64) (bool, error)
+	HiddenOf(ctx context.Context, userID, chatID int64, messageIDs []int64) (map[int64]bool, error)
 }
 
 // Attachments names the files of messages.
