@@ -42,7 +42,8 @@ forwarding links it into further chats. The server allows a download to:
 - a member of a chat in which a message using it is **visible to them** (the message exists, is not deleted for
   everyone and not hidden for them);
 - for a group avatar, the members of the group (user avatars go through the avatar endpoints below);
-- for a v1 attachment (which belongs to one chat), the members of that chat.
+- for a v1 attachment (which belongs to one chat), the members of that chat;
+- for a sticker image (purpose `sticker`), every signed-in user, so a sticker pack can be previewed from a chat.
 
 Everyone else gets `404`, so the existence of a file is not revealed.
 
@@ -71,12 +72,28 @@ instead of the request, read and write timeouts, so large files on slow connecti
 
 ## Cleanup
 
-The worker deletes uploads that nothing uses (no message link, not an avatar, not in an avatar history) once they are
+The worker deletes uploads that nothing uses (no message link, not an avatar, not in an avatar history, not a sticker) once they are
 a day old (`media.UnusedAfter`), first the row and then the objects, every hour. The row is locked first and the
 references are checked in a statement of their own, so a message that links the upload at that moment either
 keeps it (the collector waits for it and sees the link) or fails to send (the collector was first). Deleting
 a chat removes its links, so its files become unused and are collected the same way. Deleting a message for
 everyone removes its link; a forwarded copy has a link of its own and keeps the file.
+
+## Stickers
+
+Sticker packs live in `sticker_packs` and `stickers`; each sticker points at an attachment of purpose `sticker`
+(stored under `stickers/<uuid>`). A sticker message stores `sticker_id` and the sticker's `attachment_id` in
+ScyllaDB but is never linked in `attachment_links`, so stickers do not show up in a chat's media lists and are
+never collected.
+
+Built-in packs are embedded in the binary (`internal/stickers/builtin/<key>/`: `pack.json` with `key`, `title`,
+`default` and the ordered `stickers` with `key` and `emoji`, plus one `<key>.webp` per sticker of at most 512 px).
+The worker seeds them on start and retries every minute until it succeeds: new stickers are uploaded, changed
+emoji and order are updated, and stickers removed from the manifest are marked deleted (sent ones keep showing).
+A sticker is stored under its key and a hash of its image, so a changed image becomes a new sticker and the old
+one is retired; messages that sent the old one keep showing it.
+Packs with `default: true` are in every user's panel until the user removes them (`user_sticker_packs`).
+`user_recent_stickers` keeps the last 20 stickers each user sent.
 
 ## Settings
 

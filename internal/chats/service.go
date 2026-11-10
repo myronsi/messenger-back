@@ -54,6 +54,7 @@ type Store interface {
 	Users() postgres.UserRepository
 	Approvals() postgres.ApprovalRepository
 	Attachments() postgres.AttachmentRepository
+	Stickers() postgres.StickerRepository
 }
 
 // MessageStore is the part of the message store the chat list reads.
@@ -142,6 +143,7 @@ type LastMessage struct {
 	Message    scylla.Message
 	Sender     *users.View
 	Attachment *postgres.Attachment
+	Sticker    *postgres.Sticker
 	// ReadBy are the other members who read it (direct chats, with read receipts on).
 	ReadBy []postgres.ReadMarker
 }
@@ -329,6 +331,20 @@ func (s *Service) render(ctx context.Context, viewer int64, entries []postgres.C
 	}
 
 	receipts := s.receiptsFor(ctx, viewer, entries, lasts, peerOf)
+	var stickerIDs []int64
+	for _, m := range lasts {
+		if m != nil && m.StickerID != nil && !m.Deleted {
+			stickerIDs = append(stickerIDs, *m.StickerID)
+		}
+	}
+	stickers := map[int64]postgres.Sticker{}
+	if len(stickerIDs) > 0 {
+		if found, err := s.d.Store.Stickers().Stickers(ctx, dedupe(stickerIDs)); err == nil {
+			stickers = found
+		} else {
+			s.d.Log.WarnContext(ctx, "last message stickers", "error", err)
+		}
+	}
 	for i := range views {
 		e := views[i].Entry
 		if m, ok := peerOf[e.Chat.ID]; ok {
@@ -349,6 +365,11 @@ func (s *Service) render(ctx context.Context, viewer int64, entries []postgres.C
 		if m.AttachmentID != nil && !m.Deleted {
 			if a, err := s.d.Store.Attachments().Get(ctx, uuid.UUID(*m.AttachmentID)); err == nil {
 				last.Attachment = &a
+			}
+		}
+		if m.StickerID != nil && !m.Deleted {
+			if st, ok := stickers[*m.StickerID]; ok {
+				last.Sticker = &st
 			}
 		}
 		if r, ok := receipts[e.Chat.ID]; ok {

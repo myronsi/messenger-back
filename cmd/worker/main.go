@@ -102,6 +102,7 @@ func run() error {
 	}
 	mediaSvc := media.NewService(media.Options{Storage: storage, Attachments: pg.Attachments(), Log: log})
 	wg.Go(func() { collectUploads(bg, log, mediaSvc, maintenanceEvery) })
+	wg.Go(func() { seedStickers(bg, log, pg, storage) })
 	// Elasticsearch being away must not stop the other consumers: the template and first index are set up as
 	// soon as it answers, and index writes fail (and are retried) until then.
 	if cfg.Search.ReconcileEvery > 0 {

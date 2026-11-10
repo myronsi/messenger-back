@@ -52,6 +52,7 @@ type Publisher interface {
 // Store is the PostgreSQL side the fan-out reads.
 type Store interface {
 	Attachments() postgres.AttachmentRepository
+	Stickers() postgres.StickerRepository
 	Social() postgres.SocialRepository
 	Users() postgres.UserRepository
 }
@@ -175,10 +176,11 @@ func (f *Fanout) renderMessage(ctx context.Context, m scylla.Message, recipients
 		}
 	}
 	drawings := f.drawings(ctx, m)
+	sticker := f.sticker(ctx, m)
 	replies := f.replyOrigins(ctx, m, recipients)
 	out := make(map[int64]httpapi.Message, len(recipients))
 	for _, uid := range recipients {
-		parts := httpapi.MessageParts{Attachment: att, Album: album, Reactions: reactions, BasePath: f.basePath, Reply: replies[uid], Drawings: drawings}
+		parts := httpapi.MessageParts{Attachment: att, Album: album, Reactions: reactions, BasePath: f.basePath, Reply: replies[uid], Drawings: drawings, Sticker: sticker}
 		if m.SenderID != nil {
 			v, ok := senders[uid]
 			if !ok {
@@ -493,4 +495,20 @@ func (f *Fanout) CallKeys(ctx context.Context, c postgres.Call, recipient int64,
 		return
 	}
 	f.publish(ctx, map[int64]frame{recipient: {Kind: kindEvent, ChatID: c.ChatID, Session: &session, Event: raw}})
+}
+
+func (f *Fanout) sticker(ctx context.Context, m scylla.Message) *postgres.Sticker {
+	ids := httpapi.StickerIDs(m)
+	if len(ids) == 0 {
+		return nil
+	}
+	found, err := f.store.Stickers().Stickers(ctx, ids)
+	if err != nil {
+		f.log.WarnContext(ctx, "render sticker", "error", err)
+		return nil
+	}
+	if st, ok := found[ids[0]]; ok {
+		return &st
+	}
+	return nil
 }

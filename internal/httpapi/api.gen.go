@@ -490,16 +490,19 @@ func (e MediaKind) Valid() bool {
 
 // Defines values for MessageType.
 const (
-	MessageTypeFile   MessageType = "file"
-	MessageTypeSystem MessageType = "system"
-	MessageTypeText   MessageType = "text"
-	MessageTypeVoice  MessageType = "voice"
+	MessageTypeFile    MessageType = "file"
+	MessageTypeSticker MessageType = "sticker"
+	MessageTypeSystem  MessageType = "system"
+	MessageTypeText    MessageType = "text"
+	MessageTypeVoice   MessageType = "voice"
 )
 
 // Valid indicates whether the value is a known member of the MessageType enum.
 func (e MessageType) Valid() bool {
 	switch e {
 	case MessageTypeFile:
+		return true
+	case MessageTypeSticker:
 		return true
 	case MessageTypeSystem:
 		return true
@@ -694,15 +697,18 @@ func (e SearchVisibility) Valid() bool {
 
 // Defines values for SendMessageRequestType.
 const (
-	SendMessageRequestTypeFile  SendMessageRequestType = "file"
-	SendMessageRequestTypeText  SendMessageRequestType = "text"
-	SendMessageRequestTypeVoice SendMessageRequestType = "voice"
+	SendMessageRequestTypeFile    SendMessageRequestType = "file"
+	SendMessageRequestTypeSticker SendMessageRequestType = "sticker"
+	SendMessageRequestTypeText    SendMessageRequestType = "text"
+	SendMessageRequestTypeVoice   SendMessageRequestType = "voice"
 )
 
 // Valid indicates whether the value is a known member of the SendMessageRequestType enum.
 func (e SendMessageRequestType) Valid() bool {
 	switch e {
 	case SendMessageRequestTypeFile:
+		return true
+	case SendMessageRequestTypeSticker:
 		return true
 	case SendMessageRequestTypeText:
 		return true
@@ -877,15 +883,18 @@ func (e DeleteMessageParamsScope) Valid() bool {
 
 // Defines values for SearchAllMessagesParamsType.
 const (
-	SearchAllMessagesParamsTypeFile  SearchAllMessagesParamsType = "file"
-	SearchAllMessagesParamsTypeText  SearchAllMessagesParamsType = "text"
-	SearchAllMessagesParamsTypeVoice SearchAllMessagesParamsType = "voice"
+	SearchAllMessagesParamsTypeFile    SearchAllMessagesParamsType = "file"
+	SearchAllMessagesParamsTypeSticker SearchAllMessagesParamsType = "sticker"
+	SearchAllMessagesParamsTypeText    SearchAllMessagesParamsType = "text"
+	SearchAllMessagesParamsTypeVoice   SearchAllMessagesParamsType = "voice"
 )
 
 // Valid indicates whether the value is a known member of the SearchAllMessagesParamsType enum.
 func (e SearchAllMessagesParamsType) Valid() bool {
 	switch e {
 	case SearchAllMessagesParamsTypeFile:
+		return true
+	case SearchAllMessagesParamsTypeSticker:
 		return true
 	case SearchAllMessagesParamsTypeText:
 		return true
@@ -1552,7 +1561,7 @@ type Message struct {
 	// ClientTempId Client-generated ID that makes sending idempotent and ties acks and errors to the send.
 	ClientTempId *ClientTempId `json:"client_temp_id,omitempty"`
 
-	// Content Text, or the caption of a file; `null` when deleted.
+	// Content Text, the caption of a file, or the emoji of a sticker; `null` when deleted.
 	Content       *string        `json:"content"`
 	CreatedAt     Timestamp      `json:"created_at"`
 	EditedAt      *Timestamp     `json:"edited_at"`
@@ -1574,6 +1583,10 @@ type Message struct {
 
 	// Sender `null` for system messages.
 	Sender *User `json:"sender"`
+
+	// Sticker The sticker of a `sticker` message; absent for other types and when deleted. `attachment` carries the
+	// same image, so older clients show a sticker as a picture.
+	Sticker *Sticker `json:"sticker,omitempty"`
 
 	// SystemEvent What a `system` message records; set on system messages only, whose `content` is then `null`. The names
 	// are the display names at the time of the event. `target` fields are set for `member_added` and
@@ -2044,9 +2057,17 @@ type SendMessageRequest struct {
 	// Drawings Drawings on images of a `file` message, at most one per image. Each `attachment_id` must be one of the
 	// message's attachments. An image with a drawing may also be an image of the message in `reply_to`
 	// instead of the sender's own upload: that is how a member draws on an image someone sent.
-	Drawings *[]AttachmentDrawing   `json:"drawings,omitempty"`
-	ReplyTo  *Id                    `json:"reply_to,omitempty"`
-	Type     SendMessageRequestType `json:"type"`
+	Drawings *[]AttachmentDrawing `json:"drawings,omitempty"`
+	ReplyTo  *Id                  `json:"reply_to,omitempty"`
+
+	// StickerId The sticker of a `sticker` message, from any pack that is not deleted. Sticker messages have no content,
+	// attachment or drawings; the server sets `content` to the sticker's emoji. Send stickers with this
+	// operation; the WebSocket `message` event does not take them.
+	//
+	//
+	// Examples: 7217400317439950848
+	StickerId *Id                    `json:"sticker_id,omitempty"`
+	Type      SendMessageRequestType `json:"type"`
 }
 
 // SendMessageRequestType defines model for SendMessageRequest.Type.
@@ -2086,6 +2107,51 @@ type SetRecoveryEmail struct {
 type StartCallRequest struct {
 	// ClientRequestId Idempotency key chosen by the client.
 	ClientRequestId openapi_types.UUID `json:"client_request_id"`
+}
+
+// Sticker One sticker of a pack. `image` is a WebP or PNG of at most 512 x 512 px with transparency, animated when
+// `is_animated` is true; any signed-in user can load it. Clients show it without a bubble.
+type Sticker struct {
+	// Emoji The emoji the sticker stands for, for previews, notifications and search.
+	Emoji string `json:"emoji"`
+
+	// Id Decimal ID as a string (Snowflake IDs exceed 2^53).
+	//
+	// Examples: 7217400317439950848
+	Id         Id         `json:"id"`
+	Image      Attachment `json:"image"`
+	IsAnimated bool       `json:"is_animated"`
+
+	// PackId Decimal ID as a string (Snowflake IDs exceed 2^53).
+	//
+	// Examples: 7217400317439950848
+	PackId Id `json:"pack_id"`
+}
+
+// StickerList defines model for StickerList.
+type StickerList struct {
+	Items []Sticker `json:"items"`
+}
+
+// StickerPack defines model for StickerPack.
+type StickerPack struct {
+	// Id Decimal ID as a string (Snowflake IDs exceed 2^53).
+	//
+	// Examples: 7217400317439950848
+	Id Id `json:"id"`
+
+	// IsInstalled The pack is in the user's sticker panel.
+	IsInstalled bool `json:"is_installed"`
+
+	// IsOfficial A built-in pack of the messenger, not made by a user.
+	IsOfficial bool      `json:"is_official"`
+	Stickers   []Sticker `json:"stickers"`
+	Title      string    `json:"title"`
+}
+
+// StickerPackList defines model for StickerPackList.
+type StickerPackList struct {
+	Items []StickerPack `json:"items"`
 }
 
 // SystemEvent What a `system` message records; set on system messages only, whose `content` is then `null`. The names
@@ -2316,6 +2382,11 @@ type RequestId = Id
 
 // SessionId defines model for SessionId.
 type SessionId = openapi_types.UUID
+
+// StickerPackId Decimal ID as a string (Snowflake IDs exceed 2^53).
+//
+// Examples: 7217400317439950848
+type StickerPackId = Id
 
 // UserId Decimal ID as a string (Snowflake IDs exceed 2^53).
 //
@@ -3388,6 +3459,51 @@ type SearchAllMessagesParams struct {
 // SearchAllMessagesParamsType defines parameters for SearchAllMessages.
 type SearchAllMessagesParamsType string
 
+// ListStickerPacksParams defines parameters for ListStickerPacks.
+type ListStickerPacksParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// GetStickerPackParams defines parameters for GetStickerPack.
+type GetStickerPackParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// RemoveStickerPackParams defines parameters for RemoveStickerPack.
+type RemoveStickerPackParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// AddStickerPackParams defines parameters for AddStickerPack.
+type AddStickerPackParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// ListRecentStickersParams defines parameters for ListRecentStickers.
+type ListRecentStickersParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
 // GetUserByUsernameParams defines parameters for GetUserByUsername.
 type GetUserByUsernameParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
@@ -4287,6 +4403,21 @@ type ServerInterface interface {
 	// SearchAllMessages Search messages in all my chats
 	// (GET /search/messages)
 	SearchAllMessages(w http.ResponseWriter, r *http.Request, params SearchAllMessagesParams)
+	// ListStickerPacks The user's sticker packs
+	// (GET /stickers/packs)
+	ListStickerPacks(w http.ResponseWriter, r *http.Request, params ListStickerPacksParams)
+	// GetStickerPack A sticker pack
+	// (GET /stickers/packs/{pack_id})
+	GetStickerPack(w http.ResponseWriter, r *http.Request, packId StickerPackId, params GetStickerPackParams)
+	// RemoveStickerPack Remove a sticker pack from the user's panel
+	// (DELETE /stickers/packs/{pack_id}/installation)
+	RemoveStickerPack(w http.ResponseWriter, r *http.Request, packId StickerPackId, params RemoveStickerPackParams)
+	// AddStickerPack Add a sticker pack to the user's panel
+	// (PUT /stickers/packs/{pack_id}/installation)
+	AddStickerPack(w http.ResponseWriter, r *http.Request, packId StickerPackId, params AddStickerPackParams)
+	// ListRecentStickers Stickers the user sent recently
+	// (GET /stickers/recent)
+	ListRecentStickers(w http.ResponseWriter, r *http.Request, params ListRecentStickersParams)
 	// GetUserByUsername Profile by username
 	// (GET /usernames/{username})
 	GetUserByUsername(w http.ResponseWriter, r *http.Request, username Username, params GetUserByUsernameParams)
@@ -11664,6 +11795,333 @@ func (siw *ServerInterfaceWrapper) SearchAllMessages(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
+// ListStickerPacks operation middleware
+func (siw *ServerInterfaceWrapper) ListStickerPacks(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListStickerPacksParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListStickerPacks(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetStickerPack operation middleware
+func (siw *ServerInterfaceWrapper) GetStickerPack(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "pack_id" -------------
+	var packId StickerPackId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "pack_id", r.PathValue("pack_id"), &packId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pack_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetStickerPackParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetStickerPack(w, r, packId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RemoveStickerPack operation middleware
+func (siw *ServerInterfaceWrapper) RemoveStickerPack(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "pack_id" -------------
+	var packId StickerPackId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "pack_id", r.PathValue("pack_id"), &packId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pack_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RemoveStickerPackParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RemoveStickerPack(w, r, packId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AddStickerPack operation middleware
+func (siw *ServerInterfaceWrapper) AddStickerPack(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "pack_id" -------------
+	var packId StickerPackId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "pack_id", r.PathValue("pack_id"), &packId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pack_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params AddStickerPackParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddStickerPack(w, r, packId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListRecentStickers operation middleware
+func (siw *ServerInterfaceWrapper) ListRecentStickers(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListRecentStickersParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListRecentStickers(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetUserByUsername operation middleware
 func (siw *ServerInterfaceWrapper) GetUserByUsername(w http.ResponseWriter, r *http.Request) {
 
@@ -12481,6 +12939,11 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/groups/{chat_id}/transfer-owner", wrapper.TransferGroupOwnership)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/groups/{chat_id}/leave", wrapper.LeaveGroup)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/groups/{chat_id}/role-log", wrapper.GetGroupRoleLog)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/stickers/packs", wrapper.ListStickerPacks)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/stickers/packs/{pack_id}", wrapper.GetStickerPack)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/stickers/packs/{pack_id}/installation", wrapper.RemoveStickerPack)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/stickers/packs/{pack_id}/installation", wrapper.AddStickerPack)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/stickers/recent", wrapper.ListRecentStickers)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/link-preview", wrapper.GetLinkPreview)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/link-preview/image", wrapper.GetLinkPreviewImage)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/notifications", wrapper.GetNotificationSettings)
@@ -24992,6 +25455,395 @@ func (response SearchAllMessages429ApplicationProblemPlusJSONResponse) VisitSear
 	return err
 }
 
+type ListStickerPacksRequestObject struct {
+	Params ListStickerPacksParams
+}
+
+type ListStickerPacksResponseObject interface {
+	VisitListStickerPacksResponse(w http.ResponseWriter) error
+}
+
+type ListStickerPacks200JSONResponse StickerPackList
+
+func (response ListStickerPacks200JSONResponse) VisitListStickerPacksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListStickerPacks400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response ListStickerPacks400ApplicationProblemPlusJSONResponse) VisitListStickerPacksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListStickerPacks401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ListStickerPacks401ApplicationProblemPlusJSONResponse) VisitListStickerPacksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListStickerPacks426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response ListStickerPacks426ApplicationProblemPlusJSONResponse) VisitListStickerPacksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetStickerPackRequestObject struct {
+	PackId StickerPackId `json:"pack_id"`
+	Params GetStickerPackParams
+}
+
+type GetStickerPackResponseObject interface {
+	VisitGetStickerPackResponse(w http.ResponseWriter) error
+}
+
+type GetStickerPack200JSONResponse StickerPack
+
+func (response GetStickerPack200JSONResponse) VisitGetStickerPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetStickerPack400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response GetStickerPack400ApplicationProblemPlusJSONResponse) VisitGetStickerPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetStickerPack401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response GetStickerPack401ApplicationProblemPlusJSONResponse) VisitGetStickerPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetStickerPack404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetStickerPack404ApplicationProblemPlusJSONResponse) VisitGetStickerPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetStickerPack426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetStickerPack426ApplicationProblemPlusJSONResponse) VisitGetStickerPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveStickerPackRequestObject struct {
+	PackId StickerPackId `json:"pack_id"`
+	Params RemoveStickerPackParams
+}
+
+type RemoveStickerPackResponseObject interface {
+	VisitRemoveStickerPackResponse(w http.ResponseWriter) error
+}
+
+type RemoveStickerPack204Response struct {
+}
+
+func (response RemoveStickerPack204Response) VisitRemoveStickerPackResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type RemoveStickerPack400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response RemoveStickerPack400ApplicationProblemPlusJSONResponse) VisitRemoveStickerPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveStickerPack401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response RemoveStickerPack401ApplicationProblemPlusJSONResponse) VisitRemoveStickerPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveStickerPack404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response RemoveStickerPack404ApplicationProblemPlusJSONResponse) VisitRemoveStickerPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveStickerPack426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response RemoveStickerPack426ApplicationProblemPlusJSONResponse) VisitRemoveStickerPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddStickerPackRequestObject struct {
+	PackId StickerPackId `json:"pack_id"`
+	Params AddStickerPackParams
+}
+
+type AddStickerPackResponseObject interface {
+	VisitAddStickerPackResponse(w http.ResponseWriter) error
+}
+
+type AddStickerPack204Response struct {
+}
+
+func (response AddStickerPack204Response) VisitAddStickerPackResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type AddStickerPack400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response AddStickerPack400ApplicationProblemPlusJSONResponse) VisitAddStickerPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddStickerPack401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response AddStickerPack401ApplicationProblemPlusJSONResponse) VisitAddStickerPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddStickerPack404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response AddStickerPack404ApplicationProblemPlusJSONResponse) VisitAddStickerPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddStickerPack426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response AddStickerPack426ApplicationProblemPlusJSONResponse) VisitAddStickerPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListRecentStickersRequestObject struct {
+	Params ListRecentStickersParams
+}
+
+type ListRecentStickersResponseObject interface {
+	VisitListRecentStickersResponse(w http.ResponseWriter) error
+}
+
+type ListRecentStickers200JSONResponse StickerList
+
+func (response ListRecentStickers200JSONResponse) VisitListRecentStickersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListRecentStickers400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response ListRecentStickers400ApplicationProblemPlusJSONResponse) VisitListRecentStickersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListRecentStickers401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ListRecentStickers401ApplicationProblemPlusJSONResponse) VisitListRecentStickersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListRecentStickers426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response ListRecentStickers426ApplicationProblemPlusJSONResponse) VisitListRecentStickersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetUserByUsernameRequestObject struct {
 	Username Username `json:"username"`
 	Params   GetUserByUsernameParams
@@ -26147,6 +26999,21 @@ type StrictServerInterface interface {
 	// SearchAllMessages Search messages in all my chats
 	// (GET /search/messages)
 	SearchAllMessages(ctx context.Context, request SearchAllMessagesRequestObject) (SearchAllMessagesResponseObject, error)
+	// ListStickerPacks The user's sticker packs
+	// (GET /stickers/packs)
+	ListStickerPacks(ctx context.Context, request ListStickerPacksRequestObject) (ListStickerPacksResponseObject, error)
+	// GetStickerPack A sticker pack
+	// (GET /stickers/packs/{pack_id})
+	GetStickerPack(ctx context.Context, request GetStickerPackRequestObject) (GetStickerPackResponseObject, error)
+	// RemoveStickerPack Remove a sticker pack from the user's panel
+	// (DELETE /stickers/packs/{pack_id}/installation)
+	RemoveStickerPack(ctx context.Context, request RemoveStickerPackRequestObject) (RemoveStickerPackResponseObject, error)
+	// AddStickerPack Add a sticker pack to the user's panel
+	// (PUT /stickers/packs/{pack_id}/installation)
+	AddStickerPack(ctx context.Context, request AddStickerPackRequestObject) (AddStickerPackResponseObject, error)
+	// ListRecentStickers Stickers the user sent recently
+	// (GET /stickers/recent)
+	ListRecentStickers(ctx context.Context, request ListRecentStickersRequestObject) (ListRecentStickersResponseObject, error)
 	// GetUserByUsername Profile by username
 	// (GET /usernames/{username})
 	GetUserByUsername(ctx context.Context, request GetUserByUsernameRequestObject) (GetUserByUsernameResponseObject, error)
@@ -29569,6 +30436,139 @@ func (sh *strictHandler) SearchAllMessages(w http.ResponseWriter, r *http.Reques
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(SearchAllMessagesResponseObject); ok {
 		if err := validResponse.VisitSearchAllMessagesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListStickerPacks operation middleware
+func (sh *strictHandler) ListStickerPacks(w http.ResponseWriter, r *http.Request, params ListStickerPacksParams) {
+	var request ListStickerPacksRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListStickerPacks(ctx, request.(ListStickerPacksRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListStickerPacks")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListStickerPacksResponseObject); ok {
+		if err := validResponse.VisitListStickerPacksResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetStickerPack operation middleware
+func (sh *strictHandler) GetStickerPack(w http.ResponseWriter, r *http.Request, packId StickerPackId, params GetStickerPackParams) {
+	var request GetStickerPackRequestObject
+
+	request.PackId = packId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetStickerPack(ctx, request.(GetStickerPackRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetStickerPack")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetStickerPackResponseObject); ok {
+		if err := validResponse.VisitGetStickerPackResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RemoveStickerPack operation middleware
+func (sh *strictHandler) RemoveStickerPack(w http.ResponseWriter, r *http.Request, packId StickerPackId, params RemoveStickerPackParams) {
+	var request RemoveStickerPackRequestObject
+
+	request.PackId = packId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RemoveStickerPack(ctx, request.(RemoveStickerPackRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RemoveStickerPack")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RemoveStickerPackResponseObject); ok {
+		if err := validResponse.VisitRemoveStickerPackResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AddStickerPack operation middleware
+func (sh *strictHandler) AddStickerPack(w http.ResponseWriter, r *http.Request, packId StickerPackId, params AddStickerPackParams) {
+	var request AddStickerPackRequestObject
+
+	request.PackId = packId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AddStickerPack(ctx, request.(AddStickerPackRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AddStickerPack")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AddStickerPackResponseObject); ok {
+		if err := validResponse.VisitAddStickerPackResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListRecentStickers operation middleware
+func (sh *strictHandler) ListRecentStickers(w http.ResponseWriter, r *http.Request, params ListRecentStickersParams) {
+	var request ListRecentStickersRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListRecentStickers(ctx, request.(ListRecentStickersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListRecentStickers")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListRecentStickersResponseObject); ok {
+		if err := validResponse.VisitListRecentStickersResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

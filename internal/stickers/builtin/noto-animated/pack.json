@@ -1,0 +1,23 @@
+{
+  "key": "noto-animated",
+  "title": "Noto Animated Emoji",
+  "default": true,
+  "stickers": [
+    { "key": "1f600", "emoji": "😀" },
+    { "key": "1f923", "emoji": "🤣" },
+    { "key": "1f60d", "emoji": "😍" },
+    { "key": "1f970", "emoji": "🥰" },
+    { "key": "1f618", "emoji": "😘" },
+    { "key": "1f60e", "emoji": "😎" },
+    { "key": "1f62d", "emoji": "😭" },
+    { "key": "1f631", "emoji": "😱" },
+    { "key": "1f44d", "emoji": "👍" },
+    { "key": "1f44f", "emoji": "👏" },
+    { "key": "1f64f", "emoji": "🙏" },
+    { "key": "1f525", "emoji": "🔥" },
+    { "key": "2764_fe0f", "emoji": "❤️" },
+    { "key": "1f389", "emoji": "🎉" },
+    { "key": "1f4af", "emoji": "💯" },
+    { "key": "1f440", "emoji": "👀" }
+  ]
+}

@@ -23,6 +23,8 @@ Refresh cookies must match `/api/v2/auth/refresh`. Never reuse the retired `/api
 
 ## Third-party notices
 
+Built-in stickers are [Noto Emoji Animation](https://googlefonts.github.io/noto-emoji-animation/) by Google, licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); see `internal/stickers/builtin/noto-animated/NOTICE.md`.
+
 IP geolocation by [DB-IP](https://db-ip.com): sessions, security events and recovery requests show an approximate location from the DB-IP Lite city database, licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The database is downloaded at deploy time and never committed; see [GeoIP](docs/geoip.md).
 
 ## Python retirement

@@ -2,6 +2,19 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.20
+
+- Stickers: `MessageType` and `SendMessageRequest.type` gain `sticker`. A sticker message is sent with `sticker_id`
+  only (no content, attachment or drawings) through `POST /chats/{chat_id}/messages`; the WebSocket `message` event
+  does not take stickers. The server sets `content` to the sticker's emoji.
+- `Message.sticker` returns the `Sticker` (id, pack, emoji, `is_animated`, `image`). `Message.attachment` carries
+  the same image, so older clients show a sticker as a picture with its emoji as caption.
+- New `stickers` operations: `GET /stickers/packs` (the user's panel), `GET /stickers/packs/{pack_id}` (any pack),
+  `PUT` and `DELETE /stickers/packs/{pack_id}/installation` (add or remove a pack) and `GET /stickers/recent` (the
+  last 20 stickers the user sent). Built-in default packs are in every panel until the user removes them.
+- Sticker images are attachments any signed-in user can download.
+- The search `type` filter accepts `sticker`.
+
 ## 2.1.0-alpha.19
 
 - Typing status for voice messages: the WebSocket `typing` event gains `data.action` (`typing` or

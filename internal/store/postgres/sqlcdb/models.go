@@ -256,6 +256,28 @@ type RecoveryToken struct {
 	UsedAt    *time.Time
 }
 
+type Sticker struct {
+	ID           int64
+	PackID       int64
+	AttachmentID uuid.UUID
+	BuiltinKey   *string
+	Emoji        string
+	Position     int32
+	IsAnimated   bool
+	DeletedAt    *time.Time
+	CreatedAt    time.Time
+}
+
+type StickerPack struct {
+	ID         int64
+	OwnerID    *int64
+	BuiltinKey *string
+	Title      string
+	IsDefault  bool
+	DeletedAt  *time.Time
+	CreatedAt  time.Time
+}
+
 type User struct {
 	ID                 int64
 	Username           string
@@ -335,6 +357,12 @@ type UserPrivacySetting struct {
 	TypingIndicatorsEnabled bool
 }
 
+type UserRecentSticker struct {
+	UserID    int64
+	StickerID int64
+	UsedAt    time.Time
+}
+
 type UserRecoveryKey struct {
 	UserID    int64
 	KeyHash   string
@@ -380,6 +408,13 @@ type UserSessionRotatedToken struct {
 	TokenHash string
 	SessionID uuid.UUID
 	RotatedAt time.Time
+}
+
+type UserStickerPack struct {
+	UserID    int64
+	PackID    int64
+	Installed bool
+	ChangedAt time.Time
 }
 
 type UserWebauthnHandle struct {

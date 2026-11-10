@@ -15,12 +15,55 @@ type Server struct {
 	meta          MetaInfo
 	notifications *NotificationOptions
 	calls         *CallServer
+	stickers      *StickerServer
 }
 
 // WithMessages adds history, sending, editing, deleting and forwarding over HTTP, and the media lists.
 func (s *Server) WithMessages(m *MessageServer) *Server { s.messages = m; return s }
 
 func (s *Server) WithLinkPreviews(l *LinkPreviewServer) *Server { s.linkPreviews = l; return s }
+
+func (s *Server) WithStickers(st *StickerServer) *Server { s.stickers = st; return s }
+
+func (s *Server) ListStickerPacks(w http.ResponseWriter, r *http.Request, params ListStickerPacksParams) {
+	if s.stickers == nil {
+		s.AuthServer.ListStickerPacks(w, r, params)
+		return
+	}
+	s.stickers.ListStickerPacks(w, r, params)
+}
+
+func (s *Server) GetStickerPack(w http.ResponseWriter, r *http.Request, packID StickerPackId, params GetStickerPackParams) {
+	if s.stickers == nil {
+		s.AuthServer.GetStickerPack(w, r, packID, params)
+		return
+	}
+	s.stickers.GetStickerPack(w, r, packID, params)
+}
+
+func (s *Server) AddStickerPack(w http.ResponseWriter, r *http.Request, packID StickerPackId, params AddStickerPackParams) {
+	if s.stickers == nil {
+		s.AuthServer.AddStickerPack(w, r, packID, params)
+		return
+	}
+	s.stickers.AddStickerPack(w, r, packID, params)
+}
+
+func (s *Server) RemoveStickerPack(w http.ResponseWriter, r *http.Request, packID StickerPackId, params RemoveStickerPackParams) {
+	if s.stickers == nil {
+		s.AuthServer.RemoveStickerPack(w, r, packID, params)
+		return
+	}
+	s.stickers.RemoveStickerPack(w, r, packID, params)
+}
+
+func (s *Server) ListRecentStickers(w http.ResponseWriter, r *http.Request, params ListRecentStickersParams) {
+	if s.stickers == nil {
+		s.AuthServer.ListRecentStickers(w, r, params)
+		return
+	}
+	s.stickers.ListRecentStickers(w, r, params)
+}
 
 func (s *Server) GetLinkPreview(w http.ResponseWriter, r *http.Request, params GetLinkPreviewParams) {
 	if s.linkPreviews == nil {

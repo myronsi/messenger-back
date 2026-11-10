@@ -27,6 +27,7 @@ import (
 	"github.com/myronsi/messenger-back/internal/media"
 	"github.com/myronsi/messenger-back/internal/notifications"
 	"github.com/myronsi/messenger-back/internal/search"
+	"github.com/myronsi/messenger-back/internal/stickers"
 	"github.com/myronsi/messenger-back/internal/store/elastic"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/redis"
@@ -219,6 +220,8 @@ func run() error {
 				Cache: linkpreview.NewRedisCache(rd.Client()), SignKey: linkpreview.DeriveKey(cfg.JWTSecret.Reveal()),
 			}),
 			Limiter: rt.limiter, BasePath: cfg.HTTP.BasePath, Log: log,
+		})).WithStickers(httpapi.NewStickerServer(httpapi.StickerOptions{
+			Service: stickers.New(pg.Stickers()), BasePath: cfg.HTTP.BasePath, Log: log,
 		})).WithCalls(httpapi.NewCallServer(httpapi.CallOptions{
 			Service: callsSvc, Limits: callLimits(cfg.Calls), Limiter: rt.limiter, Log: log,
 		})).WithNotifications(httpapi.NotificationOptions{Store: pg.Notifications(), Config: cfg.Notifications, Tokens: notifications.NewActionTokens(cfg.Notifications.VAPIDPrivate.Reveal())}).WithMeta(httpapi.MetaInfo{

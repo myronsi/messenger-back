@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.19
+  version: 2.1.0-alpha.20
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -54,6 +54,8 @@ tags:
     description: Edit, delete and forward messages
   - name: attachments
     description: File and voice uploads
+  - name: stickers
+    description: Sticker packs, the sticker panel and recently sent stickers
   - name: requests
     description: Approval requests (direct messages and group invites)
   - name: websocket
@@ -1456,7 +1458,7 @@ paths:
           in: query
           schema:
             type: string
-            enum: [text, file, voice]
+            enum: [text, file, voice, sticker]
         - name: from
           in: query
           description: Messages created at or after this time
@@ -1802,6 +1804,97 @@ paths:
               schema: { $ref: "#/components/schemas/GroupRoleLog" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+  /stickers/packs:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    get:
+      tags: [stickers]
+      operationId: listStickerPacks
+      summary: The user's sticker packs
+      description: |
+        The packs of the sticker panel: packs the user added, most recently added first, then the built-in default
+        packs the user has not removed. Each pack lists its stickers in order. At most 200 packs.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: The packs
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StickerPackList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /stickers/packs/{pack_id}:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/StickerPackId"
+    get:
+      tags: [stickers]
+      operationId: getStickerPack
+      summary: A sticker pack
+      description: |
+        Any pack that is not deleted, whether the user has it or not, for example to preview the pack of a sticker
+        someone sent. `is_installed` tells whether it is in the user's panel.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: The pack
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StickerPack" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /stickers/packs/{pack_id}/installation:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/StickerPackId"
+    put:
+      tags: [stickers]
+      operationId: addStickerPack
+      summary: Add a sticker pack to the user's panel
+      description: Adding a pack the user has moves it to the top of the panel.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Added
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [stickers]
+      operationId: removeStickerPack
+      summary: Remove a sticker pack from the user's panel
+      description: |
+        Built-in default packs can be removed too and come back only when added again. Stickers already sent from
+        the pack keep showing in chats.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Removed
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /stickers/recent:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    get:
+      tags: [stickers]
+      operationId: listRecentStickers
+      summary: Stickers the user sent recently
+      description: The last 20 different stickers the user sent, newest first, on every device of the user.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: The stickers
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StickerList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
   /link-preview:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
@@ -3816,6 +3909,11 @@ components:
       in: path
       required: true
       schema: { $ref: "#/components/schemas/AttachmentRef" }
+    StickerPackId:
+      name: pack_id
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/Id" }
     SessionId:
       name: session_id
       in: path
@@ -4592,7 +4690,55 @@ components:
     # -------------------------------------------------------- messages
     MessageType:
       type: string
-      enum: [text, file, voice, system]
+      enum: [text, file, voice, system, sticker]
+    Sticker:
+      type: object
+      description: |
+        One sticker of a pack. `image` is a WebP or PNG of at most 512 x 512 px with transparency, animated when
+        `is_animated` is true; any signed-in user can load it. Clients show it without a bubble.
+      required: [id, pack_id, emoji, is_animated, image]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        pack_id: { $ref: "#/components/schemas/Id" }
+        emoji:
+          type: string
+          minLength: 1
+          maxLength: 32
+          description: The emoji the sticker stands for, for previews, notifications and search.
+        is_animated: { type: boolean }
+        image: { $ref: "#/components/schemas/Attachment" }
+    StickerPack:
+      type: object
+      required: [id, title, is_official, is_installed, stickers]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        title: { type: string, minLength: 1, maxLength: 64 }
+        is_official:
+          type: boolean
+          description: A built-in pack of the messenger, not made by a user.
+        is_installed:
+          type: boolean
+          description: The pack is in the user's sticker panel.
+        stickers:
+          type: array
+          maxItems: 120
+          items: { $ref: "#/components/schemas/Sticker" }
+    StickerPackList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 200
+          items: { $ref: "#/components/schemas/StickerPack" }
+    StickerList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 20
+          items: { $ref: "#/components/schemas/Sticker" }
     Reaction:
       type: object
       required: [emoji, user_id]
@@ -4666,7 +4812,7 @@ components:
         content:
           type: [string, "null"]
           maxLength: 4096
-          description: Text, or the caption of a file; `null` when deleted.
+          description: Text, the caption of a file, or the emoji of a sticker; `null` when deleted.
         attachment:
           oneOf:
             - $ref: "#/components/schemas/Attachment"
@@ -4681,6 +4827,11 @@ components:
           oneOf:
             - $ref: "#/components/schemas/ForwardedFrom"
             - type: "null"
+        sticker:
+          description: |
+            The sticker of a `sticker` message; absent for other types and when deleted. `attachment` carries the
+            same image, so older clients show a sticker as a picture.
+          $ref: "#/components/schemas/Sticker"
         attachments:
           type: array
           description: Ordered images and videos of an album. The first item is also returned as attachment for older clients.
@@ -4793,10 +4944,16 @@ components:
         client_temp_id: { $ref: "#/components/schemas/ClientTempId" }
         type:
           type: string
-          enum: [text, file, voice]
+          enum: [text, file, voice, sticker]
         content:
           type: [string, "null"]
           maxLength: 4096
+        sticker_id:
+          description: |
+            The sticker of a `sticker` message, from any pack that is not deleted. Sticker messages have no content,
+            attachment or drawings; the server sets `content` to the sticker's emoji. Send stickers with this
+            operation; the WebSocket `message` event does not take them.
+          $ref: "#/components/schemas/Id"
         attachment_id:
           description: Single upload ID for a file or voice message. Omit for albums.
           oneOf:
@@ -4825,6 +4982,8 @@ components:
         properties:
           type: { enum: [file, voice] }
       then:
+        properties:
+          sticker_id: { not: {} }
         oneOf:
           - required: [attachment_id]
             properties:
@@ -4836,12 +4995,25 @@ components:
               attachment_id: { not: {} }
               attachment_ids: { type: array }
       else:
-        required: [content]
-        properties:
-          content: { type: string, minLength: 1, maxLength: 4096 }
-          attachment_id: { not: {} }
-          attachment_ids: { not: {} }
-          drawings: { not: {} }
+        if:
+          properties:
+            type: { const: sticker }
+        then:
+          required: [sticker_id]
+          properties:
+            sticker_id: { $ref: "#/components/schemas/Id" }
+            content: { not: {} }
+            attachment_id: { not: {} }
+            attachment_ids: { not: {} }
+            drawings: { not: {} }
+        else:
+          required: [content]
+          properties:
+            content: { type: string, minLength: 1, maxLength: 4096 }
+            attachment_id: { not: {} }
+            attachment_ids: { not: {} }
+            drawings: { not: {} }
+            sticker_id: { not: {} }
     EditMessageRequest:
       type: object
       required: [content]

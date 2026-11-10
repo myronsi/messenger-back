@@ -31,6 +31,7 @@ var (
 // MessageStore is the PostgreSQL side the message endpoints read.
 type MessageStore interface {
 	Attachments() postgres.AttachmentRepository
+	Stickers() postgres.StickerRepository
 }
 
 // MessageOptions configures the message endpoints.
@@ -95,6 +96,10 @@ func (m *MessageServer) renderWith(ctx context.Context, viewer, chatID int64, ms
 	if err != nil {
 		return nil, err
 	}
+	stickers, err := m.o.Store.Stickers().Stickers(ctx, uniq(StickerIDs(msgs...)))
+	if err != nil {
+		return nil, err
+	}
 	for id, have := range files {
 		if have != nil {
 			continue
@@ -109,6 +114,11 @@ func (m *MessageServer) renderWith(ctx context.Context, viewer, chatID int64, ms
 	out := make([]Message, len(msgs))
 	for i, msg := range msgs {
 		parts := MessageParts{Reactions: deco.Reactions[msg.ID], BasePath: m.o.BasePath, Drawings: drawings[msg.ID]}
+		if msg.StickerID != nil {
+			if st, ok := stickers[*msg.StickerID]; ok {
+				parts.Sticker = &st
+			}
+		}
 		if msg.SenderID != nil {
 			v := people[*msg.SenderID]
 			parts.Sender = &v
@@ -282,6 +292,13 @@ func (m *MessageServer) SendMessage(w http.ResponseWriter, r *http.Request, chat
 	}
 	if reply != 0 {
 		req.ReplyTo = &reply
+	}
+	if body.StickerId != nil {
+		sticker, ok := parseID(w, "sticker_id", *body.StickerId)
+		if !ok {
+			return
+		}
+		req.StickerID = &sticker
 	}
 	sent, err := m.o.Service.Send(r.Context(), req)
 	if err != nil {

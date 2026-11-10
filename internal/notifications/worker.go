@@ -124,6 +124,9 @@ func (w *Worker) Handle(ctx context.Context, j postgres.NotificationJob) error {
 				}
 				p.Body = string(r)
 			}
+			if m.Type == scylla.TypeSticker && m.Content != nil {
+				p.Body = "Sticker " + *m.Content
+			}
 		}
 		for _, d := range devices {
 			dp := p
