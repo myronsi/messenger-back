@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.14.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.13.0-alpha.1...v1.14.0-alpha.1) (2026-11-10)
+
+
+### Features
+
+* **stickers:** sticker packs and sticker messages ([#177](https://github.com/myronsi/messenger-back/issues/177)) ([48c2b16](https://github.com/myronsi/messenger-back/commit/48c2b162f5eb08fec5b464e6764ef68a64802aa7))
+* **stickers:** user sticker packs with share links and reports ([#179](https://github.com/myronsi/messenger-back/issues/179)) ([f581fbd](https://github.com/myronsi/messenger-back/commit/f581fbddff77eeba7f72d1f5b33bbfeee0271928))
+
 ## [1.13.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.12.0-alpha.1...v1.13.0-alpha.1) (2026-11-10)
 
 
