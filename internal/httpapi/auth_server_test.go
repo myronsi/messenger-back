@@ -287,6 +287,11 @@ func TestRegisterLoginRefreshOverHTTP(t *testing.T) {
 	if rec.Code != http.StatusUnprocessableEntity || rec.code() != "validation_failed" || !strings.Contains(rec.Body.String(), `"field":"password"`) {
 		t.Fatalf("weak password: %d %s", rec.Code, rec.Body)
 	}
+	if rec := e.post(t, "/auth/register", map[string]any{"username": "Erin", "password": password}); rec.Code != http.StatusCreated {
+		t.Fatalf("register without display name: %d %s", rec.Code, rec.Body)
+	} else if me := e.do(t, request{method: http.MethodGet, path: "/me", token: rec.json()["access_token"].(string)}); me.json()["display_name"] != "Erin" {
+		t.Fatalf("display name defaults to the username: %s", me.Body)
+	}
 
 	if rec := e.post(t, "/auth/login", map[string]any{"username": "alice", "password": "wrong password"}); rec.Code != http.StatusUnauthorized || rec.code() != "invalid_credentials" {
 		t.Fatalf("wrong password: %d %s", rec.Code, rec.Body)

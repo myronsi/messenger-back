@@ -515,6 +515,9 @@ func (s *Service) Register(ctx context.Context, c Client, username, displayName,
 	if err := validateUsername(username); err != nil {
 		return nil, err
 	}
+	if strings.TrimSpace(displayName) == "" {
+		displayName = username
+	}
 	displayName, err := normalizeDisplayName(displayName)
 	if err != nil {
 		return nil, err

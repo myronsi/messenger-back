@@ -57,6 +57,14 @@ func PresentChat(v chats.View, basePath string) Chat {
 		Id: FormatID(c.ID), Type: ChatType(c.Type), IsPinned: v.Entry.PinnedAt != nil,
 		UnreadCount: int(v.Unread), CreatedAt: utc(c.CreatedAt),
 	}
+	if v.FirstUnread != nil {
+		id := FormatID(*v.FirstUnread)
+		out.FirstUnreadMessageId = &id
+	}
+	if r := v.Entry.LastReadMessageID; r != nil {
+		id := FormatID(*r)
+		out.LastReadMessageId = &id
+	}
 	if c.Type == postgres.ChatDirect {
 		if v.Peer != nil {
 			p := PresentUser(*v.Peer)

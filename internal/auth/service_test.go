@@ -195,6 +195,24 @@ func TestRegisterAndLogin(t *testing.T) {
 	}
 }
 
+func TestRegisterDefaultsDisplayNameToUsername(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	for name, given := range map[string]string{"Carol_1": "", "Carol_2": "   \t "} {
+		ts, err := e.svc.Register(ctx, e.client("10.0.0.3"), " "+name+" ", given, "correct horse", nil)
+		if err != nil {
+			t.Fatalf("register with display name %q: %v", given, err)
+		}
+		if ts.User.DisplayName != name {
+			t.Fatalf("display name %q: got %q, want the username %q", given, ts.User.DisplayName, name)
+		}
+	}
+	ts, err := e.svc.Register(ctx, e.client("10.0.0.3"), "dave", "  Dave   D ", "correct horse", nil)
+	if err != nil || ts.User.DisplayName != "Dave D" {
+		t.Fatalf("a given display name is kept: %v %+v", err, ts)
+	}
+}
+
 func TestLoginUpgradesV1Hash(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()

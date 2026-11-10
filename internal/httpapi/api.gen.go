@@ -1227,12 +1227,20 @@ type Chat struct {
 	AvatarUrl *string   `json:"avatar_url"`
 	CreatedAt Timestamp `json:"created_at"`
 
+	// FirstUnreadMessageId The oldest message the caller has not read (the same messages `unread_count` counts: not their own,
+	// not system messages, not deleted); `null` when nothing is unread. Clients open the chat around it and
+	// show the "new messages" divider above it.
+	FirstUnreadMessageId *Id `json:"first_unread_message_id"`
+
 	// Id Decimal ID as a string (Snowflake IDs exceed 2^53).
 	//
 	// Examples: 7217400317439950848
 	Id          Id       `json:"id"`
 	IsPinned    bool     `json:"is_pinned"`
 	LastMessage *Message `json:"last_message"`
+
+	// LastReadMessageId The caller's read marker (`POST /chats/{chat_id}/read`); `null` before their first read.
+	LastReadMessageId *Id `json:"last_read_message_id"`
 
 	// MyRole Only for groups.
 	MyRole *GroupRole `json:"my_role,omitempty"`
@@ -1998,8 +2006,10 @@ type RecoveryOverview struct {
 
 // RegisterRequest defines model for RegisterRequest.
 type RegisterRequest struct {
-	Bio         *string  `json:"bio,omitempty"`
-	DisplayName string   `json:"display_name"`
+	Bio *string `json:"bio,omitempty"`
+
+	// DisplayName Defaults to the username when it is missing, empty or only whitespace.
+	DisplayName *string  `json:"display_name,omitempty"`
 	Password    *string  `json:"password,omitempty"`
 	Username    Username `json:"username"`
 }

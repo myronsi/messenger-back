@@ -2,6 +2,14 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.22
+
+- `Chat` gains the required, nullable `first_unread_message_id` (the oldest message the caller has not read, `null`
+  when `unread_count` is 0) and `last_read_message_id` (the caller's read marker), also in `chat_created` and
+  `chat_list_update`. Clients open a chat around `first_unread_message_id` and show the "new messages" divider there.
+- `q` of `GET /chats/{chat_id}/messages/search` and `GET /search/messages` takes up to 256 characters (was 128).
+- `RegisterRequest.display_name` is optional; a missing, empty or blank display name becomes the username.
+
 ## 2.1.0-alpha.21
 
 - User sticker packs: `POST /attachments` takes `purpose: sticker` (PNG, JPEG or still WebP up to 5 MB, stored as a

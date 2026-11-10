@@ -15,6 +15,7 @@ Each entry carries:
 - `name` and `avatar_url`: those of the peer as the caller sees them (their contact name for the peer, the peer's privacy settings), or the group's own.
 - `peer` (direct chats) and `my_role` (groups; moderators show as `admin`, the contract has no moderators).
 - `unread_count` from the Redis counters (`redis.Unread`), at most 999. When a user's counters are missing, a list request rebuilds them from ScyllaDB: `CountAfter` from each read marker, 16 chats at a time, one rebuild per user even for concurrent requests. A single chat (`GET /chats/{id}`, the events) counts only itself.
+- `last_read_message_id`: the caller's read marker from PostgreSQL. `first_unread_message_id`: the oldest message after it that the counters count (not the caller's own, not system, not deleted), `null` when `unread_count` is 0. It comes from the same ScyllaDB pages as `last_message`; only a chat with more unread messages than those pages hold costs one more query (`UnreadIDs` with limit 1).
 - `last_message`: the newest message the caller can see, read from ScyllaDB in parallel (16 at a time) for the chats of the page. In a direct chat whose last message the caller sent, `read_by` holds the peer once they read it, if they share read receipts and did not block the caller. A group's list entry carries no receipts.
 
 `GET /chats/{id}` is one entry (`404` when the caller is not in the chat, `400` for an id that is not a number).
