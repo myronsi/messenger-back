@@ -20,7 +20,6 @@ import (
 	"github.com/myronsi/messenger-back/internal/drawing"
 	"github.com/myronsi/messenger-back/internal/events"
 	"github.com/myronsi/messenger-back/internal/ids"
-	"github.com/myronsi/messenger-back/internal/stickers"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/scylla"
 )
@@ -329,14 +328,6 @@ func (s *Service) Send(ctx context.Context, r SendRequest) (Sent, error) {
 	if err != nil {
 		return Sent{}, err
 	}
-	var sticker *postgres.Sticker
-	if r.StickerID != nil {
-		found, err := s.sticker(ctx, *r.StickerID)
-		if err != nil {
-			return Sent{}, err
-		}
-		sticker = &found
-	}
 
 	id, err := s.d.IDs.Next()
 	if err != nil {
@@ -355,6 +346,15 @@ func (s *Service) Send(ctx context.Context, r SendRequest) (Sent, error) {
 			return s.duplicate(ctx, r, prev)
 		}
 		id = prev
+	}
+	var sticker *postgres.Sticker
+	if r.StickerID != nil {
+		found, err := s.sticker(ctx, *r.StickerID)
+		if err != nil {
+			s.abandon(ctx, r, id, resumed)
+			return Sent{}, err
+		}
+		sticker = &found
 	}
 
 	sender := r.SenderID
@@ -393,6 +393,8 @@ func (s *Service) Send(ctx context.Context, r SendRequest) (Sent, error) {
 	return Sent{Message: m}, nil
 }
 
+const RecentStickers = 20
+
 func (s *Service) sticker(ctx context.Context, id int64) (postgres.Sticker, error) {
 	found, err := s.d.Store.Stickers().Stickers(ctx, []int64{id})
 	if err != nil {
@@ -406,7 +408,7 @@ func (s *Service) sticker(ctx context.Context, id int64) (postgres.Sticker, erro
 }
 
 func (s *Service) usedSticker(ctx context.Context, userID, stickerID int64) {
-	if err := s.d.Store.Stickers().UseSticker(context.WithoutCancel(ctx), userID, stickerID, stickers.MaxRecent); err != nil {
+	if err := s.d.Store.Stickers().UseSticker(context.WithoutCancel(ctx), userID, stickerID, RecentStickers); err != nil {
 		s.d.Log.WarnContext(ctx, "recent sticker", "error", err, "sticker_id", stickerID)
 	}
 }
@@ -789,7 +791,7 @@ func (s *Service) requireMayDeleteOthers(ctx context.Context, chatID, userID int
 	return ErrForbidden
 }
 
-func validEmoji(e string) bool {
+func ValidEmoji(e string) bool {
 	if e == "" || !utf8.ValidString(e) || utf8.RuneCountInString(e) > MaxEmoji {
 		return false
 	}
@@ -803,7 +805,7 @@ func validEmoji(e string) bool {
 
 // React adds or removes the user's reaction to a message.
 func (s *Service) React(ctx context.Context, userID, chatID, messageID int64, emoji string, add bool) error {
-	if !validEmoji(emoji) {
+	if !ValidEmoji(emoji) {
 		return invalid("emoji must be 1 to %d characters without spaces", MaxEmoji)
 	}
 	if err := s.requireMember(ctx, chatID, userID); err != nil {

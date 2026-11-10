@@ -331,6 +331,20 @@ func (s *Service) render(ctx context.Context, viewer int64, entries []postgres.C
 	}
 
 	receipts := s.receiptsFor(ctx, viewer, entries, lasts, peerOf)
+	var stickerIDs []int64
+	for _, m := range lasts {
+		if m != nil && m.StickerID != nil && !m.Deleted {
+			stickerIDs = append(stickerIDs, *m.StickerID)
+		}
+	}
+	stickers := map[int64]postgres.Sticker{}
+	if len(stickerIDs) > 0 {
+		if found, err := s.d.Store.Stickers().Stickers(ctx, dedupe(stickerIDs)); err == nil {
+			stickers = found
+		} else {
+			s.d.Log.WarnContext(ctx, "last message stickers", "error", err)
+		}
+	}
 	for i := range views {
 		e := views[i].Entry
 		if m, ok := peerOf[e.Chat.ID]; ok {
@@ -354,10 +368,8 @@ func (s *Service) render(ctx context.Context, viewer int64, entries []postgres.C
 			}
 		}
 		if m.StickerID != nil && !m.Deleted {
-			if found, err := s.d.Store.Stickers().Stickers(ctx, []int64{*m.StickerID}); err == nil {
-				if st, ok := found[*m.StickerID]; ok {
-					last.Sticker = &st
-				}
+			if st, ok := stickers[*m.StickerID]; ok {
+				last.Sticker = &st
 			}
 		}
 		if r, ok := receipts[e.Chat.ID]; ok {

@@ -110,6 +110,26 @@ func TestSeedIsIdempotentAndRetiresRemovedStickers(t *testing.T) {
 	if err != nil || !found[packs[0].Stickers[0].ID].Deleted {
 		t.Fatalf("a removed sticker stays readable for sent messages, marked deleted: %+v %v", found, err)
 	}
+
+	other, err := fs.ReadFile(stickers.Builtin(), "noto-animated/1f44d.webp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	one["party/b.webp"] = &fstest.MapFile{Data: other}
+	if err := stickers.Seed(ctx, deps, one); err != nil {
+		t.Fatal(err)
+	}
+	if len(p.keys) != 3 {
+		t.Fatalf("a changed image must be uploaded: %v", p.keys)
+	}
+	pack, err = svc.Pack(ctx, 1, packs[0].ID)
+	if err != nil || len(pack.Stickers) != 1 || pack.Stickers[0].ID == keep.ID || pack.Stickers[0].Image.Size != int64(len(other)) {
+		t.Fatalf("after the image changed: %+v %v", pack, err)
+	}
+	found, err = store.Stickers().Stickers(ctx, []int64{keep.ID})
+	if err != nil || !found[keep.ID].Deleted || found[keep.ID].Image.Size == int64(len(other)) {
+		t.Fatalf("the old version keeps its image for sent messages: %+v %v", found, err)
+	}
 }
 
 func TestSeedRejectsBadManifests(t *testing.T) {

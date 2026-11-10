@@ -66,6 +66,8 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Start the stack
+        env:
+          RECOVERY_APPROVAL_MIN_SESSION_AGE: 0s
         run: |
           go run deploy/dev/genenv.go
           docker compose -f compose.dev.yaml up --build -d --wait --wait-timeout 300

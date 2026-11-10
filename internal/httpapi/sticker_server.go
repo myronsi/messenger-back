@@ -41,7 +41,7 @@ func (s *StickerServer) fail(w http.ResponseWriter, r *http.Request, what string
 
 func (s *StickerServer) presentPack(p stickers.Pack) StickerPack {
 	out := StickerPack{
-		Id: FormatID(p.ID), Title: p.Title, IsOfficial: p.OwnerID == nil, IsInstalled: p.Installed,
+		Id: FormatID(p.ID), Title: p.Title, IsOfficial: p.BuiltinKey != nil, IsInstalled: p.Installed,
 		Stickers: make([]Sticker, 0, len(p.Stickers)),
 	}
 	for _, st := range p.Stickers {

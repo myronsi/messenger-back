@@ -77,11 +77,12 @@ func TestStickersOverHTTP(t *testing.T) {
 	}
 
 	for name, body := range map[string]map[string]any{
-		"no sticker_id":      {"type": "sticker"},
-		"with content":       {"type": "sticker", "sticker_id": stickerID, "content": "x"},
-		"unknown sticker":    {"type": "sticker", "sticker_id": "999999"},
-		"text with sticker":  {"type": "text", "content": "x", "sticker_id": stickerID},
-		"sticker with album": {"type": "sticker", "sticker_id": stickerID, "attachment_id": first["image"].(map[string]any)["id"]},
+		"no sticker_id":     {"type": "sticker"},
+		"with content":      {"type": "sticker", "sticker_id": stickerID, "content": "x"},
+		"unknown sticker":   {"type": "sticker", "sticker_id": "999999"},
+		"text with sticker": {"type": "text", "content": "x", "sticker_id": stickerID},
+		"with attachment":   {"type": "sticker", "sticker_id": stickerID, "attachment_id": first["image"].(map[string]any)["id"]},
+		"with album":        {"type": "sticker", "sticker_id": stickerID, "attachment_ids": []any{first["image"].(map[string]any)["id"], first["image"].(map[string]any)["id"]}},
 	} {
 		body["client_temp_id"] = "bad-" + name
 		if r := e.do(t, request{method: http.MethodPost, path: "/chats/" + chat + "/messages", token: alice.access, body: body}); r.Code != http.StatusUnprocessableEntity {

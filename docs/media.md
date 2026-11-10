@@ -90,6 +90,8 @@ Built-in packs are embedded in the binary (`internal/stickers/builtin/<key>/`: `
 `default` and the ordered `stickers` with `key` and `emoji`, plus one `<key>.webp` per sticker of at most 512 px).
 The worker seeds them on start and retries every minute until it succeeds: new stickers are uploaded, changed
 emoji and order are updated, and stickers removed from the manifest are marked deleted (sent ones keep showing).
+A sticker is stored under its key and a hash of its image, so a changed image becomes a new sticker and the old
+one is retired; messages that sent the old one keep showing it.
 Packs with `default: true` are in every user's panel until the user removes them (`user_sticker_packs`).
 `user_recent_stickers` keeps the last 20 stickers each user sent.
 

@@ -3,7 +3,9 @@ package stickers
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/myronsi/messenger-back/internal/messages"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 )
 
@@ -144,7 +147,7 @@ func seedPack(ctx context.Context, d SeedDeps, fsys fs.FS, m manifest) error {
 	keep := make([]string, 0, len(m.Stickers))
 	var position int32
 	for i, item := range m.Stickers {
-		if item.Key == "" || !validEmoji(item.Emoji) {
+		if item.Key == "" || !messages.ValidEmoji(item.Emoji) {
 			return fmt.Errorf("sticker %d needs a key and an emoji", i)
 		}
 		name := item.Key + ".webp"
@@ -159,10 +162,12 @@ func seedPack(ctx context.Context, d SeedDeps, fsys fs.FS, m manifest) error {
 		if img.Width > MaxSide || img.Height > MaxSide || len(data) > maxBuiltinBytes {
 			return fmt.Errorf("%s: larger than %d px or %d bytes", name, MaxSide, maxBuiltinBytes)
 		}
-		s := postgres.BuiltinSticker{Key: item.Key, Emoji: item.Emoji, Position: position, Animated: img.Animated}
+		sum := sha256.Sum256(data)
+		version := item.Key + "@" + hex.EncodeToString(sum[:6])
+		s := postgres.BuiltinSticker{Key: version, Emoji: item.Emoji, Position: position, Animated: img.Animated}
 		position++
-		keep = append(keep, item.Key)
-		if id, ok := existing[item.Key]; ok {
+		keep = append(keep, version)
+		if id, ok := existing[version]; ok {
 			if err := d.Stickers.UpdateBuiltinSticker(ctx, id, s); err != nil {
 				return err
 			}

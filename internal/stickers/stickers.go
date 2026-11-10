@@ -4,16 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"unicode"
-	"unicode/utf8"
 
+	"github.com/myronsi/messenger-back/internal/messages"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 )
 
 const (
 	MaxPacks  = 200
-	MaxRecent = 20
-	MaxEmoji  = 32
+	MaxRecent = messages.RecentStickers
 )
 
 var (
@@ -106,16 +104,4 @@ func (s *Service) Recent(ctx context.Context, userID int64) ([]postgres.Sticker,
 		return nil, unavailable(err)
 	}
 	return out, nil
-}
-
-func validEmoji(e string) bool {
-	if e == "" || !utf8.ValidString(e) || utf8.RuneCountInString(e) > MaxEmoji {
-		return false
-	}
-	for _, r := range e {
-		if unicode.IsSpace(r) || unicode.IsControl(r) {
-			return false
-		}
-	}
-	return true
 }
