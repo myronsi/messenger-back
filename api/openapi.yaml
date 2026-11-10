@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.21
+  version: 2.1.0-alpha.22
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -1232,7 +1232,7 @@ paths:
         - name: q
           in: query
           required: true
-          schema: { type: string, minLength: 2, maxLength: 128 }
+          schema: { type: string, minLength: 2, maxLength: 256 }
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/After"
       responses:
@@ -1445,7 +1445,7 @@ paths:
         - name: q
           in: query
           required: true
-          schema: { type: string, minLength: 2, maxLength: 128 }
+          schema: { type: string, minLength: 2, maxLength: 256 }
         - name: chat_id
           in: query
           description: Only this chat
@@ -4453,10 +4453,13 @@ components:
     # ------------------------------------------------------------ auth
     RegisterRequest:
       type: object
-      required: [username, display_name, password]
+      required: [username, password]
       properties:
         username: { $ref: "#/components/schemas/Username" }
-        display_name: { type: string, minLength: 1, maxLength: 64 }
+        display_name:
+          type: string
+          maxLength: 64
+          description: Defaults to the username when it is missing, empty or only whitespace.
         password: { type: string, minLength: 8, maxLength: 128, writeOnly: true }
         bio: { type: [string, "null"], maxLength: 500 }
     LoginRequest:
@@ -5405,6 +5408,8 @@ components:
         - peer
         - is_pinned
         - unread_count
+        - first_unread_message_id
+        - last_read_message_id
         - last_message
         - created_at
       properties:
@@ -5421,6 +5426,19 @@ components:
             - type: "null"
         is_pinned: { type: boolean }
         unread_count: { type: integer, minimum: 0 }
+        first_unread_message_id:
+          description: |
+            The oldest message the caller has not read (the same messages `unread_count` counts: not their own,
+            not system messages, not deleted); `null` when nothing is unread. Clients open the chat around it and
+            show the "new messages" divider above it.
+          oneOf:
+            - $ref: "#/components/schemas/Id"
+            - type: "null"
+        last_read_message_id:
+          description: The caller's read marker (`POST /chats/{chat_id}/read`); `null` before their first read.
+          oneOf:
+            - $ref: "#/components/schemas/Id"
+            - type: "null"
         last_message:
           oneOf:
             - $ref: "#/components/schemas/Message"

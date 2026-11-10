@@ -61,6 +61,7 @@ type Store interface {
 type MessageStore interface {
 	Page(ctx context.Context, q scylla.PageQuery) (scylla.Page, error)
 	CountAfter(ctx context.Context, chatID, viewer, afterID int64, limit int) (int, error)
+	UnreadIDs(ctx context.Context, chatID, viewer, afterID int64, limit int) ([]int64, error)
 }
 
 // Unread keeps the unread counters.
@@ -152,9 +153,10 @@ type LastMessage struct {
 type View struct {
 	Entry postgres.ChatEntry
 	// Peer is the other user of a direct chat.
-	Peer   *users.View
-	Unread int64
-	Last   *LastMessage
+	Peer        *users.View
+	Unread      int64
+	FirstUnread *int64
+	Last        *LastMessage
 }
 
 // RequestView is an approval request with the requester as the recipient sees them.
@@ -295,6 +297,7 @@ func (s *Service) render(ctx context.Context, viewer int64, entries []postgres.C
 
 	// Last messages, read in parallel.
 	lasts := make([]*scylla.Message, len(entries))
+	firstUnread := make([]*int64, len(entries))
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, lastMessageWorkers)
 	var mu sync.Mutex
@@ -306,14 +309,14 @@ func (s *Service) render(ctx context.Context, viewer int64, entries []postgres.C
 		wg.Go(func() {
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			m, err := s.lastShown(ctx, e.Chat.ID, viewer)
+			m, first, err := s.lastShown(ctx, e, viewer, counts[e.Chat.ID] > 0)
 			if err != nil {
 				mu.Lock()
 				firstErr = err
 				mu.Unlock()
 				return
 			}
-			lasts[i] = m
+			lasts[i], firstUnread[i] = m, first
 		})
 	}
 	wg.Wait()
@@ -353,6 +356,9 @@ func (s *Service) render(ctx context.Context, viewer int64, entries []postgres.C
 		}
 		// The counters only count up between reads; the contract stops at 999.
 		views[i].Unread = min(counts[e.Chat.ID], unreadCap)
+		if views[i].Unread > 0 {
+			views[i].FirstUnread = firstUnread[i]
+		}
 		m := lasts[i]
 		if m == nil {
 			continue
@@ -380,24 +386,54 @@ func (s *Service) render(ctx context.Context, viewer int64, entries []postgres.C
 	return views, nil
 }
 
-func (s *Service) lastShown(ctx context.Context, chatID, viewer int64) (*scylla.Message, error) {
-	q := scylla.PageQuery{ChatID: chatID, Viewer: viewer, Limit: lastMessagePage}
+func (s *Service) lastShown(ctx context.Context, e postgres.ChatEntry, viewer int64, withUnread bool) (*scylla.Message, *int64, error) {
+	readUpTo := int64(0)
+	if e.LastReadMessageID != nil {
+		readUpTo = *e.LastReadMessageID
+	}
+	q := scylla.PageQuery{ChatID: e.Chat.ID, Viewer: viewer, Limit: lastMessagePage}
+	var last *scylla.Message
+	var first *int64
+	reached := false
 	for {
 		page, err := s.d.Messages.Page(ctx, q)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		for i := len(page.Messages) - 1; i >= 0; i-- {
-			if m := page.Messages[i]; !m.Deleted {
-				return &m, nil
+			m := page.Messages[i]
+			if m.ID <= readUpTo {
+				reached = true
+			} else if withUnread && unreadBy(m, viewer) {
+				first = &m.ID
+			}
+			if last == nil && !m.Deleted {
+				last = &m
 			}
 		}
-		if !page.HasOlder || len(page.Messages) == 0 {
-			return nil, nil
+		end := !page.HasOlder || len(page.Messages) == 0
+		if last == nil && !end {
+			q.Before = page.Messages[0].ID
+			q.Limit = scylla.MaxPage
+			continue
 		}
-		q.Before = page.Messages[0].ID
-		q.Limit = scylla.MaxPage
+		if !withUnread || reached || end {
+			return last, first, nil
+		}
+		ids, err := s.d.Messages.UnreadIDs(ctx, e.Chat.ID, viewer, readUpTo, 1)
+		if err != nil {
+			s.d.Log.WarnContext(ctx, "first unread message", "error", err, "chat_id", e.Chat.ID)
+			return last, nil, nil
+		}
+		if len(ids) == 0 {
+			return last, nil, nil
+		}
+		return last, &ids[0], nil
 	}
+}
+
+func unreadBy(m scylla.Message, viewer int64) bool {
+	return !m.Deleted && m.Type != scylla.TypeSystem && (m.SenderID == nil || *m.SenderID != viewer)
 }
 
 // receiptsFor returns, per direct chat, the peer's receipt for the viewer's own last message: when the peer

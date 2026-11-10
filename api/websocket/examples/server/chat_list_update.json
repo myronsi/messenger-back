@@ -20,6 +20,8 @@
       },
       "is_pinned": false,
       "unread_count": 1,
+      "first_unread_message_id": "7217400317439950001",
+      "last_read_message_id": null,
       "last_message": {
         "id": "7217400317439950001",
         "chat_id": "42",

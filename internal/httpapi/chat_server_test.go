@@ -325,6 +325,59 @@ func TestDirectChatsListPinsAndReads(t *testing.T) {
 	}
 }
 
+func TestChatUnreadAnchor(t *testing.T) {
+	e := newChatEnv(t)
+	alice, bob := e.register(t, "alice"), e.register(t, "bob")
+	r := e.create(t, alice, e.uid(t, bob), "first")
+	chat := r.json()["id"].(string)
+	firstID := r.json()["last_message"].(map[string]any)["id"].(string)
+	view := func(s session) map[string]any {
+		t.Helper()
+		got := e.do(t, request{method: http.MethodGet, path: "/chats/" + chat, token: s.access}).json()
+		list := items(t, e.do(t, request{method: http.MethodGet, path: "/chats", token: s.access}))
+		if len(list) != 1 || list[0]["first_unread_message_id"] != got["first_unread_message_id"] || list[0]["last_read_message_id"] != got["last_read_message_id"] {
+			t.Fatalf("list and detail differ: %v %v", list, got)
+		}
+		return got
+	}
+	read := func(s session, id string) {
+		t.Helper()
+		if r := e.do(t, request{method: http.MethodPost, path: "/chats/" + chat + "/read", token: s.access, body: map[string]any{"message_id": id}}); r.Code != http.StatusOK {
+			t.Fatalf("read: %d %s", r.Code, r.Body)
+		}
+	}
+
+	if v := view(bob); v["unread_count"].(float64) != 1 || v["first_unread_message_id"] != firstID || v["last_read_message_id"] != nil {
+		t.Fatalf("never read: %v", v)
+	}
+	if v, ok := view(alice)["first_unread_message_id"]; !ok || v != nil {
+		t.Fatalf("the sender has nothing unread, the field is null: %v", v)
+	}
+
+	read(bob, firstID)
+	if v := view(bob); v["unread_count"].(float64) != 0 || v["first_unread_message_id"] != nil || v["last_read_message_id"] != firstID {
+		t.Fatalf("all read: %v", v)
+	}
+
+	var sent []string
+	for i := range 15 {
+		r := e.send(t, alice, chat, "c-"+strconv.Itoa(i), "message "+strconv.Itoa(i))
+		if r.Code != http.StatusCreated {
+			t.Fatalf("send: %d %s", r.Code, r.Body)
+		}
+		sent = append(sent, r.json()["id"].(string))
+	}
+	e.send(t, bob, chat, "c-bob", "own reply")
+	if v := view(bob); v["unread_count"].(float64) != 15 || v["first_unread_message_id"] != sent[0] || v["last_read_message_id"] != firstID {
+		t.Fatalf("more unread than one page: %v", v)
+	}
+
+	read(bob, sent[11])
+	if v := view(bob); v["unread_count"].(float64) != 3 || v["first_unread_message_id"] != sent[12] || v["last_read_message_id"] != sent[11] {
+		t.Fatalf("partly read: %v", v)
+	}
+}
+
 func TestNotificationReadTokenMarksOnlyItsChatRead(t *testing.T) {
 	e := newChatEnv(t)
 	alice, bob := e.register(t, "alice"), e.register(t, "bob")
