@@ -35,6 +35,13 @@ func stickerUpload(t *testing.T, store *postgres.Store, uploader int64, purpose 
 	return a.ID
 }
 
+func openLink(t *testing.T, svc *stickers.Service, userID int64, p stickers.Pack) {
+	t.Helper()
+	if _, err := svc.PackByLink(t.Context(), userID, *p.Slug); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestOwnPacks(t *testing.T) {
 	ctx := t.Context()
 	store := testenv.Postgres(t)
@@ -94,6 +101,15 @@ func TestOwnPacks(t *testing.T) {
 	}
 	if st, err := svc.SetEmoji(ctx, alice, pack.ID, first.ID, "😼"); err != nil || st.Emoji != "😼" {
 		t.Fatalf("emoji: %+v %v", st, err)
+	}
+	if _, err := svc.Pack(ctx, bob, pack.ID); !errors.Is(err, stickers.ErrNotFound) {
+		t.Fatalf("a user pack is not found by its ID without its link: %v", err)
+	}
+	if err := svc.SetInstalled(ctx, bob, pack.ID, true); !errors.Is(err, stickers.ErrNotFound) {
+		t.Fatalf("nor added: %v", err)
+	}
+	if err := svc.Report(ctx, bob, pack.ID, "spam"); !errors.Is(err, stickers.ErrNotFound) {
+		t.Fatalf("nor reported: %v", err)
 	}
 	got, err := svc.PackByLink(ctx, bob, *pack.Slug)
 	if err != nil || got.Installed || len(got.Stickers) != 2 || got.Stickers[0].ID != second.ID || got.Stickers[1].Emoji != "😼" {
@@ -175,6 +191,7 @@ func TestReportsHideAPack(t *testing.T) {
 		t.Fatal(err)
 	}
 	fan := user(t, store, "fan")
+	openLink(t, svc, fan, pack)
 	if err := svc.SetInstalled(ctx, fan, pack.ID, true); err != nil {
 		t.Fatal(err)
 	}
@@ -188,6 +205,7 @@ func TestReportsHideAPack(t *testing.T) {
 	var reporters []int64
 	for i := range stickers.HideAfterReports {
 		reporters = append(reporters, user(t, store, fmt.Sprintf("reporter%d", i)))
+		openLink(t, svc, reporters[i], pack)
 	}
 	for _, r := range reporters[:stickers.HideAfterReports-1] {
 		for range 2 {
@@ -247,6 +265,7 @@ func TestReportsAreLimited(t *testing.T) {
 			t.Fatal(err)
 		}
 		packs = append(packs, p.ID)
+		openLink(t, svc, reporter, p)
 		err = svc.Report(ctx, reporter, p.ID, "other")
 		if i < stickers.MaxReportsPerDay && err != nil {
 			t.Fatal(err)
@@ -272,6 +291,7 @@ func TestDeletedAccountDeletesItsPacks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	openLink(t, svc, fan, pack)
 	if err := svc.SetInstalled(ctx, fan, pack.ID, true); err != nil {
 		t.Fatal(err)
 	}

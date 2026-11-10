@@ -118,6 +118,14 @@ func (s *Service) PackByLink(ctx context.Context, userID int64, slug string) (Pa
 	if err != nil {
 		return Pack{}, storeError(err)
 	}
+	if !visible(p, userID) {
+		return Pack{}, ErrNotFound
+	}
+	if !IsMine(p, userID) {
+		if err := s.store.Remember(ctx, userID, p.ID); err != nil {
+			return Pack{}, unavailable(err)
+		}
+	}
 	return s.Pack(ctx, userID, p.ID)
 }
 
@@ -206,14 +214,10 @@ func (s *Service) Report(ctx context.Context, userID, packID int64, reason strin
 	if !ReportReasons[reason] {
 		return invalid("reason", "unknown reason")
 	}
-	p, err := s.livePack(ctx, packID)
-	if err != nil {
+	if _, _, err := s.openPack(ctx, userID, packID); err != nil {
 		return err
 	}
-	if !visible(p, userID) {
-		return ErrNotFound
-	}
-	_, err = s.store.Report(ctx, postgres.PackReport{
+	_, err := s.store.Report(ctx, postgres.PackReport{
 		PackID: packID, ReporterID: userID, Reason: reason, Since: time.Now().Add(-24 * time.Hour),
 		MaxReports: MaxReportsPerDay, HideAfter: HideAfterReports,
 	})

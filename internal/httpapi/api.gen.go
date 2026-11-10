@@ -2186,6 +2186,10 @@ type Sticker struct {
 	//
 	// Examples: 7217400317439950848
 	PackId Id `json:"pack_id"`
+
+	// PackSlug The share link of the sticker's pack when a user made it; missing for built-in packs. A client that
+	// shows the pack of a sticker someone sent opens it with `GET /stickers/links/{slug}`.
+	PackSlug *StickerPackSlug `json:"pack_slug,omitempty"`
 }
 
 // StickerList defines model for StickerList.

@@ -202,6 +202,12 @@ func TestOwnStickerPacksOverHTTP(t *testing.T) {
 		t.Fatalf("rename: %d %s", r.Code, r.Body)
 	}
 
+	if r := e.do(t, request{method: http.MethodGet, path: base, token: bob.access}); r.Code != http.StatusNotFound {
+		t.Fatalf("bob guesses the pack ID: %d %s", r.Code, r.Body)
+	}
+	if r := e.do(t, request{method: http.MethodPut, path: base + "/installation", token: bob.access}); r.Code != http.StatusNotFound {
+		t.Fatalf("bob adds by a guessed ID: %d %s", r.Code, r.Body)
+	}
 	link := e.do(t, request{method: http.MethodGet, path: "/stickers/links/" + slug, token: bob.access})
 	if link.Code != http.StatusOK || link.json()["is_mine"] != false || link.json()["is_installed"] != false {
 		t.Fatalf("bob opens the link: %d %s", link.Code, link.Body)
@@ -213,13 +219,23 @@ func TestOwnStickerPacksOverHTTP(t *testing.T) {
 	if r := e.do(t, request{method: http.MethodGet, path: "/stickers/links/AAAAAAAAAAAA", token: bob.access}); r.Code != http.StatusNotFound {
 		t.Fatalf("unknown link: %d", r.Code)
 	}
+	if r := e.do(t, request{method: http.MethodGet, path: base, token: bob.access}); r.Code != http.StatusOK {
+		t.Fatalf("after the link bob finds it by ID: %d %s", r.Code, r.Body)
+	}
 	if r := e.do(t, request{method: http.MethodPut, path: base + "/installation", token: bob.access}); r.Code != http.StatusNoContent {
 		t.Fatalf("bob adds the pack: %d", r.Code)
 	}
-	chat := e.create(t, bob, e.uid(t, alice), "").json()["id"].(string)
-	if r := e.do(t, request{method: http.MethodPost, path: "/chats/" + chat + "/messages", token: bob.access,
-		body: map[string]any{"client_temp_id": "own-1", "type": "sticker", "sticker_id": firstID}}); r.Code != http.StatusCreated {
-		t.Fatalf("bob sends alice's sticker: %d %s", r.Code, r.Body)
+	carol := e.register(t, "carol")
+	chat := e.create(t, bob, e.uid(t, carol), "").json()["id"].(string)
+	sent := e.do(t, request{method: http.MethodPost, path: "/chats/" + chat + "/messages", token: bob.access,
+		body: map[string]any{"client_temp_id": "own-1", "type": "sticker", "sticker_id": firstID}})
+	if sent.Code != http.StatusCreated || sent.json()["sticker"].(map[string]any)["pack_slug"] != slug {
+		t.Fatalf("bob sends alice's sticker with its pack link: %d %s", sent.Code, sent.Body)
+	}
+	back := e.create(t, carol, e.uid(t, alice), "").json()["id"].(string)
+	if r := e.do(t, request{method: http.MethodPost, path: "/chats/" + back + "/messages", token: carol.access,
+		body: map[string]any{"client_temp_id": "guess-1", "type": "sticker", "sticker_id": secondID}}); r.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("carol sends a sticker of a pack she never opened: %d %s", r.Code, r.Body)
 	}
 
 	if r := e.do(t, request{method: http.MethodPost, path: base + "/report", token: alice.access, body: map[string]any{"reason": "spam"}}); r.Code != http.StatusForbidden {
@@ -240,7 +256,7 @@ func TestOwnStickerPacksOverHTTP(t *testing.T) {
 	if r := e.do(t, request{method: http.MethodDelete, path: base + "/stickers/" + firstID, token: alice.access}); r.Code != http.StatusNoContent {
 		t.Fatalf("delete sticker: %d %s", r.Code, r.Body)
 	}
-	history, _ := e.history(t, bob, chat, "")
+	history, _ := e.history(t, carol, chat, "")
 	if len(history) != 1 || history[0]["sticker"] == nil {
 		t.Fatalf("a sent sticker stays after it leaves the pack: %v", history)
 	}

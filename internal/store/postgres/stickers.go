@@ -26,12 +26,14 @@ type StickerPack struct {
 }
 
 type Sticker struct {
-	ID       int64
-	PackID   int64
-	Emoji    string
-	Animated bool
-	Deleted  bool
-	Image    Attachment
+	ID          int64
+	PackID      int64
+	PackSlug    *string
+	PackOwnerID *int64
+	Emoji       string
+	Animated    bool
+	Deleted     bool
+	Image       Attachment
 }
 
 type BuiltinSticker struct {
@@ -52,6 +54,7 @@ type StickerRepository interface {
 	Installation(ctx context.Context, userID, packID int64) (*bool, error)
 	InstalledPacks(ctx context.Context, userID int64, limit int) ([]StickerPack, error)
 	SetInstalled(ctx context.Context, userID, packID int64, installed bool) error
+	Remember(ctx context.Context, userID, packID int64) error
 	Stickers(ctx context.Context, ids []int64) (map[int64]Sticker, error)
 	PackStickers(ctx context.Context, packIDs []int64) (map[int64][]Sticker, error)
 	UseSticker(ctx context.Context, userID, stickerID int64, keep int) error
@@ -91,10 +94,10 @@ func packFrom(p sqlcdb.StickerPack) StickerPack {
 	}
 }
 
-func stickerFrom(s sqlcdb.Sticker, a sqlcdb.Attachment) Sticker {
+func stickerFrom(s sqlcdb.Sticker, slug *string, owner *int64, a sqlcdb.Attachment) Sticker {
 	return Sticker{
-		ID: s.ID, PackID: s.PackID, Emoji: s.Emoji, Animated: s.IsAnimated, Deleted: s.DeletedAt != nil,
-		Image: attachmentFrom(a),
+		ID: s.ID, PackID: s.PackID, PackSlug: slug, PackOwnerID: owner, Emoji: s.Emoji, Animated: s.IsAnimated,
+		Deleted: s.DeletedAt != nil, Image: attachmentFrom(a),
 	}
 }
 
@@ -184,6 +187,12 @@ func (r stickerRepo) SetInstalled(ctx context.Context, userID, packID int64, ins
 	return mapError(r.s.q.SetStickerPackInstalled(ctx, sqlcdb.SetStickerPackInstalledParams{UserID: userID, PackID: packID, Installed: installed}))
 }
 
+func (r stickerRepo) Remember(ctx context.Context, userID, packID int64) error {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	return mapError(r.s.q.RememberStickerPack(ctx, sqlcdb.RememberStickerPackParams{UserID: userID, PackID: packID}))
+}
+
 func (r stickerRepo) Stickers(ctx context.Context, ids []int64) (map[int64]Sticker, error) {
 	if len(ids) == 0 {
 		return map[int64]Sticker{}, nil
@@ -196,7 +205,7 @@ func (r stickerRepo) Stickers(ctx context.Context, ids []int64) (map[int64]Stick
 	}
 	out := make(map[int64]Sticker, len(rows))
 	for _, row := range rows {
-		s := stickerFrom(row.Sticker, row.Attachment)
+		s := stickerFrom(row.Sticker, row.PackSlug, row.PackOwnerID, row.Attachment)
 		s.Deleted = s.Deleted || row.PackDeletedAt != nil || row.PackHiddenAt != nil
 		out[s.ID] = s
 	}
@@ -215,7 +224,7 @@ func (r stickerRepo) PackStickers(ctx context.Context, packIDs []int64) (map[int
 		return nil, mapError(err)
 	}
 	for _, row := range rows {
-		out[row.Sticker.PackID] = append(out[row.Sticker.PackID], stickerFrom(row.Sticker, row.Attachment))
+		out[row.Sticker.PackID] = append(out[row.Sticker.PackID], stickerFrom(row.Sticker, row.PackSlug, row.PackOwnerID, row.Attachment))
 	}
 	return out, nil
 }
@@ -238,7 +247,7 @@ func (r stickerRepo) Recent(ctx context.Context, userID int64, limit int) ([]Sti
 	}
 	out := make([]Sticker, len(rows))
 	for i, row := range rows {
-		out[i] = stickerFrom(row.Sticker, row.Attachment)
+		out[i] = stickerFrom(row.Sticker, row.PackSlug, row.PackOwnerID, row.Attachment)
 	}
 	return out, nil
 }

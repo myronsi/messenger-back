@@ -11,7 +11,8 @@ Contract changes only. The backend changelog is `CHANGELOG.md` in the repository
   Only the owner may change a pack (`403`). Limits: 50 packs per user and 120 stickers per pack
   (`409 limit_reached`).
 - `GET /stickers/packs?owned=true` lists the packs the user made. `GET /stickers/links/{slug}` opens a pack by its
-  share link.
+  share link. A user pack is reachable by its ID (`GET`, add, report, sending its stickers) only for its owner and
+  for users who opened its link; `Sticker.pack_slug` carries the link, so receivers of a sticker can open its pack.
 - `StickerPack` gains the required `is_mine` and `is_hidden` and the optional `owner_id` and `slug`.
 - `POST /stickers/packs/{pack_id}/report` reports a pack; after 5 reports it is hidden for everybody but its owner
   and stickers cannot be sent from it.

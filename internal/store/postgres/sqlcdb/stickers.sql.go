@@ -395,16 +395,19 @@ func (q *Queries) ListOwnedStickerPacks(ctx context.Context, arg ListOwnedSticke
 }
 
 const listPackStickers = `-- name: ListPackStickers :many
-SELECT s.id, s.pack_id, s.attachment_id, s.builtin_key, s.emoji, s.position, s.is_animated, s.deleted_at, s.created_at, a.id, a.uploader_id, a.chat_id, a.storage_key, a.mime_type, a.size, a.width, a.height, a.duration, a.waveform, a.created_at, a.purpose, a.kind, a.filename, a.thumbnail_key
+SELECT s.id, s.pack_id, s.attachment_id, s.builtin_key, s.emoji, s.position, s.is_animated, s.deleted_at, s.created_at, p.slug AS pack_slug, p.owner_id AS pack_owner_id, a.id, a.uploader_id, a.chat_id, a.storage_key, a.mime_type, a.size, a.width, a.height, a.duration, a.waveform, a.created_at, a.purpose, a.kind, a.filename, a.thumbnail_key
 FROM stickers s
+JOIN sticker_packs p ON p.id = s.pack_id
 JOIN attachments a ON a.id = s.attachment_id
 WHERE s.pack_id = ANY($1::bigint[]) AND s.deleted_at IS NULL
 ORDER BY s.pack_id, s.position, s.id
 `
 
 type ListPackStickersRow struct {
-	Sticker    Sticker
-	Attachment Attachment
+	Sticker     Sticker
+	PackSlug    *string
+	PackOwnerID *int64
+	Attachment  Attachment
 }
 
 func (q *Queries) ListPackStickers(ctx context.Context, packIds []int64) ([]ListPackStickersRow, error) {
@@ -426,6 +429,8 @@ func (q *Queries) ListPackStickers(ctx context.Context, packIds []int64) ([]List
 			&i.Sticker.IsAnimated,
 			&i.Sticker.DeletedAt,
 			&i.Sticker.CreatedAt,
+			&i.PackSlug,
+			&i.PackOwnerID,
 			&i.Attachment.ID,
 			&i.Attachment.UploaderID,
 			&i.Attachment.ChatID,
@@ -453,7 +458,7 @@ func (q *Queries) ListPackStickers(ctx context.Context, packIds []int64) ([]List
 }
 
 const listRecentStickers = `-- name: ListRecentStickers :many
-SELECT s.id, s.pack_id, s.attachment_id, s.builtin_key, s.emoji, s.position, s.is_animated, s.deleted_at, s.created_at, a.id, a.uploader_id, a.chat_id, a.storage_key, a.mime_type, a.size, a.width, a.height, a.duration, a.waveform, a.created_at, a.purpose, a.kind, a.filename, a.thumbnail_key
+SELECT s.id, s.pack_id, s.attachment_id, s.builtin_key, s.emoji, s.position, s.is_animated, s.deleted_at, s.created_at, p.slug AS pack_slug, p.owner_id AS pack_owner_id, a.id, a.uploader_id, a.chat_id, a.storage_key, a.mime_type, a.size, a.width, a.height, a.duration, a.waveform, a.created_at, a.purpose, a.kind, a.filename, a.thumbnail_key
 FROM user_recent_stickers r
 JOIN stickers s ON s.id = r.sticker_id
 JOIN sticker_packs p ON p.id = s.pack_id
@@ -469,8 +474,10 @@ type ListRecentStickersParams struct {
 }
 
 type ListRecentStickersRow struct {
-	Sticker    Sticker
-	Attachment Attachment
+	Sticker     Sticker
+	PackSlug    *string
+	PackOwnerID *int64
+	Attachment  Attachment
 }
 
 func (q *Queries) ListRecentStickers(ctx context.Context, arg ListRecentStickersParams) ([]ListRecentStickersRow, error) {
@@ -492,6 +499,8 @@ func (q *Queries) ListRecentStickers(ctx context.Context, arg ListRecentStickers
 			&i.Sticker.IsAnimated,
 			&i.Sticker.DeletedAt,
 			&i.Sticker.CreatedAt,
+			&i.PackSlug,
+			&i.PackOwnerID,
 			&i.Attachment.ID,
 			&i.Attachment.UploaderID,
 			&i.Attachment.ChatID,
@@ -519,7 +528,8 @@ func (q *Queries) ListRecentStickers(ctx context.Context, arg ListRecentStickers
 }
 
 const listStickersByID = `-- name: ListStickersByID :many
-SELECT s.id, s.pack_id, s.attachment_id, s.builtin_key, s.emoji, s.position, s.is_animated, s.deleted_at, s.created_at, p.deleted_at AS pack_deleted_at, p.hidden_at AS pack_hidden_at, a.id, a.uploader_id, a.chat_id, a.storage_key, a.mime_type, a.size, a.width, a.height, a.duration, a.waveform, a.created_at, a.purpose, a.kind, a.filename, a.thumbnail_key
+SELECT s.id, s.pack_id, s.attachment_id, s.builtin_key, s.emoji, s.position, s.is_animated, s.deleted_at, s.created_at, p.deleted_at AS pack_deleted_at, p.hidden_at AS pack_hidden_at,
+       p.slug AS pack_slug, p.owner_id AS pack_owner_id, a.id, a.uploader_id, a.chat_id, a.storage_key, a.mime_type, a.size, a.width, a.height, a.duration, a.waveform, a.created_at, a.purpose, a.kind, a.filename, a.thumbnail_key
 FROM stickers s
 JOIN sticker_packs p ON p.id = s.pack_id
 JOIN attachments a ON a.id = s.attachment_id
@@ -530,6 +540,8 @@ type ListStickersByIDRow struct {
 	Sticker       Sticker
 	PackDeletedAt *time.Time
 	PackHiddenAt  *time.Time
+	PackSlug      *string
+	PackOwnerID   *int64
 	Attachment    Attachment
 }
 
@@ -554,6 +566,8 @@ func (q *Queries) ListStickersByID(ctx context.Context, ids []int64) ([]ListStic
 			&i.Sticker.CreatedAt,
 			&i.PackDeletedAt,
 			&i.PackHiddenAt,
+			&i.PackSlug,
+			&i.PackOwnerID,
 			&i.Attachment.ID,
 			&i.Attachment.UploaderID,
 			&i.Attachment.ChatID,
@@ -627,6 +641,21 @@ func (q *Queries) PackStickerStats(ctx context.Context, packID int64) (PackStick
 	var i PackStickerStatsRow
 	err := row.Scan(&i.Live, &i.NextPosition)
 	return i, err
+}
+
+const rememberStickerPack = `-- name: RememberStickerPack :exec
+INSERT INTO user_sticker_packs (user_id, pack_id, installed) VALUES ($1, $2, false)
+ON CONFLICT (user_id, pack_id) DO NOTHING
+`
+
+type RememberStickerPackParams struct {
+	UserID int64
+	PackID int64
+}
+
+func (q *Queries) RememberStickerPack(ctx context.Context, arg RememberStickerPackParams) error {
+	_, err := q.db.Exec(ctx, rememberStickerPack, arg.UserID, arg.PackID)
+	return err
 }
 
 const renameStickerPack = `-- name: RenameStickerPack :one

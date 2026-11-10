@@ -142,7 +142,7 @@ type MessageParts struct {
 
 func PresentSticker(s postgres.Sticker, basePath string) Sticker {
 	return Sticker{
-		Id: FormatID(s.ID), PackId: FormatID(s.PackID), Emoji: s.Emoji, IsAnimated: s.Animated,
+		Id: FormatID(s.ID), PackId: FormatID(s.PackID), PackSlug: s.PackSlug, Emoji: s.Emoji, IsAnimated: s.Animated,
 		Image: PresentAttachment(s.Image, scylla.TypeSticker, basePath),
 	}
 }

@@ -39,15 +39,17 @@ INSERT INTO user_sticker_packs (user_id, pack_id, installed) VALUES (@user_id, @
 ON CONFLICT (user_id, pack_id) DO UPDATE SET installed = EXCLUDED.installed, changed_at = now();
 
 -- name: ListStickersByID :many
-SELECT sqlc.embed(s), p.deleted_at AS pack_deleted_at, p.hidden_at AS pack_hidden_at, sqlc.embed(a)
+SELECT sqlc.embed(s), p.deleted_at AS pack_deleted_at, p.hidden_at AS pack_hidden_at,
+       p.slug AS pack_slug, p.owner_id AS pack_owner_id, sqlc.embed(a)
 FROM stickers s
 JOIN sticker_packs p ON p.id = s.pack_id
 JOIN attachments a ON a.id = s.attachment_id
 WHERE s.id = ANY(@ids::bigint[]);
 
 -- name: ListPackStickers :many
-SELECT sqlc.embed(s), sqlc.embed(a)
+SELECT sqlc.embed(s), p.slug AS pack_slug, p.owner_id AS pack_owner_id, sqlc.embed(a)
 FROM stickers s
+JOIN sticker_packs p ON p.id = s.pack_id
 JOIN attachments a ON a.id = s.attachment_id
 WHERE s.pack_id = ANY(@pack_ids::bigint[]) AND s.deleted_at IS NULL
 ORDER BY s.pack_id, s.position, s.id;
@@ -63,7 +65,7 @@ WHERE r.user_id = @user_id AND r.sticker_id NOT IN (
 );
 
 -- name: ListRecentStickers :many
-SELECT sqlc.embed(s), sqlc.embed(a)
+SELECT sqlc.embed(s), p.slug AS pack_slug, p.owner_id AS pack_owner_id, sqlc.embed(a)
 FROM user_recent_stickers r
 JOIN stickers s ON s.id = r.sticker_id
 JOIN sticker_packs p ON p.id = s.pack_id
@@ -71,6 +73,10 @@ JOIN attachments a ON a.id = s.attachment_id
 WHERE r.user_id = @user_id AND s.deleted_at IS NULL AND p.deleted_at IS NULL AND p.hidden_at IS NULL
 ORDER BY r.used_at DESC, r.sticker_id DESC
 LIMIT @max_rows;
+
+-- name: RememberStickerPack :exec
+INSERT INTO user_sticker_packs (user_id, pack_id, installed) VALUES (@user_id, @pack_id, false)
+ON CONFLICT (user_id, pack_id) DO NOTHING;
 
 -- name: LockStickerPackOwner :one
 SELECT id FROM users WHERE id = @id FOR NO KEY UPDATE;

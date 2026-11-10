@@ -1863,9 +1863,10 @@ paths:
       operationId: getStickerPack
       summary: A sticker pack
       description: |
-        Any pack that is not deleted, whether the user has it or not, for example to preview the pack of a sticker
-        someone sent. `is_installed` tells whether it is in the user's panel. A hidden pack is found only by its
-        owner.
+        A built-in pack, the user's own pack, or a user pack the user opened by its link before (`404` otherwise,
+        so packs cannot be found by guessing IDs). To preview the pack of a sticker someone sent, open
+        `Sticker.pack_slug` with `GET /stickers/links/{slug}` instead. `is_installed` tells whether it is in the
+        user's panel. A hidden pack is found only by its owner.
       responses:
         "426": { $ref: "#/components/responses/ClientOutdated" }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -1922,7 +1923,9 @@ paths:
       tags: [stickers]
       operationId: addStickerPack
       summary: Add a sticker pack to the user's panel
-      description: Adding a pack the user has moves it to the top of the panel.
+      description: |
+        Adding a pack the user has moves it to the top of the panel. User packs can be added only after opening
+        them by their link (`404` otherwise).
       responses:
         "426": { $ref: "#/components/responses/ClientOutdated" }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -2055,7 +2058,8 @@ paths:
         One report per user and pack; reporting again changes nothing. After 5 reports from different users the
         pack is hidden until a moderator restores it: it leaves every panel, cannot be added or sent from, and only
         its owner still sees it (`is_hidden`). Stickers already sent keep showing. Built-in packs and the user's own
-        packs cannot be reported (`403`). At most 20 reports per user a day (`429`).
+        packs cannot be reported (`403`). User packs can be reported only after opening them by their link (`404`
+        otherwise). At most 20 new reports per user a day (`429`); reporting a pack again changes nothing.
       requestBody:
         required: true
         content:
@@ -2080,7 +2084,9 @@ paths:
       tags: [stickers]
       operationId: getStickerPackByLink
       summary: A sticker pack by its share link
-      description: The same as `GET /stickers/packs/{pack_id}`, found by the pack's `slug`.
+      description: |
+        The same as `GET /stickers/packs/{pack_id}`, found by the pack's `slug`. Opening a link lets the user use
+        the pack by its ID from then on: add it, report it and send its stickers.
       responses:
         "426": { $ref: "#/components/responses/ClientOutdated" }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -4929,6 +4935,11 @@ components:
       properties:
         id: { $ref: "#/components/schemas/Id" }
         pack_id: { $ref: "#/components/schemas/Id" }
+        pack_slug:
+          allOf: [{ $ref: "#/components/schemas/StickerPackSlug" }]
+          description: |
+            The share link of the sticker's pack when a user made it; missing for built-in packs. A client that
+            shows the pack of a sticker someone sent opens it with `GET /stickers/links/{slug}`.
         emoji:
           type: string
           minLength: 1
