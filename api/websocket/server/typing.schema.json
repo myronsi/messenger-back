@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ServerTypingEvent",
-  "description": "A user started or stopped typing.",
+  "description": "A user started or stopped typing or recording a voice message. Hide it after about 6 seconds without a repeat: the sender may disconnect before it sends `false`.",
   "type": "object",
   "properties": {
     "type": {
@@ -21,11 +21,20 @@
         },
         "is_typing": {
           "type": "boolean"
+        },
+        "action": {
+          "description": "What the user is doing. New values may be added: show an unknown one like `typing`.",
+          "type": "string",
+          "enum": [
+            "typing",
+            "recording_voice"
+          ]
         }
       },
       "required": [
         "user_id",
-        "is_typing"
+        "is_typing",
+        "action"
       ]
     }
   },

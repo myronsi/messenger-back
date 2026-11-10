@@ -43,6 +43,8 @@ func TestDecodeRejectsWhatTheSchemasReject(t *testing.T) {
 		"long client_temp_id":       `{"type":"read","client_temp_id":"` + strings.Repeat("x", 65) + `","chat_id":"1","data":{"message_id":"2"}}`,
 		"typing with temp id":       `{"type":"typing","client_temp_id":"a","chat_id":"1","data":{"is_typing":true}}`,
 		"typing without flag":       `{"type":"typing","chat_id":"1","data":{}}`,
+		"unknown typing action":     `{"type":"typing","chat_id":"1","data":{"is_typing":true,"action":"dancing"}}`,
+		"empty typing action":       `{"type":"typing","chat_id":"1","data":{"is_typing":true,"action":""}}`,
 		"text without content":      `{"type":"message","client_temp_id":"a","chat_id":"1","data":{"type":"text"}}`,
 		"text with attachment":      `{"type":"message","client_temp_id":"a","chat_id":"1","data":{"type":"text","content":"x","attachment_id":"8b4d0b5e-35a1-4f34-9b2a-0d3c1c9a1d11"}}`,
 		"file without attachment":   `{"type":"message","client_temp_id":"a","chat_id":"1","data":{"type":"file"}}`,
@@ -65,6 +67,12 @@ func TestDecodeRejectsWhatTheSchemasReject(t *testing.T) {
 		if !errors.As(err, &pe) {
 			t.Errorf("%s: accepted (%v)", name, err)
 		}
+	}
+	if ev, err := decodeClientEvent([]byte(`{"type":"typing","chat_id":"1","data":{"is_typing":true}}`)); err != nil || ev.Typing.Action != "typing" {
+		t.Fatalf("typing without an action: %+v %v", ev.Typing, err)
+	}
+	if ev, err := decodeClientEvent([]byte(`{"type":"typing","chat_id":"1","data":{"is_typing":false,"action":"recording_voice"}}`)); err != nil || ev.Typing.Action != "recording_voice" || ev.Typing.IsTyping {
+		t.Fatalf("recording a voice message: %+v %v", ev.Typing, err)
 	}
 	if ev, err := decodeClientEvent([]byte(`{"type":"edit","client_temp_id":"a","chat_id":"1","data":{"message_id":"2","content":""}}`)); err != nil || ev.Edit == nil || ev.Edit.Content != "" {
 		t.Fatalf("an empty edit for a file caption was refused: %v", err)

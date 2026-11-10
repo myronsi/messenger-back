@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ClientTypingEvent",
-  "description": "Tell the chat that you are (not) typing. Not acknowledged, so it carries no `client_temp_id`.",
+  "description": "Tell the chat that you are (not) typing or recording a voice message. Not acknowledged, so it carries no `client_temp_id`. Send `is_typing: true` again every few seconds while it lasts and `false` when it ends; receivers hide it when it is not repeated. Dropped when your `typing_indicators_enabled` privacy setting is off.",
   "type": "object",
   "properties": {
     "type": {
@@ -15,6 +15,15 @@
       "properties": {
         "is_typing": {
           "type": "boolean"
+        },
+        "action": {
+          "description": "What you are doing. Without it, `typing`.",
+          "type": "string",
+          "enum": [
+            "typing",
+            "recording_voice"
+          ],
+          "default": "typing"
         }
       },
       "required": [

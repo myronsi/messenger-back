@@ -316,7 +316,7 @@ func (c *conn) handle(ev clientEvent) {
 	case "reaction_add", "reaction_remove":
 		err = svc.React(ctx, c.userID, ev.ChatID, ev.Reaction.MessageID, ev.Reaction.Emoji, ev.Type == "reaction_add")
 	case "typing":
-		_ = svc.Typing(ctx, c.userID, ev.ChatID, ev.Typing.IsTyping)
+		_ = svc.Typing(ctx, c.userID, ev.ChatID, ev.Typing.IsTyping, ev.Typing.Action)
 		return
 	}
 	if err != nil {

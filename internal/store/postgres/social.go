@@ -36,15 +36,16 @@ const (
 
 // PrivacySettings is what a user lets others see and do.
 type PrivacySettings struct {
-	UserID              int64
-	AvatarVisibility    string
-	ProfileVisibility   string
-	PresenceVisibility  string
-	ReadReceiptsEnabled bool
-	DirectMessages      string
-	GroupInvites        string
-	SearchVisibility    string
-	CallsEnabled        bool
+	UserID                  int64
+	AvatarVisibility        string
+	ProfileVisibility       string
+	PresenceVisibility      string
+	ReadReceiptsEnabled     bool
+	DirectMessages          string
+	GroupInvites            string
+	SearchVisibility        string
+	CallsEnabled            bool
+	TypingIndicatorsEnabled bool
 }
 
 // DefaultPrivacy is what a user without a settings row gets (the column defaults).
@@ -53,6 +54,7 @@ func DefaultPrivacy(userID int64) PrivacySettings {
 		UserID: userID, AvatarVisibility: VisibleEveryone, ProfileVisibility: VisibleEveryone,
 		PresenceVisibility: VisibleEveryone, ReadReceiptsEnabled: true, DirectMessages: VisibleEveryone,
 		GroupInvites: VisibleEveryone, SearchVisibility: VisibleEveryone, CallsEnabled: true,
+		TypingIndicatorsEnabled: true,
 	}
 }
 
@@ -123,7 +125,7 @@ func privacyFrom(p sqlcdb.UserPrivacySetting) PrivacySettings {
 		UserID: p.UserID, AvatarVisibility: p.AvatarVisibility, ProfileVisibility: p.ProfileVisibility,
 		PresenceVisibility: p.PresenceVisibility, ReadReceiptsEnabled: p.ReadReceiptsEnabled,
 		DirectMessages: p.DirectMessages, GroupInvites: p.GroupInvites, SearchVisibility: p.SearchVisibility,
-		CallsEnabled: p.CallsEnabled,
+		CallsEnabled: p.CallsEnabled, TypingIndicatorsEnabled: p.TypingIndicatorsEnabled,
 	}
 }
 
@@ -156,7 +158,7 @@ func (r socialRepo) UpdatePrivacy(ctx context.Context, p PrivacySettings) (Priva
 		UserID: p.UserID, AvatarVisibility: p.AvatarVisibility, ProfileVisibility: p.ProfileVisibility,
 		PresenceVisibility: p.PresenceVisibility, ReadReceiptsEnabled: p.ReadReceiptsEnabled,
 		DirectMessages: p.DirectMessages, GroupInvites: p.GroupInvites, SearchVisibility: p.SearchVisibility,
-		CallsEnabled: p.CallsEnabled,
+		CallsEnabled: p.CallsEnabled, TypingIndicatorsEnabled: p.TypingIndicatorsEnabled,
 	})
 	if err != nil {
 		return PrivacySettings{}, mapError(err)
@@ -166,14 +168,15 @@ func (r socialRepo) UpdatePrivacy(ctx context.Context, p PrivacySettings) (Priva
 
 // PrivacyPatch changes some privacy settings; nil fields stay as they are.
 type PrivacyPatch struct {
-	AvatarVisibility    *string
-	ProfileVisibility   *string
-	PresenceVisibility  *string
-	ReadReceiptsEnabled *bool
-	DirectMessages      *string
-	GroupInvites        *string
-	SearchVisibility    *string
-	CallsEnabled        *bool
+	AvatarVisibility        *string
+	ProfileVisibility       *string
+	PresenceVisibility      *string
+	ReadReceiptsEnabled     *bool
+	DirectMessages          *string
+	GroupInvites            *string
+	SearchVisibility        *string
+	CallsEnabled            *bool
+	TypingIndicatorsEnabled *bool
 }
 
 func (r socialRepo) PatchPrivacy(ctx context.Context, userID int64, p PrivacyPatch) (PrivacySettings, error) {
@@ -186,7 +189,7 @@ func (r socialRepo) PatchPrivacy(ctx context.Context, userID int64, p PrivacyPat
 		UserID: userID, AvatarVisibility: p.AvatarVisibility, ProfileVisibility: p.ProfileVisibility,
 		PresenceVisibility: p.PresenceVisibility, ReadReceiptsEnabled: p.ReadReceiptsEnabled,
 		DirectMessages: p.DirectMessages, GroupInvites: p.GroupInvites, SearchVisibility: p.SearchVisibility,
-		CallsEnabled: p.CallsEnabled,
+		CallsEnabled: p.CallsEnabled, TypingIndicatorsEnabled: p.TypingIndicatorsEnabled,
 	})
 	if err != nil {
 		return PrivacySettings{}, mapError(err)

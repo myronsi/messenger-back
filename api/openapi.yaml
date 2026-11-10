@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.18
+  version: 2.1.0-alpha.19
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -4360,6 +4360,7 @@ components:
         - group_invites
         - search_visibility
         - calls_enabled
+        - typing_indicators_enabled
         - exceptions
       properties:
         avatar_visibility: { $ref: "#/components/schemas/Visibility" }
@@ -4372,6 +4373,9 @@ components:
         calls_enabled:
           type: boolean
           description: Whether others may ring this user. Calls are only possible from an existing direct chat or a shared group.
+        typing_indicators_enabled:
+          type: boolean
+          description: Whether other members see that this user is typing or recording a voice message. The user still sees theirs.
         exceptions: { $ref: "#/components/schemas/PrivacyExceptions" }
     UpdatePrivacySettingsRequest:
       type: object
@@ -4385,6 +4389,7 @@ components:
         group_invites: { $ref: "#/components/schemas/GroupInvitePolicy" }
         search_visibility: { $ref: "#/components/schemas/SearchVisibility" }
         calls_enabled: { type: boolean }
+        typing_indicators_enabled: { type: boolean }
     PrivacyExceptionsRequest:
       type: object
       required: [user_ids]

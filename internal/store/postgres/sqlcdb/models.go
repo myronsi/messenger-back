@@ -323,15 +323,16 @@ type UserPrivacyException struct {
 }
 
 type UserPrivacySetting struct {
-	UserID              int64
-	AvatarVisibility    string
-	ProfileVisibility   string
-	PresenceVisibility  string
-	ReadReceiptsEnabled bool
-	DirectMessages      string
-	GroupInvites        string
-	SearchVisibility    string
-	CallsEnabled        bool
+	UserID                  int64
+	AvatarVisibility        string
+	ProfileVisibility       string
+	PresenceVisibility      string
+	ReadReceiptsEnabled     bool
+	DirectMessages          string
+	GroupInvites            string
+	SearchVisibility        string
+	CallsEnabled            bool
+	TypingIndicatorsEnabled bool
 }
 
 type UserRecoveryKey struct {

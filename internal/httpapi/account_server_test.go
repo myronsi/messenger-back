@@ -125,6 +125,13 @@ func TestProfileAndPrivacy(t *testing.T) {
 	if r.json()["avatar_visibility"] != "contacts" || r.json()["search_visibility"] != "nobody" || r.json()["read_receipts_enabled"] != false {
 		t.Fatalf("partial patch: %s", r.Body)
 	}
+	if p["typing_indicators_enabled"] != true {
+		t.Fatalf("typing indicators are on by default: %v", p)
+	}
+	r = e.do(t, request{method: http.MethodPatch, path: "/me/privacy", token: alice.access, body: map[string]any{"typing_indicators_enabled": false}})
+	if r.Code != http.StatusOK || r.json()["typing_indicators_enabled"] != false || r.json()["search_visibility"] != "nobody" {
+		t.Fatalf("turn typing indicators off: %d %s", r.Code, r.Body)
+	}
 	if r := e.do(t, request{method: http.MethodPatch, path: "/me/privacy", token: alice.access, body: map[string]any{"avatar_visibility": "friends"}}); r.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("unknown value: %d", r.Code)
 	}

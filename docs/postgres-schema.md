@@ -22,6 +22,7 @@ users, chats and their participants, attachment metadata and the security log.
 | `000006_session_rotation` | `user_session_rotated_tokens` (every replaced refresh hash, for reuse detection and the parallel-refresh grace window; pruned by the worker) with indexes for age-based cleanup of it and of revoked sessions; drops `two_factor_challenges`, login challenges live in Redis |
 | `000025_calls` | `calls`, `call_participants`, `call_identities`, `call_key_envelopes`, `call_start_requests`; `user_privacy_settings.calls_enabled` ([calls.md](calls.md#implementation)) |
 | `000026_recovery_approval_passkey` | `webauthn_challenges.purpose` allows `recovery_approval` ([account-recovery.md](account-recovery.md#trusted-device-approval)) |
+| `000028_typing_indicators` | `user_privacy_settings.typing_indicators_enabled` ([realtime.md](realtime.md#client-events)) |
 
 Changes compared to v1:
 

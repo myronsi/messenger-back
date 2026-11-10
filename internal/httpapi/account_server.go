@@ -218,15 +218,16 @@ func (a *AccountServer) privacy(ctx context.Context, userID int64) (PrivacySetti
 		return PrivacySettings{}, err
 	}
 	out := PrivacySettings{
-		AvatarVisibility:    Visibility(visibilityFromDB(s.AvatarVisibility)),
-		ProfileVisibility:   Visibility(visibilityFromDB(s.ProfileVisibility)),
-		PresenceVisibility:  Visibility(visibilityFromDB(s.PresenceVisibility)),
-		ReadReceiptsEnabled: s.ReadReceiptsEnabled,
-		DirectMessages:      DirectMessagePolicy(s.DirectMessages),
-		GroupInvites:        GroupInvitePolicy(visibilityFromDB(s.GroupInvites)),
-		SearchVisibility:    SearchVisibility(s.SearchVisibility),
-		CallsEnabled:        s.CallsEnabled,
-		Exceptions:          PrivacyExceptions{},
+		AvatarVisibility:        Visibility(visibilityFromDB(s.AvatarVisibility)),
+		ProfileVisibility:       Visibility(visibilityFromDB(s.ProfileVisibility)),
+		PresenceVisibility:      Visibility(visibilityFromDB(s.PresenceVisibility)),
+		ReadReceiptsEnabled:     s.ReadReceiptsEnabled,
+		DirectMessages:          DirectMessagePolicy(s.DirectMessages),
+		GroupInvites:            GroupInvitePolicy(visibilityFromDB(s.GroupInvites)),
+		SearchVisibility:        SearchVisibility(s.SearchVisibility),
+		CallsEnabled:            s.CallsEnabled,
+		TypingIndicatorsEnabled: s.TypingIndicatorsEnabled,
+		Exceptions:              PrivacyExceptions{},
 	}
 	for _, k := range exceptionSettings {
 		out.Exceptions[k] = struct {
@@ -316,6 +317,9 @@ func (a *AccountServer) UpdatePrivacySettings(w http.ResponseWriter, r *http.Req
 	}
 	if body.CallsEnabled != nil {
 		s.CallsEnabled, changed = body.CallsEnabled, true
+	}
+	if body.TypingIndicatorsEnabled != nil {
+		s.TypingIndicatorsEnabled, changed = body.TypingIndicatorsEnabled, true
 	}
 	if !changed {
 		WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "body", Message: "send at least one setting"})

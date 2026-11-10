@@ -113,12 +113,13 @@ func truncate(b []byte) string {
 }
 
 func TestEventContractRejectsViolations(t *testing.T) {
-	ok := `{"type":"typing","event_id":"1","chat_id":"5","data":{"user_id":"7","is_typing":true}}`
+	ok := `{"type":"typing","event_id":"1","chat_id":"5","data":{"user_id":"7","is_typing":true,"action":"typing"}}`
 	if err := eventViolation([]byte(ok)); err != nil {
 		t.Fatalf("valid typing event: %v", err)
 	}
 	for _, bad := range []string{
-		`{"type":"typing","event_id":1,"chat_id":"5","data":{"user_id":"7","is_typing":true}}`,
+		`{"type":"typing","event_id":1,"chat_id":"5","data":{"user_id":"7","is_typing":true,"action":"typing"}}`,
+		`{"type":"typing","event_id":"1","chat_id":"5","data":{"user_id":"7","is_typing":true}}`,
 		`{"type":"no_such_event","event_id":"1","chat_id":null,"data":{}}`,
 		`{"type":"message","event_id":"1","chat_id":"5","data":{}}`,
 	} {

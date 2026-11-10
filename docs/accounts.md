@@ -25,6 +25,8 @@ The profile, privacy, blocking, contact-name and user lookup endpoints (`interna
 | `direct_messages` | `everyone`, `shared_chats`, `wait_approval` |
 | `search_visibility` | `everyone`, `nobody` |
 | `read_receipts_enabled` | `true`, `false` |
+| `calls_enabled` | `true`, `false` |
+| `typing_indicators_enabled` | `true`, `false`: with `false` the server drops the user's `typing` events ([realtime.md](realtime.md#client-events)) |
 
 The contract's `contacts` means "people you share a chat with" (`shared_chats` in the schema): a group, or a direct chat that you opened yourself or read a message in. A direct chat someone else opened with you, and that you never read in, does not make them your contact. `PUT /me/privacy/exceptions/{setting}/{allow|deny}` replaces one exception list; the lists apply to every value of the setting. A user can be on only one list per setting, so putting them on one removes them from the other. Unknown user IDs are rejected.
 

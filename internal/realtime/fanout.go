@@ -305,8 +305,8 @@ func (f *Fanout) Read(ctx context.Context, chatID, userID, messageID int64, at t
 }
 
 // Typing implements messages.Notifier.
-func (f *Fanout) Typing(ctx context.Context, chatID, userID int64, typing bool, recipients []int64) {
-	f.same(ctx, "typing", chatID, map[string]any{"user_id": idString(userID), "is_typing": typing}, recipients)
+func (f *Fanout) Typing(ctx context.Context, chatID, userID int64, typing bool, action string, recipients []int64) {
+	f.same(ctx, "typing", chatID, map[string]any{"user_id": idString(userID), "is_typing": typing, "action": action}, recipients)
 }
 
 // Removed tells users that they are no longer in the chat (it was deleted, they left or were removed).
