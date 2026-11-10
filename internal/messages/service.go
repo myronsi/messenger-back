@@ -20,6 +20,7 @@ import (
 	"github.com/myronsi/messenger-back/internal/drawing"
 	"github.com/myronsi/messenger-back/internal/events"
 	"github.com/myronsi/messenger-back/internal/ids"
+	"github.com/myronsi/messenger-back/internal/stickers"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/scylla"
 )
@@ -81,6 +82,7 @@ type Store interface {
 	Social() postgres.SocialRepository
 	Attachments() postgres.AttachmentRepository
 	Users() postgres.UserRepository
+	Stickers() postgres.StickerRepository
 }
 
 // Deps are the collaborators of the service.
@@ -235,6 +237,7 @@ type SendRequest struct {
 	AlbumIDs     []uuid.UUID
 	ReplyTo      *int64
 	Drawings     map[uuid.UUID][]byte
+	StickerID    *int64
 }
 
 // Sent is the result of Send. Duplicate means the client_temp_id was used before; Message then carries the id
@@ -263,6 +266,9 @@ func (s *Service) validateSend(r SendRequest) error {
 	if len(r.Drawings) > MaxAlbumItems {
 		return invalid("drawings must contain at most %d items", MaxAlbumItems)
 	}
+	if r.StickerID != nil && r.Type != scylla.TypeSticker {
+		return invalid("only a sticker message has sticker_id")
+	}
 	switch r.Type {
 	case scylla.TypeText:
 		if r.Content == nil || strings.TrimSpace(*r.Content) == "" {
@@ -275,8 +281,15 @@ func (s *Service) validateSend(r SendRequest) error {
 		if r.AttachmentID == nil && len(r.AlbumIDs) == 0 {
 			return invalid("a %s message needs attachment_id", r.Type)
 		}
+	case scylla.TypeSticker:
+		if r.StickerID == nil {
+			return invalid("a sticker message needs sticker_id")
+		}
+		if r.Content != nil || r.AttachmentID != nil {
+			return invalid("a sticker message has no content and no attachment")
+		}
 	default:
-		return invalid("type must be text, file or voice")
+		return invalid("type must be text, file, voice or sticker")
 	}
 	return nil
 }
@@ -316,6 +329,14 @@ func (s *Service) Send(ctx context.Context, r SendRequest) (Sent, error) {
 	if err != nil {
 		return Sent{}, err
 	}
+	var sticker *postgres.Sticker
+	if r.StickerID != nil {
+		found, err := s.sticker(ctx, *r.StickerID)
+		if err != nil {
+			return Sent{}, err
+		}
+		sticker = &found
+	}
 
 	id, err := s.d.IDs.Next()
 	if err != nil {
@@ -347,6 +368,10 @@ func (s *Service) Send(ctx context.Context, r SendRequest) (Sent, error) {
 	if len(attachments) > 1 {
 		m.AlbumIDs = attachments
 	}
+	if sticker != nil {
+		image, emoji := gocql.UUID(sticker.Image.ID), sticker.Emoji
+		m.StickerID, m.AttachmentID, m.Content = &sticker.ID, &image, &emoji
+	}
 	if err := s.linkAttachments(ctx, m, drawings); err != nil {
 		s.abandon(ctx, r, id, resumed)
 		return Sent{}, err
@@ -362,7 +387,28 @@ func (s *Service) Send(ctx context.Context, r SendRequest) (Sent, error) {
 		return Sent{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
 	s.delivered(ctx, m, members, r.ClientTempID)
+	if sticker != nil {
+		s.usedSticker(ctx, r.SenderID, sticker.ID)
+	}
 	return Sent{Message: m}, nil
+}
+
+func (s *Service) sticker(ctx context.Context, id int64) (postgres.Sticker, error) {
+	found, err := s.d.Store.Stickers().Stickers(ctx, []int64{id})
+	if err != nil {
+		return postgres.Sticker{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
+	}
+	st, ok := found[id]
+	if !ok || st.Deleted {
+		return postgres.Sticker{}, invalid("sticker_id is not an available sticker")
+	}
+	return st, nil
+}
+
+func (s *Service) usedSticker(ctx context.Context, userID, stickerID int64) {
+	if err := s.d.Store.Stickers().UseSticker(context.WithoutCancel(ctx), userID, stickerID, stickers.MaxRecent); err != nil {
+		s.d.Log.WarnContext(ctx, "recent sticker", "error", err, "sticker_id", stickerID)
+	}
 }
 
 func (s *Service) abandon(ctx context.Context, r SendRequest, id int64, keep bool) {
@@ -519,6 +565,9 @@ func (s *Service) mayAttach(ctx context.Context, r SendRequest, a postgres.Attac
 
 // Link before storing the message so all items are accessible as soon as recipients see it.
 func (s *Service) linkAttachments(ctx context.Context, m scylla.Message, drawings map[gocql.UUID][]byte) error {
+	if m.Type == scylla.TypeSticker {
+		return nil
+	}
 	for _, id := range m.AttachmentIDs() {
 		if err := s.d.Store.Attachments().Link(ctx, uuid.UUID(id), m.ChatID, m.ID, drawings[id]); err != nil {
 			return fmt.Errorf("%w: %w", ErrUnavailable, err)

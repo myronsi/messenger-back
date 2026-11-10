@@ -23,6 +23,7 @@ users, chats and their participants, attachment metadata and the security log.
 | `000025_calls` | `calls`, `call_participants`, `call_identities`, `call_key_envelopes`, `call_start_requests`; `user_privacy_settings.calls_enabled` ([calls.md](calls.md#implementation)) |
 | `000026_recovery_approval_passkey` | `webauthn_challenges.purpose` allows `recovery_approval` ([account-recovery.md](account-recovery.md#trusted-device-approval)) |
 | `000028_typing_indicators` | `user_privacy_settings.typing_indicators_enabled` ([realtime.md](realtime.md#client-events)) |
+| `000029_stickers` | `sticker_packs`, `stickers`, `user_sticker_packs`, `user_recent_stickers`; `attachments.purpose` allows `sticker` ([media.md](media.md#stickers)) |
 
 Changes compared to v1:
 

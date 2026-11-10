@@ -78,6 +78,11 @@ negative.push(
   ["SendMessageRequest", sendMessage({ type: "file", attachment_id: ATTACHMENT, attachment_ids: ALBUM })],
   ["SendMessageRequest", sendMessage({ type: "voice", attachment_ids: ALBUM })],
   ["SendMessageRequest", sendMessage({ type: "text", content: "x", drawings: drawn(STROKE) })],
+  ["SendMessageRequest", sendMessage({ type: "sticker" })],
+  ["SendMessageRequest", sendMessage({ type: "sticker", sticker_id: "9", content: "x" })],
+  ["SendMessageRequest", sendMessage({ type: "sticker", sticker_id: "9", attachment_id: ATTACHMENT })],
+  ["SendMessageRequest", sendMessage({ type: "text", content: "x", sticker_id: "9" })],
+  ["SendMessageRequest", sendMessage({ type: "file", attachment_id: ATTACHMENT, sticker_id: "9" })],
   ["SendMessageRequest", sendMessage({ type: "file", attachment_id: ATTACHMENT, drawings: drawn() })],
   ["SendMessageRequest", sendMessage({ type: "file", attachment_id: ATTACHMENT, drawings: drawn({ ...STROKE, text: "x" }) })],
   ["SendMessageRequest", sendMessage({ type: "file", attachment_id: ATTACHMENT, drawings: drawn({ ...LABEL, points: [0, 0] }) })],
@@ -92,6 +97,7 @@ const positive = [
   ["SendMessageRequest", sendMessage({ type: "file", attachment_ids: ALBUM, content: "Trip" })],
   ["SendMessageRequest", sendMessage({ type: "file", attachment_id: ATTACHMENT, reply_to: "7", drawings: drawn(STROKE, LABEL) })],
   ["SendMessageRequest", sendMessage({ type: "voice", attachment_id: ATTACHMENT, content: null })],
+  ["SendMessageRequest", sendMessage({ type: "sticker", sticker_id: "9", reply_to: "7" })],
   ["ServerHelloEvent", { type: "hello", event_id: "1", chat_id: null, new_envelope_field: 1, data: { api_version: "2.1.0", min_client_api_version: "2.0.0", user_id: "1", new_field: true } }],
 ];
 for (const [title, payload] of positive) {

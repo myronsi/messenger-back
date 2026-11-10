@@ -54,6 +54,7 @@ type Store interface {
 	Users() postgres.UserRepository
 	Approvals() postgres.ApprovalRepository
 	Attachments() postgres.AttachmentRepository
+	Stickers() postgres.StickerRepository
 }
 
 // MessageStore is the part of the message store the chat list reads.
@@ -142,6 +143,7 @@ type LastMessage struct {
 	Message    scylla.Message
 	Sender     *users.View
 	Attachment *postgres.Attachment
+	Sticker    *postgres.Sticker
 	// ReadBy are the other members who read it (direct chats, with read receipts on).
 	ReadBy []postgres.ReadMarker
 }
@@ -349,6 +351,13 @@ func (s *Service) render(ctx context.Context, viewer int64, entries []postgres.C
 		if m.AttachmentID != nil && !m.Deleted {
 			if a, err := s.d.Store.Attachments().Get(ctx, uuid.UUID(*m.AttachmentID)); err == nil {
 				last.Attachment = &a
+			}
+		}
+		if m.StickerID != nil && !m.Deleted {
+			if found, err := s.d.Store.Stickers().Stickers(ctx, []int64{*m.StickerID}); err == nil {
+				if st, ok := found[*m.StickerID]; ok {
+					last.Sticker = &st
+				}
 			}
 		}
 		if r, ok := receipts[e.Chat.ID]; ok {

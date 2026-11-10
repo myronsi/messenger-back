@@ -137,6 +137,24 @@ type MessageParts struct {
 	BasePath     string
 	Reply        *ReplyOrigin
 	Drawings     map[uuid.UUID][]byte
+	Sticker      *postgres.Sticker
+}
+
+func PresentSticker(s postgres.Sticker, basePath string) Sticker {
+	return Sticker{
+		Id: FormatID(s.ID), PackId: FormatID(s.PackID), Emoji: s.Emoji, IsAnimated: s.Animated,
+		Image: PresentAttachment(s.Image, scylla.TypeSticker, basePath),
+	}
+}
+
+func StickerIDs(msgs ...scylla.Message) []int64 {
+	var out []int64
+	for _, m := range msgs {
+		if m.StickerID != nil && !m.Deleted {
+			out = append(out, *m.StickerID)
+		}
+	}
+	return out
 }
 
 type ReplyOrigin struct {
@@ -226,6 +244,10 @@ func PresentMessage(m scylla.Message, p MessageParts) Message {
 		if len(album) > 1 {
 			out.Attachments = &album
 		}
+	}
+	if !m.Deleted && m.Type == scylla.TypeSticker && p.Sticker != nil {
+		st := PresentSticker(*p.Sticker, p.BasePath)
+		out.Sticker = &st
 	}
 	if p.Reply != nil && m.ReplyTo != nil && !m.Deleted {
 		r := PresentReplyPreview(*p.Reply, p.BasePath)

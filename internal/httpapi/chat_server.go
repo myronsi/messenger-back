@@ -79,7 +79,7 @@ func PresentChat(v chats.View, basePath string) Chat {
 		out.MyRole = &role
 	}
 	if l := v.Last; l != nil {
-		parts := MessageParts{Sender: l.Sender, Attachment: l.Attachment, BasePath: basePath}
+		parts := MessageParts{Sender: l.Sender, Attachment: l.Attachment, Sticker: l.Sticker, BasePath: basePath}
 		for _, m := range l.ReadBy {
 			parts.ReadBy = append(parts.ReadBy, ReadReceipt{UserId: FormatID(m.UserID), ReadAt: utc(*m.At)})
 		}

@@ -20,6 +20,7 @@ const (
 const (
 	PurposeMessage = "message"
 	PurposeAvatar  = "avatar"
+	PurposeSticker = "sticker"
 )
 
 // ErrUnsupported is returned for content that is not allowed for the purpose or kind.

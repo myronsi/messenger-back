@@ -368,9 +368,12 @@ func (s *Service) Open(ctx context.Context, viewerID int64, id uuid.UUID, v Vari
 		return Download{}, err
 	}
 	var ok bool
-	if a.Purpose == PurposeAvatar {
+	switch a.Purpose {
+	case PurposeSticker:
+		ok = true
+	case PurposeAvatar:
 		ok, err = s.canSeeAvatar(ctx, viewerID, a)
-	} else {
+	default:
 		ok, err = s.CanSee(ctx, viewerID, a)
 	}
 	if err != nil {

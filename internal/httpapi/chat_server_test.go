@@ -26,6 +26,7 @@ import (
 	"github.com/myronsi/messenger-back/internal/notifications"
 	"github.com/myronsi/messenger-back/internal/observability"
 	"github.com/myronsi/messenger-back/internal/search"
+	"github.com/myronsi/messenger-back/internal/stickers"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/redis"
 	"github.com/myronsi/messenger-back/internal/store/scylla"
@@ -176,7 +177,8 @@ func newChatEnvWith(t *testing.T, withSearch bool) *chatEnv {
 		WithLinkPreviews(NewLinkPreviewServer(LinkPreviewOptions{
 			Service:  linkpreview.New(linkpreview.Options{SignKey: []byte("test-key"), AllowAddr: func(netip.Addr) bool { return true }, AnyPort: true}),
 			BasePath: apiBase, Log: log,
-		}))
+		})).
+		WithStickers(NewStickerServer(StickerOptions{Service: stickers.New(store.Stickers()), BasePath: apiBase, Log: log}))
 	return &chatEnv{
 		authEnv: &authEnv{router: NewRouter(Options{
 			HTTP:          config.HTTP{BasePath: apiBase, RequestTimeout: 10 * time.Second, ReadinessTimeout: time.Second, MaxBodyBytes: 4096},

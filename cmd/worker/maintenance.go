@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"log/slog"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/myronsi/messenger-back/internal/jobs"
 	"github.com/myronsi/messenger-back/internal/media"
 	"github.com/myronsi/messenger-back/internal/search"
+	"github.com/myronsi/messenger-back/internal/stickers"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 )
 
@@ -142,4 +144,26 @@ func ensureIndex(ctx context.Context, log *slog.Logger, ix *search.Index) bool {
 		}
 	}
 	return false
+}
+
+func seedStickers(ctx context.Context, log *slog.Logger, store *postgres.Store, storage media.Storage) {
+	deps := stickers.SeedDeps{
+		Stickers: store.Stickers(), Attachments: store.Attachments(),
+		Put: func(ctx context.Context, key string, data []byte, contentType string) error {
+			return storage.Put(ctx, key, bytes.NewReader(data), int64(len(data)), contentType)
+		},
+	}
+	for {
+		err := stickers.Seed(ctx, deps, stickers.Builtin())
+		if err == nil {
+			log.InfoContext(ctx, "built-in sticker packs are up to date")
+			return
+		}
+		log.WarnContext(ctx, "seeding built-in sticker packs failed", "error", err)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(time.Minute):
+		}
+	}
 }

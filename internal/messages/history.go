@@ -320,7 +320,7 @@ func (s *Service) forwardCopy(ctx context.Context, sender, chatID int64, members
 	}
 	m := scylla.Message{
 		ChatID: chatID, ID: id, SenderID: &sender, Type: src.msg.Type, Content: src.msg.Content,
-		AttachmentID: src.msg.AttachmentID, AlbumIDs: src.msg.AlbumIDs, Forwarded: src.origin, CreatedAt: ids.Time(id),
+		AttachmentID: src.msg.AttachmentID, AlbumIDs: src.msg.AlbumIDs, StickerID: src.msg.StickerID, Forwarded: src.origin, CreatedAt: ids.Time(id),
 	}
 	drawings, err := s.messageDrawings(ctx, src.msg)
 	if err != nil {

@@ -380,3 +380,23 @@ func (Unimplemented) RecoverWithKey(w http.ResponseWriter, r *http.Request, _ Re
 func (Unimplemented) ListSecurityEvents(w http.ResponseWriter, r *http.Request, _ ListSecurityEventsParams) {
 	notImplemented(w, r)
 }
+
+func (Unimplemented) ListStickerPacks(w http.ResponseWriter, r *http.Request, _ ListStickerPacksParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) GetStickerPack(w http.ResponseWriter, r *http.Request, _ StickerPackId, _ GetStickerPackParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) AddStickerPack(w http.ResponseWriter, r *http.Request, _ StickerPackId, _ AddStickerPackParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) RemoveStickerPack(w http.ResponseWriter, r *http.Request, _ StickerPackId, _ RemoveStickerPackParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) ListRecentStickers(w http.ResponseWriter, r *http.Request, _ ListRecentStickersParams) {
+	notImplemented(w, r)
+}
