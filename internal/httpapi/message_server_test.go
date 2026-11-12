@@ -471,6 +471,15 @@ func TestChatMediaLists(t *testing.T) {
 		photos = append(photos, r.json()["id"].(string))
 	}
 	e.send(t, alice, chat, "text", "not media")
+	doc, err := e.store.Attachments().Create(ctx, postgres.NewAttachment{UploaderID: &aliceID, Purpose: "message", Kind: "file",
+		Filename: "route.zip", StorageKey: "attachments/" + uuid.NewString(), MimeType: "application/zip", Size: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := e.do(t, request{method: http.MethodPost, path: "/chats/" + chat + "/messages", token: alice.access,
+		body: map[string]any{"client_temp_id": "doc", "type": "file", "attachment_id": doc.ID.String()}}); r.Code != http.StatusCreated {
+		t.Fatalf("send a file: %d %s", r.Code, r.Body)
+	}
 
 	page := e.do(t, request{method: http.MethodGet, path: "/chats/" + chat + "/media?kind=image&limit=2", token: bob.access})
 	got := items(t, page)
@@ -488,6 +497,10 @@ func TestChatMediaLists(t *testing.T) {
 	}
 	if audio := items(t, e.do(t, request{method: http.MethodGet, path: "/chats/" + chat + "/media?kind=audio", token: bob.access})); len(audio) != 0 {
 		t.Fatalf("audio: %v", audio)
+	}
+	files := items(t, e.do(t, request{method: http.MethodGet, path: "/chats/" + chat + "/media?kind=file", token: bob.access}))
+	if len(files) != 1 || files[0]["message"].(map[string]any)["attachment"].(map[string]any)["filename"] != "route.zip" {
+		t.Fatalf("files: %v", files)
 	}
 	if r := e.do(t, request{method: http.MethodGet, path: "/chats/" + chat + "/media?kind=video", token: bob.access}); r.Code != http.StatusUnprocessableEntity && r.Code != http.StatusBadRequest {
 		t.Fatalf("unknown kind: %d", r.Code)

@@ -287,6 +287,20 @@ type StickerPackReport struct {
 	CreatedAt  time.Time
 }
 
+type UnsentMessage struct {
+	UserID        int64
+	ChatID        int64
+	ClientTempID  string
+	Type          string
+	Content       *string
+	ReplyTo       *int64
+	AttachmentIds []uuid.UUID
+	Drawings      []byte
+	StickerID     *int64
+	ErrorCode     string
+	CreatedAt     time.Time
+}
+
 type User struct {
 	ID                 int64
 	Username           string

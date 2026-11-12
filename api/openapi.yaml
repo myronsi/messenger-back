@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.22
+  version: 2.1.0-alpha.23
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -1219,6 +1219,55 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
+  /chats/{chat_id}/unsent:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ChatId"
+    get:
+      tags: [chats]
+      operationId: listUnsentMessages
+      summary: The caller's rejected sends of a chat
+      description: |
+        Sends the server rejected for a reason that may pass later (`forbidden`, `blocked_by_user`, `rate_limited`,
+        `internal_error`), oldest first. They belong to the caller and are shown on all of the caller's devices.
+        A later send with the same `client_temp_id` that succeeds removes the entry; at most 500 are kept per user.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Kept sends
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/UnsentMessage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /chats/{chat_id}/unsent/{client_temp_id}:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ChatId"
+      - name: client_temp_id
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/ClientTempId" }
+    delete:
+      tags: [chats]
+      operationId: deleteUnsentMessage
+      summary: Discard a rejected send
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Discarded
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /chats/{chat_id}/messages/search:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
@@ -1255,7 +1304,7 @@ paths:
     get:
       tags: [chats]
       operationId: listChatMedia
-      summary: Photos, videos or audio of a chat
+      summary: Photos, videos, audio or files of a chat
       description: Replaces `GET /messages/photos/{chat_id}` and `GET /messages/audios/{chat_id}`.
       parameters:
         - name: kind
@@ -4923,7 +4972,8 @@ components:
         drawing: { $ref: "#/components/schemas/Drawing" }
     MediaKind:
       type: string
-      enum: [image, audio, visual]
+      description: "`image` photos, `visual` photos and videos, `audio` audio files and voice messages, `file` other files (documents, archives)."
+      enum: [image, audio, visual, file]
 
     # -------------------------------------------------------- messages
     MessageType:
@@ -5228,6 +5278,28 @@ components:
             wrapped in U+E000 (start) and U+E001 (end), characters of the Unicode private use area,
             so a client can mark them without parsing markup. `null` when the message matched without
             an excerpt.
+    UnsentMessage:
+      type: object
+      description: A send the server rejected for a reason that may pass later. Resend it with the same `client_temp_id`.
+      required: [chat_id, client_temp_id, type, content, reply_to, attachments, error_code, created_at]
+      properties:
+        chat_id: { $ref: "#/components/schemas/Id" }
+        client_temp_id: { $ref: "#/components/schemas/ClientTempId" }
+        type:
+          type: string
+          enum: [text, file, voice, sticker]
+        content: { type: [string, "null"] }
+        reply_to:
+          oneOf:
+            - { $ref: "#/components/schemas/Id" }
+            - { type: "null" }
+        attachments:
+          type: array
+          description: Uploaded files of the send that still exist, in the order they were sent.
+          items: { $ref: "#/components/schemas/Attachment" }
+        sticker: { $ref: "#/components/schemas/Sticker" }
+        error_code: { $ref: "#/components/schemas/ErrorCode" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
     MessageSearchPage:
       type: object
       required: [items, next_cursor]

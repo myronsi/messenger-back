@@ -263,6 +263,13 @@ func (c *conn) ack(ev clientEvent, data any) []byte {
 	return raw
 }
 
+func (c *conn) sendRequest(ev clientEvent) messages.SendRequest {
+	return messages.SendRequest{
+		ChatID: ev.ChatID, SenderID: c.userID, ClientTempID: ev.ClientTempID, Type: ev.Message.Type,
+		Content: ev.Message.Content, AttachmentID: ev.Message.AttachmentID, ReplyTo: ev.Message.ReplyTo,
+	}
+}
+
 // rate returns the limit an event counts against.
 func rate(typ string) redis.Rate {
 	switch typ {
@@ -285,11 +292,16 @@ func (c *conn) handle(ev clientEvent) {
 		if ev.Type == "typing" { // typing is not acknowledged; excess indicators are simply dropped
 			return
 		}
+		cause := messages.ErrRateLimited
 		if err != nil {
+			cause = messages.ErrUnavailable
 			c.gw.o.Log.WarnContext(ctx, "rate limiter unavailable", "error", err)
 			c.reply(c.errorEvent(ev.ClientTempID, ev.ChatID, "internal_error", "something went wrong, try again"))
 		} else {
 			c.reply(c.errorEvent(ev.ClientTempID, ev.ChatID, "rate_limited", "too many events, slow down"))
+		}
+		if ev.Type == "message" {
+			c.gw.o.Messages.KeepUnsent(ctx, c.sendRequest(ev), cause)
 		}
 		return
 	}
@@ -298,10 +310,7 @@ func (c *conn) handle(ev clientEvent) {
 	switch ev.Type {
 	case "message":
 		var sent messages.Sent
-		sent, err = svc.Send(ctx, messages.SendRequest{
-			ChatID: ev.ChatID, SenderID: c.userID, ClientTempID: ev.ClientTempID, Type: ev.Message.Type,
-			Content: ev.Message.Content, AttachmentID: ev.Message.AttachmentID, ReplyTo: ev.Message.ReplyTo,
-		})
+		sent, err = svc.Send(ctx, c.sendRequest(ev))
 		if err == nil {
 			data = map[string]any{"message_id": idString(sent.Message.ID), "created_at": sent.Message.CreatedAt.UTC()}
 		}

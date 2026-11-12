@@ -72,7 +72,8 @@ instead of the request, read and write timeouts, so large files on slow connecti
 
 ## Cleanup
 
-The worker deletes uploads that nothing uses (no message link, not an avatar, not in an avatar history, not a sticker) once they are
+The worker deletes uploads that nothing uses (no message link, not an avatar, not in an avatar history, not a sticker, not
+in a rejected send kept for retry) once they are
 a day old (`media.UnusedAfter`), first the row and then the objects, every hour. The row is locked first and the
 references are checked in a statement of their own, so a message that links the upload at that moment either
 keeps it (the collector waits for it and sees the link) or fails to send (the collector was first). Deleting

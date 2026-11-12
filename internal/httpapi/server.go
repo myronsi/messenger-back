@@ -459,6 +459,24 @@ func (s *Server) ListChatMedia(w http.ResponseWriter, r *http.Request, chatID Ch
 	s.messages.ListChatMedia(w, r, chatID, params)
 }
 
+// ListUnsentMessages delegates to the message endpoints (GET /chats/{id}/unsent).
+func (s *Server) ListUnsentMessages(w http.ResponseWriter, r *http.Request, chatID ChatId, params ListUnsentMessagesParams) {
+	if s.messages == nil {
+		s.AuthServer.ListUnsentMessages(w, r, chatID, params)
+		return
+	}
+	s.messages.ListUnsentMessages(w, r, chatID, params)
+}
+
+// DeleteUnsentMessage delegates to the message endpoints (DELETE /chats/{id}/unsent/{client_temp_id}).
+func (s *Server) DeleteUnsentMessage(w http.ResponseWriter, r *http.Request, chatID ChatId, clientTempID ClientTempId, params DeleteUnsentMessageParams) {
+	if s.messages == nil {
+		s.AuthServer.DeleteUnsentMessage(w, r, chatID, clientTempID, params)
+		return
+	}
+	s.messages.DeleteUnsentMessage(w, r, chatID, clientTempID, params)
+}
+
 // EditMessage delegates to the message endpoints (PATCH /messages/{id}).
 func (s *Server) EditMessage(w http.ResponseWriter, r *http.Request, messageID MessageId, params EditMessageParams) {
 	if s.messages == nil {

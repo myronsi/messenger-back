@@ -138,11 +138,23 @@ WebSocket, with the same rules as the WebSocket events:
   naming the original (the first original of a forwarded message). Every target is checked before anything is
   written. Each copy uses up one send of the sender's send budget. If a store fails midway, the answer is still `201`
   with the copies written so far, so a client never repeats copies that were delivered.
-- `GET /chats/{id}/media?kind=image|audio` lists messages with photos, or with audio and voice files, newest first,
+- `GET /chats/{id}/media?kind=image|visual|audio|file` lists messages with photos, photos and videos, audio and voice
+  files, or other files (documents, archives), newest first,
   paged by message id (`attachment_links`, index from migration 000010, built concurrently). Messages deleted or
   hidden for the caller are skipped. One page looks at most at five times its size of links, so a chat full of
   hidden photos cannot make a request read the whole chat: the page then holds fewer items, and `next_cursor`
   continues where the scan stopped.
+- `GET /chats/{id}/unsent` and `DELETE /chats/{id}/unsent/{client_temp_id}`: the caller's rejected sends of a chat
+  (see below).
+
+## Rejected sends
+
+A send that fails for a reason that may pass later is kept for the sender, so it survives a sign-out and shows on
+all of their devices with its error and a retry: `forbidden` (privacy, a role), `blocked_by_user`, `rate_limited`
+(WebSocket and HTTP sends) and `internal_error`. Invalid sends and chats that are gone are not kept. The row
+(`unsent_messages`, migration 000031) holds the request: type, text, reply, sticker, drawings and the ids of the
+sender's own uploads, which the upload cleanup then leaves alone. Sending again with the same `client_temp_id`
+deletes the row when it succeeds; the sender can also discard it. A user keeps at most 500, the oldest go first.
 
 ## Migration from v1 (cutover prerequisite)
 

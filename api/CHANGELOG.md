@@ -2,6 +2,15 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.23
+
+- `MediaKind` gains `file`: `GET /chats/{chat_id}/media?kind=file` lists messages with file attachments (documents,
+  archives and other files that are not images, videos, audio or voice messages), newest first.
+- Rejected sends are kept for the sender: a send refused with `forbidden`, `blocked_by_user`, `rate_limited` or
+  `internal_error` is listed by `GET /chats/{chat_id}/unsent` (`UnsentMessage`, oldest first) on all of the sender's
+  devices until a send with the same `client_temp_id` succeeds or `DELETE /chats/{chat_id}/unsent/{client_temp_id}`
+  discards it.
+
 ## 2.1.0-alpha.22
 
 - `Chat` gains the required, nullable `first_unread_message_id` (the oldest message the caller has not read, `null`
