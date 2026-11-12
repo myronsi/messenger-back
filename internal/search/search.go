@@ -48,6 +48,7 @@ type Access interface {
 	// ChatIDs are the chats the user is in.
 	ChatIDs(ctx context.Context, userID int64) ([]int64, error)
 	IsMember(ctx context.Context, chatID, userID int64) (bool, error)
+	ClearedBounds(ctx context.Context, userID int64, chatIDs []int64) (map[int64]int64, error)
 }
 
 // Searcher answers searches.
@@ -285,6 +286,14 @@ func (s *Searcher) check(ctx context.Context, userID int64, raw []esHit) ([]*Hit
 		msgIDs[i] = msgID
 		byChat[chatID] = append(byChat[chatID], i)
 	}
+	chatIDs := make([]int64, 0, len(byChat))
+	for chatID := range byChat {
+		chatIDs = append(chatIDs, chatID)
+	}
+	bounds, err := s.access.ClearedBounds(ctx, userID, chatIDs)
+	if err != nil {
+		return nil, err
+	}
 	var (
 		wg       sync.WaitGroup
 		mu       sync.Mutex
@@ -316,7 +325,7 @@ func (s *Searcher) check(ctx context.Context, userID int64, raw []esHit) ([]*Hit
 			}
 			for _, i := range hits {
 				m, ok := msgs[msgIDs[i]]
-				if !ok || m.Deleted || hidden[m.ID] {
+				if !ok || m.Deleted || hidden[m.ID] || m.ID <= bounds[chatID] {
 					continue
 				}
 				found[i] = &Hit{Message: m, Highlight: current(raw[i].Highlight, m)}

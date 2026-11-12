@@ -35,6 +35,10 @@ func (a access) ChatIDs(ctx context.Context, userID int64) ([]int64, error) {
 	return a.pg.Social().ChatIDs(ctx, userID)
 }
 
+func (a access) ClearedBounds(ctx context.Context, userID int64, chatIDs []int64) (map[int64]int64, error) {
+	return a.pg.Chats().ClearedBounds(ctx, userID, chatIDs)
+}
+
 // eventLog hands every event straight to the indexer, like the worker would.
 type eventLog struct {
 	t  *testing.T

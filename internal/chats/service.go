@@ -91,6 +91,8 @@ type Notifier interface {
 	ChatUpdated(ctx context.Context, chatID int64, views map[int64]View)
 	// ChatRemoved: the chat is gone from the users' lists (chat_deleted).
 	ChatRemoved(ctx context.Context, chatID int64, userIDs []int64)
+	ChatHidden(ctx context.Context, chatID int64, userIDs []int64)
+	HistoryCleared(ctx context.Context, chatID, beforeID int64, scope string, actorID int64, recipients []int64)
 	// RequestCreated: a new request in the recipient's inbox.
 	RequestCreated(ctx context.Context, r RequestView)
 }
@@ -397,11 +399,11 @@ func (s *Service) render(ctx context.Context, viewer int64, entries []postgres.C
 }
 
 func (s *Service) lastShown(ctx context.Context, e postgres.ChatEntry, viewer int64, withUnread bool) (*scylla.Message, *int64, error) {
-	readUpTo := int64(0)
+	readUpTo := e.ClearedBefore()
 	if e.LastReadMessageID != nil {
-		readUpTo = *e.LastReadMessageID
+		readUpTo = max(readUpTo, *e.LastReadMessageID)
 	}
-	q := scylla.PageQuery{ChatID: e.Chat.ID, Viewer: viewer, Limit: lastMessagePage}
+	q := scylla.PageQuery{ChatID: e.Chat.ID, Viewer: viewer, Limit: lastMessagePage, Floor: e.ClearedBefore()}
 	var last *scylla.Message
 	var first *int64
 	reached := false
@@ -511,9 +513,9 @@ func (s *Service) countOne(ctx context.Context, userID int64, e postgres.ChatEnt
 	if e.Chat.LastMessageID == nil {
 		return 0, nil
 	}
-	from := int64(0)
+	from := e.ClearedBefore()
 	if e.LastReadMessageID != nil {
-		from = *e.LastReadMessageID
+		from = max(from, *e.LastReadMessageID)
 	}
 	if from >= *e.Chat.LastMessageID {
 		return 0, nil
@@ -801,6 +803,78 @@ func (s *Service) Delete(ctx context.Context, userID, chatID int64) error {
 		}
 	}
 	return stale
+}
+
+const (
+	ClearForMe       = "me"
+	ClearForEveryone = "everyone"
+)
+
+func (s *Service) DeleteForMe(ctx context.Context, userID, chatID int64) error {
+	e, err := s.d.Store.Chats().Entry(ctx, userID, chatID)
+	if err != nil {
+		return notFoundOr(err)
+	}
+	if e.Chat.Type != postgres.ChatDirect {
+		return fmt.Errorf("%w: delete or leave a group with the group endpoints", ErrInvalid)
+	}
+	var bound int64
+	if e.Chat.LastMessageID != nil {
+		bound = *e.Chat.LastMessageID
+	}
+	if err := s.d.Store.Chats().ClearForUser(ctx, chatID, userID, bound, true); err != nil {
+		return notFoundOr(err)
+	}
+	if err := s.d.Store.Chats().Unpin(ctx, userID, chatID); err != nil {
+		s.d.Log.WarnContext(ctx, "unpin a chat deleted for the user", "error", err)
+	}
+	if err := s.d.Unread.Forget(ctx, chatID, userID); err != nil {
+		s.d.Log.WarnContext(ctx, "forget unread", "error", err)
+	}
+	s.d.Notifier.ChatHidden(ctx, chatID, []int64{userID})
+	return nil
+}
+
+func (s *Service) ClearHistory(ctx context.Context, userID, chatID int64, scope string) error {
+	if scope != ClearForMe && scope != ClearForEveryone {
+		return fmt.Errorf("%w: scope must be me or everyone", ErrInvalid)
+	}
+	e, err := s.d.Store.Chats().Entry(ctx, userID, chatID)
+	if err != nil {
+		return notFoundOr(err)
+	}
+	if scope == ClearForEveryone && e.Chat.Type == postgres.ChatGroup && e.Role != postgres.RoleOwner && e.Role != postgres.RoleAdmin {
+		return fmt.Errorf("%w: only the owner and admins can clear a group for everyone", ErrForbidden)
+	}
+	if e.Chat.LastMessageID == nil {
+		return nil
+	}
+	bound := *e.Chat.LastMessageID
+	recipients := []int64{userID}
+	if scope == ClearForEveryone {
+		ps, err := s.d.Store.Chats().Participants(ctx, chatID)
+		if err != nil {
+			return unavailable(err)
+		}
+		recipients = make([]int64, len(ps))
+		for i, p := range ps {
+			recipients[i] = p.UserID
+		}
+		if err := s.d.Store.Chats().ClearForEveryone(ctx, chatID, bound); err != nil {
+			return unavailable(err)
+		}
+	} else if err := s.d.Store.Chats().ClearForUser(ctx, chatID, userID, bound, false); err != nil {
+		return notFoundOr(err)
+	}
+	if err := s.d.Unread.Forget(ctx, chatID, recipients...); err != nil {
+		s.d.Log.WarnContext(ctx, "forget unread", "error", err)
+	}
+	s.d.Notifier.HistoryCleared(ctx, chatID, bound, scope, userID, recipients)
+	s.d.Notifier.ChatUpdated(ctx, chatID, s.viewsFor(ctx, chatID, recipients))
+	if scope == ClearForEveryone {
+		s.emit(ctx, events.Event{Type: events.HistoryCleared, ChatID: chatID, MessageID: bound, ActorID: userID, At: time.Now()})
+	}
+	return nil
 }
 
 // ---------------------------------------------------------------- pins and reading

@@ -142,7 +142,7 @@ UPDATE chats
 SET name = COALESCE($1, name),
     description = CASE WHEN $2::bool THEN COALESCE($3, '') ELSE description END
 WHERE id = $4 AND type = 'group'
-RETURNING id, type, name, description, avatar_url, direct_key, created_by, created_at, updated_at, avatar_attachment_id, last_message_id, last_activity_at
+RETURNING id, type, name, description, avatar_url, direct_key, created_by, created_at, updated_at, avatar_attachment_id, last_message_id, last_activity_at, cleared_before_message_id
 `
 
 type UpdateGroupInfoParams struct {
@@ -174,6 +174,7 @@ func (q *Queries) UpdateGroupInfo(ctx context.Context, arg UpdateGroupInfoParams
 		&i.AvatarAttachmentID,
 		&i.LastMessageID,
 		&i.LastActivityAt,
+		&i.ClearedBeforeMessageID,
 	)
 	return i, err
 }

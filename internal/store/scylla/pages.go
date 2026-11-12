@@ -28,6 +28,7 @@ type scan struct {
 	desc   bool
 	// bound excludes it and everything on its side (0: no bound).
 	bound int64
+	floor int64
 	// start is the first bucket to read; nil starts at the newest (desc) or oldest (asc) bucket.
 	start *int
 	need  int
@@ -65,19 +66,22 @@ func (r *Messages) run(ctx context.Context, sess *gocql.Session, sc scan) ([]Mes
 		}
 		b := buckets[0]
 		buckets = buckets[1:]
-		done, err := r.readBucket(ctx, sess, sc, b, &out)
+		done, stop, err := r.readBucket(ctx, sess, sc, b, &out)
 		if err != nil {
 			return nil, false, err
 		}
 		if done {
 			return out, true, nil
 		}
+		if stop {
+			return out, false, nil
+		}
 	}
 }
 
 // readBucket appends the visible messages of one bucket to out until it has sc.need of them; done reports
 // that it has.
-func (r *Messages) readBucket(ctx context.Context, sess *gocql.Session, sc scan, b int, out *[]Message) (bool, error) {
+func (r *Messages) readBucket(ctx context.Context, sess *gocql.Session, sc scan, b int, out *[]Message) (bool, bool, error) {
 	cursor := sc.bound
 	for {
 		want := max(sc.need-len(*out), minFetch)
@@ -107,26 +111,32 @@ func (r *Messages) readBucket(ctx context.Context, sess *gocql.Session, sc scan,
 			rows = append(rows, m)
 		}
 		if err := iter.Close(); err != nil {
-			return false, fmt.Errorf("read messages: %w", err)
+			return false, false, fmt.Errorf("read messages: %w", err)
 		}
 		if len(rows) == 0 {
-			return false, nil
+			return false, false, nil
 		}
 		hidden, err := r.hiddenIn(ctx, sess, sc.viewer, sc.chatID, rows[0].ID, rows[len(rows)-1].ID)
 		if err != nil {
-			return false, err
+			return false, false, err
 		}
 		for _, m := range rows {
+			if m.ID <= sc.floor {
+				if sc.desc {
+					return false, true, nil
+				}
+				continue
+			}
 			if m.Type == "" || hidden[m.ID] || (sc.keep != nil && !sc.keep(m)) {
 				continue
 			}
 			*out = append(*out, m)
 			if len(*out) >= sc.need {
-				return true, nil
+				return true, false, nil
 			}
 		}
 		if len(rows) < want {
-			return false, nil
+			return false, false, nil
 		}
 		cursor = rows[len(rows)-1].ID
 	}
@@ -236,7 +246,7 @@ func (r *Messages) Page(ctx context.Context, q PageQuery) (Page, error) {
 				return nil, false, err
 			}
 		}
-		msgs, _, err := r.run(ctx, sess, scan{chatID: q.ChatID, viewer: q.Viewer, desc: true, bound: bound, start: start, need: n + 1})
+		msgs, _, err := r.run(ctx, sess, scan{chatID: q.ChatID, viewer: q.Viewer, desc: true, bound: bound, floor: q.Floor, start: start, need: n + 1})
 		if err != nil {
 			return nil, false, err
 		}
@@ -246,6 +256,7 @@ func (r *Messages) Page(ctx context.Context, q PageQuery) (Page, error) {
 		return msgs, more, nil
 	}
 	newer := func(bound int64, n int) ([]Message, bool, error) {
+		bound = max(bound, q.Floor)
 		start, err := r.startAt(ctx, sess, q.ChatID, bound)
 		if err != nil {
 			return nil, false, err
@@ -263,6 +274,9 @@ func (r *Messages) Page(ctx context.Context, q PageQuery) (Page, error) {
 		msgs, more, err := newer(q.After, limit)
 		return Page{Messages: msgs, HasOlder: true, HasNewer: more}, err
 	case q.Around != 0:
+		if q.Around <= q.Floor {
+			return Page{}, ErrNotFound
+		}
 		target, _, err := r.get(ctx, sess, q.ChatID, q.Around)
 		if err != nil {
 			return Page{}, err
@@ -303,6 +317,9 @@ func (r *Messages) Page(ctx context.Context, q PageQuery) (Page, error) {
 		}
 		return Page{Messages: append(msgs, nw[:after]...), HasOlder: hasOlder, HasNewer: hasNewer}, nil
 	default:
+		if q.Before != 0 && q.Before <= q.Floor {
+			return Page{HasNewer: true}, nil
+		}
 		msgs, more, err := older(q.Before, limit)
 		return Page{Messages: msgs, HasOlder: more, HasNewer: q.Before != 0}, err
 	}

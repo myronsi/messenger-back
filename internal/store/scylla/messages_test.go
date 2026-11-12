@@ -705,3 +705,56 @@ func TestUnhideAllAndHiddenAmong(t *testing.T) {
 		t.Fatalf("after unhide: %v", hidden)
 	}
 }
+
+func TestFloorHidesClearedMessages(t *testing.T) {
+	r := testRepo(t)
+	ctx := context.Background()
+	chat := newChat()
+	all := seed(t, r, chat, 1, 12, time.Now().Add(-40*24*time.Hour), 3*24*time.Hour)
+	floor := all[7]
+	p, err := r.Page(ctx, PageQuery{ChatID: chat, Floor: floor, Limit: 3})
+	if err != nil || !slices.Equal(idsOf(p.Messages), all[9:]) || !p.HasOlder {
+		t.Fatalf("newest page: %v %v %v", idsOf(p.Messages), p.HasOlder, err)
+	}
+	p, err = r.Page(ctx, PageQuery{ChatID: chat, Floor: floor, Before: all[9], Limit: 5})
+	if err != nil || !slices.Equal(idsOf(p.Messages), all[8:9]) || p.HasOlder {
+		t.Fatalf("older page stops at the floor: %v %v %v", idsOf(p.Messages), p.HasOlder, err)
+	}
+	p, err = r.Page(ctx, PageQuery{ChatID: chat, Floor: floor, After: all[2], Limit: 2})
+	if err != nil || !slices.Equal(idsOf(p.Messages), all[8:10]) {
+		t.Fatalf("newer page starts after the floor: %v %v", idsOf(p.Messages), err)
+	}
+	if _, err := r.Page(ctx, PageQuery{ChatID: chat, Floor: floor, Around: all[3]}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("around a cleared message: %v", err)
+	}
+	p, err = r.Page(ctx, PageQuery{ChatID: chat, Floor: floor, Around: all[10], Limit: 5})
+	if err != nil || !slices.Equal(idsOf(p.Messages), all[8:]) {
+		t.Fatalf("around after the floor: %v %v", idsOf(p.Messages), err)
+	}
+}
+
+func TestDeleteHistory(t *testing.T) {
+	r := testRepo(t)
+	ctx := context.Background()
+	chat := newChat()
+	all := seed(t, r, chat, 1, 12, time.Now().Add(-40*24*time.Hour), 3*24*time.Hour)
+	if err := r.AddReaction(ctx, chat, all[2], 2, "👍", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.DeleteHistory(ctx, chat, all[7]); err != nil {
+		t.Fatal(err)
+	}
+	p, err := r.Page(ctx, PageQuery{ChatID: chat, Limit: 50})
+	if err != nil || !slices.Equal(idsOf(p.Messages), all[8:]) {
+		t.Fatalf("left after deleting history: %v %v", idsOf(p.Messages), err)
+	}
+	if _, err := r.Locate(ctx, all[0]); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("location left: %v", err)
+	}
+	if rx, _ := r.Reactions(ctx, chat, all[2:3]); len(rx) != 0 {
+		t.Fatal("reactions left")
+	}
+	if _, err := r.Locate(ctx, all[8]); err != nil {
+		t.Fatalf("newer message lost its location: %v", err)
+	}
+}

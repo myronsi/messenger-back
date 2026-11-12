@@ -172,6 +172,10 @@ func (Unimplemented) ArchiveChat(w http.ResponseWriter, r *http.Request, chatId 
 	notImplemented(w, r)
 }
 
+func (Unimplemented) ClearChatHistory(w http.ResponseWriter, r *http.Request, chatId ChatId, params ClearChatHistoryParams) {
+	notImplemented(w, r)
+}
+
 func (Unimplemented) UnarchiveChat(w http.ResponseWriter, r *http.Request, chatId ChatId, params UnarchiveChatParams) {
 	notImplemented(w, r)
 }

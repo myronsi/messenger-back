@@ -451,6 +451,14 @@ func (f *Fanout) ChatRemoved(ctx context.Context, chatID int64, userIDs []int64)
 	f.Removed(ctx, chatID, userIDs)
 }
 
+func (f *Fanout) ChatHidden(ctx context.Context, chatID int64, userIDs []int64) {
+	f.same(ctx, "chat_deleted", chatID, struct{}{}, userIDs)
+}
+
+func (f *Fanout) HistoryCleared(ctx context.Context, chatID, beforeID int64, scope string, actorID int64, recipients []int64) {
+	f.same(ctx, "history_cleared", chatID, map[string]any{"before_message_id": idString(beforeID), "scope": scope, "actor_id": idString(actorID)}, recipients)
+}
+
 // RequestCreated implements chats.Notifier: the request appears in the recipient's inbox.
 func (f *Fanout) RequestCreated(ctx context.Context, r chats.RequestView) {
 	raw, err := f.encode("approval_request_created", 0, map[string]any{"request": httpapi.PresentRequest(r)}, "")

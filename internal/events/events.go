@@ -26,6 +26,7 @@ const (
 	ChatMemberAdded   = "chat.member_added"
 	ChatMemberRemoved = "chat.member_removed"
 	ChatDeleted       = "chat.deleted"
+	HistoryCleared    = "chat.history_cleared"
 	UserUpdated       = "user.updated"
 	UserDeleted       = "user.deleted"
 )
@@ -48,7 +49,7 @@ func Stream(eventType string) (string, error) {
 	switch eventType {
 	case MessageCreated, MessageEdited, MessageDeleted, MessageHidden, ReactionChanged:
 		return redis.StreamMessages, nil
-	case ChatMemberAdded, ChatMemberRemoved, ChatDeleted:
+	case ChatMemberAdded, ChatMemberRemoved, ChatDeleted, HistoryCleared:
 		return redis.StreamChats, nil
 	case UserUpdated, UserDeleted:
 		return redis.StreamUsers, nil

@@ -192,11 +192,23 @@ func (s *Service) visible(ctx context.Context, viewerID, chatID, messageID int64
 	if err != nil || m.Deleted || (attachment != nil && !slices.Contains(m.AttachmentIDs(), *attachment)) {
 		return false, err
 	}
+	floor, err := s.floor(ctx, chatID, viewerID)
+	if err != nil || messageID <= floor {
+		return false, err
+	}
 	hidden, err := s.d.Messages.Hidden(ctx, viewerID, chatID, messageID)
 	if err != nil {
 		return false, err
 	}
 	return !hidden, nil
+}
+
+func (s *Service) floor(ctx context.Context, chatID, userID int64) (int64, error) {
+	bound, err := s.d.Store.Chats().ClearedBound(ctx, chatID, userID)
+	if errors.Is(err, postgres.ErrNotFound) {
+		return 0, nil
+	}
+	return bound, err
 }
 
 // requireMember fails with ErrNotFound unless the user is in the chat.
@@ -742,6 +754,13 @@ func (s *Service) DeleteMany(ctx context.Context, userID, chatID int64, messageI
 }
 
 func (s *Service) requireNotHidden(ctx context.Context, userID int64, m scylla.Message) error {
+	floor, err := s.floor(ctx, m.ChatID, userID)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrUnavailable, err)
+	}
+	if m.ID <= floor {
+		return ErrNotFound
+	}
 	hidden, err := s.d.Messages.Hidden(ctx, userID, m.ChatID, m.ID)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrUnavailable, err)
@@ -877,13 +896,20 @@ func (s *Service) Read(ctx context.Context, userID, chatID, messageID int64) (in
 		if p.LastReadMessageID != nil {
 			from = *p.LastReadMessageID
 		}
+		if floor, err := s.floor(ctx, chatID, userID); err == nil {
+			from = max(from, floor)
+		}
 		n, err := s.d.Messages.CountAfter(ctx, chatID, userID, from, unreadCap)
 		if err != nil {
 			return 0, fmt.Errorf("%w: %w", ErrUnavailable, err)
 		}
 		return n, nil
 	}
-	unread, err := s.d.Messages.UnreadIDs(ctx, chatID, userID, messageID, unreadCap)
+	after := messageID
+	if floor, err := s.floor(ctx, chatID, userID); err == nil {
+		after = max(after, floor)
+	}
+	unread, err := s.d.Messages.UnreadIDs(ctx, chatID, userID, after, unreadCap)
 	n := len(unread)
 	countErr := err
 	if err != nil {

@@ -30,6 +30,8 @@ func chatFrom(c sqlcdb.Chat) Chat {
 		UpdatedAt:          c.UpdatedAt,
 		LastMessageID:      c.LastMessageID,
 		LastActivityAt:     c.LastActivityAt,
+
+		ClearedBeforeMessageID: c.ClearedBeforeMessageID,
 	}
 }
 
@@ -95,6 +97,8 @@ func createDirect(ctx context.Context, q *sqlcdb.Queries, creatorID, otherID int
 				return Chat{}, false, nil, err
 			}
 		}
+	} else if err := q.UnhideChat(ctx, sqlcdb.UnhideChatParams{ChatID: row.ID, UserID: creatorID}); err != nil {
+		return Chat{}, false, nil, err
 	}
 	rows, err := q.CloseDirectRequests(ctx, sqlcdb.CloseDirectRequestsParams{A: creatorID, B: otherID})
 	if err != nil {

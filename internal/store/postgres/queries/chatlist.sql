@@ -7,7 +7,8 @@ WHERE id = @chat_id AND (last_message_id IS NULL OR last_message_id < @message_i
 -- name: ListChatEntries :many
 -- A user's chats: pinned ones first (by pin position), then by last activity, then by id. The cursor is the
 -- last entry of the previous page: (pinned, pin position, sort time, chat id).
-SELECT c.*, p.role, p.last_read_message_id, p.archived_at, pin.pinned_at, pin.position AS pin_position,
+SELECT c.*, p.role, p.last_read_message_id, p.archived_at, p.cleared_before_message_id AS my_cleared_before_message_id, p.hidden_at,
+       pin.pinned_at, pin.position AS pin_position,
        COALESCE(pin.pinned_at, c.last_activity_at)::timestamptz AS sort_at
 FROM participants p
 JOIN chats c ON c.id = p.chat_id
@@ -15,6 +16,7 @@ LEFT JOIN user_chat_pins pin ON pin.user_id = p.user_id AND pin.chat_id = p.chat
 WHERE p.user_id = @user_id
   AND (sqlc.narg(chat_type)::text IS NULL OR c.type = sqlc.narg(chat_type)::text)
   AND (sqlc.narg(archived)::bool IS NULL OR (p.archived_at IS NOT NULL) = sqlc.narg(archived)::bool)
+  AND (p.hidden_at IS NULL OR c.last_message_id > COALESCE(p.cleared_before_message_id, 0))
   AND (
     sqlc.narg(after_chat_id)::bigint IS NULL
     OR (pin.pinned_at IS NULL)::int > sqlc.narg(after_unpinned)::int
@@ -28,7 +30,8 @@ ORDER BY (pin.pinned_at IS NULL), COALESCE(pin.position, 0), COALESCE(pin.pinned
 LIMIT @max_rows;
 
 -- name: GetChatEntry :one
-SELECT c.*, p.role, p.last_read_message_id, p.archived_at, pin.pinned_at, pin.position AS pin_position,
+SELECT c.*, p.role, p.last_read_message_id, p.archived_at, p.cleared_before_message_id AS my_cleared_before_message_id, p.hidden_at,
+       pin.pinned_at, pin.position AS pin_position,
        COALESCE(pin.pinned_at, c.last_activity_at)::timestamptz AS sort_at
 FROM participants p
 JOIN chats c ON c.id = p.chat_id
@@ -115,3 +118,29 @@ SELECT id FROM chats WHERE id > @after_id ORDER BY id LIMIT @max_rows;
 -- name: ListChatIDsActiveSince :many
 -- Chats with a message since the time, for the search index reconciliation.
 SELECT id FROM chats WHERE last_activity_at >= @since AND id > @after_id ORDER BY id LIMIT @max_rows;
+
+-- name: ClearedBound :one
+SELECT GREATEST(COALESCE(p.cleared_before_message_id, 0), COALESCE(c.cleared_before_message_id, 0))::bigint AS bound
+FROM participants p
+JOIN chats c ON c.id = p.chat_id
+WHERE p.chat_id = @chat_id AND p.user_id = @user_id;
+
+-- name: ClearedBounds :many
+SELECT p.chat_id, GREATEST(COALESCE(p.cleared_before_message_id, 0), COALESCE(c.cleared_before_message_id, 0))::bigint AS bound
+FROM participants p
+JOIN chats c ON c.id = p.chat_id
+WHERE p.user_id = @user_id AND p.chat_id = ANY(@chat_ids::bigint[]);
+
+-- name: ClearForUser :execrows
+UPDATE participants
+SET cleared_before_message_id = GREATEST(COALESCE(cleared_before_message_id, 0), @bound::bigint),
+    hidden_at = CASE WHEN @hide::bool THEN now() ELSE NULL END
+WHERE chat_id = @chat_id AND user_id = @user_id;
+
+-- name: ClearForEveryone :exec
+UPDATE chats
+SET cleared_before_message_id = GREATEST(COALESCE(cleared_before_message_id, 0), @bound::bigint)
+WHERE id = @chat_id;
+
+-- name: UnhideChat :exec
+UPDATE participants SET hidden_at = NULL WHERE chat_id = @chat_id AND user_id = @user_id AND hidden_at IS NOT NULL;

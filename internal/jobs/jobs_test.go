@@ -14,9 +14,17 @@ import (
 )
 
 type deleter struct {
-	mu    sync.Mutex
-	calls []int64
-	err   error
+	mu      sync.Mutex
+	calls   []int64
+	history [][2]int64
+	err     error
+}
+
+func (d *deleter) DeleteHistory(_ context.Context, id, upTo int64) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.history = append(d.history, [2]int64{id, upTo})
+	return d.err
 }
 
 func (d *deleter) DeleteChat(_ context.Context, id int64) error {
@@ -65,7 +73,7 @@ func entry(e events.Event) redis.Entry {
 
 func TestChatDeletedRunsTwice(t *testing.T) {
 	d, f, m := &deleter{}, &forgetter{}, members{}
-	h := ChatCleanup(d, f, m, time.Minute, nil)
+	h := ChatCleanup(d, f, m, nil, time.Minute, nil)
 	ctx := context.Background()
 
 	// Fresh deletion: the first pass, then come back after the grace period.
@@ -90,7 +98,7 @@ func TestChatDeletedRunsTwice(t *testing.T) {
 
 func TestMemberRemovedForgetsUnread(t *testing.T) {
 	d, f := &deleter{}, &forgetter{}
-	h := ChatCleanup(d, f, members{}, time.Minute, nil)
+	h := ChatCleanup(d, f, members{}, nil, time.Minute, nil)
 	if err := h(context.Background(), entry(events.Event{Type: events.ChatMemberRemoved, ChatID: 4, UserID: 2})); err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +106,7 @@ func TestMemberRemovedForgetsUnread(t *testing.T) {
 		t.Fatalf("forgot %v, deleted %v", f.got, d.calls)
 	}
 	// A user who is back in the chat keeps the counter: the entry was handled late.
-	h = ChatCleanup(d, f, members{{4, 3}: true}, time.Minute, nil)
+	h = ChatCleanup(d, f, members{{4, 3}: true}, nil, time.Minute, nil)
 	if err := h(context.Background(), entry(events.Event{Type: events.ChatMemberRemoved, ChatID: 4, UserID: 3})); err != nil {
 		t.Fatal(err)
 	}
@@ -155,5 +163,24 @@ func TestLostChatDeletionsAreSentAgain(t *testing.T) {
 	store.emitted, em.err = nil, errors.New("redis down")
 	if _, err := ResendChatDeletions(context.Background(), store, em, 15*time.Minute, 100); err == nil || len(store.emitted) != 0 {
 		t.Fatalf("a failed emit must not be marked: %v %v", err, store.emitted)
+	}
+}
+
+type unlinker struct{ got [][2]int64 }
+
+func (u *unlinker) UnlinkMessagesUpTo(_ context.Context, chatID, messageID int64) error {
+	u.got = append(u.got, [2]int64{chatID, messageID})
+	return nil
+}
+
+func TestHistoryClearedDeletesMessagesAndLinks(t *testing.T) {
+	d, u := &deleter{}, &unlinker{}
+	h := ChatCleanup(d, &forgetter{}, members{}, u, time.Minute, nil)
+	e := events.Event{Type: events.HistoryCleared, ChatID: 4, MessageID: 90, At: time.Now()}
+	if err := h(context.Background(), entry(e)); err != nil {
+		t.Fatal(err)
+	}
+	if len(d.history) != 1 || d.history[0] != [2]int64{4, 90} || len(u.got) != 1 || u.got[0] != [2]int64{4, 90} {
+		t.Fatalf("history %v links %v", d.history, u.got)
 	}
 }

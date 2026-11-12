@@ -270,3 +270,7 @@ type searchAccess struct {
 func (a searchAccess) ChatIDs(ctx context.Context, userID int64) ([]int64, error) {
 	return a.pg.Social().ChatIDs(ctx, userID)
 }
+
+func (a searchAccess) ClearedBounds(ctx context.Context, userID int64, chatIDs []int64) (map[int64]int64, error) {
+	return a.pg.Chats().ClearedBounds(ctx, userID, chatIDs)
+}

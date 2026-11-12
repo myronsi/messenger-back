@@ -297,3 +297,9 @@ func (r attachmentRepo) IsStickerImage(ctx context.Context, attachmentID uuid.UU
 	ok, err := r.s.q.IsStickerImage(ctx, attachmentID)
 	return ok, mapError(err)
 }
+
+func (r attachmentRepo) UnlinkMessagesUpTo(ctx context.Context, chatID, messageID int64) error {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	return mapError(r.s.q.UnlinkMessagesUpTo(ctx, sqlcdb.UnlinkMessagesUpToParams{ChatID: chatID, MessageID: messageID}))
+}

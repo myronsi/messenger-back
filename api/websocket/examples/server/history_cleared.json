@@ -1,0 +1,10 @@
+{
+  "type": "history_cleared",
+  "event_id": "7217400317439950011",
+  "chat_id": "42",
+  "data": {
+    "before_message_id": "7217400317439950002",
+    "scope": "everyone",
+    "actor_id": "7"
+  }
+}

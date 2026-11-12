@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ServerHistoryClearedEvent",
+  "description": "Messages of the chat up to before_message_id were cleared, for you (scope me) or for every member (scope everyone). Drop them from what you show.",
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "history_cleared"
+    },
+    "event_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "chat_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "before_message_id": {
+          "$ref": "../../openapi.yaml#/components/schemas/Id"
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "me",
+            "everyone"
+          ]
+        },
+        "actor_id": {
+          "$ref": "../../openapi.yaml#/components/schemas/Id"
+        }
+      },
+      "required": [
+        "before_message_id",
+        "scope",
+        "actor_id"
+      ]
+    }
+  },
+  "required": [
+    "type",
+    "event_id",
+    "chat_id",
+    "data"
+  ]
+}

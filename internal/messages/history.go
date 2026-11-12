@@ -73,6 +73,11 @@ func (s *Service) History(ctx context.Context, userID int64, q scylla.PageQuery)
 		return scylla.Page{}, err
 	}
 	q.Viewer = userID
+	floor, err := s.floor(ctx, q.ChatID, userID)
+	if err != nil {
+		return scylla.Page{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
+	}
+	q.Floor = floor
 	p, err := s.d.Messages.Page(ctx, q)
 	if errors.Is(err, scylla.ErrNotFound) {
 		return scylla.Page{}, ErrNotFound // around a message that is not in this chat
@@ -151,8 +156,12 @@ func (s *Service) replyOrigins(ctx context.Context, userID, chatID int64, msgs [
 	}
 	out := map[int64]scylla.Message{}
 	var missing []int64
+	floor, err := s.floor(ctx, chatID, userID)
+	if err != nil {
+		return out
+	}
 	for _, m := range msgs {
-		if m.Deleted || m.ReplyTo == nil {
+		if m.Deleted || m.ReplyTo == nil || *m.ReplyTo <= floor {
 			continue
 		}
 		if o, ok := page[*m.ReplyTo]; ok {
@@ -383,11 +392,18 @@ func (s *Service) Media(ctx context.Context, userID, chatID int64, kinds []strin
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
+	floor, err := s.floor(ctx, chatID, userID)
+	if err != nil {
+		return nil, 0, fmt.Errorf("%w: %w", ErrUnavailable, err)
+	}
 	links, err := s.d.Store.Attachments().ListLinked(ctx, chatID, kinds, before, limit*mediaScan+MaxAlbumItems)
 	if err != nil {
 		return nil, 0, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
 	for i, l := range links {
+		if l.MessageID <= floor {
+			return items, 0, nil
+		}
 		// The cursor is a message ID, so include all matching items of the last album.
 		if i > 0 && l.MessageID != links[i-1].MessageID && (len(items) >= limit || i >= limit*mediaScan) {
 			return items, links[i-1].MessageID, nil
