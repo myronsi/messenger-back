@@ -93,6 +93,7 @@ type PageQuery struct {
 	Around int64
 	// Limit is clamped to 1..MaxPage; 0 means 50.
 	Limit int
+	Floor int64
 }
 
 // Page is a page of messages, oldest first.
@@ -806,4 +807,62 @@ func (r *Messages) allBuckets(ctx context.Context, sess *gocql.Session, chatID i
 		return nil, fmt.Errorf("chat buckets: %w", err)
 	}
 	return out, nil
+}
+
+func (r *Messages) DeleteHistory(ctx context.Context, chatID, upTo int64) error {
+	if upTo <= 0 {
+		return nil
+	}
+	sess, err := r.s.Session(ctx)
+	if err != nil {
+		return err
+	}
+	lctx, cancel := context.WithTimeout(ctx, r.timeout)
+	buckets, err := r.allBuckets(lctx, sess, chatID)
+	cancel()
+	if err != nil {
+		return err
+	}
+	for _, b := range buckets {
+		for {
+			done, err := r.deleteChunkUpTo(ctx, sess, chatID, b, upTo)
+			if err != nil {
+				return fmt.Errorf("delete history: %w", err)
+			}
+			if done {
+				break
+			}
+		}
+	}
+	return nil
+}
+
+func (r *Messages) deleteChunkUpTo(ctx context.Context, sess *gocql.Session, chatID int64, b int, upTo int64) (bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, r.timeout)
+	defer cancel()
+	iter := sess.Query(`SELECT message_id FROM messages WHERE chat_id = ? AND bucket = ? AND message_id <= ? LIMIT ?`,
+		chatID, b, upTo, deleteChunk).WithContext(ctx).Iter()
+	var ids []int64
+	var id int64
+	for iter.Scan(&id) {
+		ids = append(ids, id)
+	}
+	if err := iter.Close(); err != nil {
+		return false, err
+	}
+	if len(ids) == 0 {
+		return true, nil
+	}
+	err := each(ctx, ids, func(ctx context.Context, id int64) error {
+		if err := sess.Query(`DELETE FROM message_reactions WHERE chat_id = ? AND message_id = ?`, chatID, id).WithContext(ctx).Idempotent(true).Exec(); err != nil {
+			return err
+		}
+		return sess.Query(`DELETE FROM message_locations WHERE message_id = ?`, id).WithContext(ctx).Idempotent(true).Exec()
+	})
+	if err != nil {
+		return false, err
+	}
+	err = sess.Query(`DELETE FROM messages WHERE chat_id = ? AND bucket = ? AND message_id >= ? AND message_id <= ?`,
+		chatID, b, ids[len(ids)-1], ids[0]).WithContext(ctx).Idempotent(true).Exec()
+	return false, err
 }

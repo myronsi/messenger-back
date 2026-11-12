@@ -12,6 +12,105 @@ import (
 	"github.com/google/uuid"
 )
 
+const clearForEveryone = `-- name: ClearForEveryone :exec
+UPDATE chats
+SET cleared_before_message_id = GREATEST(COALESCE(cleared_before_message_id, 0), $1::bigint)
+WHERE id = $2
+`
+
+type ClearForEveryoneParams struct {
+	Bound  int64
+	ChatID int64
+}
+
+func (q *Queries) ClearForEveryone(ctx context.Context, arg ClearForEveryoneParams) error {
+	_, err := q.db.Exec(ctx, clearForEveryone, arg.Bound, arg.ChatID)
+	return err
+}
+
+const clearForUser = `-- name: ClearForUser :execrows
+UPDATE participants
+SET cleared_before_message_id = GREATEST(COALESCE(cleared_before_message_id, 0), $1::bigint),
+    hidden_at = CASE WHEN $2::bool THEN now() ELSE NULL END
+WHERE chat_id = $3 AND user_id = $4
+`
+
+type ClearForUserParams struct {
+	Bound  int64
+	Hide   bool
+	ChatID int64
+	UserID int64
+}
+
+func (q *Queries) ClearForUser(ctx context.Context, arg ClearForUserParams) (int64, error) {
+	result, err := q.db.Exec(ctx, clearForUser,
+		arg.Bound,
+		arg.Hide,
+		arg.ChatID,
+		arg.UserID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const clearedBound = `-- name: ClearedBound :one
+SELECT GREATEST(COALESCE(p.cleared_before_message_id, 0), COALESCE(c.cleared_before_message_id, 0))::bigint AS bound
+FROM participants p
+JOIN chats c ON c.id = p.chat_id
+WHERE p.chat_id = $1 AND p.user_id = $2
+`
+
+type ClearedBoundParams struct {
+	ChatID int64
+	UserID int64
+}
+
+func (q *Queries) ClearedBound(ctx context.Context, arg ClearedBoundParams) (int64, error) {
+	row := q.db.QueryRow(ctx, clearedBound, arg.ChatID, arg.UserID)
+	var bound int64
+	err := row.Scan(&bound)
+	return bound, err
+}
+
+const clearedBounds = `-- name: ClearedBounds :many
+SELECT p.chat_id, GREATEST(COALESCE(p.cleared_before_message_id, 0), COALESCE(c.cleared_before_message_id, 0))::bigint AS bound
+FROM participants p
+JOIN chats c ON c.id = p.chat_id
+WHERE p.user_id = $1 AND p.chat_id = ANY($2::bigint[])
+`
+
+type ClearedBoundsParams struct {
+	UserID  int64
+	ChatIds []int64
+}
+
+type ClearedBoundsRow struct {
+	ChatID int64
+	Bound  int64
+}
+
+func (q *Queries) ClearedBounds(ctx context.Context, arg ClearedBoundsParams) ([]ClearedBoundsRow, error) {
+	rows, err := q.db.Query(ctx, clearedBounds, arg.UserID, arg.ChatIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ClearedBoundsRow{}
+	for rows.Next() {
+		var i ClearedBoundsRow
+		if err := rows.Scan(&i.ChatID, &i.Bound); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const closeDirectRequests = `-- name: CloseDirectRequests :many
 UPDATE approval_requests
 SET status = 'approved', responded_at = now()
@@ -138,7 +237,8 @@ func (q *Queries) GetApprovalRequest(ctx context.Context, id int64) (ApprovalReq
 }
 
 const getChatEntry = `-- name: GetChatEntry :one
-SELECT c.id, c.type, c.name, c.description, c.avatar_url, c.direct_key, c.created_by, c.created_at, c.updated_at, c.avatar_attachment_id, c.last_message_id, c.last_activity_at, p.role, p.last_read_message_id, p.archived_at, pin.pinned_at, pin.position AS pin_position,
+SELECT c.id, c.type, c.name, c.description, c.avatar_url, c.direct_key, c.created_by, c.created_at, c.updated_at, c.avatar_attachment_id, c.last_message_id, c.last_activity_at, c.cleared_before_message_id, p.role, p.last_read_message_id, p.archived_at, p.cleared_before_message_id AS my_cleared_before_message_id, p.hidden_at,
+       pin.pinned_at, pin.position AS pin_position,
        COALESCE(pin.pinned_at, c.last_activity_at)::timestamptz AS sort_at
 FROM participants p
 JOIN chats c ON c.id = p.chat_id
@@ -152,24 +252,27 @@ type GetChatEntryParams struct {
 }
 
 type GetChatEntryRow struct {
-	ID                 int64
-	Type               string
-	Name               *string
-	Description        string
-	AvatarUrl          *string
-	DirectKey          *string
-	CreatedBy          *int64
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
-	AvatarAttachmentID *uuid.UUID
-	LastMessageID      *int64
-	LastActivityAt     time.Time
-	Role               string
-	LastReadMessageID  *int64
-	ArchivedAt         *time.Time
-	PinnedAt           *time.Time
-	PinPosition        *int32
-	SortAt             time.Time
+	ID                       int64
+	Type                     string
+	Name                     *string
+	Description              string
+	AvatarUrl                *string
+	DirectKey                *string
+	CreatedBy                *int64
+	CreatedAt                time.Time
+	UpdatedAt                time.Time
+	AvatarAttachmentID       *uuid.UUID
+	LastMessageID            *int64
+	LastActivityAt           time.Time
+	ClearedBeforeMessageID   *int64
+	Role                     string
+	LastReadMessageID        *int64
+	ArchivedAt               *time.Time
+	MyClearedBeforeMessageID *int64
+	HiddenAt                 *time.Time
+	PinnedAt                 *time.Time
+	PinPosition              *int32
+	SortAt                   time.Time
 }
 
 func (q *Queries) GetChatEntry(ctx context.Context, arg GetChatEntryParams) (GetChatEntryRow, error) {
@@ -188,9 +291,12 @@ func (q *Queries) GetChatEntry(ctx context.Context, arg GetChatEntryParams) (Get
 		&i.AvatarAttachmentID,
 		&i.LastMessageID,
 		&i.LastActivityAt,
+		&i.ClearedBeforeMessageID,
 		&i.Role,
 		&i.LastReadMessageID,
 		&i.ArchivedAt,
+		&i.MyClearedBeforeMessageID,
+		&i.HiddenAt,
 		&i.PinnedAt,
 		&i.PinPosition,
 		&i.SortAt,
@@ -199,7 +305,8 @@ func (q *Queries) GetChatEntry(ctx context.Context, arg GetChatEntryParams) (Get
 }
 
 const listChatEntries = `-- name: ListChatEntries :many
-SELECT c.id, c.type, c.name, c.description, c.avatar_url, c.direct_key, c.created_by, c.created_at, c.updated_at, c.avatar_attachment_id, c.last_message_id, c.last_activity_at, p.role, p.last_read_message_id, p.archived_at, pin.pinned_at, pin.position AS pin_position,
+SELECT c.id, c.type, c.name, c.description, c.avatar_url, c.direct_key, c.created_by, c.created_at, c.updated_at, c.avatar_attachment_id, c.last_message_id, c.last_activity_at, c.cleared_before_message_id, p.role, p.last_read_message_id, p.archived_at, p.cleared_before_message_id AS my_cleared_before_message_id, p.hidden_at,
+       pin.pinned_at, pin.position AS pin_position,
        COALESCE(pin.pinned_at, c.last_activity_at)::timestamptz AS sort_at
 FROM participants p
 JOIN chats c ON c.id = p.chat_id
@@ -207,6 +314,7 @@ LEFT JOIN user_chat_pins pin ON pin.user_id = p.user_id AND pin.chat_id = p.chat
 WHERE p.user_id = $1
   AND ($2::text IS NULL OR c.type = $2::text)
   AND ($3::bool IS NULL OR (p.archived_at IS NOT NULL) = $3::bool)
+  AND (p.hidden_at IS NULL OR c.last_message_id > COALESCE(p.cleared_before_message_id, 0))
   AND (
     $4::bigint IS NULL
     OR (pin.pinned_at IS NULL)::int > $5::int
@@ -232,24 +340,27 @@ type ListChatEntriesParams struct {
 }
 
 type ListChatEntriesRow struct {
-	ID                 int64
-	Type               string
-	Name               *string
-	Description        string
-	AvatarUrl          *string
-	DirectKey          *string
-	CreatedBy          *int64
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
-	AvatarAttachmentID *uuid.UUID
-	LastMessageID      *int64
-	LastActivityAt     time.Time
-	Role               string
-	LastReadMessageID  *int64
-	ArchivedAt         *time.Time
-	PinnedAt           *time.Time
-	PinPosition        *int32
-	SortAt             time.Time
+	ID                       int64
+	Type                     string
+	Name                     *string
+	Description              string
+	AvatarUrl                *string
+	DirectKey                *string
+	CreatedBy                *int64
+	CreatedAt                time.Time
+	UpdatedAt                time.Time
+	AvatarAttachmentID       *uuid.UUID
+	LastMessageID            *int64
+	LastActivityAt           time.Time
+	ClearedBeforeMessageID   *int64
+	Role                     string
+	LastReadMessageID        *int64
+	ArchivedAt               *time.Time
+	MyClearedBeforeMessageID *int64
+	HiddenAt                 *time.Time
+	PinnedAt                 *time.Time
+	PinPosition              *int32
+	SortAt                   time.Time
 }
 
 // A user's chats: pinned ones first (by pin position), then by last activity, then by id. The cursor is the
@@ -285,9 +396,12 @@ func (q *Queries) ListChatEntries(ctx context.Context, arg ListChatEntriesParams
 			&i.AvatarAttachmentID,
 			&i.LastMessageID,
 			&i.LastActivityAt,
+			&i.ClearedBeforeMessageID,
 			&i.Role,
 			&i.LastReadMessageID,
 			&i.ArchivedAt,
+			&i.MyClearedBeforeMessageID,
+			&i.HiddenAt,
 			&i.PinnedAt,
 			&i.PinPosition,
 			&i.SortAt,
@@ -598,6 +712,20 @@ type TouchChatActivityParams struct {
 // A new message: the chat moves to the top of its members' lists. Never moves back for an older id.
 func (q *Queries) TouchChatActivity(ctx context.Context, arg TouchChatActivityParams) error {
 	_, err := q.db.Exec(ctx, touchChatActivity, arg.MessageID, arg.At, arg.ChatID)
+	return err
+}
+
+const unhideChat = `-- name: UnhideChat :exec
+UPDATE participants SET hidden_at = NULL WHERE chat_id = $1 AND user_id = $2 AND hidden_at IS NOT NULL
+`
+
+type UnhideChatParams struct {
+	ChatID int64
+	UserID int64
+}
+
+func (q *Queries) UnhideChat(ctx context.Context, arg UnhideChatParams) error {
+	_, err := q.db.Exec(ctx, unhideChat, arg.ChatID, arg.UserID)
 	return err
 }
 

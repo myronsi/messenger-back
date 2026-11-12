@@ -396,6 +396,14 @@ func (s *Server) UnpinChat(w http.ResponseWriter, r *http.Request, chatID ChatId
 	s.chats.UnpinChat(w, r, chatID, params)
 }
 
+func (s *Server) ClearChatHistory(w http.ResponseWriter, r *http.Request, chatID ChatId, params ClearChatHistoryParams) {
+	if s.chats == nil {
+		s.AuthServer.ClearChatHistory(w, r, chatID, params)
+		return
+	}
+	s.chats.ClearChatHistory(w, r, chatID, params)
+}
+
 // ArchiveChat delegates to the chat endpoints (PUT /chats/{id}/archive).
 func (s *Server) ArchiveChat(w http.ResponseWriter, r *http.Request, chatID ChatId, params ArchiveChatParams) {
 	if s.chats == nil {

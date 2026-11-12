@@ -205,6 +205,9 @@ type member struct{}
 
 func (member) ChatIDs(context.Context, int64) ([]int64, error)      { return []int64{1, 2}, nil }
 func (member) IsMember(context.Context, int64, int64) (bool, error) { return true, nil }
+func (member) ClearedBounds(context.Context, int64, []int64) (map[int64]int64, error) {
+	return nil, nil
+}
 
 func pageFixture(n int, drop func(i int) string) (*Searcher, *fakeES, *fakeMessages, []int64) {
 	es := &fakeES{}

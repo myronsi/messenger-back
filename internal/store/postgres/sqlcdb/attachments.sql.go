@@ -672,3 +672,17 @@ func (q *Queries) UnlinkMessageAttachments(ctx context.Context, arg UnlinkMessag
 	_, err := q.db.Exec(ctx, unlinkMessageAttachments, arg.ChatID, arg.MessageID)
 	return err
 }
+
+const unlinkMessagesUpTo = `-- name: UnlinkMessagesUpTo :exec
+DELETE FROM attachment_links WHERE chat_id = $1 AND message_id <= $2
+`
+
+type UnlinkMessagesUpToParams struct {
+	ChatID    int64
+	MessageID int64
+}
+
+func (q *Queries) UnlinkMessagesUpTo(ctx context.Context, arg UnlinkMessagesUpToParams) error {
+	_, err := q.db.Exec(ctx, unlinkMessagesUpTo, arg.ChatID, arg.MessageID)
+	return err
+}

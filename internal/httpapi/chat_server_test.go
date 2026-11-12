@@ -42,6 +42,8 @@ type chatEvents struct {
 	updated  map[int64][]int64
 	removed  map[int64][]int64
 	requests []int64 // recipients
+	hidden   map[int64][]int64
+	cleared  []clearedEvent
 
 	groupCreated map[int64][]int64
 	groupUpdates map[int64]int
@@ -67,6 +69,27 @@ func (c *chatEvents) ChatRemoved(_ context.Context, chatID int64, userIDs []int6
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.removed[chatID] = append(c.removed[chatID], userIDs...)
+}
+
+type clearedEvent struct {
+	chatID, before int64
+	scope          string
+	recipients     []int64
+}
+
+func (c *chatEvents) ChatHidden(_ context.Context, chatID int64, userIDs []int64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.hidden == nil {
+		c.hidden = map[int64][]int64{}
+	}
+	c.hidden[chatID] = append(c.hidden[chatID], userIDs...)
+}
+
+func (c *chatEvents) HistoryCleared(_ context.Context, chatID, beforeID int64, scope string, _ int64, recipients []int64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.cleared = append(c.cleared, clearedEvent{chatID, beforeID, scope, recipients})
 }
 
 func (c *chatEvents) RequestCreated(_ context.Context, r chats.RequestView) {
@@ -125,6 +148,10 @@ type searchAccess struct {
 
 func (a searchAccess) ChatIDs(ctx context.Context, userID int64) ([]int64, error) {
 	return a.pg.Social().ChatIDs(ctx, userID)
+}
+
+func (a searchAccess) ClearedBounds(ctx context.Context, userID int64, chatIDs []int64) (map[int64]int64, error) {
+	return a.pg.Chats().ClearedBounds(ctx, userID, chatIDs)
 }
 
 // newChatEnvWith is newChatEnv with message search (Elasticsearch, TEST_ELASTIC_URL) when withSearch.
@@ -712,5 +739,129 @@ func TestSavedMessagesArchiveAndPinOrder(t *testing.T) {
 	cb, _ := strconv.ParseInt(chatBob, 10, 64)
 	if len(e.events.updated[cb]) < 4 {
 		t.Fatalf("chat_list_update for pin, reorder, archive and unarchive: %v", e.events.updated[cb])
+	}
+}
+
+func TestDeleteForMeAndClearHistory(t *testing.T) {
+	e := newChatEnv(t)
+	alice, bob, carol := e.register(t, "alice"), e.register(t, "bob"), e.register(t, "carol")
+	aliceID, _ := strconv.ParseInt(e.uid(t, alice), 10, 64)
+	chat := e.create(t, alice, e.uid(t, bob), "").json()["id"].(string)
+	chatID, _ := strconv.ParseInt(chat, 10, 64)
+	a, err := e.store.Attachments().Create(t.Context(), postgres.NewAttachment{
+		UploaderID: &aliceID, Purpose: "message", Kind: "image", Filename: "p.png",
+		StorageKey: "attachments/" + uuid.NewString(), MimeType: "image/png", Size: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := e.do(t, request{method: http.MethodPost, path: "/chats/" + chat + "/messages", token: alice.access,
+		body: map[string]any{"client_temp_id": "photo", "type": "file", "attachment_id": a.ID.String()}}); r.Code != http.StatusCreated {
+		t.Fatalf("photo: %d %s", r.Code, r.Body)
+	}
+	e.send(t, alice, chat, "old-1", "old from alice")
+	e.send(t, bob, chat, "old-2", "old from bob")
+	listed := func(s session) map[string]any {
+		t.Helper()
+		for _, c := range items(t, e.do(t, request{method: http.MethodGet, path: "/chats", token: s.access})) {
+			if c["id"] == chat {
+				return c
+			}
+		}
+		return nil
+	}
+	media := func(s session) int {
+		t.Helper()
+		return len(items(t, e.do(t, request{method: http.MethodGet, path: "/chats/" + chat + "/media?kind=image", token: s.access})))
+	}
+
+	if r := e.do(t, request{method: http.MethodDelete, path: "/chats/" + chat + "?scope=nobody", token: alice.access}); r.Code != http.StatusUnprocessableEntity && r.Code != http.StatusBadRequest {
+		t.Fatalf("unknown scope: %d", r.Code)
+	}
+	if r := e.do(t, request{method: http.MethodDelete, path: "/chats/" + chat + "?scope=me", token: alice.access}); r.Code != http.StatusNoContent {
+		t.Fatalf("delete for me: %d %s", r.Code, r.Body)
+	}
+	if len(e.events.hidden[chatID]) != 1 || e.events.hidden[chatID][0] != aliceID || len(e.events.removed[chatID]) != 0 {
+		t.Fatalf("chat_deleted only for alice: hidden %v removed %v", e.events.hidden, e.events.removed)
+	}
+	if listed(alice) != nil || listed(bob) == nil {
+		t.Fatal("the chat leaves only alice's list")
+	}
+	if got, _ := e.history(t, bob, chat, ""); len(got) != 3 || media(bob) != 1 {
+		t.Fatalf("bob keeps the history: %v", got)
+	}
+
+	e.send(t, bob, chat, "new-1", "are you there")
+	back := listed(alice)
+	if back == nil || back["last_message"].(map[string]any)["content"] != "are you there" || back["unread_count"].(float64) != 1 {
+		t.Fatalf("the chat comes back with only the new message: %v", back)
+	}
+	if got, _ := e.history(t, alice, chat, ""); len(got) != 1 || got[0]["content"] != "are you there" {
+		t.Fatalf("alice sees only the new message: %v", got)
+	}
+	if media(alice) != 0 {
+		t.Fatal("cleared media stays hidden")
+	}
+
+	clear := func(s session, id, scope string) reply {
+		return e.do(t, request{method: http.MethodPost, path: "/chats/" + id + "/clear", token: s.access, body: map[string]any{"scope": scope}})
+	}
+	if r := clear(alice, chat, "me"); r.Code != http.StatusNoContent {
+		t.Fatalf("clear for me: %d %s", r.Code, r.Body)
+	}
+	if got, _ := e.history(t, alice, chat, ""); len(got) != 0 {
+		t.Fatalf("alice's history after clearing: %v", got)
+	}
+	if c := listed(alice); c == nil || c["unread_count"].(float64) != 0 || c["last_message"] != nil {
+		t.Fatalf("a cleared chat stays listed, empty and read: %v", c)
+	}
+	if got, _ := e.history(t, bob, chat, ""); len(got) != 4 {
+		t.Fatalf("bob's history after alice cleared hers: %d", len(got))
+	}
+
+	e.send(t, bob, chat, "new-2", "last one")
+	if r := clear(bob, chat, "everyone"); r.Code != http.StatusNoContent {
+		t.Fatalf("clear for everyone: %d %s", r.Code, r.Body)
+	}
+	for _, s := range []session{alice, bob} {
+		if got, _ := e.history(t, s, chat, ""); len(got) != 0 {
+			t.Fatalf("history after clearing for everyone: %v", got)
+		}
+	}
+	last := e.events.cleared[len(e.events.cleared)-1]
+	if last.chatID != chatID || last.scope != "everyone" || len(last.recipients) != 2 || last.before == 0 {
+		t.Fatalf("history_cleared: %+v", last)
+	}
+	if r := clear(carol, chat, "me"); r.Code != http.StatusNotFound {
+		t.Fatalf("a stranger clears: %d", r.Code)
+	}
+	if r := clear(alice, chat, "all"); r.Code != http.StatusUnprocessableEntity && r.Code != http.StatusBadRequest {
+		t.Fatalf("unknown clear scope: %d", r.Code)
+	}
+
+	group := e.do(t, request{method: http.MethodPost, path: "/groups", token: alice.access,
+		body: map[string]any{"name": "Clearers", "member_ids": []string{e.uid(t, bob), e.uid(t, carol)}}})
+	if group.Code != http.StatusCreated {
+		t.Fatalf("group: %d %s", group.Code, group.Body)
+	}
+	gid := group.json()["id"].(string)
+	e.send(t, alice, gid, "g-1", "group news")
+	if r := clear(bob, gid, "everyone"); r.Code != http.StatusForbidden {
+		t.Fatalf("a member clears a group for everyone: %d %s", r.Code, r.Body)
+	}
+	if r := clear(bob, gid, "me"); r.Code != http.StatusNoContent {
+		t.Fatalf("a member clears a group for himself: %d %s", r.Code, r.Body)
+	}
+	if got, _ := e.history(t, carol, gid, ""); len(got) == 0 {
+		t.Fatal("carol keeps the group history")
+	}
+	if r := clear(alice, gid, "everyone"); r.Code != http.StatusNoContent {
+		t.Fatalf("the owner clears a group for everyone: %d %s", r.Code, r.Body)
+	}
+	if got, _ := e.history(t, carol, gid, ""); len(got) != 0 {
+		t.Fatalf("carol's group history after the owner cleared it: %v", got)
+	}
+	if r := e.do(t, request{method: http.MethodDelete, path: "/chats/" + gid + "?scope=me", token: bob.access}); r.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("delete a group for me: %d", r.Code)
 	}
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/myronsi/messenger-back/internal/events"
+	"github.com/myronsi/messenger-back/internal/ids"
 	"github.com/myronsi/messenger-back/internal/store/elastic"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/redis"
@@ -164,6 +165,8 @@ func (in *Indexer) Handle(ctx context.Context, entry redis.Entry) error {
 			err = in.hide(ctx, target, e.MessageID, e.UserID)
 		case events.ChatDeleted:
 			err = in.dropChat(ctx, target, e.ChatID)
+		case events.HistoryCleared:
+			err = in.dropHistory(ctx, target, e.ChatID, e.MessageID)
 		}
 		if err != nil {
 			return err
@@ -228,6 +231,21 @@ func (in *Indexer) dropChat(ctx context.Context, target string, chatID int64) er
 		return nil
 	}
 	return err
+}
+
+func (in *Indexer) dropHistory(ctx context.Context, target string, chatID, upTo int64) error {
+	if chatID == 0 || upTo == 0 {
+		return nil
+	}
+	query := map[string]any{"bool": map[string]any{"filter": []any{
+		map[string]any{"term": map[string]any{"chat_id": id(chatID)}},
+		map[string]any{"range": map[string]any{"created_at": map[string]any{"lt": ids.Time(upTo).UTC()}}},
+	}}}
+	err := in.ix.es.Do(ctx, "POST", "/"+target+"/_delete_by_query?conflicts=proceed&refresh=false", map[string]any{"query": query}, nil)
+	if err != nil && !errors.Is(err, elastic.ErrNotFound) {
+		return err
+	}
+	return in.delete(ctx, target, upTo)
 }
 
 // mergeScript writes a document from the message store but keeps the users already in hidden_for: a hide

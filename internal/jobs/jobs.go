@@ -21,6 +21,7 @@ const (
 // ChatDeleter removes the messages of a chat (scylla.Messages).
 type ChatDeleter interface {
 	DeleteChat(ctx context.Context, chatID int64) error
+	DeleteHistory(ctx context.Context, chatID, upTo int64) error
 }
 
 // UnreadForgetter drops a chat from users' unread counters (redis.Unread).
@@ -32,6 +33,10 @@ type UnreadForgetter interface {
 type Members interface {
 	Participant(ctx context.Context, chatID, userID int64) (postgres.Participant, error)
 	MessagesDeleted(ctx context.Context, chatID int64) error
+}
+
+type HistoryUnlinker interface {
+	UnlinkMessagesUpTo(ctx context.Context, chatID, messageID int64) error
 }
 
 type DeletionStore interface {
@@ -65,7 +70,7 @@ func ResendChatDeletions(ctx context.Context, store DeletionStore, emit Emitter,
 //     writes that were in flight when the chat was deleted;
 //   - chat.member_removed drops the chat from the user's unread counters, unless the user is a member again
 //     (the entry can be handled late, or replayed).
-func ChatCleanup(messages ChatDeleter, unread UnreadForgetter, members Members, grace time.Duration, log *slog.Logger) redis.Handler {
+func ChatCleanup(messages ChatDeleter, unread UnreadForgetter, members Members, links HistoryUnlinker, grace time.Duration, log *slog.Logger) redis.Handler {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
@@ -91,6 +96,19 @@ func ChatCleanup(messages ChatDeleter, unread UnreadForgetter, members Members, 
 				return err
 			}
 			log.InfoContext(ctx, "chat messages deleted", "chat_id", e.ChatID)
+		case events.HistoryCleared:
+			if e.ChatID == 0 || e.MessageID == 0 {
+				return nil
+			}
+			if err := messages.DeleteHistory(ctx, e.ChatID, e.MessageID); err != nil {
+				return err
+			}
+			if links != nil {
+				if err := links.UnlinkMessagesUpTo(ctx, e.ChatID, e.MessageID); err != nil {
+					return err
+				}
+			}
+			log.InfoContext(ctx, "chat history deleted", "chat_id", e.ChatID)
 		case events.ChatMemberRemoved:
 			if e.ChatID == 0 || e.UserID == 0 {
 				return nil

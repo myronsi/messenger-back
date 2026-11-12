@@ -945,3 +945,66 @@ func TestPinOrderAndArchive(t *testing.T) {
 		t.Fatalf("every chat without the filter: %v", got)
 	}
 }
+
+func TestClearedHistoryAndHiddenChats(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	me, other := mustUser(t, s, "clearer"), mustUser(t, s, "cleared_peer")
+	c, _, err := s.Chats().CreateDirect(ctx, me.ID, other.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed := func(userID int64) bool {
+		t.Helper()
+		page, err := s.Chats().Entries(ctx, userID, nil, 50)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range page {
+			if e.Chat.ID == c.ID {
+				return true
+			}
+		}
+		return false
+	}
+	if err := s.Chats().TouchActivity(ctx, c.ID, 100, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Chats().ClearForUser(ctx, c.ID, me.ID, 100, true); err != nil {
+		t.Fatal(err)
+	}
+	if listed(me.ID) || !listed(other.ID) {
+		t.Fatal("a chat deleted for me must leave only my list")
+	}
+	if b, err := s.Chats().ClearedBound(ctx, c.ID, me.ID); err != nil || b != 100 {
+		t.Fatalf("my bound: %d %v", b, err)
+	}
+	if b, _ := s.Chats().ClearedBound(ctx, c.ID, other.ID); b != 0 {
+		t.Fatalf("the other user's bound: %d", b)
+	}
+	if err := s.Chats().TouchActivity(ctx, c.ID, 120, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if !listed(me.ID) {
+		t.Fatal("a newer message brings the chat back")
+	}
+	if err := s.Chats().ClearForEveryone(ctx, c.ID, 120); err != nil {
+		t.Fatal(err)
+	}
+	bounds, err := s.Chats().ClearedBounds(ctx, other.ID, []int64{c.ID})
+	if err != nil || bounds[c.ID] != 120 {
+		t.Fatalf("bounds after clearing for everyone: %v %v", bounds, err)
+	}
+	if e, err := s.Chats().Entry(ctx, me.ID, c.ID); err != nil || e.ClearedBefore() != 120 {
+		t.Fatalf("entry bound: %+v %v", e, err)
+	}
+	if err := s.Chats().ClearForUser(ctx, c.ID, me.ID, 120, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.Chats().CreateDirect(ctx, me.ID, other.ID); err != nil || !listed(me.ID) {
+		t.Fatalf("opening the chat again shows it: %v", err)
+	}
+	if err := s.Chats().ClearForUser(ctx, c.ID, mustUser(t, s, "stranger_clear").ID, 1, false); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("a stranger clears: %v", err)
+	}
+}

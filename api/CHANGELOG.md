@@ -2,6 +2,16 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.26
+
+- `DELETE /chats/{chat_id}` takes `scope=me|everyone` (default `everyone`, as before). `me` deletes the direct chat
+  only for the caller: it leaves their list, its history so far stays hidden for them, and it comes back with only
+  newer messages when one arrives.
+- `POST /chats/{chat_id}/clear` (`ClearHistoryRequest`, `scope: me|everyone`) clears the history up to the newest
+  message: for the caller only, or for every member (direct chats: either user; groups: owner and admins, else
+  `403`).
+- New server WebSocket event `history_cleared` (`before_message_id`, `scope`, `actor_id`).
+
 ## 2.1.0-alpha.25
 
 - Archive: `PUT` and `DELETE /chats/{chat_id}/archive` archive a chat for the caller and move it back. `Chat` gains

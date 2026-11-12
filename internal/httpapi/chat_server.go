@@ -239,7 +239,7 @@ func (c *ChatServer) CreateChat(w http.ResponseWriter, r *http.Request, _ Create
 }
 
 // DeleteChat implements DELETE /chats/{id}.
-func (c *ChatServer) DeleteChat(w http.ResponseWriter, r *http.Request, chatID ChatId, _ DeleteChatParams) {
+func (c *ChatServer) DeleteChat(w http.ResponseWriter, r *http.Request, chatID ChatId, params DeleteChatParams) {
 	p, ok := principalOr401(w, r)
 	if !ok {
 		return
@@ -248,8 +248,40 @@ func (c *ChatServer) DeleteChat(w http.ResponseWriter, r *http.Request, chatID C
 	if !ok {
 		return
 	}
-	if err := c.o.Service.Delete(r.Context(), p.UserID, id); err != nil {
+	if params.Scope != nil && !params.Scope.Valid() {
+		WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "scope", Message: "must be me or everyone"})
+		return
+	}
+	del := c.o.Service.Delete
+	if params.Scope != nil && *params.Scope == DeleteChatParamsScopeMe {
+		del = c.o.Service.DeleteForMe
+	}
+	if err := del(r.Context(), p.UserID, id); err != nil {
 		serviceError(w, r, c.o.Log, "delete chat", err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (c *ChatServer) ClearChatHistory(w http.ResponseWriter, r *http.Request, chatID ChatId, _ ClearChatHistoryParams) {
+	p, ok := principalOr401(w, r)
+	if !ok {
+		return
+	}
+	id, ok := parseID(w, "chat_id", chatID)
+	if !ok {
+		return
+	}
+	var body ClearHistoryRequest
+	if !decode(w, r, &body) {
+		return
+	}
+	if !body.Scope.Valid() {
+		WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "scope", Message: "must be me or everyone"})
+		return
+	}
+	if err := c.o.Service.ClearHistory(r.Context(), p.UserID, id, string(body.Scope)); err != nil {
+		serviceError(w, r, c.o.Log, "clear chat history", err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

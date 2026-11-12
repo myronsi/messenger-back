@@ -131,7 +131,7 @@ func run() error {
 	wg.Go(func() { resendChatDeletions(bg, log, pg.Chats(), evlog, deletionSweepEvery, deletionLostAfter) })
 	if err := start(redis.ConsumerOptions{
 		Stream: redis.StreamChats, Group: jobs.GroupChatCleanup,
-		Handler: jobs.ChatCleanup(msgs, redis.NewUnread(rd.Client(), ""), pg.Chats(), scylla.DeleteGracePeriod, log),
+		Handler: jobs.ChatCleanup(msgs, redis.NewUnread(rd.Client(), ""), pg.Chats(), pg.Attachments(), scylla.DeleteGracePeriod, log),
 	}); err != nil {
 		return err
 	}

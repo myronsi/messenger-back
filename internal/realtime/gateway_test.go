@@ -883,3 +883,35 @@ func TestConcurrentConnectionsKeepTheLimit(t *testing.T) {
 	case <-time.After(300 * time.Millisecond):
 	}
 }
+
+func TestHiddenChatKeepsDeliveringAndHistoryClearedFollowsTheContract(t *testing.T) {
+	e := newEnv(t)
+	a := e.instance("a")
+	ctx := context.Background()
+	alice, bob := e.user("alice"), e.user("bob")
+	chat, _, err := e.pg.Chats().CreateDirect(ctx, alice, bob)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ca := e.online(a, alice)
+	cb := e.online(a, bob)
+	waitDelivery(t, ca, cb, chat.ID)
+
+	a.fanout.ChatHidden(ctx, chat.ID, []int64{bob})
+	if ev := cb.next("chat_deleted"); ev["chat_id"] != fmt.Sprint(chat.ID) {
+		t.Fatalf("chat deleted for bob: %v", ev)
+	}
+	ca.send(text("after-hide", chat.ID, "still there?"))
+	ca.next("ack")
+	if m := data(cb.next("message"))["message"].(map[string]any); m["content"] != "still there?" {
+		t.Fatalf("bob still gets new messages: %v", m)
+	}
+
+	a.fanout.HistoryCleared(ctx, chat.ID, 42, "everyone", alice, []int64{alice, bob})
+	for _, c := range []*client{ca, cb} {
+		d := data(c.next("history_cleared"))
+		if d["before_message_id"] != "42" || d["scope"] != "everyone" || d["actor_id"] != fmt.Sprint(alice) {
+			t.Fatalf("history_cleared: %v", d)
+		}
+	}
+}

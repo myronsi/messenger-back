@@ -126,8 +126,9 @@ type Chat struct {
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
 	// LastMessageID is the newest message (nil before the first one); LastActivityAt orders the chat list.
-	LastMessageID  *int64
-	LastActivityAt time.Time
+	LastMessageID          *int64
+	LastActivityAt         time.Time
+	ClearedBeforeMessageID *int64
 }
 
 // ChatEntry is a chat in one user's list: the chat and the user's own relation to it.
@@ -138,6 +139,8 @@ type ChatEntry struct {
 	PinnedAt          *time.Time
 	PinPosition       *int32
 	ArchivedAt        *time.Time
+	MyClearedBefore   *int64
+	HiddenAt          *time.Time
 	// SortAt is the pin time of a pinned chat and the last activity of any other.
 	SortAt time.Time
 }
@@ -151,6 +154,17 @@ type ChatCursor struct {
 }
 
 // CursorOf returns the cursor that continues after the entry.
+func (e ChatEntry) ClearedBefore() int64 {
+	var bound int64
+	if e.MyClearedBefore != nil {
+		bound = *e.MyClearedBefore
+	}
+	if e.Chat.ClearedBeforeMessageID != nil {
+		bound = max(bound, *e.Chat.ClearedBeforeMessageID)
+	}
+	return bound
+}
+
 func (e ChatEntry) CursorOf() ChatCursor {
 	c := ChatCursor{Unpinned: e.PinnedAt == nil, SortAt: e.SortAt, ChatID: e.Chat.ID}
 	if e.PinnedAt != nil && e.PinPosition != nil {
@@ -269,6 +283,11 @@ type ChatRepository interface {
 	Unpin(ctx context.Context, userID, chatID int64) error
 	ReorderPins(ctx context.Context, userID int64, chatIDs []int64) error
 	SetArchived(ctx context.Context, userID, chatID int64, archived bool) error
+	ClearedBound(ctx context.Context, chatID, userID int64) (int64, error)
+	ClearedBounds(ctx context.Context, userID int64, chatIDs []int64) (map[int64]int64, error)
+	ClearForUser(ctx context.Context, chatID, userID, bound int64, hide bool) error
+	ClearForEveryone(ctx context.Context, chatID, bound int64) error
+	Unhide(ctx context.Context, chatID, userID int64) error
 
 	// IDsAfter walks every chat in id order (with since: only chats with activity since then).
 	IDsAfter(ctx context.Context, afterID int64, since *time.Time, limit int) ([]int64, error)
@@ -411,6 +430,7 @@ type AttachmentRepository interface {
 	Link(ctx context.Context, attachmentID uuid.UUID, chatID, messageID int64, drawing []byte) error
 	Drawings(ctx context.Context, chatID int64, messageIDs []int64) ([]LinkDrawing, error)
 	UnlinkMessage(ctx context.Context, chatID, messageID int64) error
+	UnlinkMessagesUpTo(ctx context.Context, chatID, messageID int64) error
 	// LinksForViewer returns the messages using the attachment in chats the viewer is a member of (at most 50).
 	LinksForViewer(ctx context.Context, attachmentID uuid.UUID, viewerID int64) ([]AttachmentLink, error)
 	// ListLinked returns a chat's attachments of the kinds, newest first, linked before `before` (zero: now).

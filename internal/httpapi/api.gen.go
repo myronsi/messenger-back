@@ -215,6 +215,24 @@ func (e ChatType) Valid() bool {
 	}
 }
 
+// Defines values for ClearHistoryRequestScope.
+const (
+	ClearHistoryRequestScopeEveryone ClearHistoryRequestScope = "everyone"
+	ClearHistoryRequestScopeMe       ClearHistoryRequestScope = "me"
+)
+
+// Valid indicates whether the value is a known member of the ClearHistoryRequestScope enum.
+func (e ClearHistoryRequestScope) Valid() bool {
+	switch e {
+	case ClearHistoryRequestScopeEveryone:
+		return true
+	case ClearHistoryRequestScopeMe:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for DeleteMessagesRequestScope.
 const (
 	DeleteMessagesRequestScopeEveryone DeleteMessagesRequestScope = "everyone"
@@ -926,6 +944,24 @@ func (e GetAttachmentContentParamsVariant) Valid() bool {
 	}
 }
 
+// Defines values for DeleteChatParamsScope.
+const (
+	DeleteChatParamsScopeEveryone DeleteChatParamsScope = "everyone"
+	DeleteChatParamsScopeMe       DeleteChatParamsScope = "me"
+)
+
+// Valid indicates whether the value is a known member of the DeleteChatParamsScope enum.
+func (e DeleteChatParamsScope) Valid() bool {
+	switch e {
+	case DeleteChatParamsScopeEveryone:
+		return true
+	case DeleteChatParamsScopeMe:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for DeleteMessageParamsScope.
 const (
 	DeleteMessageParamsScopeEveryone DeleteMessageParamsScope = "everyone"
@@ -1297,6 +1333,14 @@ type ChatPage struct {
 
 // ChatType defines model for ChatType.
 type ChatType string
+
+// ClearHistoryRequest defines model for ClearHistoryRequest.
+type ClearHistoryRequest struct {
+	Scope ClearHistoryRequestScope `json:"scope"`
+}
+
+// ClearHistoryRequestScope defines model for ClearHistoryRequest.Scope.
+type ClearHistoryRequestScope string
 
 // ClientTempId Client-generated ID that makes sending idempotent and ties acks and errors to the send.
 type ClientTempId = string
@@ -3023,12 +3067,17 @@ type ReorderPinnedChatsParams struct {
 
 // DeleteChatParams defines parameters for DeleteChat.
 type DeleteChatParams struct {
+	Scope *DeleteChatParamsScope `form:"scope,omitempty" json:"scope,omitempty"`
+
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
 	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
 }
+
+// DeleteChatParamsScope defines parameters for DeleteChat.
+type DeleteChatParamsScope string
 
 // GetChatParams defines parameters for GetChat.
 type GetChatParams struct {
@@ -3068,6 +3117,15 @@ type GetChatCallParams struct {
 
 // StartChatCallParams defines parameters for StartChatCall.
 type StartChatCallParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// ClearChatHistoryParams defines parameters for ClearChatHistory.
+type ClearChatHistoryParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
@@ -3990,6 +4048,9 @@ type SetNotificationMuteJSONRequestBody = NotificationMuteRequest
 // StartChatCallJSONRequestBody defines body for StartChatCall for application/json ContentType.
 type StartChatCallJSONRequestBody = StartCallRequest
 
+// ClearChatHistoryJSONRequestBody defines body for ClearChatHistory for application/json ContentType.
+type ClearChatHistoryJSONRequestBody = ClearHistoryRequest
+
 // SendMessageJSONRequestBody defines body for SendMessage for application/json ContentType.
 type SendMessageJSONRequestBody = SendMessageRequest
 
@@ -4554,6 +4615,9 @@ type ServerInterface interface {
 	// StartChatCall Start a call in the chat, or get the one already running
 	// (POST /chats/{chat_id}/call)
 	StartChatCall(w http.ResponseWriter, r *http.Request, chatId ChatId, params StartChatCallParams)
+	// ClearChatHistory Clear the history of a chat
+	// (POST /chats/{chat_id}/clear)
+	ClearChatHistory(w http.ResponseWriter, r *http.Request, chatId ChatId, params ClearChatHistoryParams)
 	// ListChatMedia Photos, videos, audio or files of a chat
 	// (GET /chats/{chat_id}/media)
 	ListChatMedia(w http.ResponseWriter, r *http.Request, chatId ChatId, params ListChatMediaParams)
@@ -7700,6 +7764,19 @@ func (siw *ServerInterfaceWrapper) DeleteChat(w http.ResponseWriter, r *http.Req
 	// Parameter object where we will unmarshal all parameters from the context
 	var params DeleteChatParams
 
+	// ------------- Optional query parameter "scope" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "scope", r.URL.Query(), &params.Scope, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "scope"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "scope", Err: err})
+		}
+		return
+	}
+
 	headers := r.Header
 
 	// ------------- Optional header parameter "X-Client-Version" -------------
@@ -8087,6 +8164,75 @@ func (siw *ServerInterfaceWrapper) StartChatCall(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.StartChatCall(w, r, chatId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ClearChatHistory operation middleware
+func (siw *ServerInterfaceWrapper) ClearChatHistory(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ClearChatHistoryParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ClearChatHistory(w, r, chatId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -14296,6 +14442,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/chats/{chat_id}", wrapper.GetChat)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/chats/{chat_id}/pin", wrapper.UnpinChat)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/chats/{chat_id}/pin", wrapper.PinChat)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/chats/{chat_id}/clear", wrapper.ClearChatHistory)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/chats/{chat_id}/archive", wrapper.UnarchiveChat)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/chats/{chat_id}/archive", wrapper.ArchiveChat)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/chats/pins/order", wrapper.ReorderPinnedChats)
@@ -20392,6 +20539,120 @@ func (response StartChatCall503ApplicationProblemPlusJSONResponse) VisitStartCha
 		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
 	}
 	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ClearChatHistoryRequestObject struct {
+	ChatId ChatId `json:"chat_id"`
+	Params ClearChatHistoryParams
+	Body   *ClearChatHistoryJSONRequestBody
+}
+
+type ClearChatHistoryResponseObject interface {
+	VisitClearChatHistoryResponse(w http.ResponseWriter) error
+}
+
+type ClearChatHistory204Response struct {
+}
+
+func (response ClearChatHistory204Response) VisitClearChatHistoryResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type ClearChatHistory400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response ClearChatHistory400ApplicationProblemPlusJSONResponse) VisitClearChatHistoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ClearChatHistory401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ClearChatHistory401ApplicationProblemPlusJSONResponse) VisitClearChatHistoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ClearChatHistory403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response ClearChatHistory403ApplicationProblemPlusJSONResponse) VisitClearChatHistoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ClearChatHistory404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response ClearChatHistory404ApplicationProblemPlusJSONResponse) VisitClearChatHistoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ClearChatHistory422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response ClearChatHistory422ApplicationProblemPlusJSONResponse) VisitClearChatHistoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ClearChatHistory426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response ClearChatHistory426ApplicationProblemPlusJSONResponse) VisitClearChatHistoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -29630,6 +29891,9 @@ type StrictServerInterface interface {
 	// StartChatCall Start a call in the chat, or get the one already running
 	// (POST /chats/{chat_id}/call)
 	StartChatCall(ctx context.Context, request StartChatCallRequestObject) (StartChatCallResponseObject, error)
+	// ClearChatHistory Clear the history of a chat
+	// (POST /chats/{chat_id}/clear)
+	ClearChatHistory(ctx context.Context, request ClearChatHistoryRequestObject) (ClearChatHistoryResponseObject, error)
 	// ListChatMedia Photos, videos, audio or files of a chat
 	// (GET /chats/{chat_id}/media)
 	ListChatMedia(ctx context.Context, request ListChatMediaRequestObject) (ListChatMediaResponseObject, error)
@@ -31442,6 +31706,40 @@ func (sh *strictHandler) StartChatCall(w http.ResponseWriter, r *http.Request, c
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(StartChatCallResponseObject); ok {
 		if err := validResponse.VisitStartChatCallResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ClearChatHistory operation middleware
+func (sh *strictHandler) ClearChatHistory(w http.ResponseWriter, r *http.Request, chatId ChatId, params ClearChatHistoryParams) {
+	var request ClearChatHistoryRequestObject
+
+	request.ChatId = chatId
+	request.Params = params
+
+	var body ClearChatHistoryJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ClearChatHistory(ctx, request.(ClearChatHistoryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ClearChatHistory")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ClearChatHistoryResponseObject); ok {
+		if err := validResponse.VisitClearChatHistoryResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

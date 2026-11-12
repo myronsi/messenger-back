@@ -129,3 +129,6 @@ SELECT id FROM chats WHERE avatar_attachment_id = @attachment_id;
 
 -- name: IsStickerImage :one
 SELECT EXISTS (SELECT 1 FROM stickers WHERE attachment_id = @attachment_id);
+
+-- name: UnlinkMessagesUpTo :exec
+DELETE FROM attachment_links WHERE chat_id = @chat_id AND message_id <= @message_id;

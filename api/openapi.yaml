@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.25
+  version: 2.1.0-alpha.26
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -1089,9 +1089,20 @@ paths:
       operationId: deleteChat
       summary: Delete a direct chat
       description: |
-        Deletes the chat and its messages for both users (as v1 did); both get `chat_deleted`.
+        `scope=everyone` (the default) deletes the chat and its messages for both users (as v1 did); both get
+        `chat_deleted`. `scope=me` deletes it only for the caller: the chat leaves their list and its history up to
+        now is hidden for them (as `POST /chats/{chat_id}/clear` with `scope: me`); only the caller's devices get
+        `chat_deleted`. When a newer message arrives the chat comes back for the caller with only the newer messages.
         For groups use `DELETE /groups/{chat_id}` (owner) or `POST /groups/{chat_id}/leave`;
         a group here is `422`.
+      parameters:
+        - name: scope
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [me, everyone]
+            default: everyone
       responses:
         "426": { $ref: "#/components/responses/ClientOutdated" }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -1131,6 +1142,35 @@ paths:
           description: Unpinned
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+  /chats/{chat_id}/clear:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ChatId"
+    post:
+      tags: [chats]
+      operationId: clearChatHistory
+      summary: Clear the history of a chat
+      description: |
+        Clears every message up to the newest one now. `scope: me` hides them only for the caller (any member).
+        `scope: everyone` removes them for every member: in a direct chat either user may do it, in a group the
+        owner and admins (`403` for others). The chat itself stays. The caller's devices (`me`) or every member's
+        (`everyone`) get `history_cleared`; messages up to `before_message_id` are no longer listed, counted as
+        unread, found by search or shown as media.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClearHistoryRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Cleared
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
   /chats/{chat_id}/archive:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
@@ -5607,6 +5647,13 @@ components:
           type: array
           items: { $ref: "#/components/schemas/Chat" }
         next_cursor: { $ref: "#/components/schemas/Cursor" }
+    ClearHistoryRequest:
+      type: object
+      required: [scope]
+      properties:
+        scope:
+          type: string
+          enum: [me, everyone]
     PinOrderRequest:
       type: object
       required: [chat_ids]

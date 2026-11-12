@@ -16,10 +16,10 @@ func entryFrom(r sqlcdb.ListChatEntriesRow) ChatEntry {
 		Chat: chatFrom(sqlcdb.Chat{
 			ID: r.ID, Type: r.Type, Name: r.Name, Description: r.Description, AvatarUrl: r.AvatarUrl, DirectKey: r.DirectKey,
 			CreatedBy: r.CreatedBy, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt, AvatarAttachmentID: r.AvatarAttachmentID,
-			LastMessageID: r.LastMessageID, LastActivityAt: r.LastActivityAt,
+			LastMessageID: r.LastMessageID, LastActivityAt: r.LastActivityAt, ClearedBeforeMessageID: r.ClearedBeforeMessageID,
 		}),
 		Role: Role(r.Role), LastReadMessageID: r.LastReadMessageID, PinnedAt: r.PinnedAt, PinPosition: r.PinPosition,
-		ArchivedAt: r.ArchivedAt, SortAt: r.SortAt,
+		ArchivedAt: r.ArchivedAt, MyClearedBefore: r.MyClearedBeforeMessageID, HiddenAt: r.HiddenAt, SortAt: r.SortAt,
 	}
 }
 
@@ -304,4 +304,58 @@ func (r chatRepo) IDsAfter(ctx context.Context, afterID int64, since *time.Time,
 		ids, err = r.s.q.ListChatIDsAfter(ctx, sqlcdb.ListChatIDsAfterParams{AfterID: afterID, MaxRows: clampLimit(limit)})
 	}
 	return ids, mapError(err)
+}
+
+func (r chatRepo) ClearedBound(ctx context.Context, chatID, userID int64) (int64, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	bound, err := r.s.q.ClearedBound(ctx, sqlcdb.ClearedBoundParams{ChatID: chatID, UserID: userID})
+	if err != nil {
+		return 0, mapError(err)
+	}
+	return bound, nil
+}
+
+func (r chatRepo) ClearedBounds(ctx context.Context, userID int64, chatIDs []int64) (map[int64]int64, error) {
+	out := make(map[int64]int64, len(chatIDs))
+	if len(chatIDs) == 0 {
+		return out, nil
+	}
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	rows, err := r.s.q.ClearedBounds(ctx, sqlcdb.ClearedBoundsParams{UserID: userID, ChatIds: chatIDs})
+	if err != nil {
+		return nil, mapError(err)
+	}
+	for _, row := range rows {
+		if row.Bound > 0 {
+			out[row.ChatID] = row.Bound
+		}
+	}
+	return out, nil
+}
+
+func (r chatRepo) ClearForUser(ctx context.Context, chatID, userID, bound int64, hide bool) error {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	n, err := r.s.q.ClearForUser(ctx, sqlcdb.ClearForUserParams{ChatID: chatID, UserID: userID, Bound: bound, Hide: hide})
+	if err != nil {
+		return mapError(err)
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (r chatRepo) ClearForEveryone(ctx context.Context, chatID, bound int64) error {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	return mapError(r.s.q.ClearForEveryone(ctx, sqlcdb.ClearForEveryoneParams{ChatID: chatID, Bound: bound}))
+}
+
+func (r chatRepo) Unhide(ctx context.Context, chatID, userID int64) error {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	return mapError(r.s.q.UnhideChat(ctx, sqlcdb.UnhideChatParams{ChatID: chatID, UserID: userID}))
 }

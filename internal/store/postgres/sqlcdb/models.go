@@ -109,18 +109,19 @@ type CallStartRequest struct {
 }
 
 type Chat struct {
-	ID                 int64
-	Type               string
-	Name               *string
-	Description        string
-	AvatarUrl          *string
-	DirectKey          *string
-	CreatedBy          *int64
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
-	AvatarAttachmentID *uuid.UUID
-	LastMessageID      *int64
-	LastActivityAt     time.Time
+	ID                     int64
+	Type                   string
+	Name                   *string
+	Description            string
+	AvatarUrl              *string
+	DirectKey              *string
+	CreatedBy              *int64
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
+	AvatarAttachmentID     *uuid.UUID
+	LastMessageID          *int64
+	LastActivityAt         time.Time
+	ClearedBeforeMessageID *int64
 }
 
 type ChatDeletion struct {
@@ -195,13 +196,15 @@ type NotificationPreference struct {
 }
 
 type Participant struct {
-	ChatID            int64
-	UserID            int64
-	Role              string
-	LastReadMessageID *int64
-	JoinedAt          time.Time
-	LastReadAt        *time.Time
-	ArchivedAt        *time.Time
+	ChatID                 int64
+	UserID                 int64
+	Role                   string
+	LastReadMessageID      *int64
+	JoinedAt               time.Time
+	LastReadAt             *time.Time
+	ArchivedAt             *time.Time
+	ClearedBeforeMessageID *int64
+	HiddenAt               *time.Time
 }
 
 type QrLoginRequest struct {

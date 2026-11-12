@@ -40,6 +40,9 @@
       "$ref": "server/chat_deleted.schema.json"
     },
     {
+      "$ref": "server/history_cleared.schema.json"
+    },
+    {
       "$ref": "server/group_created.schema.json"
     },
     {
