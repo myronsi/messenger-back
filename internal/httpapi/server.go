@@ -582,6 +582,22 @@ func (s *Server) GetGroup(w http.ResponseWriter, r *http.Request, chatID ChatId,
 	s.chats.GetGroup(w, r, chatID, params)
 }
 
+func (s *Server) ListGroupMembers(w http.ResponseWriter, r *http.Request, chatID ChatId, params ListGroupMembersParams) {
+	if s.chats == nil {
+		s.AuthServer.ListGroupMembers(w, r, chatID, params)
+		return
+	}
+	s.chats.ListGroupMembers(w, r, chatID, params)
+}
+
+func (s *Server) ListCommonGroups(w http.ResponseWriter, r *http.Request, userID Id, params ListCommonGroupsParams) {
+	if s.chats == nil {
+		s.AuthServer.ListCommonGroups(w, r, userID, params)
+		return
+	}
+	s.chats.ListCommonGroups(w, r, userID, params)
+}
+
 // UpdateGroup delegates to the group endpoints.
 func (s *Server) UpdateGroup(w http.ResponseWriter, r *http.Request, chatID ChatId, params UpdateGroupParams) {
 	if s.chats == nil {

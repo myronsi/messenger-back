@@ -137,7 +137,10 @@ func (r attachmentRepo) Drawings(ctx context.Context, chatID int64, messageIDs [
 func (r attachmentRepo) UnlinkMessage(ctx context.Context, chatID, messageID int64) error {
 	ctx, cancel := r.s.call(ctx)
 	defer cancel()
-	return mapError(r.s.q.UnlinkMessageAttachments(ctx, sqlcdb.UnlinkMessageAttachmentsParams{ChatID: chatID, MessageID: messageID}))
+	if err := r.s.q.UnlinkMessageAttachments(ctx, sqlcdb.UnlinkMessageAttachmentsParams{ChatID: chatID, MessageID: messageID}); err != nil {
+		return mapError(err)
+	}
+	return mapError(r.s.q.DeleteMessageURLs(ctx, sqlcdb.DeleteMessageURLsParams{ChatID: chatID, MessageID: messageID}))
 }
 
 func (r attachmentRepo) LinksForViewer(ctx context.Context, attachmentID uuid.UUID, viewerID int64) ([]AttachmentLink, error) {
@@ -301,5 +304,8 @@ func (r attachmentRepo) IsStickerImage(ctx context.Context, attachmentID uuid.UU
 func (r attachmentRepo) UnlinkMessagesUpTo(ctx context.Context, chatID, messageID int64) error {
 	ctx, cancel := r.s.call(ctx)
 	defer cancel()
-	return mapError(r.s.q.UnlinkMessagesUpTo(ctx, sqlcdb.UnlinkMessagesUpToParams{ChatID: chatID, MessageID: messageID}))
+	if err := r.s.q.UnlinkMessagesUpTo(ctx, sqlcdb.UnlinkMessagesUpToParams{ChatID: chatID, MessageID: messageID}); err != nil {
+		return mapError(err)
+	}
+	return mapError(r.s.q.DeleteURLsUpTo(ctx, sqlcdb.DeleteURLsUpToParams{ChatID: chatID, MessageID: messageID}))
 }

@@ -247,6 +247,8 @@ type ChatRepository interface {
 	// CreateGroup creates the group and all its participants in one transaction.
 	CreateGroup(ctx context.Context, g NewGroup) (Chat, error)
 	Get(ctx context.Context, id int64) (Chat, error)
+	GroupMembersPage(ctx context.Context, chatID int64, query string, after *MemberCursor, limit int) ([]MemberEntry, int64, error)
+	CommonGroups(ctx context.Context, viewerID, userID int64, after *CommonGroupCursor, limit int) ([]CommonGroup, error)
 	// ListForUser returns the chats of a user, most recently changed first. limit is capped at 500.
 	ListForUser(ctx context.Context, userID int64, limit int) ([]Chat, error)
 	Participants(ctx context.Context, chatID int64) ([]Participant, error)
@@ -432,6 +434,8 @@ type AttachmentRepository interface {
 	Drawings(ctx context.Context, chatID int64, messageIDs []int64) ([]LinkDrawing, error)
 	UnlinkMessage(ctx context.Context, chatID, messageID int64) error
 	UnlinkMessagesUpTo(ctx context.Context, chatID, messageID int64) error
+	SetMessageURLs(ctx context.Context, chatID, messageID int64, urls []string, at time.Time) error
+	LinkMessageIDs(ctx context.Context, chatID, beforeMessageID int64, limit int) ([]int64, error)
 	// LinksForViewer returns the messages using the attachment in chats the viewer is a member of (at most 50).
 	LinksForViewer(ctx context.Context, attachmentID uuid.UUID, viewerID int64) ([]AttachmentLink, error)
 	// ListLinked returns a chat's attachments of the kinds, newest first, linked before `before` (zero: now).

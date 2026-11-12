@@ -493,7 +493,9 @@ const (
 	MediaKindAudio  MediaKind = "audio"
 	MediaKindFile   MediaKind = "file"
 	MediaKindImage  MediaKind = "image"
+	MediaKindLink   MediaKind = "link"
 	MediaKindVisual MediaKind = "visual"
+	MediaKindVoice  MediaKind = "voice"
 )
 
 // Valid indicates whether the value is a known member of the MediaKind enum.
@@ -505,7 +507,11 @@ func (e MediaKind) Valid() bool {
 		return true
 	case MediaKindImage:
 		return true
+	case MediaKindLink:
+		return true
 	case MediaKindVisual:
+		return true
+	case MediaKindVoice:
 		return true
 	default:
 		return false
@@ -1345,6 +1351,26 @@ type ClearHistoryRequestScope string
 // ClientTempId Client-generated ID that makes sending idempotent and ties acks and errors to the send.
 type ClientTempId = string
 
+// CommonGroup defines model for CommonGroup.
+type CommonGroup struct {
+	AvatarUrl *string `json:"avatar_url"`
+
+	// Id Decimal ID as a string (Snowflake IDs exceed 2^53).
+	//
+	// Examples: 7217400317439950848
+	Id          Id     `json:"id"`
+	MemberCount int    `json:"member_count"`
+	Name        string `json:"name"`
+}
+
+// CommonGroupPage defines model for CommonGroupPage.
+type CommonGroupPage struct {
+	Items []CommonGroup `json:"items"`
+
+	// NextCursor Opaque cursor; `null` when there are no more results.
+	NextCursor *Cursor `json:"next_cursor"`
+}
+
 // ContactNameRequest defines model for ContactNameRequest.
 type ContactNameRequest struct {
 	ContactName string `json:"contact_name"`
@@ -1565,6 +1591,15 @@ type GroupMember struct {
 	User User `json:"user"`
 }
 
+// GroupMemberPage defines model for GroupMemberPage.
+type GroupMemberPage struct {
+	Items []GroupMember `json:"items"`
+
+	// NextCursor Opaque cursor; `null` when there are no more results.
+	NextCursor *Cursor `json:"next_cursor"`
+	Total      int     `json:"total"`
+}
+
 // GroupRole A moderator may delete other members' messages; owners and admins also manage the group.
 type GroupRole string
 
@@ -1681,7 +1716,8 @@ type Me struct {
 	Username              Username `json:"username"`
 }
 
-// MediaKind `image` photos, `visual` photos and videos, `audio` audio files and voice messages, `file` other files (documents, archives).
+// MediaKind `image` photos, `visual` photos and videos, `audio` audio files and voice messages, `voice` voice messages only,
+// `file` other files (documents, archives), `link` messages whose text or caption contains a web link.
 type MediaKind string
 
 // Message defines model for Message.
@@ -3338,6 +3374,23 @@ type LeaveGroupParams struct {
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
 }
 
+// ListGroupMembersParams defines parameters for ListGroupMembers.
+type ListGroupMembersParams struct {
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
+
+	// Limit Page size
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// After Opaque `next_cursor` of the previous page
+	After *After `form:"after,omitempty" json:"after,omitempty"`
+
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
 // AddGroupParticipantParams defines parameters for AddGroupParticipant.
 type AddGroupParticipantParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
@@ -3942,6 +3995,21 @@ type GetUserAvatarParams struct {
 
 // ListUserAvatarsParams defines parameters for ListUserAvatars.
 type ListUserAvatarsParams struct {
+	// Limit Page size
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// After Opaque `next_cursor` of the previous page
+	After *After `form:"after,omitempty" json:"after,omitempty"`
+
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// ListCommonGroupsParams defines parameters for ListCommonGroups.
+type ListCommonGroupsParams struct {
 	// Limit Page size
 	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
 
@@ -4627,7 +4695,7 @@ type ServerInterface interface {
 	// ClearChatHistory Clear the history of a chat
 	// (POST /chats/{chat_id}/clear)
 	ClearChatHistory(w http.ResponseWriter, r *http.Request, chatId ChatId, params ClearChatHistoryParams)
-	// ListChatMedia Photos, videos, audio or files of a chat
+	// ListChatMedia Photos, videos, audio, voice messages, files or links of a chat
 	// (GET /chats/{chat_id}/media)
 	ListChatMedia(w http.ResponseWriter, r *http.Request, chatId ChatId, params ListChatMediaParams)
 	// ListMessages Message history
@@ -4681,6 +4749,9 @@ type ServerInterface interface {
 	// LeaveGroup Leave the group
 	// (POST /groups/{chat_id}/leave)
 	LeaveGroup(w http.ResponseWriter, r *http.Request, chatId ChatId, params LeaveGroupParams)
+	// ListGroupMembers Members of a group, page by page
+	// (GET /groups/{chat_id}/participants)
+	ListGroupMembers(w http.ResponseWriter, r *http.Request, chatId ChatId, params ListGroupMembersParams)
 	// AddGroupParticipant Add a participant
 	// (POST /groups/{chat_id}/participants)
 	AddGroupParticipant(w http.ResponseWriter, r *http.Request, chatId ChatId, params AddGroupParticipantParams)
@@ -4888,6 +4959,9 @@ type ServerInterface interface {
 	// ListUserAvatars Avatar history
 	// (GET /users/{user_id}/avatars)
 	ListUserAvatars(w http.ResponseWriter, r *http.Request, userId UserId, params ListUserAvatarsParams)
+	// ListCommonGroups Groups the caller and the user are both in
+	// (GET /users/{user_id}/common-groups)
+	ListCommonGroups(w http.ResponseWriter, r *http.Request, userId Id, params ListCommonGroupsParams)
 	// RemoveContactName Remove your display name for a user
 	// (DELETE /users/{user_id}/contact-name)
 	RemoveContactName(w http.ResponseWriter, r *http.Request, userId UserId, params RemoveContactNameParams)
@@ -9640,6 +9714,114 @@ func (siw *ServerInterfaceWrapper) LeaveGroup(w http.ResponseWriter, r *http.Req
 	handler.ServeHTTP(w, r)
 }
 
+// ListGroupMembers operation middleware
+func (siw *ServerInterfaceWrapper) ListGroupMembers(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListGroupMembersParams
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "after" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "after", r.URL.Query(), &params.After, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "after"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after", Err: err})
+		}
+		return
+	}
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListGroupMembers(w, r, chatId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // AddGroupParticipant operation middleware
 func (siw *ServerInterfaceWrapper) AddGroupParticipant(w http.ResponseWriter, r *http.Request) {
 
@@ -14087,6 +14269,101 @@ func (siw *ServerInterfaceWrapper) ListUserAvatars(w http.ResponseWriter, r *htt
 	handler.ServeHTTP(w, r)
 }
 
+// ListCommonGroups operation middleware
+func (siw *ServerInterfaceWrapper) ListCommonGroups(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "user_id" -------------
+	var userId Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "user_id", r.PathValue("user_id"), &userId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "user_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListCommonGroupsParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "after" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "after", r.URL.Query(), &params.After, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "after"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after", Err: err})
+		}
+		return
+	}
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListCommonGroups(w, r, userId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // RemoveContactName operation middleware
 func (siw *ServerInterfaceWrapper) RemoveContactName(w http.ResponseWriter, r *http.Request) {
 
@@ -14438,6 +14715,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/me/blocked-users/{user_id}", wrapper.BlockUser)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/users", wrapper.SearchUsers)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/usernames/{username}", wrapper.GetUserByUsername)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/users/{user_id}/common-groups", wrapper.ListCommonGroups)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/users/{user_id}", wrapper.GetUser)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/users/{user_id}/avatar", wrapper.GetUserAvatar)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/users/{user_id}/avatars", wrapper.ListUserAvatars)
@@ -14477,6 +14755,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/groups/{chat_id}", wrapper.GetGroup)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/groups/{chat_id}", wrapper.UpdateGroup)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/groups/{chat_id}/avatar", wrapper.SetGroupAvatar)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/groups/{chat_id}/participants", wrapper.ListGroupMembers)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/groups/{chat_id}/participants", wrapper.AddGroupParticipant)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/groups/{chat_id}/participants/{user_id}", wrapper.RemoveGroupParticipant)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/groups/{chat_id}/participants/{user_id}", wrapper.UpdateGroupParticipantRole)
@@ -22562,6 +22841,93 @@ func (response LeaveGroup426ApplicationProblemPlusJSONResponse) VisitLeaveGroupR
 	return err
 }
 
+type ListGroupMembersRequestObject struct {
+	ChatId ChatId `json:"chat_id"`
+	Params ListGroupMembersParams
+}
+
+type ListGroupMembersResponseObject interface {
+	VisitListGroupMembersResponse(w http.ResponseWriter) error
+}
+
+type ListGroupMembers200JSONResponse GroupMemberPage
+
+func (response ListGroupMembers200JSONResponse) VisitListGroupMembersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListGroupMembers400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response ListGroupMembers400ApplicationProblemPlusJSONResponse) VisitListGroupMembersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListGroupMembers401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ListGroupMembers401ApplicationProblemPlusJSONResponse) VisitListGroupMembersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListGroupMembers404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response ListGroupMembers404ApplicationProblemPlusJSONResponse) VisitListGroupMembersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListGroupMembers426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response ListGroupMembers426ApplicationProblemPlusJSONResponse) VisitListGroupMembersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type AddGroupParticipantRequestObject struct {
 	ChatId ChatId `json:"chat_id"`
 	Params AddGroupParticipantParams
@@ -29495,6 +29861,93 @@ func (response ListUserAvatars426ApplicationProblemPlusJSONResponse) VisitListUs
 	return err
 }
 
+type ListCommonGroupsRequestObject struct {
+	UserId Id `json:"user_id"`
+	Params ListCommonGroupsParams
+}
+
+type ListCommonGroupsResponseObject interface {
+	VisitListCommonGroupsResponse(w http.ResponseWriter) error
+}
+
+type ListCommonGroups200JSONResponse CommonGroupPage
+
+func (response ListCommonGroups200JSONResponse) VisitListCommonGroupsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListCommonGroups400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response ListCommonGroups400ApplicationProblemPlusJSONResponse) VisitListCommonGroupsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListCommonGroups401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ListCommonGroups401ApplicationProblemPlusJSONResponse) VisitListCommonGroupsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListCommonGroups404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response ListCommonGroups404ApplicationProblemPlusJSONResponse) VisitListCommonGroupsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListCommonGroups426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response ListCommonGroups426ApplicationProblemPlusJSONResponse) VisitListCommonGroupsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type RemoveContactNameRequestObject struct {
 	UserId UserId `json:"user_id"`
 	Params RemoveContactNameParams
@@ -29943,7 +30396,7 @@ type StrictServerInterface interface {
 	// ClearChatHistory Clear the history of a chat
 	// (POST /chats/{chat_id}/clear)
 	ClearChatHistory(ctx context.Context, request ClearChatHistoryRequestObject) (ClearChatHistoryResponseObject, error)
-	// ListChatMedia Photos, videos, audio or files of a chat
+	// ListChatMedia Photos, videos, audio, voice messages, files or links of a chat
 	// (GET /chats/{chat_id}/media)
 	ListChatMedia(ctx context.Context, request ListChatMediaRequestObject) (ListChatMediaResponseObject, error)
 	// ListMessages Message history
@@ -29997,6 +30450,9 @@ type StrictServerInterface interface {
 	// LeaveGroup Leave the group
 	// (POST /groups/{chat_id}/leave)
 	LeaveGroup(ctx context.Context, request LeaveGroupRequestObject) (LeaveGroupResponseObject, error)
+	// ListGroupMembers Members of a group, page by page
+	// (GET /groups/{chat_id}/participants)
+	ListGroupMembers(ctx context.Context, request ListGroupMembersRequestObject) (ListGroupMembersResponseObject, error)
 	// AddGroupParticipant Add a participant
 	// (POST /groups/{chat_id}/participants)
 	AddGroupParticipant(ctx context.Context, request AddGroupParticipantRequestObject) (AddGroupParticipantResponseObject, error)
@@ -30204,6 +30660,9 @@ type StrictServerInterface interface {
 	// ListUserAvatars Avatar history
 	// (GET /users/{user_id}/avatars)
 	ListUserAvatars(ctx context.Context, request ListUserAvatarsRequestObject) (ListUserAvatarsResponseObject, error)
+	// ListCommonGroups Groups the caller and the user are both in
+	// (GET /users/{user_id}/common-groups)
+	ListCommonGroups(ctx context.Context, request ListCommonGroupsRequestObject) (ListCommonGroupsResponseObject, error)
 	// RemoveContactName Remove your display name for a user
 	// (DELETE /users/{user_id}/contact-name)
 	RemoveContactName(ctx context.Context, request RemoveContactNameRequestObject) (RemoveContactNameResponseObject, error)
@@ -32330,6 +32789,33 @@ func (sh *strictHandler) LeaveGroup(w http.ResponseWriter, r *http.Request, chat
 	}
 }
 
+// ListGroupMembers operation middleware
+func (sh *strictHandler) ListGroupMembers(w http.ResponseWriter, r *http.Request, chatId ChatId, params ListGroupMembersParams) {
+	var request ListGroupMembersRequestObject
+
+	request.ChatId = chatId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListGroupMembers(ctx, request.(ListGroupMembersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListGroupMembers")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListGroupMembersResponseObject); ok {
+		if err := validResponse.VisitListGroupMembersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // AddGroupParticipant operation middleware
 func (sh *strictHandler) AddGroupParticipant(w http.ResponseWriter, r *http.Request, chatId ChatId, params AddGroupParticipantParams) {
 	var request AddGroupParticipantRequestObject
@@ -34340,6 +34826,33 @@ func (sh *strictHandler) ListUserAvatars(w http.ResponseWriter, r *http.Request,
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListUserAvatarsResponseObject); ok {
 		if err := validResponse.VisitListUserAvatarsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListCommonGroups operation middleware
+func (sh *strictHandler) ListCommonGroups(w http.ResponseWriter, r *http.Request, userId Id, params ListCommonGroupsParams) {
+	var request ListCommonGroupsRequestObject
+
+	request.UserId = userId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListCommonGroups(ctx, request.(ListCommonGroupsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListCommonGroups")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListCommonGroupsResponseObject); ok {
+		if err := validResponse.VisitListCommonGroupsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

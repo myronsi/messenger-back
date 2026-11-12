@@ -2,6 +2,15 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.28
+
+- `MediaKind` gains `voice` (voice messages only) and `link` (messages whose text or caption contains a web link) for
+  `GET /chats/{chat_id}/media`.
+- `GET /groups/{chat_id}/participants` (`GroupMemberPage`): members page by page, owner first, then admins, moderators
+  and members by display name, with an optional `q` filter and the matching `total`.
+- `GET /users/{user_id}/common-groups` (`CommonGroupPage` of `CommonGroup`): the groups the caller shares with the
+  user.
+
 ## 2.1.0-alpha.27
 
 - `User` gains the required `profile_version` (grows with username, display name, bio or avatar changes, not with

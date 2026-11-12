@@ -20,6 +20,7 @@ import (
 	"github.com/myronsi/messenger-back/internal/drawing"
 	"github.com/myronsi/messenger-back/internal/events"
 	"github.com/myronsi/messenger-back/internal/ids"
+	"github.com/myronsi/messenger-back/internal/linkpreview"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/scylla"
 )
@@ -591,6 +592,9 @@ func (s *Service) mayAttach(ctx context.Context, r SendRequest, a postgres.Attac
 
 // Link before storing the message so all items are accessible as soon as recipients see it.
 func (s *Service) linkAttachments(ctx context.Context, m scylla.Message, drawings map[gocql.UUID][]byte) error {
+	if err := s.indexURLs(ctx, m); err != nil {
+		return err
+	}
 	if m.Type == scylla.TypeSticker {
 		return nil
 	}
@@ -598,6 +602,20 @@ func (s *Service) linkAttachments(ctx context.Context, m scylla.Message, drawing
 		if err := s.d.Store.Attachments().Link(ctx, uuid.UUID(id), m.ChatID, m.ID, drawings[id]); err != nil {
 			return fmt.Errorf("%w: %w", ErrUnavailable, err)
 		}
+	}
+	return nil
+}
+
+func (s *Service) indexURLs(ctx context.Context, m scylla.Message) error {
+	if m.Content == nil || m.Type == scylla.TypeSystem || m.Type == scylla.TypeSticker {
+		return nil
+	}
+	urls := linkpreview.FindURLs(*m.Content, postgres.MaxMessageURLs)
+	if len(urls) == 0 {
+		return nil
+	}
+	if err := s.d.Store.Attachments().SetMessageURLs(ctx, m.ChatID, m.ID, urls, m.CreatedAt); err != nil {
+		return fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
 	return nil
 }
@@ -653,6 +671,10 @@ func (s *Service) Edit(ctx context.Context, userID, chatID, messageID int64, con
 		return scylla.Message{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
 	m.Content, m.EditedAt = &content, &at
+	urls := linkpreview.FindURLs(content, postgres.MaxMessageURLs)
+	if err := s.d.Store.Attachments().SetMessageURLs(context.WithoutCancel(ctx), chatID, messageID, urls, m.CreatedAt); err != nil {
+		s.d.Log.WarnContext(ctx, "link index", "error", err, "chat_id", chatID, "message_id", messageID)
+	}
 	if members, err := s.Members(ctx, chatID); err == nil {
 		// Members who deleted the message for themselves do not get its new text.
 		s.d.Notifier.MessageEdited(ctx, m, s.withoutHidden(ctx, chatID, messageID, members))
