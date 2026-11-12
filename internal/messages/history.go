@@ -369,7 +369,57 @@ var MediaKinds = map[string][]string{
 	"image":  {"image"},
 	"visual": {"image", "video"},
 	"audio":  {"audio", "voice"},
+	"voice":  {"voice"},
 	"file":   {"file"},
+}
+
+const MediaLink = "link"
+
+func (s *Service) LinkMessages(ctx context.Context, userID, chatID, before int64, limit int) (found []scylla.Message, next int64, err error) {
+	if err := s.requireMember(ctx, chatID, userID); err != nil {
+		return nil, 0, err
+	}
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	floor, err := s.floor(ctx, chatID, userID)
+	if err != nil {
+		return nil, 0, fmt.Errorf("%w: %w", ErrUnavailable, err)
+	}
+	scan := limit * mediaScan
+	ids, err := s.d.Store.Attachments().LinkMessageIDs(ctx, chatID, before, scan)
+	if err != nil {
+		return nil, 0, fmt.Errorf("%w: %w", ErrUnavailable, err)
+	}
+	for i, id := range ids {
+		if id <= floor {
+			return found, 0, nil
+		}
+		if len(found) >= limit {
+			return found, ids[i-1], nil
+		}
+		m, err := s.message(ctx, chatID, id)
+		if errors.Is(err, ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return nil, 0, err
+		}
+		if m.Deleted {
+			continue
+		}
+		hidden, err := s.d.Messages.Hidden(ctx, userID, chatID, id)
+		if err != nil {
+			return nil, 0, fmt.Errorf("%w: %w", ErrUnavailable, err)
+		}
+		if !hidden {
+			found = append(found, m)
+		}
+	}
+	if len(ids) == scan {
+		return found, ids[len(ids)-1], nil
+	}
+	return found, 0, nil
 }
 
 // MediaItem is a message of a media list with its file.

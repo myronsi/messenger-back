@@ -204,6 +204,14 @@ func (Unimplemented) GetGroup(w http.ResponseWriter, r *http.Request, chatId Cha
 	notImplemented(w, r)
 }
 
+func (Unimplemented) ListGroupMembers(w http.ResponseWriter, r *http.Request, chatId ChatId, params ListGroupMembersParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) ListCommonGroups(w http.ResponseWriter, r *http.Request, userId Id, params ListCommonGroupsParams) {
+	notImplemented(w, r)
+}
+
 func (Unimplemented) UpdateGroup(w http.ResponseWriter, r *http.Request, chatId ChatId, params UpdateGroupParams) {
 	notImplemented(w, r)
 }

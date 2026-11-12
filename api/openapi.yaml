@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.27
+  version: 2.1.0-alpha.28
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -783,6 +783,32 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
+  /users/{user_id}/common-groups:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - name: user_id
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/Id" }
+    get:
+      tags: [users]
+      operationId: listCommonGroups
+      summary: Groups the caller and the user are both in
+      description: Newest activity first. Empty for the caller's own id.
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/After"
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: A page of groups
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CommonGroupPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /users/{user_id}:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
@@ -1411,7 +1437,7 @@ paths:
     get:
       tags: [chats]
       operationId: listChatMedia
-      summary: Photos, videos, audio or files of a chat
+      summary: Photos, videos, audio, voice messages, files or links of a chat
       description: Replaces `GET /messages/photos/{chat_id}` and `GET /messages/audios/{chat_id}`.
       parameters:
         - name: kind
@@ -1837,6 +1863,30 @@ paths:
       - $ref: "#/components/parameters/ClientVersion"
       - $ref: "#/components/parameters/ClientApiVersion"
       - $ref: "#/components/parameters/ChatId"
+    get:
+      tags: [groups]
+      operationId: listGroupMembers
+      summary: Members of a group, page by page
+      description: |
+        Owner first, then admins, moderators and members, each by display name. `q` keeps members whose username starts
+        with it or whose display name contains it (case-insensitive). `total` counts every member that matches.
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema: { type: string, maxLength: 64 }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/After"
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: A page of members
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GroupMemberPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
     post:
       tags: [groups]
       operationId: addGroupParticipant
@@ -5096,8 +5146,10 @@ components:
         drawing: { $ref: "#/components/schemas/Drawing" }
     MediaKind:
       type: string
-      description: "`image` photos, `visual` photos and videos, `audio` audio files and voice messages, `file` other files (documents, archives)."
-      enum: [image, audio, visual, file]
+      description: |
+        `image` photos, `visual` photos and videos, `audio` audio files and voice messages, `voice` voice messages only,
+        `file` other files (documents, archives), `link` messages whose text or caption contains a web link.
+      enum: [image, audio, visual, file, voice, link]
 
     # -------------------------------------------------------- messages
     MessageType:
@@ -5689,6 +5741,31 @@ components:
         initial_message:
           type: [string, "null"]
           maxLength: 4096
+    GroupMemberPage:
+      type: object
+      required: [items, next_cursor, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/GroupMember" }
+        next_cursor: { $ref: "#/components/schemas/Cursor" }
+        total: { type: integer, minimum: 0 }
+    CommonGroup:
+      type: object
+      required: [id, name, avatar_url, member_count]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        name: { type: string }
+        avatar_url: { type: [string, "null"] }
+        member_count: { type: integer, minimum: 1 }
+    CommonGroupPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/CommonGroup" }
+        next_cursor: { $ref: "#/components/schemas/Cursor" }
     GroupMember:
       type: object
       required: [user, role, joined_at]

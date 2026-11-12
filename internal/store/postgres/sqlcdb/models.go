@@ -132,6 +132,13 @@ type ChatDeletion struct {
 	SearchDone   bool
 }
 
+type ChatLink struct {
+	ChatID    int64
+	MessageID int64
+	Url       string
+	CreatedAt time.Time
+}
+
 type EmailToken struct {
 	TokenHash string
 	UserID    int64

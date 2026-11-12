@@ -513,7 +513,7 @@ func (m *MessageServer) ForwardMessage(w http.ResponseWriter, r *http.Request, m
 	m.answerForward(w, r, copies, err)
 }
 
-// ListChatMedia implements GET /chats/{id}/media?kind=image|visual|audio|file.
+// ListChatMedia implements GET /chats/{id}/media?kind=image|visual|audio|voice|file|link.
 func (m *MessageServer) ListChatMedia(w http.ResponseWriter, r *http.Request, chatID ChatId, params ListChatMediaParams) {
 	p, ok := principalOr401(w, r)
 	if !ok {
@@ -524,8 +524,8 @@ func (m *MessageServer) ListChatMedia(w http.ResponseWriter, r *http.Request, ch
 		return
 	}
 	kinds, known := messages.MediaKinds[string(params.Kind)]
-	if !known {
-		WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "kind", Message: "image, video gallery (visual), audio, or file"})
+	if !known && string(params.Kind) != messages.MediaLink {
+		WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "kind", Message: "image, video gallery (visual), audio, voice, file, or link"})
 		return
 	}
 	var before int64
@@ -533,6 +533,10 @@ func (m *MessageServer) ListChatMedia(w http.ResponseWriter, r *http.Request, ch
 		if before, ok = parseID(w, "after", *params.After); !ok {
 			return
 		}
+	}
+	if !known {
+		m.listLinks(w, r, p.UserID, id, before, pageLimit(params.Limit))
+		return
 	}
 	found, next, err := m.o.Service.Media(r.Context(), p.UserID, id, kinds, before, pageLimit(params.Limit))
 	if err != nil {
