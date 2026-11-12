@@ -5,16 +5,17 @@ SELECT * FROM user_privacy_settings WHERE user_id = ANY(@user_ids::BIGINT[]);
 
 -- name: UpdatePrivacySettings :one
 INSERT INTO user_privacy_settings (
-    user_id, avatar_visibility, profile_visibility, presence_visibility, read_receipts_enabled,
+    user_id, avatar_visibility, profile_visibility, presence_visibility, last_seen_visibility, read_receipts_enabled,
     direct_messages, group_invites, search_visibility, calls_enabled, typing_indicators_enabled
 ) VALUES (
-    @user_id, @avatar_visibility, @profile_visibility, @presence_visibility, @read_receipts_enabled,
+    @user_id, @avatar_visibility, @profile_visibility, @presence_visibility, @last_seen_visibility, @read_receipts_enabled,
     @direct_messages, @group_invites, @search_visibility, @calls_enabled, @typing_indicators_enabled
 )
 ON CONFLICT (user_id) DO UPDATE SET
     avatar_visibility = EXCLUDED.avatar_visibility,
     profile_visibility = EXCLUDED.profile_visibility,
     presence_visibility = EXCLUDED.presence_visibility,
+    last_seen_visibility = EXCLUDED.last_seen_visibility,
     read_receipts_enabled = EXCLUDED.read_receipts_enabled,
     direct_messages = EXCLUDED.direct_messages,
     group_invites = EXCLUDED.group_invites,
@@ -125,6 +126,7 @@ UPDATE user_privacy_settings
 SET avatar_visibility = COALESCE(sqlc.narg(avatar_visibility), avatar_visibility),
     profile_visibility = COALESCE(sqlc.narg(profile_visibility), profile_visibility),
     presence_visibility = COALESCE(sqlc.narg(presence_visibility), presence_visibility),
+    last_seen_visibility = COALESCE(sqlc.narg(last_seen_visibility), last_seen_visibility),
     read_receipts_enabled = COALESCE(sqlc.narg(read_receipts_enabled)::bool, read_receipts_enabled),
     direct_messages = COALESCE(sqlc.narg(direct_messages), direct_messages),
     group_invites = COALESCE(sqlc.narg(group_invites), group_invites),

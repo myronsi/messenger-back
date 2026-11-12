@@ -378,6 +378,7 @@ type UserPrivacySetting struct {
 	SearchVisibility        string
 	CallsEnabled            bool
 	TypingIndicatorsEnabled bool
+	LastSeenVisibility      string
 }
 
 type UserRecentSticker struct {

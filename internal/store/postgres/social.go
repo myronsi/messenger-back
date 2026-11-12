@@ -23,6 +23,7 @@ const (
 	SettingAvatar         = "avatar_visibility"
 	SettingProfile        = "profile_visibility"
 	SettingPresence       = "presence_visibility"
+	SettingLastSeen       = "last_seen_visibility"
 	SettingGroupInvites   = "group_invites"
 	SettingDirectMessages = "direct_messages"
 	SettingSearch         = "search_visibility"
@@ -40,6 +41,7 @@ type PrivacySettings struct {
 	AvatarVisibility        string
 	ProfileVisibility       string
 	PresenceVisibility      string
+	LastSeenVisibility      string
 	ReadReceiptsEnabled     bool
 	DirectMessages          string
 	GroupInvites            string
@@ -52,7 +54,7 @@ type PrivacySettings struct {
 func DefaultPrivacy(userID int64) PrivacySettings {
 	return PrivacySettings{
 		UserID: userID, AvatarVisibility: VisibleEveryone, ProfileVisibility: VisibleEveryone,
-		PresenceVisibility: VisibleEveryone, ReadReceiptsEnabled: true, DirectMessages: VisibleEveryone,
+		PresenceVisibility: VisibleEveryone, LastSeenVisibility: VisibleEveryone, ReadReceiptsEnabled: true, DirectMessages: VisibleEveryone,
 		GroupInvites: VisibleEveryone, SearchVisibility: VisibleEveryone, CallsEnabled: true,
 		TypingIndicatorsEnabled: true,
 	}
@@ -123,7 +125,7 @@ var _ SocialRepository = socialRepo{}
 func privacyFrom(p sqlcdb.UserPrivacySetting) PrivacySettings {
 	return PrivacySettings{
 		UserID: p.UserID, AvatarVisibility: p.AvatarVisibility, ProfileVisibility: p.ProfileVisibility,
-		PresenceVisibility: p.PresenceVisibility, ReadReceiptsEnabled: p.ReadReceiptsEnabled,
+		PresenceVisibility: p.PresenceVisibility, LastSeenVisibility: p.LastSeenVisibility, ReadReceiptsEnabled: p.ReadReceiptsEnabled,
 		DirectMessages: p.DirectMessages, GroupInvites: p.GroupInvites, SearchVisibility: p.SearchVisibility,
 		CallsEnabled: p.CallsEnabled, TypingIndicatorsEnabled: p.TypingIndicatorsEnabled,
 	}
@@ -156,7 +158,7 @@ func (r socialRepo) UpdatePrivacy(ctx context.Context, p PrivacySettings) (Priva
 	defer cancel()
 	row, err := r.s.q.UpdatePrivacySettings(ctx, sqlcdb.UpdatePrivacySettingsParams{
 		UserID: p.UserID, AvatarVisibility: p.AvatarVisibility, ProfileVisibility: p.ProfileVisibility,
-		PresenceVisibility: p.PresenceVisibility, ReadReceiptsEnabled: p.ReadReceiptsEnabled,
+		PresenceVisibility: p.PresenceVisibility, LastSeenVisibility: p.LastSeenVisibility, ReadReceiptsEnabled: p.ReadReceiptsEnabled,
 		DirectMessages: p.DirectMessages, GroupInvites: p.GroupInvites, SearchVisibility: p.SearchVisibility,
 		CallsEnabled: p.CallsEnabled, TypingIndicatorsEnabled: p.TypingIndicatorsEnabled,
 	})
@@ -171,6 +173,7 @@ type PrivacyPatch struct {
 	AvatarVisibility        *string
 	ProfileVisibility       *string
 	PresenceVisibility      *string
+	LastSeenVisibility      *string
 	ReadReceiptsEnabled     *bool
 	DirectMessages          *string
 	GroupInvites            *string
@@ -187,7 +190,7 @@ func (r socialRepo) PatchPrivacy(ctx context.Context, userID int64, p PrivacyPat
 	}
 	row, err := r.s.q.PatchPrivacySettings(ctx, sqlcdb.PatchPrivacySettingsParams{
 		UserID: userID, AvatarVisibility: p.AvatarVisibility, ProfileVisibility: p.ProfileVisibility,
-		PresenceVisibility: p.PresenceVisibility, ReadReceiptsEnabled: p.ReadReceiptsEnabled,
+		PresenceVisibility: p.PresenceVisibility, LastSeenVisibility: p.LastSeenVisibility, ReadReceiptsEnabled: p.ReadReceiptsEnabled,
 		DirectMessages: p.DirectMessages, GroupInvites: p.GroupInvites, SearchVisibility: p.SearchVisibility,
 		CallsEnabled: p.CallsEnabled, TypingIndicatorsEnabled: p.TypingIndicatorsEnabled,
 	})

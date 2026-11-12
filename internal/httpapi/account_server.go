@@ -203,7 +203,7 @@ func visibilityFromDB(v string) string {
 }
 
 var exceptionSettings = []string{
-	postgres.SettingAvatar, postgres.SettingProfile, postgres.SettingPresence, postgres.SettingGroupInvites,
+	postgres.SettingAvatar, postgres.SettingProfile, postgres.SettingPresence, postgres.SettingLastSeen, postgres.SettingGroupInvites,
 	postgres.SettingDirectMessages, postgres.SettingSearch,
 }
 
@@ -221,6 +221,7 @@ func (a *AccountServer) privacy(ctx context.Context, userID int64) (PrivacySetti
 		AvatarVisibility:        Visibility(visibilityFromDB(s.AvatarVisibility)),
 		ProfileVisibility:       Visibility(visibilityFromDB(s.ProfileVisibility)),
 		PresenceVisibility:      Visibility(visibilityFromDB(s.PresenceVisibility)),
+		LastSeenVisibility:      Visibility(visibilityFromDB(s.LastSeenVisibility)),
 		ReadReceiptsEnabled:     s.ReadReceiptsEnabled,
 		DirectMessages:          DirectMessagePolicy(s.DirectMessages),
 		GroupInvites:            GroupInvitePolicy(visibilityFromDB(s.GroupInvites)),
@@ -288,7 +289,8 @@ func (a *AccountServer) UpdatePrivacySettings(w http.ResponseWriter, r *http.Req
 	}
 	if !vis(&s.AvatarVisibility, body.AvatarVisibility, "avatar_visibility") ||
 		!vis(&s.ProfileVisibility, body.ProfileVisibility, "profile_visibility") ||
-		!vis(&s.PresenceVisibility, body.PresenceVisibility, "presence_visibility") {
+		!vis(&s.PresenceVisibility, body.PresenceVisibility, "presence_visibility") ||
+		!vis(&s.LastSeenVisibility, body.LastSeenVisibility, "last_seen_visibility") {
 		return
 	}
 	if body.ReadReceiptsEnabled != nil {

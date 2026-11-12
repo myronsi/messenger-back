@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.23
+  version: 2.1.0-alpha.24
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -651,7 +651,7 @@ paths:
         required: true
         schema:
           type: string
-          enum: [avatar_visibility, profile_visibility, presence_visibility, group_invites, direct_messages, search_visibility]
+          enum: [avatar_visibility, profile_visibility, presence_visibility, last_seen_visibility, group_invites, direct_messages, search_visibility]
       - name: effect
         in: path
         required: true
@@ -4736,6 +4736,7 @@ components:
         - avatar_visibility
         - profile_visibility
         - presence_visibility
+        - last_seen_visibility
         - read_receipts_enabled
         - direct_messages
         - group_invites
@@ -4746,7 +4747,12 @@ components:
       properties:
         avatar_visibility: { $ref: "#/components/schemas/Visibility" }
         profile_visibility: { $ref: "#/components/schemas/Visibility" }
-        presence_visibility: { $ref: "#/components/schemas/Visibility" }
+        presence_visibility:
+          description: Who sees that the user is online now (`User.is_online`, `presence` events).
+          allOf: [{ $ref: "#/components/schemas/Visibility" }]
+        last_seen_visibility:
+          description: Who sees when the user was last online (`User.last_seen`, `presence` events).
+          allOf: [{ $ref: "#/components/schemas/Visibility" }]
         read_receipts_enabled: { type: boolean }
         direct_messages: { $ref: "#/components/schemas/DirectMessagePolicy" }
         group_invites: { $ref: "#/components/schemas/GroupInvitePolicy" }
@@ -4765,6 +4771,7 @@ components:
         avatar_visibility: { $ref: "#/components/schemas/Visibility" }
         profile_visibility: { $ref: "#/components/schemas/Visibility" }
         presence_visibility: { $ref: "#/components/schemas/Visibility" }
+        last_seen_visibility: { $ref: "#/components/schemas/Visibility" }
         read_receipts_enabled: { type: boolean }
         direct_messages: { $ref: "#/components/schemas/DirectMessagePolicy" }
         group_invites: { $ref: "#/components/schemas/GroupInvitePolicy" }

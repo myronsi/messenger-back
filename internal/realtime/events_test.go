@@ -74,6 +74,15 @@ func TestDecodeRejectsWhatTheSchemasReject(t *testing.T) {
 	if ev, err := decodeClientEvent([]byte(`{"type":"typing","chat_id":"1","data":{"is_typing":false,"action":"recording_voice"}}`)); err != nil || ev.Typing.Action != "recording_voice" || ev.Typing.IsTyping {
 		t.Fatalf("recording a voice message: %+v %v", ev.Typing, err)
 	}
+	for _, action := range []string{"choosing_sticker", "uploading_photo", "uploading_video", "uploading_file"} {
+		raw := `{"type":"typing","chat_id":"1","data":{"is_typing":true,"action":"` + action + `"}}`
+		if ev, err := decodeClientEvent([]byte(raw)); err != nil || ev.Typing.Action != action {
+			t.Fatalf("%s: %+v %v", action, ev.Typing, err)
+		}
+	}
+	if _, err := decodeClientEvent([]byte(`{"type":"typing","chat_id":"1","data":{"is_typing":true,"action":"dancing"}}`)); err == nil {
+		t.Fatal("unknown typing action accepted")
+	}
 	if ev, err := decodeClientEvent([]byte(`{"type":"edit","client_temp_id":"a","chat_id":"1","data":{"message_id":"2","content":""}}`)); err != nil || ev.Edit == nil || ev.Edit.Content != "" {
 		t.Fatalf("an empty edit for a file caption was refused: %v", err)
 	}

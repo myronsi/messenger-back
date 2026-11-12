@@ -110,10 +110,10 @@ func TestDirectoryAppliesPrivacy(t *testing.T) {
 	if !asBob[999999].IsDeleted {
 		t.Fatal("unknown user not shown as deleted")
 	}
-	// Carol shares no chat: no avatar, the bio (allowed), no presence (denied).
+	// Carol shares no chat: no avatar, the bio (allowed), no online status (denied), the last seen time.
 	asCarol, _ := dir.ForViewer(ctx, carol, []int64{alice})
 	c := asCarol[alice]
-	if c.AvatarURL != nil || c.Bio == nil || c.IsOnline || c.LastSeen != nil || c.ContactName != nil {
+	if c.AvatarURL != nil || c.Bio == nil || c.IsOnline || c.LastSeen == nil || c.ContactName != nil {
 		t.Fatalf("as carol: %+v", c)
 	}
 	// Alice sees herself completely.
@@ -127,7 +127,16 @@ func TestDirectoryAppliesPrivacy(t *testing.T) {
 		t.Fatalf("to viewers: %+v %v", many, err)
 	}
 	vis, err := dir.PresenceVisibleTo(ctx, alice, []int64{bob, carol}, false)
-	if err != nil || !vis[bob] || vis[carol] {
+	if err != nil || vis[bob] != (users.PresenceAccess{Online: true, LastSeen: true}) || vis[carol] != (users.PresenceAccess{LastSeen: true}) {
 		t.Fatalf("presence visibility: %v %v", vis, err)
+	}
+	s.LastSeenVisibility = postgres.VisibleNobody
+	if _, err := pg.Social().UpdatePrivacy(ctx, s); err != nil {
+		t.Fatal(err)
+	}
+	dir = users.NewDirectory(pg, online{}, "/api/v2")
+	asBob, _ = dir.ForViewer(ctx, bob, []int64{alice})
+	if asBob[alice].IsOnline || asBob[alice].LastSeen != nil {
+		t.Fatalf("last seen hidden: %+v", asBob[alice])
 	}
 }

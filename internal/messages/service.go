@@ -967,7 +967,7 @@ func (s *Service) Resend(ctx context.Context, userID, chatID, messageID int64) e
 
 // Typing tells the other members that the user is (not) typing.
 func (s *Service) Typing(ctx context.Context, userID, chatID int64, typing bool, action string) error {
-	if action != TypingText && action != TypingVoice {
+	if !ValidTypingAction(action) {
 		return ErrInvalid
 	}
 	if err := s.requireMember(ctx, chatID, userID); err != nil {
