@@ -201,7 +201,7 @@ func TestUploadAndDownloadOverHTTP(t *testing.T) {
 	}
 	r := get(bob.access, "")
 	if r.Code != http.StatusOK || r.Header().Get("Content-Type") != "image/png" || r.Header().Get("X-Content-Type-Options") != "nosniff" ||
-		r.Header().Get("Content-Security-Policy") == "" || r.Body.Len() == 0 || r.Header().Get("Cache-Control") != "private, max-age=3600" ||
+		r.Header().Get("Content-Security-Policy") == "" || r.Body.Len() == 0 || r.Header().Get("Cache-Control") != cacheForever ||
 		!slices.Contains(r.Header().Values("Vary"), "Authorization") {
 		t.Fatalf("download: %d %v", r.Code, r.Header())
 	}

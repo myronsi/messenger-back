@@ -22,6 +22,7 @@ type User struct {
 	Bio                *string
 	LastSeenAt         time.Time
 	CreatedAt          time.Time
+	ProfileVersion     int64
 }
 
 // HasAvatar reports whether the user has an avatar of either generation.

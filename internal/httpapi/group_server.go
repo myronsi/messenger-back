@@ -110,7 +110,11 @@ func (c *ChatServer) GetGroup(w http.ResponseWriter, r *http.Request, chatID Cha
 		return
 	}
 	g, err := c.o.Service.Group(r.Context(), p.UserID, id)
-	c.writeGroup(w, r, http.StatusOK, g, err, "get group")
+	if err != nil {
+		serviceError(w, r, c.o.Log, "get group", err)
+		return
+	}
+	writeJSONCached(w, r, PresentGroup(g, c.o.BasePath))
 }
 
 // UpdateGroup implements PATCH /groups/{id}: only the sent fields change; "description": null clears it.

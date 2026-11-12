@@ -37,7 +37,7 @@ func utc(t time.Time) time.Time { return t.UTC() }
 func PresentUser(v users.View) User {
 	u := User{
 		Id: FormatID(v.ID), Username: v.Username, DisplayName: v.DisplayName, ContactName: v.ContactName,
-		AvatarUrl: v.AvatarURL, Bio: v.Bio, IsOnline: v.IsOnline, IsDeleted: v.IsDeleted,
+		AvatarUrl: v.AvatarURL, Bio: v.Bio, IsOnline: v.IsOnline, IsDeleted: v.IsDeleted, ProfileVersion: int(v.ProfileVersion),
 	}
 	if v.LastSeen != nil {
 		t := utc(*v.LastSeen)
@@ -52,7 +52,8 @@ const KindVoiceString = "voice"
 // PresentMe renders the caller's own account.
 func PresentMe(u postgres.User, basePath string) Me {
 	id := FormatID(u.ID)
-	me := Me{Id: id, Username: u.Username, DisplayName: u.DisplayName, Bio: u.Bio, CreatedAt: utc(u.CreatedAt), IsOnline: true}
+	me := Me{Id: id, Username: u.Username, DisplayName: u.DisplayName, Bio: u.Bio, CreatedAt: utc(u.CreatedAt), IsOnline: true,
+		ProfileVersion: int(u.ProfileVersion)}
 	if !u.LastSeenAt.IsZero() {
 		seen := utc(u.LastSeenAt)
 		me.LastSeen = &seen

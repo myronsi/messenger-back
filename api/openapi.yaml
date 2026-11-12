@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.26
+  version: 2.1.0-alpha.27
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -329,6 +329,8 @@ paths:
       operationId: getMe
       summary: Current user
       responses:
+        "304":
+          description: Not modified; the response's `ETag` matches `If-None-Match`.
         "426": { $ref: "#/components/responses/ClientOutdated" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "200":
@@ -795,6 +797,8 @@ paths:
         or a `deny` exception) is `404` unless the two share a chat. Your own profile is always found. Lookups are
         rate limited per user.
       responses:
+        "304":
+          description: Not modified; the response's `ETag` matches `If-None-Match`.
         "426": { $ref: "#/components/responses/ClientOutdated" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "200":
@@ -1757,6 +1761,8 @@ paths:
       operationId: getGroup
       summary: Group details and members
       responses:
+        "304":
+          description: Not modified; the response's `ETag` matches `If-None-Match`.
         "426": { $ref: "#/components/responses/ClientOutdated" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "200":
@@ -1974,6 +1980,8 @@ paths:
           required: false
           schema: { type: boolean, default: false }
       responses:
+        "304":
+          description: Not modified; the response's `ETag` matches `If-None-Match`.
         "426": { $ref: "#/components/responses/ClientOutdated" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "200":
@@ -2020,6 +2028,8 @@ paths:
         `Sticker.pack_slug` with `GET /stickers/links/{slug}` instead. `is_installed` tells whether it is in the
         user's panel. A hidden pack is found only by its owner.
       responses:
+        "304":
+          description: Not modified; the response's `ETag` matches `If-None-Match`.
         "426": { $ref: "#/components/responses/ClientOutdated" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "200":
@@ -4894,9 +4904,13 @@ components:
     User:
       type: object
       description: A user as visible to the requesting user; hidden fields are `null`.
-      required: [id, username, display_name, avatar_url, bio, is_online, last_seen, is_deleted]
+      required: [id, username, display_name, avatar_url, bio, is_online, last_seen, is_deleted, profile_version]
       properties:
         id: { $ref: "#/components/schemas/Id" }
+        profile_version:
+          type: integer
+          minimum: 0
+          description: Grows whenever the username, display name, bio or avatar changes (not with presence). Clients keep a stored profile until a higher version arrives.
         username: { $ref: "#/components/schemas/Username" }
         display_name: { type: string }
         contact_name:
@@ -5115,9 +5129,13 @@ components:
       pattern: "^[A-Za-z0-9]{8,32}$"
     StickerPack:
       type: object
-      required: [id, title, is_official, is_installed, is_mine, is_hidden, stickers]
+      required: [id, title, is_official, is_installed, is_mine, is_hidden, stickers, version]
       properties:
         id: { $ref: "#/components/schemas/Id" }
+        version:
+          type: integer
+          minimum: 0
+          description: Grows whenever the title or the stickers of the pack change.
         title: { type: string, minLength: 1, maxLength: 64 }
         is_official:
           type: boolean

@@ -354,8 +354,7 @@ func (a *AuthServer) GetMe(w http.ResponseWriter, r *http.Request, _ GetMeParams
 	}
 	required := !status.Exists
 	me.RecoverySetupRequired = &required
-	noStore(w)
-	writeJSONStatus(w, http.StatusOK, me)
+	writeJSONCached(w, r, me)
 }
 
 type passwordChangeBody struct {

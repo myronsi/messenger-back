@@ -2,6 +2,15 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.27
+
+- `User` gains the required `profile_version` (grows with username, display name, bio or avatar changes, not with
+  presence) and `StickerPack` the required `version` (grows with title or sticker changes).
+- `GET /me`, `GET /users/{user_id}`, `GET /groups/{chat_id}`, `GET /stickers/packs` and `GET /stickers/packs/{pack_id}`
+  send an `ETag` with `Cache-Control: private, no-cache` and answer `304` to a matching `If-None-Match`.
+- `/attachments/{attachment_id}/content` is cached as immutable (an attachment never changes).
+- New server WebSocket event `user_updated` (`user_id`, `profile_version`) for users who share a chat with the user.
+
 ## 2.1.0-alpha.26
 
 - `DELETE /chats/{chat_id}` takes `scope=me|everyone` (default `everyone`, as before). `me` deletes the direct chat

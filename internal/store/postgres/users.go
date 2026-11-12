@@ -28,6 +28,7 @@ func userFrom(u sqlcdb.User) User {
 		CreatedAt:   u.CreatedAt,
 
 		AvatarAttachmentID: u.AvatarAttachmentID,
+		ProfileVersion:     u.ProfileVersion,
 	}
 }
 

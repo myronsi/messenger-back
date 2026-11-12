@@ -22,9 +22,10 @@ import (
 
 type accountEnv struct {
 	*authEnv
-	store   *postgres.Store
-	mu      sync.Mutex
-	deleted []postgres.DeletedAccount
+	store    *postgres.Store
+	mu       sync.Mutex
+	deleted  []postgres.DeletedAccount
+	profiles []int64
 }
 
 func newAccountEnv(t *testing.T) *accountEnv {
@@ -48,6 +49,11 @@ func newAccountEnv(t *testing.T) *accountEnv {
 				e.mu.Unlock()
 			},
 			Limiter: redis.NewRateLimiter(rdb, "t"+uuid.NewString()+":"), BasePath: apiBase, Log: log,
+			ProfileChanged: func(_ context.Context, _ int64, version int64) {
+				e.mu.Lock()
+				e.profiles = append(e.profiles, version)
+				e.mu.Unlock()
+			},
 		})).
 		WithMeta(MetaInfo{BackendVersion: "1.2.3", Commit: "abc1234", MinClientAPIVersion: "2.0.0-alpha.2"})
 	e.authEnv = &authEnv{router: NewRouter(Options{
@@ -337,5 +343,27 @@ func TestVersionLabels(t *testing.T) {
 		if got := versionLabel(version.MustParse(raw)); got != want {
 			t.Errorf("%s: %s, want %s", raw, got, want)
 		}
+	}
+}
+
+func TestOnlyProfileChangesAnnounceANewVersion(t *testing.T) {
+	e := newAccountEnv(t)
+	alice := e.register(t, "alice")
+	announced := func() []int64 {
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		return append([]int64(nil), e.profiles...)
+	}
+	if r := e.do(t, request{method: http.MethodPatch, path: "/me/privacy", token: alice.access, body: map[string]any{"last_seen_visibility": "nobody"}}); r.Code != http.StatusOK {
+		t.Fatalf("privacy: %d", r.Code)
+	}
+	if r := e.do(t, request{method: http.MethodPatch, path: "/me", token: alice.access, body: map[string]any{"bio": "hi"}}); r.Code != http.StatusOK {
+		t.Fatalf("bio: %d", r.Code)
+	}
+	if r := e.do(t, request{method: http.MethodPatch, path: "/me", token: alice.access, body: map[string]any{"bio": "hi"}}); r.Code != http.StatusOK {
+		t.Fatalf("same bio: %d", r.Code)
+	}
+	if got := announced(); len(got) != 1 || got[0] != 1 {
+		t.Fatalf("announced versions: %v", got)
 	}
 }

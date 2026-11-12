@@ -1,0 +1,9 @@
+{
+  "type": "user_updated",
+  "event_id": "7217400317439950012",
+  "chat_id": null,
+  "data": {
+    "user_id": "7",
+    "profile_version": 3
+  }
+}

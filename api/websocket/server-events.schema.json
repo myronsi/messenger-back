@@ -43,6 +43,9 @@
       "$ref": "server/history_cleared.schema.json"
     },
     {
+      "$ref": "server/user_updated.schema.json"
+    },
+    {
       "$ref": "server/group_created.schema.json"
     },
     {

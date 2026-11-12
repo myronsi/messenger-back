@@ -53,7 +53,7 @@ func (s *StickerServer) presentPack(p stickers.Pack, viewerID int64) StickerPack
 	out := StickerPack{
 		Id: FormatID(p.ID), Title: p.Title, IsOfficial: p.BuiltinKey != nil, IsInstalled: p.Installed,
 		IsMine: stickers.IsMine(p.StickerPack, viewerID), IsHidden: p.Hidden, OwnerId: formatIDPtr(p.OwnerID),
-		Slug: p.Slug, Stickers: make([]Sticker, 0, len(p.Stickers)),
+		Slug: p.Slug, Stickers: make([]Sticker, 0, len(p.Stickers)), Version: int(p.Version),
 	}
 	for _, st := range p.Stickers {
 		out.Stickers = append(out.Stickers, PresentSticker(st, s.o.BasePath))
@@ -79,8 +79,7 @@ func (s *StickerServer) ListStickerPacks(w http.ResponseWriter, r *http.Request,
 	for _, pack := range packs {
 		out.Items = append(out.Items, s.presentPack(pack, p.UserID))
 	}
-	noStore(w)
-	writeJSONStatus(w, http.StatusOK, out)
+	writeJSONCached(w, r, out)
 }
 
 func (s *StickerServer) GetStickerPack(w http.ResponseWriter, r *http.Request, packID StickerPackId, _ GetStickerPackParams) {
@@ -97,8 +96,7 @@ func (s *StickerServer) GetStickerPack(w http.ResponseWriter, r *http.Request, p
 		s.fail(w, r, "get sticker pack", err)
 		return
 	}
-	noStore(w)
-	writeJSONStatus(w, http.StatusOK, s.presentPack(pack, p.UserID))
+	writeJSONCached(w, r, s.presentPack(pack, p.UserID))
 }
 
 func (s *StickerServer) setInstalled(w http.ResponseWriter, r *http.Request, packID StickerPackId, installed bool) {

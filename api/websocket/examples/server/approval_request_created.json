@@ -15,7 +15,8 @@
         "bio": null,
         "is_online": true,
         "last_seen": null,
-        "is_deleted": false
+        "is_deleted": false,
+        "profile_version": 1
       },
       "group_name": null,
       "preview": "Hi, can we talk?",

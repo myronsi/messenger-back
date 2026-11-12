@@ -197,6 +197,7 @@ func run() error {
 			}),
 			httpapi.NewMediaServer(httpapi.MediaOptions{
 				Service: mediaSvc, Store: pg, Directory: rt.directory, Limiter: rt.limiter, Events: rt.events, BasePath: cfg.HTTP.BasePath, Log: log,
+				ProfileChanged: rt.profileChanged,
 			}),
 		).WithAccount(httpapi.NewAccountServer(httpapi.AccountOptions{
 			Store: pg, Directory: rt.directory, Deleter: authSvc, AfterDeletion: rt.accountDeleted(storage, callsSvc, log),
@@ -205,7 +206,7 @@ func run() error {
 					callsSvc.Blocked(ctx, blocker, blocked)
 				}
 			},
-			Events: rt.events, Limiter: rt.limiter, BasePath: cfg.HTTP.BasePath, Log: log,
+			Events: rt.events, Limiter: rt.limiter, BasePath: cfg.HTTP.BasePath, Log: log, ProfileChanged: rt.profileChanged,
 		})).WithChats(httpapi.NewChatServer(httpapi.ChatOptions{
 			Service: chats.New(chats.Deps{
 				Store: pg, Messages: rt.store, Unread: rt.unread, Members: rt.members, Sender: rt.messages,
