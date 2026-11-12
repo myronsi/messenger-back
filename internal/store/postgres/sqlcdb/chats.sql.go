@@ -13,7 +13,7 @@ import (
 const addParticipant = `-- name: AddParticipant :one
 INSERT INTO participants (chat_id, user_id, role)
 VALUES ($1, $2, $3)
-RETURNING chat_id, user_id, role, last_read_message_id, joined_at, last_read_at
+RETURNING chat_id, user_id, role, last_read_message_id, joined_at, last_read_at, archived_at
 `
 
 type AddParticipantParams struct {
@@ -32,6 +32,7 @@ func (q *Queries) AddParticipant(ctx context.Context, arg AddParticipantParams) 
 		&i.LastReadMessageID,
 		&i.JoinedAt,
 		&i.LastReadAt,
+		&i.ArchivedAt,
 	)
 	return i, err
 }
@@ -108,7 +109,7 @@ func (q *Queries) GetDirectChat(ctx context.Context, directKey *string) (Chat, e
 }
 
 const getParticipant = `-- name: GetParticipant :one
-SELECT chat_id, user_id, role, last_read_message_id, joined_at, last_read_at FROM participants WHERE chat_id = $1 AND user_id = $2
+SELECT chat_id, user_id, role, last_read_message_id, joined_at, last_read_at, archived_at FROM participants WHERE chat_id = $1 AND user_id = $2
 `
 
 type GetParticipantParams struct {
@@ -126,6 +127,7 @@ func (q *Queries) GetParticipant(ctx context.Context, arg GetParticipantParams) 
 		&i.LastReadMessageID,
 		&i.JoinedAt,
 		&i.LastReadAt,
+		&i.ArchivedAt,
 	)
 	return i, err
 }
@@ -284,7 +286,7 @@ func (q *Queries) ListParticipantIDs(ctx context.Context, chatID int64) ([]int64
 }
 
 const listParticipants = `-- name: ListParticipants :many
-SELECT chat_id, user_id, role, last_read_message_id, joined_at, last_read_at FROM participants WHERE chat_id = $1 ORDER BY joined_at, user_id
+SELECT chat_id, user_id, role, last_read_message_id, joined_at, last_read_at, archived_at FROM participants WHERE chat_id = $1 ORDER BY joined_at, user_id
 `
 
 func (q *Queries) ListParticipants(ctx context.Context, chatID int64) ([]Participant, error) {
@@ -303,6 +305,7 @@ func (q *Queries) ListParticipants(ctx context.Context, chatID int64) ([]Partici
 			&i.LastReadMessageID,
 			&i.JoinedAt,
 			&i.LastReadAt,
+			&i.ArchivedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -466,7 +469,7 @@ func (q *Queries) LockChatsOfUser(ctx context.Context, userID int64) ([]int64, e
 }
 
 const lockParticipant = `-- name: LockParticipant :one
-SELECT chat_id, user_id, role, last_read_message_id, joined_at, last_read_at FROM participants WHERE chat_id = $1 AND user_id = $2 FOR UPDATE
+SELECT chat_id, user_id, role, last_read_message_id, joined_at, last_read_at, archived_at FROM participants WHERE chat_id = $1 AND user_id = $2 FOR UPDATE
 `
 
 type LockParticipantParams struct {
@@ -484,6 +487,7 @@ func (q *Queries) LockParticipant(ctx context.Context, arg LockParticipantParams
 		&i.LastReadMessageID,
 		&i.JoinedAt,
 		&i.LastReadAt,
+		&i.ArchivedAt,
 	)
 	return i, err
 }

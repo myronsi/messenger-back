@@ -1262,7 +1262,10 @@ type Chat struct {
 	// Id Decimal ID as a string (Snowflake IDs exceed 2^53).
 	//
 	// Examples: 7217400317439950848
-	Id          Id       `json:"id"`
+	Id Id `json:"id"`
+
+	// IsArchived Whether the caller archived the chat (only for the caller).
+	IsArchived  bool     `json:"is_archived"`
 	IsPinned    bool     `json:"is_pinned"`
 	LastMessage *Message `json:"last_message"`
 
@@ -1275,8 +1278,11 @@ type Chat struct {
 	// Name Display name of the peer or the group
 	Name string `json:"name"`
 
-	// Peer The other user of a direct chat; `null` for groups.
-	Peer        *User    `json:"peer"`
+	// Peer The other user of a direct chat (the caller in their "Saved Messages" chat); `null` for groups.
+	Peer *User `json:"peer"`
+
+	// PinPosition Order of a pinned chat among the caller's pinned chats, lowest first; `null` when not pinned.
+	PinPosition *int     `json:"pin_position"`
 	Type        ChatType `json:"type"`
 	UnreadCount int      `json:"unread_count"`
 }
@@ -1830,6 +1836,11 @@ type PasskeyVerification struct {
 // PasswordConfirmation defines model for PasswordConfirmation.
 type PasswordConfirmation struct {
 	Password *string `json:"password,omitempty"`
+}
+
+// PinOrderRequest defines model for PinOrderRequest.
+type PinOrderRequest struct {
+	ChatIds []Id `json:"chat_ids"`
 }
 
 // PrivacyExceptions User IDs per setting. An exception wins over the setting whatever its value; `allow` always lets the user in, `deny` always keeps them out.
@@ -2982,6 +2993,9 @@ type ListChatsParams struct {
 	// After Opaque `next_cursor` of the previous page
 	After *After `form:"after,omitempty" json:"after,omitempty"`
 
+	// Archived `true`: only archived chats, `false`: only chats that are not archived. Without it, every chat.
+	Archived *bool `form:"archived,omitempty" json:"archived,omitempty"`
+
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
@@ -2991,6 +3005,15 @@ type ListChatsParams struct {
 
 // CreateChatParams defines parameters for CreateChat.
 type CreateChatParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// ReorderPinnedChatsParams defines parameters for ReorderPinnedChats.
+type ReorderPinnedChatsParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
@@ -3009,6 +3032,24 @@ type DeleteChatParams struct {
 
 // GetChatParams defines parameters for GetChat.
 type GetChatParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// UnarchiveChatParams defines parameters for UnarchiveChat.
+type UnarchiveChatParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// ArchiveChatParams defines parameters for ArchiveChat.
+type ArchiveChatParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
@@ -3940,6 +3981,9 @@ type SendCallKeysJSONRequestBody = SendCallKeysRequest
 // CreateChatJSONRequestBody defines body for CreateChat for application/json ContentType.
 type CreateChatJSONRequestBody = CreateChatRequest
 
+// ReorderPinnedChatsJSONRequestBody defines body for ReorderPinnedChats for application/json ContentType.
+type ReorderPinnedChatsJSONRequestBody = PinOrderRequest
+
 // SetNotificationMuteJSONRequestBody defines body for SetNotificationMute for application/json ContentType.
 type SetNotificationMuteJSONRequestBody = NotificationMuteRequest
 
@@ -4486,6 +4530,9 @@ type ServerInterface interface {
 	// CreateChat Start a direct chat
 	// (POST /chats)
 	CreateChat(w http.ResponseWriter, r *http.Request, params CreateChatParams)
+	// ReorderPinnedChats Order the pinned chats
+	// (PUT /chats/pins/order)
+	ReorderPinnedChats(w http.ResponseWriter, r *http.Request, params ReorderPinnedChatsParams)
 	// SetNotificationMute Mute or unmute a chat
 	// (PUT /chats/{chatId}/notification-mute)
 	SetNotificationMute(w http.ResponseWriter, r *http.Request, chatId Id)
@@ -4495,6 +4542,12 @@ type ServerInterface interface {
 	// GetChat One chat
 	// (GET /chats/{chat_id})
 	GetChat(w http.ResponseWriter, r *http.Request, chatId ChatId, params GetChatParams)
+	// UnarchiveChat Move a chat out of the archive
+	// (DELETE /chats/{chat_id}/archive)
+	UnarchiveChat(w http.ResponseWriter, r *http.Request, chatId ChatId, params UnarchiveChatParams)
+	// ArchiveChat Archive a chat
+	// (PUT /chats/{chat_id}/archive)
+	ArchiveChat(w http.ResponseWriter, r *http.Request, chatId ChatId, params ArchiveChatParams)
 	// GetChatCall The chat's call that is not over
 	// (GET /chats/{chat_id}/call)
 	GetChatCall(w http.ResponseWriter, r *http.Request, chatId ChatId, params GetChatCallParams)
@@ -7419,6 +7472,19 @@ func (siw *ServerInterfaceWrapper) ListChats(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// ------------- Optional query parameter "archived" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "archived", r.URL.Query(), &params.Archived, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "archived"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "archived", Err: err})
+		}
+		return
+	}
+
 	headers := r.Header
 
 	// ------------- Optional header parameter "X-Client-Version" -------------
@@ -7521,6 +7587,66 @@ func (siw *ServerInterfaceWrapper) CreateChat(w http.ResponseWriter, r *http.Req
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CreateChat(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReorderPinnedChats operation middleware
+func (siw *ServerInterfaceWrapper) ReorderPinnedChats(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ReorderPinnedChatsParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReorderPinnedChats(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -7685,6 +7811,144 @@ func (siw *ServerInterfaceWrapper) GetChat(w http.ResponseWriter, r *http.Reques
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetChat(w, r, chatId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UnarchiveChat operation middleware
+func (siw *ServerInterfaceWrapper) UnarchiveChat(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UnarchiveChatParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UnarchiveChat(w, r, chatId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ArchiveChat operation middleware
+func (siw *ServerInterfaceWrapper) ArchiveChat(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ArchiveChatParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ArchiveChat(w, r, chatId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -14032,6 +14296,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/chats/{chat_id}", wrapper.GetChat)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/chats/{chat_id}/pin", wrapper.UnpinChat)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/chats/{chat_id}/pin", wrapper.PinChat)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/chats/{chat_id}/archive", wrapper.UnarchiveChat)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/chats/{chat_id}/archive", wrapper.ArchiveChat)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/chats/pins/order", wrapper.ReorderPinnedChats)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/chats/{chat_id}/read", wrapper.MarkChatRead)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/chats/{chat_id}/messages", wrapper.ListMessages)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/chats/{chat_id}/messages", wrapper.SendMessage)
@@ -19343,6 +19610,87 @@ func (response CreateChat429ApplicationProblemPlusJSONResponse) VisitCreateChatR
 	return err
 }
 
+type ReorderPinnedChatsRequestObject struct {
+	Params ReorderPinnedChatsParams
+	Body   *ReorderPinnedChatsJSONRequestBody
+}
+
+type ReorderPinnedChatsResponseObject interface {
+	VisitReorderPinnedChatsResponse(w http.ResponseWriter) error
+}
+
+type ReorderPinnedChats204Response struct {
+}
+
+func (response ReorderPinnedChats204Response) VisitReorderPinnedChatsResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type ReorderPinnedChats400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response ReorderPinnedChats400ApplicationProblemPlusJSONResponse) VisitReorderPinnedChatsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReorderPinnedChats401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ReorderPinnedChats401ApplicationProblemPlusJSONResponse) VisitReorderPinnedChatsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReorderPinnedChats422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response ReorderPinnedChats422ApplicationProblemPlusJSONResponse) VisitReorderPinnedChatsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReorderPinnedChats426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response ReorderPinnedChats426ApplicationProblemPlusJSONResponse) VisitReorderPinnedChatsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type SetNotificationMuteRequestObject struct {
 	ChatId Id `json:"chatId"`
 	Body   *SetNotificationMuteJSONRequestBody
@@ -19597,6 +19945,168 @@ type GetChat426ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetChat426ApplicationProblemPlusJSONResponse) VisitGetChatResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnarchiveChatRequestObject struct {
+	ChatId ChatId `json:"chat_id"`
+	Params UnarchiveChatParams
+}
+
+type UnarchiveChatResponseObject interface {
+	VisitUnarchiveChatResponse(w http.ResponseWriter) error
+}
+
+type UnarchiveChat204Response struct {
+}
+
+func (response UnarchiveChat204Response) VisitUnarchiveChatResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type UnarchiveChat400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response UnarchiveChat400ApplicationProblemPlusJSONResponse) VisitUnarchiveChatResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnarchiveChat401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response UnarchiveChat401ApplicationProblemPlusJSONResponse) VisitUnarchiveChatResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnarchiveChat404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response UnarchiveChat404ApplicationProblemPlusJSONResponse) VisitUnarchiveChatResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnarchiveChat426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response UnarchiveChat426ApplicationProblemPlusJSONResponse) VisitUnarchiveChatResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ArchiveChatRequestObject struct {
+	ChatId ChatId `json:"chat_id"`
+	Params ArchiveChatParams
+}
+
+type ArchiveChatResponseObject interface {
+	VisitArchiveChatResponse(w http.ResponseWriter) error
+}
+
+type ArchiveChat204Response struct {
+}
+
+func (response ArchiveChat204Response) VisitArchiveChatResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type ArchiveChat400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response ArchiveChat400ApplicationProblemPlusJSONResponse) VisitArchiveChatResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ArchiveChat401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ArchiveChat401ApplicationProblemPlusJSONResponse) VisitArchiveChatResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ArchiveChat404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response ArchiveChat404ApplicationProblemPlusJSONResponse) VisitArchiveChatResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ArchiveChat426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response ArchiveChat426ApplicationProblemPlusJSONResponse) VisitArchiveChatResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -29096,6 +29606,9 @@ type StrictServerInterface interface {
 	// CreateChat Start a direct chat
 	// (POST /chats)
 	CreateChat(ctx context.Context, request CreateChatRequestObject) (CreateChatResponseObject, error)
+	// ReorderPinnedChats Order the pinned chats
+	// (PUT /chats/pins/order)
+	ReorderPinnedChats(ctx context.Context, request ReorderPinnedChatsRequestObject) (ReorderPinnedChatsResponseObject, error)
 	// SetNotificationMute Mute or unmute a chat
 	// (PUT /chats/{chatId}/notification-mute)
 	SetNotificationMute(ctx context.Context, request SetNotificationMuteRequestObject) (SetNotificationMuteResponseObject, error)
@@ -29105,6 +29618,12 @@ type StrictServerInterface interface {
 	// GetChat One chat
 	// (GET /chats/{chat_id})
 	GetChat(ctx context.Context, request GetChatRequestObject) (GetChatResponseObject, error)
+	// UnarchiveChat Move a chat out of the archive
+	// (DELETE /chats/{chat_id}/archive)
+	UnarchiveChat(ctx context.Context, request UnarchiveChatRequestObject) (UnarchiveChatResponseObject, error)
+	// ArchiveChat Archive a chat
+	// (PUT /chats/{chat_id}/archive)
+	ArchiveChat(ctx context.Context, request ArchiveChatRequestObject) (ArchiveChatResponseObject, error)
 	// GetChatCall The chat's call that is not over
 	// (GET /chats/{chat_id}/call)
 	GetChatCall(ctx context.Context, request GetChatCallRequestObject) (GetChatCallResponseObject, error)
@@ -30695,6 +31214,39 @@ func (sh *strictHandler) CreateChat(w http.ResponseWriter, r *http.Request, para
 	}
 }
 
+// ReorderPinnedChats operation middleware
+func (sh *strictHandler) ReorderPinnedChats(w http.ResponseWriter, r *http.Request, params ReorderPinnedChatsParams) {
+	var request ReorderPinnedChatsRequestObject
+
+	request.Params = params
+
+	var body ReorderPinnedChatsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ReorderPinnedChats(ctx, request.(ReorderPinnedChatsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ReorderPinnedChats")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ReorderPinnedChatsResponseObject); ok {
+		if err := validResponse.VisitReorderPinnedChatsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // SetNotificationMute operation middleware
 func (sh *strictHandler) SetNotificationMute(w http.ResponseWriter, r *http.Request, chatId Id) {
 	var request SetNotificationMuteRequestObject
@@ -30775,6 +31327,60 @@ func (sh *strictHandler) GetChat(w http.ResponseWriter, r *http.Request, chatId 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetChatResponseObject); ok {
 		if err := validResponse.VisitGetChatResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UnarchiveChat operation middleware
+func (sh *strictHandler) UnarchiveChat(w http.ResponseWriter, r *http.Request, chatId ChatId, params UnarchiveChatParams) {
+	var request UnarchiveChatRequestObject
+
+	request.ChatId = chatId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UnarchiveChat(ctx, request.(UnarchiveChatRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UnarchiveChat")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UnarchiveChatResponseObject); ok {
+		if err := validResponse.VisitUnarchiveChatResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ArchiveChat operation middleware
+func (sh *strictHandler) ArchiveChat(w http.ResponseWriter, r *http.Request, chatId ChatId, params ArchiveChatParams) {
+	var request ArchiveChatRequestObject
+
+	request.ChatId = chatId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ArchiveChat(ctx, request.(ArchiveChatRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ArchiveChat")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ArchiveChatResponseObject); ok {
+		if err := validResponse.VisitArchiveChatResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

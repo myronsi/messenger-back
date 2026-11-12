@@ -5,27 +5,30 @@ SET last_message_id = @message_id::bigint, last_activity_at = @at
 WHERE id = @chat_id AND (last_message_id IS NULL OR last_message_id < @message_id::bigint);
 
 -- name: ListChatEntries :many
--- A user's chats: pinned ones first (most recently pinned first), then by last activity, then by id. The
--- cursor is the last entry of the previous page: (pinned, sort time, chat id).
-SELECT c.*, p.role, p.last_read_message_id, pin.pinned_at,
+-- A user's chats: pinned ones first (by pin position), then by last activity, then by id. The cursor is the
+-- last entry of the previous page: (pinned, pin position, sort time, chat id).
+SELECT c.*, p.role, p.last_read_message_id, p.archived_at, pin.pinned_at, pin.position AS pin_position,
        COALESCE(pin.pinned_at, c.last_activity_at)::timestamptz AS sort_at
 FROM participants p
 JOIN chats c ON c.id = p.chat_id
 LEFT JOIN user_chat_pins pin ON pin.user_id = p.user_id AND pin.chat_id = p.chat_id
 WHERE p.user_id = @user_id
   AND (sqlc.narg(chat_type)::text IS NULL OR c.type = sqlc.narg(chat_type)::text)
+  AND (sqlc.narg(archived)::bool IS NULL OR (p.archived_at IS NOT NULL) = sqlc.narg(archived)::bool)
   AND (
     sqlc.narg(after_chat_id)::bigint IS NULL
     OR (pin.pinned_at IS NULL)::int > sqlc.narg(after_unpinned)::int
     OR ((pin.pinned_at IS NULL)::int = sqlc.narg(after_unpinned)::int AND (
-          COALESCE(pin.pinned_at, c.last_activity_at) < sqlc.narg(after_sort_at)::timestamptz
-          OR (COALESCE(pin.pinned_at, c.last_activity_at) = sqlc.narg(after_sort_at)::timestamptz AND c.id < sqlc.narg(after_chat_id)::bigint)))
+          COALESCE(pin.position, 0) > sqlc.narg(after_position)::int
+          OR (COALESCE(pin.position, 0) = sqlc.narg(after_position)::int AND (
+                COALESCE(pin.pinned_at, c.last_activity_at) < sqlc.narg(after_sort_at)::timestamptz
+                OR (COALESCE(pin.pinned_at, c.last_activity_at) = sqlc.narg(after_sort_at)::timestamptz AND c.id < sqlc.narg(after_chat_id)::bigint)))))
   )
-ORDER BY (pin.pinned_at IS NULL), COALESCE(pin.pinned_at, c.last_activity_at) DESC, c.id DESC
+ORDER BY (pin.pinned_at IS NULL), COALESCE(pin.position, 0), COALESCE(pin.pinned_at, c.last_activity_at) DESC, c.id DESC
 LIMIT @max_rows;
 
 -- name: GetChatEntry :one
-SELECT c.*, p.role, p.last_read_message_id, pin.pinned_at,
+SELECT c.*, p.role, p.last_read_message_id, p.archived_at, pin.pinned_at, pin.position AS pin_position,
        COALESCE(pin.pinned_at, c.last_activity_at)::timestamptz AS sort_at
 FROM participants p
 JOIN chats c ON c.id = p.chat_id
@@ -46,7 +49,23 @@ JOIN participants p ON p.chat_id = pin.chat_id AND p.user_id = pin.user_id
 WHERE pin.user_id = @user_id;
 
 -- name: PinChat :execrows
-INSERT INTO user_chat_pins (user_id, chat_id) VALUES (@user_id, @chat_id) ON CONFLICT DO NOTHING;
+INSERT INTO user_chat_pins (user_id, chat_id, position)
+VALUES (@user_id, @chat_id, COALESCE((SELECT min(mine.position) FROM user_chat_pins mine WHERE mine.user_id = @user_id), 1) - 1)
+ON CONFLICT DO NOTHING;
+
+-- name: ListPinnedChatIDs :many
+SELECT pin.chat_id FROM user_chat_pins pin
+JOIN participants p ON p.chat_id = pin.chat_id AND p.user_id = pin.user_id
+WHERE pin.user_id = @user_id
+ORDER BY pin.position, pin.pinned_at DESC;
+
+-- name: SetPinPosition :exec
+UPDATE user_chat_pins SET position = @position WHERE user_id = @user_id AND chat_id = @chat_id;
+
+-- name: SetChatArchived :execrows
+UPDATE participants
+SET archived_at = CASE WHEN @archived::bool THEN COALESCE(archived_at, now()) ELSE NULL END
+WHERE chat_id = @chat_id AND user_id = @user_id;
 
 -- name: UnpinChat :execrows
 DELETE FROM user_chat_pins WHERE user_id = @user_id AND chat_id = @chat_id;

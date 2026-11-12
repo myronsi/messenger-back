@@ -55,7 +55,11 @@ func PresentChat(v chats.View, basePath string) Chat {
 	c := v.Entry.Chat
 	out := Chat{
 		Id: FormatID(c.ID), Type: ChatType(c.Type), IsPinned: v.Entry.PinnedAt != nil,
-		UnreadCount: int(v.Unread), CreatedAt: utc(c.CreatedAt),
+		IsArchived: v.Entry.ArchivedAt != nil, UnreadCount: int(v.Unread), CreatedAt: utc(c.CreatedAt),
+	}
+	if v.Entry.PinnedAt != nil && v.Entry.PinPosition != nil {
+		position := int(*v.Entry.PinPosition)
+		out.PinPosition = &position
 	}
 	if v.FirstUnread != nil {
 		id := FormatID(*v.FirstUnread)
@@ -165,7 +169,7 @@ func (c *ChatServer) ListChats(w http.ResponseWriter, r *http.Request, params Li
 	if !ok {
 		return
 	}
-	views, next, err := c.o.Service.List(r.Context(), p.UserID, cursorParam(params.After), pageLimit(params.Limit))
+	views, next, err := c.o.Service.List(r.Context(), p.UserID, params.Archived, cursorParam(params.After), pageLimit(params.Limit))
 	if err != nil {
 		serviceError(w, r, c.o.Log, "list chats", err)
 		return
@@ -278,6 +282,61 @@ func (c *ChatServer) pin(w http.ResponseWriter, r *http.Request, chatID string, 
 	}
 	if err != nil {
 		serviceError(w, r, c.o.Log, "pin chat", err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ArchiveChat implements PUT /chats/{id}/archive.
+func (c *ChatServer) ArchiveChat(w http.ResponseWriter, r *http.Request, chatID ChatId, _ ArchiveChatParams) {
+	c.archive(w, r, chatID, true)
+}
+
+// UnarchiveChat implements DELETE /chats/{id}/archive.
+func (c *ChatServer) UnarchiveChat(w http.ResponseWriter, r *http.Request, chatID ChatId, _ UnarchiveChatParams) {
+	c.archive(w, r, chatID, false)
+}
+
+func (c *ChatServer) archive(w http.ResponseWriter, r *http.Request, chatID string, on bool) {
+	p, ok := principalOr401(w, r)
+	if !ok {
+		return
+	}
+	id, ok := parseID(w, "chat_id", chatID)
+	if !ok {
+		return
+	}
+	if err := c.o.Service.SetArchived(r.Context(), p.UserID, id, on); err != nil {
+		serviceError(w, r, c.o.Log, "archive chat", err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ReorderPinnedChats implements PUT /chats/pins/order.
+func (c *ChatServer) ReorderPinnedChats(w http.ResponseWriter, r *http.Request, _ ReorderPinnedChatsParams) {
+	p, ok := principalOr401(w, r)
+	if !ok {
+		return
+	}
+	var body PinOrderRequest
+	if !decode(w, r, &body) {
+		return
+	}
+	if len(body.ChatIds) > 10 {
+		WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "chat_ids", Message: "at most 10"})
+		return
+	}
+	ids := make([]int64, 0, len(body.ChatIds))
+	for _, raw := range body.ChatIds {
+		id, ok := parseID(w, "chat_ids", raw)
+		if !ok {
+			return
+		}
+		ids = append(ids, id)
+	}
+	if err := c.o.Service.ReorderPins(r.Context(), p.UserID, ids); err != nil {
+		serviceError(w, r, c.o.Log, "reorder pinned chats", err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

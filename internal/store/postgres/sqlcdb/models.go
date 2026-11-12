@@ -201,6 +201,7 @@ type Participant struct {
 	LastReadMessageID *int64
 	JoinedAt          time.Time
 	LastReadAt        *time.Time
+	ArchivedAt        *time.Time
 }
 
 type QrLoginRequest struct {
@@ -341,6 +342,7 @@ type UserChatPin struct {
 	UserID   int64
 	ChatID   int64
 	PinnedAt time.Time
+	Position int32
 }
 
 type UserContactName struct {

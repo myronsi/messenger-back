@@ -330,7 +330,7 @@ func (s *Service) invalidateMembers(ctx context.Context, chatID int64) error {
 
 // ListGroups is the chat list of the user's groups.
 func (s *Service) ListGroups(ctx context.Context, userID int64, after string, limit int) ([]View, string, error) {
-	return s.list(ctx, userID, postgres.ChatGroup, after, limit)
+	return s.list(ctx, userID, postgres.ChatGroup, nil, after, limit)
 }
 
 // CreateGroup creates a group with the creator as owner. Members who approve invitations first get an

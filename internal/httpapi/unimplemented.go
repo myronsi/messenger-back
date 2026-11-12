@@ -168,6 +168,18 @@ func (Unimplemented) PinChat(w http.ResponseWriter, r *http.Request, chatId Chat
 	notImplemented(w, r)
 }
 
+func (Unimplemented) ArchiveChat(w http.ResponseWriter, r *http.Request, chatId ChatId, params ArchiveChatParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) UnarchiveChat(w http.ResponseWriter, r *http.Request, chatId ChatId, params UnarchiveChatParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) ReorderPinnedChats(w http.ResponseWriter, r *http.Request, params ReorderPinnedChatsParams) {
+	notImplemented(w, r)
+}
+
 func (Unimplemented) MarkChatRead(w http.ResponseWriter, r *http.Request, chatId ChatId, params MarkChatReadParams) {
 	notImplemented(w, r)
 }

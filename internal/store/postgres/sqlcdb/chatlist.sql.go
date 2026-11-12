@@ -138,7 +138,7 @@ func (q *Queries) GetApprovalRequest(ctx context.Context, id int64) (ApprovalReq
 }
 
 const getChatEntry = `-- name: GetChatEntry :one
-SELECT c.id, c.type, c.name, c.description, c.avatar_url, c.direct_key, c.created_by, c.created_at, c.updated_at, c.avatar_attachment_id, c.last_message_id, c.last_activity_at, p.role, p.last_read_message_id, pin.pinned_at,
+SELECT c.id, c.type, c.name, c.description, c.avatar_url, c.direct_key, c.created_by, c.created_at, c.updated_at, c.avatar_attachment_id, c.last_message_id, c.last_activity_at, p.role, p.last_read_message_id, p.archived_at, pin.pinned_at, pin.position AS pin_position,
        COALESCE(pin.pinned_at, c.last_activity_at)::timestamptz AS sort_at
 FROM participants p
 JOIN chats c ON c.id = p.chat_id
@@ -166,7 +166,9 @@ type GetChatEntryRow struct {
 	LastActivityAt     time.Time
 	Role               string
 	LastReadMessageID  *int64
+	ArchivedAt         *time.Time
 	PinnedAt           *time.Time
+	PinPosition        *int32
 	SortAt             time.Time
 }
 
@@ -188,36 +190,43 @@ func (q *Queries) GetChatEntry(ctx context.Context, arg GetChatEntryParams) (Get
 		&i.LastActivityAt,
 		&i.Role,
 		&i.LastReadMessageID,
+		&i.ArchivedAt,
 		&i.PinnedAt,
+		&i.PinPosition,
 		&i.SortAt,
 	)
 	return i, err
 }
 
 const listChatEntries = `-- name: ListChatEntries :many
-SELECT c.id, c.type, c.name, c.description, c.avatar_url, c.direct_key, c.created_by, c.created_at, c.updated_at, c.avatar_attachment_id, c.last_message_id, c.last_activity_at, p.role, p.last_read_message_id, pin.pinned_at,
+SELECT c.id, c.type, c.name, c.description, c.avatar_url, c.direct_key, c.created_by, c.created_at, c.updated_at, c.avatar_attachment_id, c.last_message_id, c.last_activity_at, p.role, p.last_read_message_id, p.archived_at, pin.pinned_at, pin.position AS pin_position,
        COALESCE(pin.pinned_at, c.last_activity_at)::timestamptz AS sort_at
 FROM participants p
 JOIN chats c ON c.id = p.chat_id
 LEFT JOIN user_chat_pins pin ON pin.user_id = p.user_id AND pin.chat_id = p.chat_id
 WHERE p.user_id = $1
   AND ($2::text IS NULL OR c.type = $2::text)
+  AND ($3::bool IS NULL OR (p.archived_at IS NOT NULL) = $3::bool)
   AND (
-    $3::bigint IS NULL
-    OR (pin.pinned_at IS NULL)::int > $4::int
-    OR ((pin.pinned_at IS NULL)::int = $4::int AND (
-          COALESCE(pin.pinned_at, c.last_activity_at) < $5::timestamptz
-          OR (COALESCE(pin.pinned_at, c.last_activity_at) = $5::timestamptz AND c.id < $3::bigint)))
+    $4::bigint IS NULL
+    OR (pin.pinned_at IS NULL)::int > $5::int
+    OR ((pin.pinned_at IS NULL)::int = $5::int AND (
+          COALESCE(pin.position, 0) > $6::int
+          OR (COALESCE(pin.position, 0) = $6::int AND (
+                COALESCE(pin.pinned_at, c.last_activity_at) < $7::timestamptz
+                OR (COALESCE(pin.pinned_at, c.last_activity_at) = $7::timestamptz AND c.id < $4::bigint)))))
   )
-ORDER BY (pin.pinned_at IS NULL), COALESCE(pin.pinned_at, c.last_activity_at) DESC, c.id DESC
-LIMIT $6
+ORDER BY (pin.pinned_at IS NULL), COALESCE(pin.position, 0), COALESCE(pin.pinned_at, c.last_activity_at) DESC, c.id DESC
+LIMIT $8
 `
 
 type ListChatEntriesParams struct {
 	UserID        int64
 	ChatType      *string
+	Archived      *bool
 	AfterChatID   *int64
 	AfterUnpinned *int32
+	AfterPosition *int32
 	AfterSortAt   *time.Time
 	MaxRows       int32
 }
@@ -237,18 +246,22 @@ type ListChatEntriesRow struct {
 	LastActivityAt     time.Time
 	Role               string
 	LastReadMessageID  *int64
+	ArchivedAt         *time.Time
 	PinnedAt           *time.Time
+	PinPosition        *int32
 	SortAt             time.Time
 }
 
-// A user's chats: pinned ones first (most recently pinned first), then by last activity, then by id. The
-// cursor is the last entry of the previous page: (pinned, sort time, chat id).
+// A user's chats: pinned ones first (by pin position), then by last activity, then by id. The cursor is the
+// last entry of the previous page: (pinned, pin position, sort time, chat id).
 func (q *Queries) ListChatEntries(ctx context.Context, arg ListChatEntriesParams) ([]ListChatEntriesRow, error) {
 	rows, err := q.db.Query(ctx, listChatEntries,
 		arg.UserID,
 		arg.ChatType,
+		arg.Archived,
 		arg.AfterChatID,
 		arg.AfterUnpinned,
+		arg.AfterPosition,
 		arg.AfterSortAt,
 		arg.MaxRows,
 	)
@@ -274,7 +287,9 @@ func (q *Queries) ListChatEntries(ctx context.Context, arg ListChatEntriesParams
 			&i.LastActivityAt,
 			&i.Role,
 			&i.LastReadMessageID,
+			&i.ArchivedAt,
 			&i.PinnedAt,
+			&i.PinPosition,
 			&i.SortAt,
 		); err != nil {
 			return nil, err
@@ -438,6 +453,33 @@ func (q *Queries) ListPendingRequests(ctx context.Context, arg ListPendingReques
 	return items, nil
 }
 
+const listPinnedChatIDs = `-- name: ListPinnedChatIDs :many
+SELECT pin.chat_id FROM user_chat_pins pin
+JOIN participants p ON p.chat_id = pin.chat_id AND p.user_id = pin.user_id
+WHERE pin.user_id = $1
+ORDER BY pin.position, pin.pinned_at DESC
+`
+
+func (q *Queries) ListPinnedChatIDs(ctx context.Context, userID int64) ([]int64, error) {
+	rows, err := q.db.Query(ctx, listPinnedChatIDs, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int64{}
+	for rows.Next() {
+		var chat_id int64
+		if err := rows.Scan(&chat_id); err != nil {
+			return nil, err
+		}
+		items = append(items, chat_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockApprovalRequest = `-- name: LockApprovalRequest :one
 SELECT id, type, requester_id, recipient_id, status, message_text, chat_id, created_at, responded_at FROM approval_requests WHERE id = $1 FOR UPDATE
 `
@@ -471,7 +513,9 @@ func (q *Queries) LockDirectPair(ctx context.Context, directKey string) error {
 }
 
 const pinChat = `-- name: PinChat :execrows
-INSERT INTO user_chat_pins (user_id, chat_id) VALUES ($1, $2) ON CONFLICT DO NOTHING
+INSERT INTO user_chat_pins (user_id, chat_id, position)
+VALUES ($1, $2, COALESCE((SELECT min(mine.position) FROM user_chat_pins mine WHERE mine.user_id = $1), 1) - 1)
+ON CONFLICT DO NOTHING
 `
 
 type PinChatParams struct {
@@ -502,6 +546,41 @@ func (q *Queries) RespondToRequest(ctx context.Context, arg RespondToRequestPara
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const setChatArchived = `-- name: SetChatArchived :execrows
+UPDATE participants
+SET archived_at = CASE WHEN $1::bool THEN COALESCE(archived_at, now()) ELSE NULL END
+WHERE chat_id = $2 AND user_id = $3
+`
+
+type SetChatArchivedParams struct {
+	Archived bool
+	ChatID   int64
+	UserID   int64
+}
+
+func (q *Queries) SetChatArchived(ctx context.Context, arg SetChatArchivedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setChatArchived, arg.Archived, arg.ChatID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setPinPosition = `-- name: SetPinPosition :exec
+UPDATE user_chat_pins SET position = $1 WHERE user_id = $2 AND chat_id = $3
+`
+
+type SetPinPositionParams struct {
+	Position int32
+	UserID   int64
+	ChatID   int64
+}
+
+func (q *Queries) SetPinPosition(ctx context.Context, arg SetPinPositionParams) error {
+	_, err := q.db.Exec(ctx, setPinPosition, arg.Position, arg.UserID, arg.ChatID)
+	return err
 }
 
 const touchChatActivity = `-- name: TouchChatActivity :exec

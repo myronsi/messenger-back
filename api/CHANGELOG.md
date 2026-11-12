@@ -2,6 +2,18 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.25
+
+- Archive: `PUT` and `DELETE /chats/{chat_id}/archive` archive a chat for the caller and move it back. `Chat` gains
+  the required `is_archived`; `GET /chats?archived=true|false` lists only archived or only other chats (without the
+  parameter, every chat as before). Archiving unpins; an archived chat stays archived when new messages arrive;
+  pinning a chat unarchives it.
+- Pin order: `Chat` gains the required, nullable `pin_position` (lowest first) and pinned chats are listed in that
+  order. A newly pinned chat goes to the top. `PUT /chats/pins/order` (`PinOrderRequest`) sets the order of all
+  pinned chats at once.
+- Saved Messages: `POST /chats` accepts the caller's own `user_id` and opens a direct chat whose only member and
+  `peer` is the caller.
+
 ## 2.1.0-alpha.24
 
 - `PrivacySettings` gains the required `last_seen_visibility`, also accepted by `PATCH /me/privacy` and as a

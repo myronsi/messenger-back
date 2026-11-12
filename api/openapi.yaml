@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.24
+  version: 2.1.0-alpha.25
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -1006,13 +1006,18 @@ paths:
       summary: My chats with last message and unread count
       description: |
         One request replaces `GET /chats/list/{username}` and `GET /groups/list/{username}`.
-        Pinned chats come first (most recently pinned first), then the others by their last
+        Pinned chats come first (by `pin_position`), then the others by their last
         message (newest first). `last_message` is the newest message the caller can see; in
         direct chats its `read_by` holds the other user once they read it (with read receipts
         on), in groups it is empty. `unread_count` stops at 999.
       parameters:
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/After"
+        - name: archived
+          in: query
+          required: false
+          description: "`true`: only archived chats, `false`: only chats that are not archived. Without it, every chat."
+          schema: { type: boolean }
       responses:
         "426": { $ref: "#/components/responses/ClientOutdated" }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -1029,7 +1034,9 @@ paths:
       description: |
         Respects the other user's `direct_messages` privacy setting. When approval is needed
         the answer is `202` with the pending request instead of a chat. Returns the existing
-        chat (`200`) if there already is one.
+        chat (`200`) if there already is one. `user_id` may be the caller's own id: that opens
+        their "Saved Messages" chat, a direct chat with the caller as its only member and as
+        its `peer`.
       requestBody:
         required: true
         content:
@@ -1102,7 +1109,9 @@ paths:
       tags: [chats]
       operationId: pinChat
       summary: Pin a chat
-      description: At most 10 chats can be pinned (`409` beyond that). Pinning a pinned chat changes nothing.
+      description: |
+        At most 10 chats can be pinned (`409` beyond that). A newly pinned chat goes to the top of the pinned
+        chats and leaves the archive. Pinning a pinned chat changes nothing.
       responses:
         "426": { $ref: "#/components/responses/ClientOutdated" }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -1122,6 +1131,60 @@ paths:
           description: Unpinned
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+  /chats/{chat_id}/archive:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ChatId"
+    put:
+      tags: [chats]
+      operationId: archiveChat
+      summary: Archive a chat
+      description: |
+        Only for the caller. The chat leaves the pinned chats and stays archived when new messages arrive,
+        until `DELETE` unarchives it. Archiving an archived chat changes nothing. The caller's devices get
+        `chat_list_update`.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Archived
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [chats]
+      operationId: unarchiveChat
+      summary: Move a chat out of the archive
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Not archived
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /chats/pins/order:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    put:
+      tags: [chats]
+      operationId: reorderPinnedChats
+      summary: Order the pinned chats
+      description: |
+        `chat_ids` must name every pinned chat of the caller exactly once (`422` otherwise), in the new order,
+        top first. The caller's devices get `chat_list_update` for each pinned chat.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PinOrderRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Reordered
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
   /chats/{chat_id}/read:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
@@ -5486,6 +5549,8 @@ components:
         - avatar_url
         - peer
         - is_pinned
+        - pin_position
+        - is_archived
         - unread_count
         - first_unread_message_id
         - last_read_message_id
@@ -5499,11 +5564,17 @@ components:
           description: Display name of the peer or the group
         avatar_url: { type: [string, "null"] }
         peer:
-          description: The other user of a direct chat; `null` for groups.
+          description: The other user of a direct chat (the caller in their "Saved Messages" chat); `null` for groups.
           oneOf:
             - $ref: "#/components/schemas/User"
             - type: "null"
         is_pinned: { type: boolean }
+        pin_position:
+          description: Order of a pinned chat among the caller's pinned chats, lowest first; `null` when not pinned.
+          type: [integer, "null"]
+        is_archived:
+          type: boolean
+          description: Whether the caller archived the chat (only for the caller).
         unread_count: { type: integer, minimum: 0 }
         first_unread_message_id:
           description: |
@@ -5536,6 +5607,15 @@ components:
           type: array
           items: { $ref: "#/components/schemas/Chat" }
         next_cursor: { $ref: "#/components/schemas/Cursor" }
+    PinOrderRequest:
+      type: object
+      required: [chat_ids]
+      properties:
+        chat_ids:
+          type: array
+          maxItems: 10
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/Id" }
     CreateChatRequest:
       type: object
       required: [user_id]

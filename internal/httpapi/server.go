@@ -396,6 +396,33 @@ func (s *Server) UnpinChat(w http.ResponseWriter, r *http.Request, chatID ChatId
 	s.chats.UnpinChat(w, r, chatID, params)
 }
 
+// ArchiveChat delegates to the chat endpoints (PUT /chats/{id}/archive).
+func (s *Server) ArchiveChat(w http.ResponseWriter, r *http.Request, chatID ChatId, params ArchiveChatParams) {
+	if s.chats == nil {
+		s.AuthServer.ArchiveChat(w, r, chatID, params)
+		return
+	}
+	s.chats.ArchiveChat(w, r, chatID, params)
+}
+
+// UnarchiveChat delegates to the chat endpoints (DELETE /chats/{id}/archive).
+func (s *Server) UnarchiveChat(w http.ResponseWriter, r *http.Request, chatID ChatId, params UnarchiveChatParams) {
+	if s.chats == nil {
+		s.AuthServer.UnarchiveChat(w, r, chatID, params)
+		return
+	}
+	s.chats.UnarchiveChat(w, r, chatID, params)
+}
+
+// ReorderPinnedChats delegates to the chat endpoints (PUT /chats/pins/order).
+func (s *Server) ReorderPinnedChats(w http.ResponseWriter, r *http.Request, params ReorderPinnedChatsParams) {
+	if s.chats == nil {
+		s.AuthServer.ReorderPinnedChats(w, r, params)
+		return
+	}
+	s.chats.ReorderPinnedChats(w, r, params)
+}
+
 // MarkChatRead delegates to the chat endpoints (POST /chats/{id}/read).
 func (s *Server) MarkChatRead(w http.ResponseWriter, r *http.Request, chatID ChatId, params MarkChatReadParams) {
 	if s.chats == nil {

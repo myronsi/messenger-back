@@ -14,7 +14,7 @@ import (
 var Backend = "dev"
 
 // API is the version of the contract in api/openapi.yaml (info.version). A test keeps the two equal.
-const API = "2.1.0-alpha.24"
+const API = "2.1.0-alpha.25"
 
 // SemVer is a parsed version; build metadata is dropped.
 type SemVer struct {
