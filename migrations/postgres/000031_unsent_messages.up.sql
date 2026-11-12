@@ -16,4 +16,5 @@ CREATE TABLE unsent_messages (
 );
 
 CREATE INDEX unsent_messages_user_idx ON unsent_messages (user_id, created_at);
+CREATE INDEX unsent_messages_chat_idx ON unsent_messages (chat_id);
 CREATE INDEX unsent_messages_attachments_idx ON unsent_messages USING GIN (attachment_ids);
