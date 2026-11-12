@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.17.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.16.0-alpha.1...v1.17.0-alpha.1) (2026-11-12)
+
+
+### Features
+
+* **cache:** profile and sticker pack versions, ETags and live profile updates ([#189](https://github.com/myronsi/messenger-back/issues/189)) ([fb700e7](https://github.com/myronsi/messenger-back/commit/fb700e7308892cc137d459546f647ef5cb912da4))
+* **chats:** archive, pinned chat order and Saved Messages ([#187](https://github.com/myronsi/messenger-back/issues/187)) ([9ba6216](https://github.com/myronsi/messenger-back/commit/9ba62162b51eac2be54fdaa23abc2b6875d41bc3))
+* **chats:** delete a chat for me and clear history for me or everyone ([#188](https://github.com/myronsi/messenger-back/issues/188)) ([496a487](https://github.com/myronsi/messenger-back/commit/496a48785fd1801c92919d60abe04d3d72ddb702))
+* **privacy:** separate last seen setting and sticker and upload typing actions ([#186](https://github.com/myronsi/messenger-back/issues/186)) ([8cfffb2](https://github.com/myronsi/messenger-back/commit/8cfffb29cb1e34c31affb9ca39a6b37c1a66f3b4))
+* **profiles:** links and voice media, paged group members and groups in common ([#190](https://github.com/myronsi/messenger-back/issues/190)) ([4e12321](https://github.com/myronsi/messenger-back/commit/4e123219599436eb5149542ed4235f160b25b1fa))
+
 ## [1.16.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.15.0-alpha.1...v1.16.0-alpha.1) (2026-11-12)
 
 
