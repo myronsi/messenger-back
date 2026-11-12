@@ -262,9 +262,6 @@ func (m *MessageServer) SendMessage(w http.ResponseWriter, r *http.Request, chat
 	if !ok {
 		return
 	}
-	if !allow(w, r, m.o.Limiter, RateSend, strconv.FormatInt(p.UserID, 10), m.o.Log) {
-		return
-	}
 	req := messages.SendRequest{
 		ChatID: id, SenderID: p.UserID, ClientTempID: body.ClientTempId, Type: string(body.Type), Content: body.Content,
 	}
@@ -299,6 +296,10 @@ func (m *MessageServer) SendMessage(w http.ResponseWriter, r *http.Request, chat
 			return
 		}
 		req.StickerID = &sticker
+	}
+	if !allow(w, r, m.o.Limiter, RateSend, strconv.FormatInt(p.UserID, 10), m.o.Log) {
+		m.o.Service.KeepUnsent(r.Context(), req, messages.ErrRateLimited)
+		return
 	}
 	sent, err := m.o.Service.Send(r.Context(), req)
 	if err != nil {
@@ -512,7 +513,7 @@ func (m *MessageServer) ForwardMessage(w http.ResponseWriter, r *http.Request, m
 	m.answerForward(w, r, copies, err)
 }
 
-// ListChatMedia implements GET /chats/{id}/media?kind=image|audio.
+// ListChatMedia implements GET /chats/{id}/media?kind=image|visual|audio|file.
 func (m *MessageServer) ListChatMedia(w http.ResponseWriter, r *http.Request, chatID ChatId, params ListChatMediaParams) {
 	p, ok := principalOr401(w, r)
 	if !ok {
@@ -524,7 +525,7 @@ func (m *MessageServer) ListChatMedia(w http.ResponseWriter, r *http.Request, ch
 	}
 	kinds, known := messages.MediaKinds[string(params.Kind)]
 	if !known {
-		WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "kind", Message: "image, video gallery (visual), or audio"})
+		WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "kind", Message: "image, video gallery (visual), audio, or file"})
 		return
 	}
 	var before int64

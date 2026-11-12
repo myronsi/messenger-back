@@ -473,6 +473,7 @@ func (e GroupRole) Valid() bool {
 // Defines values for MediaKind.
 const (
 	MediaKindAudio  MediaKind = "audio"
+	MediaKindFile   MediaKind = "file"
 	MediaKindImage  MediaKind = "image"
 	MediaKindVisual MediaKind = "visual"
 )
@@ -481,6 +482,8 @@ const (
 func (e MediaKind) Valid() bool {
 	switch e {
 	case MediaKindAudio:
+		return true
+	case MediaKindFile:
 		return true
 	case MediaKindImage:
 		return true
@@ -806,6 +809,30 @@ const (
 func (e TwoFactorChallengeTwoFactorRequired) Valid() bool {
 	switch e {
 	case True:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UnsentMessageType.
+const (
+	UnsentMessageTypeFile    UnsentMessageType = "file"
+	UnsentMessageTypeSticker UnsentMessageType = "sticker"
+	UnsentMessageTypeText    UnsentMessageType = "text"
+	UnsentMessageTypeVoice   UnsentMessageType = "voice"
+)
+
+// Valid indicates whether the value is a known member of the UnsentMessageType enum.
+func (e UnsentMessageType) Valid() bool {
+	switch e {
+	case UnsentMessageTypeFile:
+		return true
+	case UnsentMessageTypeSticker:
+		return true
+	case UnsentMessageTypeText:
+		return true
+	case UnsentMessageTypeVoice:
 		return true
 	default:
 		return false
@@ -1601,7 +1628,7 @@ type Me struct {
 	Username              Username   `json:"username"`
 }
 
-// MediaKind defines model for MediaKind.
+// MediaKind `image` photos, `visual` photos and videos, `audio` audio files and voice messages, `file` other files (documents, archives).
 type MediaKind string
 
 // Message defines model for Message.
@@ -2325,6 +2352,35 @@ type TwoFactorSetup struct {
 	OtpauthUri string `json:"otpauth_uri"`
 	Secret     string `json:"secret"`
 }
+
+// UnsentMessage A send the server rejected for a reason that may pass later. Resend it with the same `client_temp_id`.
+type UnsentMessage struct {
+	// Attachments Uploaded files of the send that still exist, in the order they were sent.
+	Attachments []Attachment `json:"attachments"`
+
+	// ChatId Decimal ID as a string (Snowflake IDs exceed 2^53).
+	//
+	// Examples: 7217400317439950848
+	ChatId Id `json:"chat_id"`
+
+	// ClientTempId Client-generated ID that makes sending idempotent and ties acks and errors to the send.
+	ClientTempId ClientTempId `json:"client_temp_id"`
+	Content      *string      `json:"content"`
+	CreatedAt    Timestamp    `json:"created_at"`
+
+	// ErrorCode Stable machine-readable error code. New codes can appear in MINOR versions; unknown
+	// codes must be treated like `internal_error`.
+	ErrorCode ErrorCode `json:"error_code"`
+	ReplyTo   *Id       `json:"reply_to"`
+
+	// Sticker One sticker of a pack. `image` is a WebP or PNG of at most 512 x 512 px with transparency, animated when
+	// `is_animated` is true; any signed-in user can load it. Clients show it without a bubble.
+	Sticker *Sticker          `json:"sticker,omitempty"`
+	Type    UnsentMessageType `json:"type"`
+}
+
+// UnsentMessageType defines model for UnsentMessage.Type.
+type UnsentMessageType string
 
 // UpdateGroupRequest defines model for UpdateGroupRequest.
 type UpdateGroupRequest struct {
@@ -3074,6 +3130,24 @@ type PinChatParams struct {
 
 // MarkChatReadParams defines parameters for MarkChatRead.
 type MarkChatReadParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// ListUnsentMessagesParams defines parameters for ListUnsentMessages.
+type ListUnsentMessagesParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// DeleteUnsentMessageParams defines parameters for DeleteUnsentMessage.
+type DeleteUnsentMessageParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
@@ -4421,7 +4495,7 @@ type ServerInterface interface {
 	// StartChatCall Start a call in the chat, or get the one already running
 	// (POST /chats/{chat_id}/call)
 	StartChatCall(w http.ResponseWriter, r *http.Request, chatId ChatId, params StartChatCallParams)
-	// ListChatMedia Photos, videos or audio of a chat
+	// ListChatMedia Photos, videos, audio or files of a chat
 	// (GET /chats/{chat_id}/media)
 	ListChatMedia(w http.ResponseWriter, r *http.Request, chatId ChatId, params ListChatMediaParams)
 	// ListMessages Message history
@@ -4448,6 +4522,12 @@ type ServerInterface interface {
 	// MarkChatRead Mark messages as read up to a message
 	// (POST /chats/{chat_id}/read)
 	MarkChatRead(w http.ResponseWriter, r *http.Request, chatId ChatId, params MarkChatReadParams)
+	// ListUnsentMessages The caller's rejected sends of a chat
+	// (GET /chats/{chat_id}/unsent)
+	ListUnsentMessages(w http.ResponseWriter, r *http.Request, chatId ChatId, params ListUnsentMessagesParams)
+	// DeleteUnsentMessage Discard a rejected send
+	// (DELETE /chats/{chat_id}/unsent/{client_temp_id})
+	DeleteUnsentMessage(w http.ResponseWriter, r *http.Request, chatId ChatId, clientTempId ClientTempId, params DeleteUnsentMessageParams)
 	// ListGroups My groups
 	// (GET /groups)
 	ListGroups(w http.ResponseWriter, r *http.Request, params ListGroupsParams)
@@ -8488,6 +8568,153 @@ func (siw *ServerInterfaceWrapper) MarkChatRead(w http.ResponseWriter, r *http.R
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.MarkChatRead(w, r, chatId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListUnsentMessages operation middleware
+func (siw *ServerInterfaceWrapper) ListUnsentMessages(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListUnsentMessagesParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListUnsentMessages(w, r, chatId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteUnsentMessage operation middleware
+func (siw *ServerInterfaceWrapper) DeleteUnsentMessage(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "client_temp_id" -------------
+	var clientTempId ClientTempId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "client_temp_id", r.PathValue("client_temp_id"), &clientTempId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "client_temp_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteUnsentMessageParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteUnsentMessage(w, r, chatId, clientTempId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -13802,6 +14029,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/chats/{chat_id}/read", wrapper.MarkChatRead)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/chats/{chat_id}/messages", wrapper.ListMessages)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/chats/{chat_id}/messages", wrapper.SendMessage)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/chats/{chat_id}/unsent", wrapper.ListUnsentMessages)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/chats/{chat_id}/unsent/{client_temp_id}", wrapper.DeleteUnsentMessage)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/chats/{chat_id}/messages/search", wrapper.SearchMessages)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/chats/{chat_id}/media", wrapper.ListChatMedia)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/messages/{message_id}", wrapper.DeleteMessage)
@@ -20644,6 +20873,177 @@ type MarkChatRead426ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response MarkChatRead426ApplicationProblemPlusJSONResponse) VisitMarkChatReadResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListUnsentMessagesRequestObject struct {
+	ChatId ChatId `json:"chat_id"`
+	Params ListUnsentMessagesParams
+}
+
+type ListUnsentMessagesResponseObject interface {
+	VisitListUnsentMessagesResponse(w http.ResponseWriter) error
+}
+
+type ListUnsentMessages200JSONResponse struct {
+	Items []UnsentMessage `json:"items"`
+}
+
+func (response ListUnsentMessages200JSONResponse) VisitListUnsentMessagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListUnsentMessages400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response ListUnsentMessages400ApplicationProblemPlusJSONResponse) VisitListUnsentMessagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListUnsentMessages401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ListUnsentMessages401ApplicationProblemPlusJSONResponse) VisitListUnsentMessagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListUnsentMessages404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response ListUnsentMessages404ApplicationProblemPlusJSONResponse) VisitListUnsentMessagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListUnsentMessages426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response ListUnsentMessages426ApplicationProblemPlusJSONResponse) VisitListUnsentMessagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteUnsentMessageRequestObject struct {
+	ChatId       ChatId       `json:"chat_id"`
+	ClientTempId ClientTempId `json:"client_temp_id"`
+	Params       DeleteUnsentMessageParams
+}
+
+type DeleteUnsentMessageResponseObject interface {
+	VisitDeleteUnsentMessageResponse(w http.ResponseWriter) error
+}
+
+type DeleteUnsentMessage204Response struct {
+}
+
+func (response DeleteUnsentMessage204Response) VisitDeleteUnsentMessageResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteUnsentMessage400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteUnsentMessage400ApplicationProblemPlusJSONResponse) VisitDeleteUnsentMessageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteUnsentMessage401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteUnsentMessage401ApplicationProblemPlusJSONResponse) VisitDeleteUnsentMessageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteUnsentMessage404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteUnsentMessage404ApplicationProblemPlusJSONResponse) VisitDeleteUnsentMessageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteUnsentMessage426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteUnsentMessage426ApplicationProblemPlusJSONResponse) VisitDeleteUnsentMessageResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -28705,7 +29105,7 @@ type StrictServerInterface interface {
 	// StartChatCall Start a call in the chat, or get the one already running
 	// (POST /chats/{chat_id}/call)
 	StartChatCall(ctx context.Context, request StartChatCallRequestObject) (StartChatCallResponseObject, error)
-	// ListChatMedia Photos, videos or audio of a chat
+	// ListChatMedia Photos, videos, audio or files of a chat
 	// (GET /chats/{chat_id}/media)
 	ListChatMedia(ctx context.Context, request ListChatMediaRequestObject) (ListChatMediaResponseObject, error)
 	// ListMessages Message history
@@ -28732,6 +29132,12 @@ type StrictServerInterface interface {
 	// MarkChatRead Mark messages as read up to a message
 	// (POST /chats/{chat_id}/read)
 	MarkChatRead(ctx context.Context, request MarkChatReadRequestObject) (MarkChatReadResponseObject, error)
+	// ListUnsentMessages The caller's rejected sends of a chat
+	// (GET /chats/{chat_id}/unsent)
+	ListUnsentMessages(ctx context.Context, request ListUnsentMessagesRequestObject) (ListUnsentMessagesResponseObject, error)
+	// DeleteUnsentMessage Discard a rejected send
+	// (DELETE /chats/{chat_id}/unsent/{client_temp_id})
+	DeleteUnsentMessage(ctx context.Context, request DeleteUnsentMessageRequestObject) (DeleteUnsentMessageResponseObject, error)
 	// ListGroups My groups
 	// (GET /groups)
 	ListGroups(ctx context.Context, request ListGroupsRequestObject) (ListGroupsResponseObject, error)
@@ -30695,6 +31101,61 @@ func (sh *strictHandler) MarkChatRead(w http.ResponseWriter, r *http.Request, ch
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(MarkChatReadResponseObject); ok {
 		if err := validResponse.VisitMarkChatReadResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListUnsentMessages operation middleware
+func (sh *strictHandler) ListUnsentMessages(w http.ResponseWriter, r *http.Request, chatId ChatId, params ListUnsentMessagesParams) {
+	var request ListUnsentMessagesRequestObject
+
+	request.ChatId = chatId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListUnsentMessages(ctx, request.(ListUnsentMessagesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListUnsentMessages")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListUnsentMessagesResponseObject); ok {
+		if err := validResponse.VisitListUnsentMessagesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteUnsentMessage operation middleware
+func (sh *strictHandler) DeleteUnsentMessage(w http.ResponseWriter, r *http.Request, chatId ChatId, clientTempId ClientTempId, params DeleteUnsentMessageParams) {
+	var request DeleteUnsentMessageRequestObject
+
+	request.ChatId = chatId
+	request.ClientTempId = clientTempId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteUnsentMessage(ctx, request.(DeleteUnsentMessageRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteUnsentMessage")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteUnsentMessageResponseObject); ok {
+		if err := validResponse.VisitDeleteUnsentMessageResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

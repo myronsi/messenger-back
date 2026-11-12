@@ -140,6 +140,14 @@ func (Unimplemented) ListChatMedia(w http.ResponseWriter, r *http.Request, chatI
 	notImplemented(w, r)
 }
 
+func (Unimplemented) ListUnsentMessages(w http.ResponseWriter, r *http.Request, chatId ChatId, params ListUnsentMessagesParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) DeleteUnsentMessage(w http.ResponseWriter, r *http.Request, chatId ChatId, clientTempId ClientTempId, params DeleteUnsentMessageParams) {
+	notImplemented(w, r)
+}
+
 func (Unimplemented) ListMessages(w http.ResponseWriter, r *http.Request, chatId ChatId, params ListMessagesParams) {
 	notImplemented(w, r)
 }

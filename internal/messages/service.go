@@ -44,6 +44,8 @@ var (
 	ErrInvalid = errors.New("invalid request")
 	// ErrUnavailable: a store needed for the action is down; the client may retry.
 	ErrUnavailable = errors.New("temporarily unavailable")
+	// ErrRateLimited: the sender sent too much; the transport rejects the event before the service sees it.
+	ErrRateLimited = errors.New("rate limited")
 )
 
 func invalid(format string, args ...any) error {
@@ -82,6 +84,7 @@ type Store interface {
 	Attachments() postgres.AttachmentRepository
 	Users() postgres.UserRepository
 	Stickers() postgres.StickerRepository
+	Unsent() postgres.UnsentRepository
 }
 
 // Deps are the collaborators of the service.
@@ -293,8 +296,8 @@ func (s *Service) validateSend(r SendRequest) error {
 	return nil
 }
 
-// Send stores a message and delivers it to the members of the chat.
-func (s *Service) Send(ctx context.Context, r SendRequest) (Sent, error) {
+// send stores a message and delivers it to the members of the chat.
+func (s *Service) send(ctx context.Context, r SendRequest) (Sent, error) {
 	if err := s.validateSend(r); err != nil {
 		return Sent{}, err
 	}

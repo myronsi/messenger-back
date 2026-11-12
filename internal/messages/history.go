@@ -360,6 +360,7 @@ var MediaKinds = map[string][]string{
 	"image":  {"image"},
 	"visual": {"image", "video"},
 	"audio":  {"audio", "voice"},
+	"file":   {"file"},
 }
 
 // MediaItem is a message of a media list with its file.
