@@ -132,6 +132,14 @@ func TestProfileAndPrivacy(t *testing.T) {
 	if r.Code != http.StatusOK || r.json()["typing_indicators_enabled"] != false || r.json()["search_visibility"] != "nobody" {
 		t.Fatalf("turn typing indicators off: %d %s", r.Code, r.Body)
 	}
+	r = e.do(t, request{method: http.MethodPatch, path: "/me/privacy", token: alice.access, body: map[string]any{"last_seen_visibility": "nobody"}})
+	if r.Code != http.StatusOK || r.json()["last_seen_visibility"] != "nobody" || r.json()["presence_visibility"] != "everyone" {
+		t.Fatalf("hide last seen only: %d %s", r.Code, r.Body)
+	}
+	r = e.do(t, request{method: http.MethodPut, path: "/me/privacy/exceptions/last_seen_visibility/allow", token: alice.access, body: map[string]any{"user_ids": []string{bobID}}})
+	if r.Code != http.StatusOK || len(r.json()["exceptions"].(map[string]any)["last_seen_visibility"].(map[string]any)["allow"].([]any)) != 1 {
+		t.Fatalf("last seen exceptions: %d %s", r.Code, r.Body)
+	}
 	if r := e.do(t, request{method: http.MethodPatch, path: "/me/privacy", token: alice.access, body: map[string]any{"avatar_visibility": "friends"}}); r.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("unknown value: %d", r.Code)
 	}

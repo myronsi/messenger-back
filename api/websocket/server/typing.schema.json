@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ServerTypingEvent",
-  "description": "A user started or stopped typing or recording a voice message. Hide it after about 6 seconds without a repeat: the sender may disconnect before it sends `false`.",
+  "description": "A user started or stopped typing, recording a voice message, choosing a sticker or sending a photo, video or file. Hide it after about 6 seconds without a repeat: the sender may disconnect before it sends `false`.",
   "type": "object",
   "properties": {
     "type": {
@@ -27,7 +27,11 @@
           "type": "string",
           "enum": [
             "typing",
-            "recording_voice"
+            "recording_voice",
+            "choosing_sticker",
+            "uploading_photo",
+            "uploading_video",
+            "uploading_file"
           ]
         }
       },

@@ -126,12 +126,13 @@ func (d *Directory) render(u postgres.User, viewer int64, f facts) View {
 	if allowed(f.settings.ProfileVisibility, postgres.SettingProfile) {
 		v.Bio = u.Bio
 	}
-	if allowed(f.settings.PresenceVisibility, postgres.SettingPresence) {
+	showOnline := allowed(f.settings.PresenceVisibility, postgres.SettingPresence)
+	if showOnline {
 		v.IsOnline = f.online
-		if !f.online {
-			seen := u.LastSeenAt
-			v.LastSeen = &seen
-		}
+	}
+	if allowed(f.settings.LastSeenVisibility, postgres.SettingLastSeen) && !v.IsOnline {
+		seen := u.LastSeenAt
+		v.LastSeen = &seen
 	}
 	return v
 }
@@ -248,9 +249,14 @@ func (d *Directory) onlineOf(ctx context.Context, ids []int64) map[int64]bool {
 	return m
 }
 
-// PresenceVisibleTo returns which viewers may see the presence of subject.
-func (d *Directory) PresenceVisibleTo(ctx context.Context, subject int64, viewers []int64, sharesChat bool) (map[int64]bool, error) {
-	out := make(map[int64]bool, len(viewers))
+type PresenceAccess struct {
+	Online   bool
+	LastSeen bool
+}
+
+// PresenceVisibleTo returns what each viewer may see of the presence of subject.
+func (d *Directory) PresenceVisibleTo(ctx context.Context, subject int64, viewers []int64, sharesChat bool) (map[int64]PresenceAccess, error) {
+	out := make(map[int64]PresenceAccess, len(viewers))
 	if len(viewers) == 0 {
 		return out, nil
 	}
@@ -273,9 +279,15 @@ func (d *Directory) PresenceVisibleTo(ctx context.Context, subject int64, viewer
 	if err != nil {
 		return nil, err
 	}
-	setting := settings[subject].PresenceVisibility
+	s := settings[subject]
 	for _, v := range viewers {
-		out[v] = v == subject || (!blocks[[2]int64{subject, v}] && Visible(setting, exceptions[v][postgres.SettingPresence], sharesChat || shared[v]))
+		visible := func(setting, key string) bool {
+			return v == subject || (!blocks[[2]int64{subject, v}] && Visible(setting, exceptions[v][key], sharesChat || shared[v]))
+		}
+		out[v] = PresenceAccess{
+			Online:   visible(s.PresenceVisibility, postgres.SettingPresence),
+			LastSeen: visible(s.LastSeenVisibility, postgres.SettingLastSeen),
+		}
 	}
 	return out, nil
 }

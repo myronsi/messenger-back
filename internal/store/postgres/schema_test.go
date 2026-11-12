@@ -170,3 +170,48 @@ func TestInertPrivacyExceptionsAreDropped(t *testing.T) {
 		t.Fatalf("exceptions under the default settings were inert: %v", got)
 	}
 }
+
+func TestLastSeenStartsAsTheOldPresenceSetting(t *testing.T) {
+	dbURL := newDatabase(t)
+	if err := migrate(t, dbURL, ".up.sql"); err != nil {
+		t.Fatal(err)
+	}
+	s, err := New(context.Background(), dbURL, Options{MaxConns: 4, QueryTimeout: 10 * time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(s.Close)
+	ctx := context.Background()
+	owner, target := mustUser(t, s, "owner"), mustUser(t, s, "target")
+	conn, err := pgx.Connect(ctx, dbURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close(ctx)
+	if err := applyFiles(ctx, conn, []string{filepath.Join(migrationsDir, "000032_last_seen_visibility.down.sql")}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Exec(ctx, `INSERT INTO user_privacy_settings (user_id, presence_visibility) VALUES ($1, 'everyone_except')`, owner.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Exec(ctx, `INSERT INTO user_privacy_exceptions (owner_id, setting_key, target_user_id, effect) VALUES ($1, 'presence_visibility', $2, 'deny')`, owner.ID, target.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := applyFiles(ctx, conn, []string{filepath.Join(migrationsDir, "000032_last_seen_visibility.up.sql")}); err != nil {
+		t.Fatal(err)
+	}
+	p, err := s.Social().Privacy(ctx, []int64{owner.ID, target.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p[owner.ID].LastSeenVisibility != VisibleEveryoneExcept || p[target.ID].LastSeenVisibility != VisibleEveryone {
+		t.Fatalf("last seen settings: %+v %+v", p[owner.ID], p[target.ID])
+	}
+	effects, err := s.Social().ExceptionsOf(ctx, owner.ID, []int64{target.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if effects[target.ID][SettingLastSeen] != EffectDeny || effects[target.ID][SettingPresence] != EffectDeny {
+		t.Fatalf("exceptions: %v", effects)
+	}
+}

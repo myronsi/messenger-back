@@ -1857,8 +1857,10 @@ type PrivacySettings struct {
 	Exceptions   PrivacyExceptions `json:"exceptions"`
 	GroupInvites GroupInvitePolicy `json:"group_invites"`
 
-	// PresenceVisibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
-	// `contacts` are the users you share a group with, or a direct chat that you opened or read in.
+	// LastSeenVisibility Who sees when the user was last online (`User.last_seen`, `presence` events).
+	LastSeenVisibility Visibility `json:"last_seen_visibility"`
+
+	// PresenceVisibility Who sees that the user is online now (`User.is_online`, `presence` events).
 	PresenceVisibility Visibility `json:"presence_visibility"`
 
 	// ProfileVisibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
@@ -2402,6 +2404,10 @@ type UpdatePrivacySettingsRequest struct {
 	CallsEnabled     *bool                `json:"calls_enabled,omitempty"`
 	DirectMessages   *DirectMessagePolicy `json:"direct_messages,omitempty"`
 	GroupInvites     *GroupInvitePolicy   `json:"group_invites,omitempty"`
+
+	// LastSeenVisibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
+	// `contacts` are the users you share a group with, or a direct chat that you opened or read in.
+	LastSeenVisibility *Visibility `json:"last_seen_visibility,omitempty"`
 
 	// PresenceVisibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
 	// `contacts` are the users you share a group with, or a direct chat that you opened or read in.

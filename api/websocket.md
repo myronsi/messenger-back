@@ -58,7 +58,7 @@ The sender also receives the broadcast `message` event with the stored message (
 | `delete` | Delete a message for yourself (`scope: me`) or everyone |
 | `read` | Mark messages as read up to `message_id` |
 | `reaction_add`, `reaction_remove` | Add or remove a reaction |
-| `typing` | Typing or recording a voice message (`action`, not acknowledged). Repeat `is_typing: true` every 3 s while it lasts, send `false` when it ends |
+| `typing` | Typing, recording a voice message, choosing a sticker or sending a photo, video or file (`action`, not acknowledged). Repeat `is_typing: true` every 3 s while it lasts, send `false` when it ends |
 
 ## Server → client events
 
@@ -69,7 +69,7 @@ The sender also receives the broadcast `message` event with the stored message (
 | `message`, `edit`, `delete` | Message created, edited or deleted |
 | `reaction_add`, `reaction_remove` | Reactions changed |
 | `read` | A user read up to `message_id` |
-| `typing` | A user is typing or recording a voice message (`action`); hide it after 6 s without a repeat |
+| `typing` | A user is typing, recording a voice message, choosing a sticker or sending a photo, video or file (`action`); hide it after 6 s without a repeat |
 | `chat_created`, `chat_deleted`, `chat_list_update` | Chat list changes |
 | `group_created`, `group_updated` | Group changes (members, roles, name, avatar) |
 | `approval_request_created` | New request in the inbox |

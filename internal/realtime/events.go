@@ -289,8 +289,8 @@ func decodeClientEvent(frame []byte) (clientEvent, error) {
 		if d.Action != nil {
 			action = *d.Action
 		}
-		if action != messages.TypingText && action != messages.TypingVoice {
-			return clientEvent{}, fail("action must be typing or recording_voice")
+		if !messages.ValidTypingAction(action) {
+			return clientEvent{}, fail("unknown typing action")
 		}
 		ev.Typing = &typingData{IsTyping: *d.IsTyping, Action: action}
 	default:

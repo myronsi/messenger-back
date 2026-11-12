@@ -560,8 +560,25 @@ func TestPresenceAcrossInstances(t *testing.T) {
 	if _, err := e.pg.Social().UpdatePrivacy(context.Background(), settings); err != nil {
 		t.Fatal(err)
 	}
-	e.online(a, alice)
+	hidden := e.online(a, alice)
 	cb.quiet("presence")
+	_ = hidden.ws.Close(websocket.StatusNormalClosure, "")
+	if seen := data(cb.next("presence")); seen["is_online"] != false || seen["last_seen"] == nil {
+		t.Fatalf("last seen without online: %v", seen)
+	}
+
+	settings.PresenceVisibility, settings.LastSeenVisibility = postgres.VisibleEveryone, postgres.VisibleNobody
+	if _, err := e.pg.Social().UpdatePrivacy(context.Background(), settings); err != nil {
+		t.Fatal(err)
+	}
+	shown := e.online(a, alice)
+	if on := data(cb.next("presence")); on["is_online"] != true {
+		t.Fatalf("online without last seen: %v", on)
+	}
+	_ = shown.ws.Close(websocket.StatusNormalClosure, "")
+	if off := data(cb.next("presence")); off["is_online"] != false || off["last_seen"] != nil {
+		t.Fatalf("offline without last seen: %v", off)
+	}
 }
 
 func TestRevokedSessionLosesItsSocket(t *testing.T) {

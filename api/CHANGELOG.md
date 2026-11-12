@@ -2,6 +2,15 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.24
+
+- `PrivacySettings` gains the required `last_seen_visibility`, also accepted by `PATCH /me/privacy` and as a
+  `setting_key` of `PUT /me/privacy/exceptions/{setting_key}/{effect}`. It decides who sees `User.last_seen` and the
+  `last_seen` of `presence` events; `presence_visibility` now decides only `User.is_online` and online `presence`
+  events. Existing users start with both settings and their exceptions equal to their old `presence_visibility`.
+- The `action` of the client and server `typing` events gains `choosing_sticker`, `uploading_photo`,
+  `uploading_video` and `uploading_file`.
+
 ## 2.1.0-alpha.23
 
 - `MediaKind` gains `file`: `GET /chats/{chat_id}/media?kind=file` lists messages with file attachments (documents,

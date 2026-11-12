@@ -397,13 +397,18 @@ func (f *Fanout) Presence(ctx context.Context, c redis.Change, lastSeen time.Tim
 		f.log.WarnContext(ctx, "presence visibility", "error", err)
 		return
 	}
-	data := map[string]any{"user_id": idString(c.UserID), "is_online": c.Online, "last_seen": nil}
-	if !c.Online {
-		data["last_seen"] = lastSeen.UTC()
-	}
 	frames := make(map[int64]frame, len(watchers))
 	for _, w := range watchers {
-		if !visible[w] {
+		access := visible[w]
+		data := map[string]any{"user_id": idString(c.UserID), "is_online": false, "last_seen": nil}
+		switch {
+		case c.Online && access.Online:
+			data["is_online"] = true
+		case c.Online:
+			continue
+		case access.LastSeen:
+			data["last_seen"] = lastSeen.UTC()
+		case !access.Online:
 			continue
 		}
 		raw, err := f.encode("presence", 0, data, "")

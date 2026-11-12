@@ -22,9 +22,21 @@ type Notifier interface {
 }
 
 const (
-	TypingText  = "typing"
-	TypingVoice = "recording_voice"
+	TypingText    = "typing"
+	TypingVoice   = "recording_voice"
+	TypingSticker = "choosing_sticker"
+	TypingPhoto   = "uploading_photo"
+	TypingVideo   = "uploading_video"
+	TypingFile    = "uploading_file"
 )
+
+func ValidTypingAction(action string) bool {
+	switch action {
+	case TypingText, TypingVoice, TypingSticker, TypingPhoto, TypingVideo, TypingFile:
+		return true
+	}
+	return false
+}
 
 // NopNotifier delivers nothing.
 type NopNotifier struct{}
