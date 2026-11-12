@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.16.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.15.0-alpha.1...v1.16.0-alpha.1) (2026-11-12)
+
+
+### Features
+
+* **messages:** keep rejected sends for the sender and list chat files ([#184](https://github.com/myronsi/messenger-back/issues/184)) ([8f87a2b](https://github.com/myronsi/messenger-back/commit/8f87a2bf8167faf278b51511649bea2a0d6c0396))
+
 ## [1.15.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.14.0-alpha.1...v1.15.0-alpha.1) (2026-11-10)
 
 
