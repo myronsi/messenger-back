@@ -23,6 +23,7 @@ type StickerPack struct {
 	Hidden     bool
 	Deleted    bool
 	CreatedAt  time.Time
+	Version    int64
 }
 
 type Sticker struct {
@@ -90,7 +91,7 @@ func (s *Store) Stickers() StickerRepository { return stickerRepo{s} }
 func packFrom(p sqlcdb.StickerPack) StickerPack {
 	return StickerPack{
 		ID: p.ID, OwnerID: p.OwnerID, BuiltinKey: p.BuiltinKey, Title: p.Title, IsDefault: p.IsDefault,
-		Slug: p.Slug, Hidden: p.HiddenAt != nil, Deleted: p.DeletedAt != nil, CreatedAt: p.CreatedAt,
+		Slug: p.Slug, Hidden: p.HiddenAt != nil, Deleted: p.DeletedAt != nil, CreatedAt: p.CreatedAt, Version: p.Version,
 	}
 }
 

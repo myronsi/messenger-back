@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ServerUserUpdatedEvent",
+  "description": "A user you share a chat with changed their username, display name, bio or avatar. Fetch GET /users/{user_id} again when profile_version is higher than the one you keep.",
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "user_updated"
+    },
+    "event_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "chat_id": {
+      "type": "null"
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "$ref": "../../openapi.yaml#/components/schemas/Id"
+        },
+        "profile_version": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "user_id",
+        "profile_version"
+      ]
+    }
+  },
+  "required": [
+    "type",
+    "event_id",
+    "chat_id",
+    "data"
+  ]
+}

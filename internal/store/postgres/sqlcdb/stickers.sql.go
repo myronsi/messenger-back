@@ -84,7 +84,7 @@ func (q *Queries) DeleteStickerPacksOfOwner(ctx context.Context, ownerID *int64)
 }
 
 const getStickerPack = `-- name: GetStickerPack :one
-SELECT id, owner_id, builtin_key, title, is_default, deleted_at, created_at, slug, hidden_at FROM sticker_packs WHERE id = $1
+SELECT id, owner_id, builtin_key, title, is_default, deleted_at, created_at, slug, hidden_at, version FROM sticker_packs WHERE id = $1
 `
 
 func (q *Queries) GetStickerPack(ctx context.Context, id int64) (StickerPack, error) {
@@ -100,12 +100,13 @@ func (q *Queries) GetStickerPack(ctx context.Context, id int64) (StickerPack, er
 		&i.CreatedAt,
 		&i.Slug,
 		&i.HiddenAt,
+		&i.Version,
 	)
 	return i, err
 }
 
 const getStickerPackBySlug = `-- name: GetStickerPackBySlug :one
-SELECT id, owner_id, builtin_key, title, is_default, deleted_at, created_at, slug, hidden_at FROM sticker_packs WHERE slug = $1
+SELECT id, owner_id, builtin_key, title, is_default, deleted_at, created_at, slug, hidden_at, version FROM sticker_packs WHERE slug = $1
 `
 
 func (q *Queries) GetStickerPackBySlug(ctx context.Context, slug *string) (StickerPack, error) {
@@ -121,6 +122,7 @@ func (q *Queries) GetStickerPackBySlug(ctx context.Context, slug *string) (Stick
 		&i.CreatedAt,
 		&i.Slug,
 		&i.HiddenAt,
+		&i.Version,
 	)
 	return i, err
 }
@@ -212,7 +214,7 @@ func (q *Queries) InsertOwnedSticker(ctx context.Context, arg InsertOwnedSticker
 }
 
 const insertOwnedStickerPack = `-- name: InsertOwnedStickerPack :one
-INSERT INTO sticker_packs (owner_id, title, slug) VALUES ($1, $2, $3) RETURNING id, owner_id, builtin_key, title, is_default, deleted_at, created_at, slug, hidden_at
+INSERT INTO sticker_packs (owner_id, title, slug) VALUES ($1, $2, $3) RETURNING id, owner_id, builtin_key, title, is_default, deleted_at, created_at, slug, hidden_at, version
 `
 
 type InsertOwnedStickerPackParams struct {
@@ -234,6 +236,7 @@ func (q *Queries) InsertOwnedStickerPack(ctx context.Context, arg InsertOwnedSti
 		&i.CreatedAt,
 		&i.Slug,
 		&i.HiddenAt,
+		&i.Version,
 	)
 	return i, err
 }
@@ -287,7 +290,7 @@ func (q *Queries) ListBuiltinStickerKeys(ctx context.Context, packID int64) ([]L
 }
 
 const listInstalledStickerPacks = `-- name: ListInstalledStickerPacks :many
-SELECT p.id, p.owner_id, p.builtin_key, p.title, p.is_default, p.deleted_at, p.created_at, p.slug, p.hidden_at
+SELECT p.id, p.owner_id, p.builtin_key, p.title, p.is_default, p.deleted_at, p.created_at, p.slug, p.hidden_at, p.version
 FROM sticker_packs p
 LEFT JOIN user_sticker_packs u ON u.pack_id = p.id AND u.user_id = $1
 WHERE p.deleted_at IS NULL AND (p.hidden_at IS NULL OR p.owner_id = $1)
@@ -320,6 +323,7 @@ func (q *Queries) ListInstalledStickerPacks(ctx context.Context, arg ListInstall
 			&i.CreatedAt,
 			&i.Slug,
 			&i.HiddenAt,
+			&i.Version,
 		); err != nil {
 			return nil, err
 		}
@@ -356,7 +360,7 @@ func (q *Queries) ListLiveStickerIDs(ctx context.Context, packID int64) ([]int64
 }
 
 const listOwnedStickerPacks = `-- name: ListOwnedStickerPacks :many
-SELECT id, owner_id, builtin_key, title, is_default, deleted_at, created_at, slug, hidden_at FROM sticker_packs WHERE owner_id = $1 AND deleted_at IS NULL ORDER BY id DESC LIMIT $2
+SELECT id, owner_id, builtin_key, title, is_default, deleted_at, created_at, slug, hidden_at, version FROM sticker_packs WHERE owner_id = $1 AND deleted_at IS NULL ORDER BY id DESC LIMIT $2
 `
 
 type ListOwnedStickerPacksParams struct {
@@ -383,6 +387,7 @@ func (q *Queries) ListOwnedStickerPacks(ctx context.Context, arg ListOwnedSticke
 			&i.CreatedAt,
 			&i.Slug,
 			&i.HiddenAt,
+			&i.Version,
 		); err != nil {
 			return nil, err
 		}
@@ -595,7 +600,7 @@ func (q *Queries) ListStickersByID(ctx context.Context, ids []int64) ([]ListStic
 }
 
 const lockStickerPack = `-- name: LockStickerPack :one
-SELECT id, owner_id, builtin_key, title, is_default, deleted_at, created_at, slug, hidden_at FROM sticker_packs WHERE id = $1 FOR NO KEY UPDATE
+SELECT id, owner_id, builtin_key, title, is_default, deleted_at, created_at, slug, hidden_at, version FROM sticker_packs WHERE id = $1 FOR NO KEY UPDATE
 `
 
 func (q *Queries) LockStickerPack(ctx context.Context, id int64) (StickerPack, error) {
@@ -611,6 +616,7 @@ func (q *Queries) LockStickerPack(ctx context.Context, id int64) (StickerPack, e
 		&i.CreatedAt,
 		&i.Slug,
 		&i.HiddenAt,
+		&i.Version,
 	)
 	return i, err
 }
@@ -659,7 +665,7 @@ func (q *Queries) RememberStickerPack(ctx context.Context, arg RememberStickerPa
 }
 
 const renameStickerPack = `-- name: RenameStickerPack :one
-UPDATE sticker_packs SET title = $1 WHERE id = $2 AND deleted_at IS NULL RETURNING id, owner_id, builtin_key, title, is_default, deleted_at, created_at, slug, hidden_at
+UPDATE sticker_packs SET title = $1 WHERE id = $2 AND deleted_at IS NULL RETURNING id, owner_id, builtin_key, title, is_default, deleted_at, created_at, slug, hidden_at, version
 `
 
 type RenameStickerPackParams struct {
@@ -680,6 +686,7 @@ func (q *Queries) RenameStickerPack(ctx context.Context, arg RenameStickerPackPa
 		&i.CreatedAt,
 		&i.Slug,
 		&i.HiddenAt,
+		&i.Version,
 	)
 	return i, err
 }

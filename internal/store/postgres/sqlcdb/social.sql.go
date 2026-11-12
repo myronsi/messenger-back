@@ -497,7 +497,7 @@ func (q *Queries) PatchPrivacySettings(ctx context.Context, arg PatchPrivacySett
 }
 
 const searchUsers = `-- name: SearchUsers :many
-SELECT u.id, u.username, u.display_name, u.password_hash, u.avatar_url, u.bio, u.last_seen_at, u.created_at, u.updated_at, u.avatar_attachment_id
+SELECT u.id, u.username, u.display_name, u.password_hash, u.avatar_url, u.bio, u.last_seen_at, u.created_at, u.updated_at, u.avatar_attachment_id, u.profile_version
 FROM users u
 LEFT JOIN user_privacy_settings p ON p.user_id = u.id
 WHERE (LOWER(u.username) LIKE $1::text || '%' OR LOWER(u.display_name) LIKE '%' || $2::text || '%')
@@ -547,6 +547,7 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.AvatarAttachmentID,
+			&i.ProfileVersion,
 		); err != nil {
 			return nil, err
 		}
@@ -559,7 +560,7 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 }
 
 const searchUsersByUsername = `-- name: SearchUsersByUsername :many
-SELECT u.id, u.username, u.display_name, u.password_hash, u.avatar_url, u.bio, u.last_seen_at, u.created_at, u.updated_at, u.avatar_attachment_id
+SELECT u.id, u.username, u.display_name, u.password_hash, u.avatar_url, u.bio, u.last_seen_at, u.created_at, u.updated_at, u.avatar_attachment_id, u.profile_version
 FROM users u
 LEFT JOIN user_privacy_settings p ON p.user_id = u.id
 WHERE LOWER(u.username) LIKE $1::text || '%'
@@ -606,6 +607,7 @@ func (q *Queries) SearchUsersByUsername(ctx context.Context, arg SearchUsersByUs
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.AvatarAttachmentID,
+			&i.ProfileVersion,
 		); err != nil {
 			return nil, err
 		}

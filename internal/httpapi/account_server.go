@@ -42,12 +42,13 @@ type AccountOptions struct {
 	Directory *users.Directory
 	Deleter   AccountDeleter
 	// AfterDeletion runs after an account was deleted. Optional.
-	AfterDeletion AfterAccountDeletion
-	OnBlocked     func(ctx context.Context, blockerID, blockedID int64)
-	Events        EventEmitter
-	Limiter       RateAllower
-	BasePath      string
-	Log           *slog.Logger
+	AfterDeletion  AfterAccountDeletion
+	OnBlocked      func(ctx context.Context, blockerID, blockedID int64)
+	Events         EventEmitter
+	ProfileChanged func(ctx context.Context, userID, version int64)
+	Limiter        RateAllower
+	BasePath       string
+	Log            *slog.Logger
 }
 
 // AccountServer implements the profile, privacy, blocking, contact-name and user lookup operations.
@@ -140,12 +141,16 @@ func (a *AccountServer) UpdateMe(w http.ResponseWriter, r *http.Request, _ Updat
 			return
 		}
 	}
+	before := profileVersionOf(r.Context(), a.o.Store.Users(), p.UserID)
 	u, err := a.o.Store.Users().PatchProfile(r.Context(), p.UserID, prof)
 	if err != nil {
 		a.internal(w, r, "update profile", err)
 		return
 	}
 	a.emit(r.Context(), events.Event{Type: events.UserUpdated, UserID: p.UserID, ActorID: p.UserID})
+	if a.o.ProfileChanged != nil && u.ProfileVersion != before {
+		a.o.ProfileChanged(context.WithoutCancel(r.Context()), p.UserID, u.ProfileVersion)
+	}
 	noStore(w)
 	writeJSONStatus(w, http.StatusOK, PresentMe(u, a.o.BasePath))
 }
@@ -499,7 +504,7 @@ func (a *AccountServer) UnblockUser(w http.ResponseWriter, r *http.Request, user
 // ---------------------------------------------------------------- users
 
 // writeUser renders a user for the viewer, or 404 for a user that does not exist.
-func (a *AccountServer) writeUser(w http.ResponseWriter, r *http.Request, viewer, id int64) {
+func (a *AccountServer) writeUser(w http.ResponseWriter, r *http.Request, viewer, id int64, cached bool) {
 	views, err := a.o.Directory.ForViewer(r.Context(), viewer, []int64{id})
 	if err != nil {
 		a.internal(w, r, "render user", err)
@@ -508,6 +513,10 @@ func (a *AccountServer) writeUser(w http.ResponseWriter, r *http.Request, viewer
 	v := views[id]
 	if v.IsDeleted || !v.Findable {
 		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
+		return
+	}
+	if cached {
+		writeJSONCached(w, r, PresentUser(v))
 		return
 	}
 	writeJSONStatus(w, http.StatusOK, PresentUser(v))
@@ -526,7 +535,7 @@ func (a *AccountServer) GetUser(w http.ResponseWriter, r *http.Request, userID U
 	if !ok {
 		return
 	}
-	a.writeUser(w, r, p.UserID, id)
+	a.writeUser(w, r, p.UserID, id, true)
 }
 
 // GetUserByUsername implements GET /usernames/{username}.
@@ -547,7 +556,7 @@ func (a *AccountServer) GetUserByUsername(w http.ResponseWriter, r *http.Request
 		a.internal(w, r, "user by username", err)
 		return
 	}
-	a.writeUser(w, r, p.UserID, u.ID)
+	a.writeUser(w, r, p.UserID, u.ID, false)
 }
 
 // SetContactName implements PUT /users/{id}/contact-name.
@@ -590,7 +599,7 @@ func (a *AccountServer) SetContactName(w http.ResponseWriter, r *http.Request, u
 		a.internal(w, r, "set contact name", err)
 		return
 	}
-	a.writeUser(w, r, p.UserID, target)
+	a.writeUser(w, r, p.UserID, target, false)
 }
 
 // RemoveContactName implements DELETE /users/{id}/contact-name.

@@ -282,6 +282,7 @@ type StickerPack struct {
 	CreatedAt  time.Time
 	Slug       *string
 	HiddenAt   *time.Time
+	Version    int64
 }
 
 type StickerPackReport struct {
@@ -316,6 +317,7 @@ type User struct {
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
 	AvatarAttachmentID *uuid.UUID
+	ProfileVersion     int64
 }
 
 type User2faRecoveryCode struct {

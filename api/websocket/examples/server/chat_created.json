@@ -16,7 +16,8 @@
         "bio": null,
         "is_online": true,
         "last_seen": null,
-        "is_deleted": false
+        "is_deleted": false,
+        "profile_version": 1
       },
       "is_pinned": false,
       "pin_position": null,
@@ -36,7 +37,8 @@
           "bio": null,
           "is_online": true,
           "last_seen": null,
-          "is_deleted": false
+          "is_deleted": false,
+          "profile_version": 1
         },
         "content": "Hello!",
         "attachment": null,

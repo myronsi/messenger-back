@@ -85,13 +85,14 @@ func allowWith(w http.ResponseWriter, r *http.Request, check func() (redis.Resul
 
 // MediaOptions configures the media endpoints.
 type MediaOptions struct {
-	Service   *media.Service
-	Store     MediaStore
-	Directory *users.Directory
-	Limiter   RateAllower
-	Events    EventEmitter
-	BasePath  string
-	Log       *slog.Logger
+	Service        *media.Service
+	Store          MediaStore
+	Directory      *users.Directory
+	Limiter        RateAllower
+	Events         EventEmitter
+	BasePath       string
+	Log            *slog.Logger
+	ProfileChanged func(ctx context.Context, userID, version int64)
 }
 
 // MediaServer implements uploads, downloads and avatars.
@@ -330,7 +331,11 @@ func (m *MediaServer) GetAttachmentContent(w http.ResponseWriter, r *http.Reques
 		WriteProblem(w, http.StatusInternalServerError, ErrorCodeInternalError)
 		return
 	}
-	m.serve(w, r, d, "private, max-age=3600", id.String()+suffix)
+	cache := cacheForever
+	if variant == media.VariantThumbnail {
+		cache = "private, max-age=3600"
+	}
+	m.serve(w, r, d, cache, id.String()+suffix)
 }
 
 // SetMyAvatar implements PUT /me/avatar.
@@ -344,6 +349,7 @@ func (m *MediaServer) SetMyAvatar(w http.ResponseWriter, r *http.Request, _ SetM
 	if !decode(w, r, &body) {
 		return
 	}
+	before := profileVersionOf(r.Context(), m.o.Store.Users(), p.UserID)
 	a, err := m.o.Store.Attachments().Get(r.Context(), body.AttachmentId)
 	if errors.Is(err, postgres.ErrNotFound) || (err == nil && (a.Purpose != postgres.PurposeAvatar || a.UploaderID == nil || *a.UploaderID != p.UserID)) {
 		WriteProblem(w, http.StatusBadRequest, ErrorCodeValidationFailed, ProblemError{Field: "attachment_id", Message: "not one of your avatar uploads"})
@@ -353,7 +359,7 @@ func (m *MediaServer) SetMyAvatar(w http.ResponseWriter, r *http.Request, _ SetM
 		id := body.AttachmentId
 		err = m.o.Store.Attachments().SetUserAvatar(r.Context(), p.UserID, &id)
 	}
-	m.answerMe(w, r, p.UserID, "set avatar", err)
+	m.answerMe(w, r, p.UserID, "set avatar", err, before)
 }
 
 func (m *MediaServer) DeleteMyAvatar(w http.ResponseWriter, r *http.Request, avatarID Id, _ DeleteMyAvatarParams) {
@@ -366,15 +372,16 @@ func (m *MediaServer) DeleteMyAvatar(w http.ResponseWriter, r *http.Request, ava
 	if !ok {
 		return
 	}
+	before := profileVersionOf(r.Context(), m.o.Store.Users(), p.UserID)
 	err := m.o.Store.Attachments().DeleteUserAvatar(r.Context(), p.UserID, version)
 	if errors.Is(err, postgres.ErrNotFound) {
 		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
 		return
 	}
-	m.answerMe(w, r, p.UserID, "delete avatar", err)
+	m.answerMe(w, r, p.UserID, "delete avatar", err, before)
 }
 
-func (m *MediaServer) answerMe(w http.ResponseWriter, r *http.Request, userID int64, action string, err error) {
+func (m *MediaServer) answerMe(w http.ResponseWriter, r *http.Request, userID int64, action string, err error, before int64) {
 	if err != nil {
 		m.o.Log.ErrorContext(r.Context(), action, "error", err)
 		WriteProblem(w, http.StatusInternalServerError, ErrorCodeInternalError)
@@ -389,6 +396,9 @@ func (m *MediaServer) answerMe(w http.ResponseWriter, r *http.Request, userID in
 	if err != nil {
 		WriteProblem(w, http.StatusInternalServerError, ErrorCodeInternalError)
 		return
+	}
+	if m.o.ProfileChanged != nil && u.ProfileVersion != before {
+		m.o.ProfileChanged(context.WithoutCancel(r.Context()), userID, u.ProfileVersion)
 	}
 	noStore(w)
 	writeJSONStatus(w, http.StatusOK, PresentMe(u, m.o.BasePath))

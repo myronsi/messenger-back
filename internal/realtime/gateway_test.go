@@ -915,3 +915,25 @@ func TestHiddenChatKeepsDeliveringAndHistoryClearedFollowsTheContract(t *testing
 		}
 	}
 }
+
+func TestProfileChangeReachesChatPartnersAndOwnDevices(t *testing.T) {
+	e := newEnv(t)
+	a, b := e.instance("a"), e.instance("b")
+	alice, bob, stranger := e.user("alice"), e.user("bob"), e.user("stranger")
+	if _, _, err := e.pg.Chats().CreateDirect(context.Background(), alice, bob); err != nil {
+		t.Fatal(err)
+	}
+	cb := e.online(b, bob)
+	cs := e.online(b, stranger)
+	ca := e.online(a, alice)
+
+	a.fanout.ProfileChanged(context.Background(), alice, 3)
+	ev := cb.next("user_updated")
+	if d := data(ev); d["user_id"] != fmt.Sprint(alice) || d["profile_version"] != float64(3) || ev["chat_id"] != nil {
+		t.Fatalf("partner: %v", ev)
+	}
+	if d := data(ca.next("user_updated")); d["profile_version"] != float64(3) {
+		t.Fatalf("own device: %v", d)
+	}
+	cs.quiet("user_updated")
+}

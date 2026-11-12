@@ -1670,12 +1670,15 @@ type Me struct {
 	// Id Decimal ID as a string (Snowflake IDs exceed 2^53).
 	//
 	// Examples: 7217400317439950848
-	Id                    Id         `json:"id"`
-	IsDeleted             bool       `json:"is_deleted"`
-	IsOnline              bool       `json:"is_online"`
-	LastSeen              *Timestamp `json:"last_seen"`
-	RecoverySetupRequired *bool      `json:"recovery_setup_required,omitempty"`
-	Username              Username   `json:"username"`
+	Id        Id         `json:"id"`
+	IsDeleted bool       `json:"is_deleted"`
+	IsOnline  bool       `json:"is_online"`
+	LastSeen  *Timestamp `json:"last_seen"`
+
+	// ProfileVersion Grows whenever the username, display name, bio or avatar changes (not with presence). Clients keep a stored profile until a higher version arrives.
+	ProfileVersion        int      `json:"profile_version"`
+	RecoverySetupRequired *bool    `json:"recovery_setup_required,omitempty"`
+	Username              Username `json:"username"`
 }
 
 // MediaKind `image` photos, `visual` photos and videos, `audio` audio files and voice messages, `file` other files (documents, archives).
@@ -2319,6 +2322,9 @@ type StickerPack struct {
 	Slug     *StickerPackSlug `json:"slug,omitempty"`
 	Stickers []Sticker        `json:"stickers"`
 	Title    string           `json:"title"`
+
+	// Version Grows whenever the title or the stickers of the pack change.
+	Version int `json:"version"`
 }
 
 // StickerPackList defines model for StickerPackList.
@@ -2537,7 +2543,10 @@ type User struct {
 	IsDeleted bool       `json:"is_deleted"`
 	IsOnline  bool       `json:"is_online"`
 	LastSeen  *Timestamp `json:"last_seen"`
-	Username  Username   `json:"username"`
+
+	// ProfileVersion Grows whenever the username, display name, bio or avatar changes (not with presence). Clients keep a stored profile until a higher version arrives.
+	ProfileVersion int      `json:"profile_version"`
+	Username       Username `json:"username"`
 }
 
 // UserPage defines model for UserPage.
@@ -22144,6 +22153,14 @@ func (response GetGroup200JSONResponse) VisitGetGroupResponse(w http.ResponseWri
 	return err
 }
 
+type GetGroup304Response struct {
+}
+
+func (response GetGroup304Response) VisitGetGroupResponse(w http.ResponseWriter) error {
+	w.WriteHeader(304)
+	return nil
+}
+
 type GetGroup400ApplicationProblemPlusJSONResponse struct {
 	BadRequestApplicationProblemPlusJSONResponse
 }
@@ -23460,6 +23477,14 @@ func (response GetMe200JSONResponse) VisitGetMeResponse(w http.ResponseWriter) e
 	w.WriteHeader(200)
 	_, err := buf.WriteTo(w)
 	return err
+}
+
+type GetMe304Response struct {
+}
+
+func (response GetMe304Response) VisitGetMeResponse(w http.ResponseWriter) error {
+	w.WriteHeader(304)
+	return nil
 }
 
 type GetMe400ApplicationProblemPlusJSONResponse struct {
@@ -27636,6 +27661,14 @@ func (response ListStickerPacks200JSONResponse) VisitListStickerPacksResponse(w 
 	return err
 }
 
+type ListStickerPacks304Response struct {
+}
+
+func (response ListStickerPacks304Response) VisitListStickerPacksResponse(w http.ResponseWriter) error {
+	w.WriteHeader(304)
+	return nil
+}
+
 type ListStickerPacks400ApplicationProblemPlusJSONResponse struct {
 	BadRequestApplicationProblemPlusJSONResponse
 }
@@ -27905,6 +27938,14 @@ func (response GetStickerPack200JSONResponse) VisitGetStickerPackResponse(w http
 	w.WriteHeader(200)
 	_, err := buf.WriteTo(w)
 	return err
+}
+
+type GetStickerPack304Response struct {
+}
+
+func (response GetStickerPack304Response) VisitGetStickerPackResponse(w http.ResponseWriter) error {
+	w.WriteHeader(304)
+	return nil
 }
 
 type GetStickerPack400ApplicationProblemPlusJSONResponse struct {
@@ -29138,6 +29179,14 @@ func (response GetUser200JSONResponse) VisitGetUserResponse(w http.ResponseWrite
 	w.WriteHeader(200)
 	_, err := buf.WriteTo(w)
 	return err
+}
+
+type GetUser304Response struct {
+}
+
+func (response GetUser304Response) VisitGetUserResponse(w http.ResponseWriter) error {
+	w.WriteHeader(304)
+	return nil
 }
 
 type GetUser400ApplicationProblemPlusJSONResponse struct {

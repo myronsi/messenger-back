@@ -22,12 +22,13 @@ type View struct {
 	// ContactName is the viewer's own name for the user.
 	ContactName *string
 	// AvatarURL is the same-origin path of the avatar, never the storage location.
-	AvatarURL *string
-	Bio       *string
-	IsOnline  bool
-	LastSeen  *time.Time
-	IsDeleted bool
-	Findable  bool
+	AvatarURL      *string
+	Bio            *string
+	IsOnline       bool
+	LastSeen       *time.Time
+	IsDeleted      bool
+	Findable       bool
+	ProfileVersion int64
 }
 
 // Visible reports whether a field guarded by a privacy setting with value setting is visible to a viewer,
@@ -113,7 +114,7 @@ type facts struct {
 }
 
 func (d *Directory) render(u postgres.User, viewer int64, f facts) View {
-	v := View{ID: u.ID, Username: u.Username, DisplayName: u.DisplayName, ContactName: f.contact}
+	v := View{ID: u.ID, Username: u.Username, DisplayName: u.DisplayName, ContactName: f.contact, ProfileVersion: u.ProfileVersion}
 	self := u.ID == viewer
 	v.Findable = self || f.shares || Findable(f.settings.SearchVisibility, f.exceptions[postgres.SettingSearch])
 	allowed := func(setting, key string) bool {

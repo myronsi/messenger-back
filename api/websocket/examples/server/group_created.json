@@ -20,7 +20,8 @@
             "bio": null,
             "is_online": true,
             "last_seen": null,
-            "is_deleted": false
+            "is_deleted": false,
+            "profile_version": 1
           },
           "role": "owner",
           "joined_at": "2026-10-04T12:00:00Z"

@@ -384,6 +384,15 @@ func (f *Fanout) partners(ctx context.Context, userID int64) ([]int64, error) {
 	return out, nil
 }
 
+func (f *Fanout) ProfileChanged(ctx context.Context, userID, version int64) {
+	watchers, err := f.partners(ctx, userID)
+	if err != nil {
+		f.log.WarnContext(ctx, "profile watchers", "error", err)
+		return
+	}
+	f.same(ctx, "user_updated", 0, map[string]any{"user_id": idString(userID), "profile_version": version}, append(watchers, userID))
+}
+
 // Presence announces a presence change to the users who share a chat with the user and may see it. An
 // offline change carries the time the user was last seen.
 func (f *Fanout) Presence(ctx context.Context, c redis.Change, lastSeen time.Time) {
