@@ -45,17 +45,11 @@ func participantFrom(p sqlcdb.Participant) Participant {
 }
 
 func (r chatRepo) CreateDirect(ctx context.Context, creatorID, otherID int64) (Chat, bool, error) {
-	if creatorID == otherID {
-		return Chat{}, false, fmt.Errorf("%w: a direct chat needs two different users", ErrInvalid)
-	}
 	chat, created, _, err := r.OpenDirect(ctx, creatorID, otherID)
 	return chat, created, err
 }
 
 func (r chatRepo) OpenDirect(ctx context.Context, creatorID, otherID int64) (Chat, bool, []ApprovalRequest, error) {
-	if creatorID == otherID {
-		return Chat{}, false, nil, fmt.Errorf("%w: a direct chat needs two different users", ErrInvalid)
-	}
 	var (
 		chat    Chat
 		created bool
@@ -92,7 +86,11 @@ func createDirect(ctx context.Context, q *sqlcdb.Queries, creatorID, otherID int
 		return Chat{}, false, nil, err
 	}
 	if created {
-		for _, uid := range []int64{min(creatorID, otherID), max(creatorID, otherID)} {
+		members := []int64{min(creatorID, otherID), max(creatorID, otherID)}
+		if creatorID == otherID {
+			members = members[:1]
+		}
+		for _, uid := range members {
 			if _, err := q.AddParticipant(ctx, sqlcdb.AddParticipantParams{ChatID: row.ID, UserID: uid, Role: string(RoleMember)}); err != nil {
 				return Chat{}, false, nil, err
 			}

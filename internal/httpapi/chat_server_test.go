@@ -7,6 +7,7 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"net/netip"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -244,9 +245,6 @@ func TestDirectChatsListPinsAndReads(t *testing.T) {
 	cb, _ := strconv.ParseInt(chatBob, 10, 64)
 	if len(e.events.created[cb]) != 2 {
 		t.Fatalf("chat_created went to %v", e.events.created[cb])
-	}
-	if r := e.create(t, alice, e.uid(t, alice), ""); r.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("chat with yourself: %d", r.Code)
 	}
 	if r := e.create(t, alice, "999999", ""); r.Code != http.StatusNotFound {
 		t.Fatalf("unknown user: %d", r.Code)
@@ -625,5 +623,94 @@ func TestChatListSkipsMessagesDeletedForEveryone(t *testing.T) {
 	deleteForEveryone(keptID)
 	if got := e.do(t, request{method: http.MethodGet, path: "/chats/" + chatID, token: alice.access}).json(); got["last_message"] != nil {
 		t.Fatalf("a chat with only deleted messages has no last message: %v", got["last_message"])
+	}
+}
+
+func TestSavedMessagesArchiveAndPinOrder(t *testing.T) {
+	e := newChatEnv(t)
+	alice, bob, carol := e.register(t, "alice"), e.register(t, "bob"), e.register(t, "carol")
+	aliceID := e.uid(t, alice)
+
+	saved := e.create(t, alice, aliceID, "")
+	if saved.Code != http.StatusCreated || saved.json()["peer"].(map[string]any)["id"] != aliceID || saved.json()["type"] != "direct" {
+		t.Fatalf("saved messages: %d %s", saved.Code, saved.Body)
+	}
+	savedID := saved.json()["id"].(string)
+	if again := e.create(t, alice, aliceID, ""); again.Code != http.StatusOK || again.json()["id"] != savedID {
+		t.Fatalf("saved messages again: %d %s", again.Code, again.Body)
+	}
+	sc, _ := strconv.ParseInt(savedID, 10, 64)
+	if len(e.events.created[sc]) != 1 {
+		t.Fatalf("chat_created went to %v", e.events.created[sc])
+	}
+	if r := e.send(t, alice, savedID, "note-1", "remember the milk"); r.Code != http.StatusCreated {
+		t.Fatalf("send to saved messages: %d %s", r.Code, r.Body)
+	}
+	got := e.do(t, request{method: http.MethodGet, path: "/chats/" + savedID, token: alice.access}).json()
+	if got["unread_count"].(float64) != 0 || got["last_message"].(map[string]any)["content"] != "remember the milk" || got["name"] != "Display alice" {
+		t.Fatalf("saved messages view: %v", got)
+	}
+
+	chatBob := e.create(t, alice, e.uid(t, bob), "hi").json()["id"].(string)
+	chatCarol := e.create(t, alice, e.uid(t, carol), "hi").json()["id"].(string)
+	for _, id := range []string{savedID, chatBob, chatCarol} {
+		if r := e.do(t, request{method: http.MethodPut, path: "/chats/" + id + "/pin", token: alice.access}); r.Code != http.StatusNoContent {
+			t.Fatalf("pin %s: %d %s", id, r.Code, r.Body)
+		}
+	}
+	ids := func(list []map[string]any) []string {
+		out := []string{}
+		for _, c := range list {
+			out = append(out, c["id"].(string))
+		}
+		return out
+	}
+	list := items(t, e.do(t, request{method: http.MethodGet, path: "/chats", token: alice.access}))
+	if got := ids(list); !slices.Equal(got, []string{chatCarol, chatBob, savedID}) || list[0]["pin_position"] == nil {
+		t.Fatalf("newest pin on top: %v", got)
+	}
+	order := map[string]any{"chat_ids": []string{savedID, chatCarol, chatBob}}
+	if r := e.do(t, request{method: http.MethodPut, path: "/chats/pins/order", token: alice.access, body: order}); r.Code != http.StatusNoContent {
+		t.Fatalf("reorder: %d %s", r.Code, r.Body)
+	}
+	if got := ids(items(t, e.do(t, request{method: http.MethodGet, path: "/chats", token: alice.access}))); !slices.Equal(got, []string{savedID, chatCarol, chatBob}) {
+		t.Fatalf("reordered: %v", got)
+	}
+	bad := map[string]any{"chat_ids": []string{savedID, chatCarol}}
+	if r := e.do(t, request{method: http.MethodPut, path: "/chats/pins/order", token: alice.access, body: bad}); r.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("incomplete order: %d %s", r.Code, r.Body)
+	}
+
+	if r := e.do(t, request{method: http.MethodPut, path: "/chats/" + chatBob + "/archive", token: alice.access}); r.Code != http.StatusNoContent {
+		t.Fatalf("archive: %d %s", r.Code, r.Body)
+	}
+	archived := items(t, e.do(t, request{method: http.MethodGet, path: "/chats?archived=true", token: alice.access}))
+	if len(archived) != 1 || archived[0]["id"] != chatBob || archived[0]["is_archived"] != true || archived[0]["is_pinned"] != false || archived[0]["pin_position"] != nil {
+		t.Fatalf("archived list: %v", archived)
+	}
+	if got := ids(items(t, e.do(t, request{method: http.MethodGet, path: "/chats?archived=false", token: alice.access}))); !slices.Equal(got, []string{savedID, chatCarol}) {
+		t.Fatalf("main list: %v", got)
+	}
+	if r := e.send(t, bob, chatBob, "still-archived", "ping"); r.Code != http.StatusCreated {
+		t.Fatalf("bob writes: %d %s", r.Code, r.Body)
+	}
+	if got := e.do(t, request{method: http.MethodGet, path: "/chats/" + chatBob, token: alice.access}).json(); got["is_archived"] != true || got["unread_count"].(float64) != 1 {
+		t.Fatalf("a new message keeps the chat archived: %v", got)
+	}
+	if got := e.do(t, request{method: http.MethodGet, path: "/chats/" + chatBob, token: bob.access}).json(); got["is_archived"] != false {
+		t.Fatalf("archive is per user: %v", got)
+	}
+	if r := e.do(t, request{method: http.MethodDelete, path: "/chats/" + chatBob + "/archive", token: alice.access}); r.Code != http.StatusNoContent {
+		t.Fatalf("unarchive: %d %s", r.Code, r.Body)
+	}
+	if got := items(t, e.do(t, request{method: http.MethodGet, path: "/chats", token: alice.access})); len(got) != 3 {
+		t.Fatalf("all chats: %v", ids(got))
+	}
+	if r := e.do(t, request{method: http.MethodPut, path: "/chats/" + chatBob + "/archive", token: carol.access}); r.Code != http.StatusNotFound {
+		t.Fatalf("archive someone else's chat: %d", r.Code)
+	}
+	cb, _ := strconv.ParseInt(chatBob, 10, 64)
+	if len(e.events.updated[cb]) < 4 {
+		t.Fatalf("chat_list_update for pin, reorder, archive and unarchive: %v", e.events.updated[cb])
 	}
 }

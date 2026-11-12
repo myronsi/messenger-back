@@ -183,7 +183,7 @@ func EncodeCursor(c postgres.ChatCursor) string {
 	if !c.Unpinned {
 		p = "0"
 	}
-	raw := p + "." + strconv.FormatInt(c.SortAt.UnixMicro(), 10) + "." + strconv.FormatInt(c.ChatID, 10)
+	raw := p + "." + strconv.FormatInt(int64(c.Position), 10) + "." + strconv.FormatInt(c.SortAt.UnixMicro(), 10) + "." + strconv.FormatInt(c.ChatID, 10)
 	return base64.RawURLEncoding.EncodeToString([]byte(raw))
 }
 
@@ -194,25 +194,29 @@ func DecodeCursor(s string) (postgres.ChatCursor, error) {
 		return postgres.ChatCursor{}, badCursor()
 	}
 	parts := strings.Split(string(b), ".")
-	if len(parts) != 3 || (parts[0] != "0" && parts[0] != "1") {
+	if len(parts) == 3 {
+		parts = []string{parts[0], "0", parts[1], parts[2]}
+	}
+	if len(parts) != 4 || (parts[0] != "0" && parts[0] != "1") {
 		return postgres.ChatCursor{}, badCursor()
 	}
-	us, err1 := strconv.ParseInt(parts[1], 10, 64)
-	id, err2 := strconv.ParseInt(parts[2], 10, 64)
-	if err1 != nil || err2 != nil {
+	pos, err0 := strconv.ParseInt(parts[1], 10, 32)
+	us, err1 := strconv.ParseInt(parts[2], 10, 64)
+	id, err2 := strconv.ParseInt(parts[3], 10, 64)
+	if err0 != nil || err1 != nil || err2 != nil {
 		return postgres.ChatCursor{}, badCursor()
 	}
-	return postgres.ChatCursor{Unpinned: parts[0] == "1", SortAt: time.UnixMicro(us), ChatID: id}, nil
+	return postgres.ChatCursor{Unpinned: parts[0] == "1", Position: int32(pos), SortAt: time.UnixMicro(us), ChatID: id}, nil
 }
 
 // ---------------------------------------------------------------- the chat list
 
 // List returns a page of the user's chats and the cursor of the next page ("" at the end).
-func (s *Service) List(ctx context.Context, userID int64, after string, limit int) ([]View, string, error) {
-	return s.list(ctx, userID, "", after, limit)
+func (s *Service) List(ctx context.Context, userID int64, archived *bool, after string, limit int) ([]View, string, error) {
+	return s.list(ctx, userID, "", archived, after, limit)
 }
 
-func (s *Service) list(ctx context.Context, userID int64, t postgres.ChatType, after string, limit int) ([]View, string, error) {
+func (s *Service) list(ctx context.Context, userID int64, t postgres.ChatType, archived *bool, after string, limit int) ([]View, string, error) {
 	var cur *postgres.ChatCursor
 	if after != "" {
 		c, err := DecodeCursor(after)
@@ -224,7 +228,7 @@ func (s *Service) list(ctx context.Context, userID int64, t postgres.ChatType, a
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
-	entries, err := s.d.Store.Chats().EntriesOfType(ctx, userID, t, cur, limit+1)
+	entries, err := s.d.Store.Chats().EntriesOfType(ctx, userID, t, archived, cur, limit+1)
 	if err != nil {
 		return nil, "", unavailable(err)
 	}
@@ -287,6 +291,9 @@ func (s *Service) render(ctx context.Context, viewer int64, entries []postgres.C
 	for _, m := range markers {
 		peerOf[m.ChatID] = m
 		ids = append(ids, m.UserID)
+	}
+	if len(peerOf) < len(direct) {
+		ids = append(ids, viewer)
 	}
 
 	counts, err := s.unreadCounts(ctx, viewer, entries)
@@ -352,6 +359,9 @@ func (s *Service) render(ctx context.Context, viewer int64, entries []postgres.C
 		e := views[i].Entry
 		if m, ok := peerOf[e.Chat.ID]; ok {
 			p := people[m.UserID]
+			views[i].Peer = &p
+		} else if e.Chat.Type == postgres.ChatDirect {
+			p := people[viewer]
 			views[i].Peer = &p
 		}
 		// The counters only count up between reads; the contract stops at 999.
@@ -610,9 +620,6 @@ func (s *Service) permission(ctx context.Context, requester, recipient int64) (a
 // CreateDirect opens a direct chat with another user, honouring their direct_messages setting. An existing
 // chat is returned as it is (New false); when the other user wants to approve first, a request is made.
 func (s *Service) CreateDirect(ctx context.Context, requester, otherID int64, initial *string) (Created, error) {
-	if otherID == requester {
-		return Created{}, fmt.Errorf("%w: a direct chat needs another user", ErrInvalid)
-	}
 	if initial != nil {
 		t := strings.TrimSpace(*initial)
 		if t == "" {
@@ -642,9 +649,12 @@ func (s *Service) CreateDirect(ctx context.Context, requester, otherID int64, in
 		}
 		return Created{Chat: &v}, nil
 	}
-	allowed, approval, err := s.permission(ctx, requester, otherID)
-	if err != nil {
-		return Created{}, unavailable(err)
+	allowed, approval := true, false
+	if otherID != requester {
+		var err error
+		if allowed, approval, err = s.permission(ctx, requester, otherID); err != nil {
+			return Created{}, unavailable(err)
+		}
 	}
 	if approval {
 		req, isNew, err := s.d.Store.Approvals().RequestDirect(ctx, requester, otherID, initial)
@@ -715,9 +725,14 @@ func (s *Service) opened(ctx context.Context, chat postgres.Chat, created bool, 
 		if err := s.d.Members.Invalidate(ctx, chat.ID); err != nil {
 			s.d.Log.WarnContext(ctx, "invalidate members", "error", err)
 		}
-		s.emit(ctx, events.Event{Type: events.ChatMemberAdded, ChatID: chat.ID, UserID: from, ActorID: from})
-		s.emit(ctx, events.Event{Type: events.ChatMemberAdded, ChatID: chat.ID, UserID: to, ActorID: from})
-		s.d.Notifier.ChatCreated(ctx, chat.ID, s.viewsFor(ctx, chat.ID, []int64{from, to}))
+		members := []int64{from, to}
+		if from == to {
+			members = members[:1]
+		}
+		for _, uid := range members {
+			s.emit(ctx, events.Event{Type: events.ChatMemberAdded, ChatID: chat.ID, UserID: uid, ActorID: from})
+		}
+		s.d.Notifier.ChatCreated(ctx, chat.ID, s.viewsFor(ctx, chat.ID, members))
 	}
 	for _, m := range first {
 		text := m.text
@@ -812,6 +827,28 @@ func (s *Service) Unpin(ctx context.Context, userID, chatID int64) error {
 		return unavailable(err)
 	}
 	s.d.Notifier.ChatUpdated(ctx, chatID, s.viewsFor(ctx, chatID, []int64{userID}))
+	return nil
+}
+
+func (s *Service) SetArchived(ctx context.Context, userID, chatID int64, archived bool) error {
+	if err := s.d.Store.Chats().SetArchived(ctx, userID, chatID, archived); err != nil {
+		return notFoundOr(err)
+	}
+	s.d.Notifier.ChatUpdated(ctx, chatID, s.viewsFor(ctx, chatID, []int64{userID}))
+	return nil
+}
+
+func (s *Service) ReorderPins(ctx context.Context, userID int64, chatIDs []int64) error {
+	err := s.d.Store.Chats().ReorderPins(ctx, userID, chatIDs)
+	switch {
+	case errors.Is(err, postgres.ErrInvalid):
+		return fmt.Errorf("%w: chat_ids must name every pinned chat once", ErrInvalid)
+	case err != nil:
+		return unavailable(err)
+	}
+	for _, chatID := range chatIDs {
+		s.d.Notifier.ChatUpdated(ctx, chatID, s.viewsFor(ctx, chatID, []int64{userID}))
+	}
 	return nil
 }
 

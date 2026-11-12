@@ -136,6 +136,8 @@ type ChatEntry struct {
 	Role              Role
 	LastReadMessageID *int64
 	PinnedAt          *time.Time
+	PinPosition       *int32
+	ArchivedAt        *time.Time
 	// SortAt is the pin time of a pinned chat and the last activity of any other.
 	SortAt time.Time
 }
@@ -143,13 +145,18 @@ type ChatEntry struct {
 // ChatCursor continues a chat list after the entry it was made from.
 type ChatCursor struct {
 	Unpinned bool
+	Position int32
 	SortAt   time.Time
 	ChatID   int64
 }
 
 // CursorOf returns the cursor that continues after the entry.
 func (e ChatEntry) CursorOf() ChatCursor {
-	return ChatCursor{Unpinned: e.PinnedAt == nil, SortAt: e.SortAt, ChatID: e.Chat.ID}
+	c := ChatCursor{Unpinned: e.PinnedAt == nil, SortAt: e.SortAt, ChatID: e.Chat.ID}
+	if e.PinnedAt != nil && e.PinPosition != nil {
+		c.Position = *e.PinPosition
+	}
+	return c
 }
 
 // ReadMarker is how far a member has read a chat.
@@ -260,11 +267,13 @@ type ChatRepository interface {
 	Pin(ctx context.Context, userID, chatID int64, maxPins int) error
 	// Unpin unpins the chat (unpinned already is fine).
 	Unpin(ctx context.Context, userID, chatID int64) error
+	ReorderPins(ctx context.Context, userID int64, chatIDs []int64) error
+	SetArchived(ctx context.Context, userID, chatID int64, archived bool) error
 
 	// IDsAfter walks every chat in id order (with since: only chats with activity since then).
 	IDsAfter(ctx context.Context, afterID int64, since *time.Time, limit int) ([]int64, error)
 	// EntriesOfType is Entries of one chat type ("" for all).
-	EntriesOfType(ctx context.Context, userID int64, t ChatType, after *ChatCursor, limit int) ([]ChatEntry, error)
+	EntriesOfType(ctx context.Context, userID int64, t ChatType, archived *bool, after *ChatCursor, limit int) ([]ChatEntry, error)
 
 	// Group operations of an actor: the actor's role is checked under the group's lock, in the transaction
 	// of the change. ErrNotFound: no such group or the actor is not in it; ErrForbidden: the actor's role does

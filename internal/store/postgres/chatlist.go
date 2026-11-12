@@ -18,7 +18,8 @@ func entryFrom(r sqlcdb.ListChatEntriesRow) ChatEntry {
 			CreatedBy: r.CreatedBy, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt, AvatarAttachmentID: r.AvatarAttachmentID,
 			LastMessageID: r.LastMessageID, LastActivityAt: r.LastActivityAt,
 		}),
-		Role: Role(r.Role), LastReadMessageID: r.LastReadMessageID, PinnedAt: r.PinnedAt, SortAt: r.SortAt,
+		Role: Role(r.Role), LastReadMessageID: r.LastReadMessageID, PinnedAt: r.PinnedAt, PinPosition: r.PinPosition,
+		ArchivedAt: r.ArchivedAt, SortAt: r.SortAt,
 	}
 }
 
@@ -40,7 +41,7 @@ func (r chatRepo) TouchActivity(ctx context.Context, chatID, messageID int64, at
 }
 
 func (r chatRepo) Entries(ctx context.Context, userID int64, after *ChatCursor, limit int) ([]ChatEntry, error) {
-	return r.EntriesOfType(ctx, userID, "", after, limit)
+	return r.EntriesOfType(ctx, userID, "", nil, after, limit)
 }
 
 func (r chatRepo) Entry(ctx context.Context, userID, chatID int64) (ChatEntry, error) {
@@ -90,7 +91,58 @@ func (r chatRepo) Pin(ctx context.Context, userID, chatID int64, maxPins int) er
 		if added == 1 && n >= int64(maxPins) {
 			return ErrConflict
 		}
+		_, err = q.SetChatArchived(ctx, sqlcdb.SetChatArchivedParams{Archived: false, ChatID: chatID, UserID: userID})
+		return err
+	})
+}
+
+func (r chatRepo) ReorderPins(ctx context.Context, userID int64, chatIDs []int64) error {
+	return r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
+		if _, err := q.LockUser(ctx, userID); err != nil {
+			return err
+		}
+		pinned, err := q.ListPinnedChatIDs(ctx, userID)
+		if err != nil {
+			return err
+		}
+		current := make(map[int64]bool, len(pinned))
+		for _, id := range pinned {
+			current[id] = true
+		}
+		seen := make(map[int64]bool, len(chatIDs))
+		for _, id := range chatIDs {
+			if !current[id] || seen[id] {
+				return fmt.Errorf("%w: the order must name every pinned chat once", ErrInvalid)
+			}
+			seen[id] = true
+		}
+		if len(seen) != len(current) {
+			return fmt.Errorf("%w: the order must name every pinned chat once", ErrInvalid)
+		}
+		position := int32(0)
+		for _, id := range chatIDs {
+			if err := q.SetPinPosition(ctx, sqlcdb.SetPinPositionParams{Position: position, UserID: userID, ChatID: id}); err != nil {
+				return err
+			}
+			position++
+		}
 		return nil
+	})
+}
+
+func (r chatRepo) SetArchived(ctx context.Context, userID, chatID int64, archived bool) error {
+	return r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
+		n, err := q.SetChatArchived(ctx, sqlcdb.SetChatArchivedParams{Archived: archived, ChatID: chatID, UserID: userID})
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return ErrNotFound
+		}
+		if archived {
+			_, err = q.UnpinChat(ctx, sqlcdb.UnpinChatParams{UserID: userID, ChatID: chatID})
+		}
+		return err
 	})
 }
 

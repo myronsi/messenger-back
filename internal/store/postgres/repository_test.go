@@ -107,8 +107,15 @@ func TestDirectChatIsUniquePerPair(t *testing.T) {
 	if err != nil || created || again.ID != first.ID {
 		t.Fatalf("reversed pair must return the same chat: %+v created=%v err=%v", again, created, err)
 	}
-	if _, _, err := s.Chats().CreateDirect(ctx, a.ID, a.ID); !errors.Is(err, ErrInvalid) {
-		t.Fatalf("self chat: got %v", err)
+	self, created, err := s.Chats().CreateDirect(ctx, a.ID, a.ID)
+	if err != nil || !created {
+		t.Fatalf("self chat: %+v created=%v err=%v", self, created, err)
+	}
+	if ps, err := s.Chats().Participants(ctx, self.ID); err != nil || len(ps) != 1 || ps[0].UserID != a.ID {
+		t.Fatalf("self chat participants: %+v, %v", ps, err)
+	}
+	if again, created, err := s.Chats().CreateDirect(ctx, a.ID, a.ID); err != nil || created || again.ID != self.ID {
+		t.Fatalf("self chat again: %+v created=%v err=%v", again, created, err)
 	}
 	if _, _, err := s.Chats().CreateDirect(ctx, a.ID, 999999); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("unknown user: got %v", err)
@@ -853,5 +860,88 @@ func TestPinsAreLimited(t *testing.T) {
 	entries, err := s.Chats().Entries(ctx, me.ID, nil, 10)
 	if err != nil || len(entries) != 3 || entries[0].PinnedAt == nil || entries[1].PinnedAt == nil || entries[2].PinnedAt != nil {
 		t.Fatalf("entries: %+v %v", entries, err)
+	}
+}
+
+func TestPinOrderAndArchive(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	me := mustUser(t, s, "orderer")
+	var chatIDs []int64
+	for i := range 4 {
+		other := mustUser(t, s, fmt.Sprintf("ordered_%d", i))
+		c, _, err := s.Chats().CreateDirect(ctx, me.ID, other.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		chatIDs = append(chatIDs, c.ID)
+	}
+	for _, id := range chatIDs[:3] {
+		if err := s.Chats().Pin(ctx, me.ID, id, 10); err != nil {
+			t.Fatal(err)
+		}
+	}
+	order := func(archived *bool, limit int) []int64 {
+		t.Helper()
+		var out []int64
+		var cur *ChatCursor
+		for {
+			page, err := s.Chats().EntriesOfType(ctx, me.ID, "", archived, cur, limit)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, e := range page {
+				out = append(out, e.Chat.ID)
+			}
+			if len(page) < limit {
+				return out
+			}
+			c := page[len(page)-1].CursorOf()
+			cur = &c
+		}
+	}
+	want := []int64{chatIDs[2], chatIDs[1], chatIDs[0], chatIDs[3]}
+	if got := order(nil, 1); !slices.Equal(got, want) {
+		t.Fatalf("a new pin goes on top: %v, want %v", got, want)
+	}
+	if err := s.Chats().ReorderPins(ctx, me.ID, []int64{chatIDs[0], chatIDs[2], chatIDs[1]}); err != nil {
+		t.Fatal(err)
+	}
+	want = []int64{chatIDs[0], chatIDs[2], chatIDs[1], chatIDs[3]}
+	if got := order(nil, 1); !slices.Equal(got, want) {
+		t.Fatalf("reordered: %v, want %v", got, want)
+	}
+	for _, wrong := range [][]int64{{chatIDs[0], chatIDs[2]}, {chatIDs[0], chatIDs[2], chatIDs[3]}, {chatIDs[0], chatIDs[0], chatIDs[1]}} {
+		if err := s.Chats().ReorderPins(ctx, me.ID, wrong); !errors.Is(err, ErrInvalid) {
+			t.Fatalf("order %v: %v", wrong, err)
+		}
+	}
+
+	if err := s.Chats().SetArchived(ctx, me.ID, chatIDs[2], true); err != nil {
+		t.Fatal(err)
+	}
+	yes, no := true, false
+	if got := order(&yes, 10); !slices.Equal(got, []int64{chatIDs[2]}) {
+		t.Fatalf("archived: %v", got)
+	}
+	if got := order(&no, 10); !slices.Equal(got, []int64{chatIDs[0], chatIDs[1], chatIDs[3]}) {
+		t.Fatalf("not archived: %v", got)
+	}
+	e, err := s.Chats().Entry(ctx, me.ID, chatIDs[2])
+	if err != nil || e.ArchivedAt == nil || e.PinnedAt != nil {
+		t.Fatalf("archiving unpins: %+v %v", e, err)
+	}
+	if err := s.Chats().Pin(ctx, me.ID, chatIDs[2], 10); err != nil {
+		t.Fatal(err)
+	}
+	if e, err := s.Chats().Entry(ctx, me.ID, chatIDs[2]); err != nil || e.ArchivedAt != nil || e.PinPosition == nil {
+		t.Fatalf("pinning unarchives: %+v %v", e, err)
+	}
+	stranger := mustUser(t, s, "archive_stranger")
+	if err := s.Chats().SetArchived(ctx, stranger.ID, chatIDs[0], true); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("archive by a non-member: %v", err)
+	}
+	if got := order(nil, 10); len(got) != 4 {
+		t.Fatalf("every chat without the filter: %v", got)
 	}
 }
