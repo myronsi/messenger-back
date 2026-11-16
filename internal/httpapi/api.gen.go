@@ -2914,8 +2914,9 @@ type UploadAttachmentRequest struct {
 	// `profile_background`: an image (10 MB), an animated GIF (15 MB) or a video of at most 15 s (15 MB). Use it
 	// with `PUT /me/background` or `PUT /groups/{chat_id}/background`.
 	//
-	// `emoji`: a PNG, JPEG or still WebP (scaled into 128 x 128 px) or a GIF of at most 128 x 128 px, at most
-	// 256 KB. Use it with `POST /emoji/packs/{pack_id}/emoji`.
+	// `emoji`: a PNG, JPEG, still WebP or GIF of at most 8 MB. The server scales it into 128 x 128 px (a GIF frame
+	// by frame) and refuses it with `413` when the result is still over 256 KB. Use it with
+	// `POST /emoji/packs/{pack_id}/emoji`.
 	Purpose UploadPurpose `json:"purpose"`
 
 	// StartMs `profile_music` only: where the kept part starts.
@@ -2936,8 +2937,9 @@ type UploadAttachmentRequest struct {
 // `profile_background`: an image (10 MB), an animated GIF (15 MB) or a video of at most 15 s (15 MB). Use it
 // with `PUT /me/background` or `PUT /groups/{chat_id}/background`.
 //
-// `emoji`: a PNG, JPEG or still WebP (scaled into 128 x 128 px) or a GIF of at most 128 x 128 px, at most
-// 256 KB. Use it with `POST /emoji/packs/{pack_id}/emoji`.
+// `emoji`: a PNG, JPEG, still WebP or GIF of at most 8 MB. The server scales it into 128 x 128 px (a GIF frame
+// by frame) and refuses it with `413` when the result is still over 256 KB. Use it with
+// `POST /emoji/packs/{pack_id}/emoji`.
 type UploadPurpose string
 
 // User A user as visible to the requesting user; hidden fields are `null`.

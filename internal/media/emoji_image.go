@@ -13,9 +13,10 @@ import (
 )
 
 const (
-	PurposeEmoji  = postgres.PurposeEmoji
-	EmojiSide     = 128
-	MaxEmojiBytes = 256 << 10
+	PurposeEmoji   = postgres.PurposeEmoji
+	EmojiSide      = 128
+	MaxEmojiBytes  = 256 << 10
+	MaxEmojiSource = 8 << 20
 )
 
 var emojiTypes = map[string]bool{"image/jpeg": true, "image/png": true, "image/webp": true, "image/gif": true}
@@ -34,14 +35,17 @@ func EmojiImage(data []byte, contentType string) (ProcessedImage, error) {
 		if err != nil {
 			return ProcessedImage{}, ErrUnsupported
 		}
-		if cfg.Width > EmojiSide || cfg.Height > EmojiSide {
-			return ProcessedImage{}, fmt.Errorf("%w: an animated emoji is at most %d x %d px", ErrImageTooLarge, EmojiSide, EmojiSide)
+		if cfg.Width <= EmojiSide && cfg.Height <= EmojiSide && len(data) <= MaxEmojiBytes {
+			if frames, area, err := scanGIF(data); err != nil || frames > maxGIFFrames || area > maxGIFArea {
+				return ProcessedImage{}, ErrUnsupported
+			}
+			return ProcessedImage{Data: data, ContentType: "image/gif", Width: cfg.Width, Height: cfg.Height}, nil
 		}
-		frames, area, err := scanGIF(data)
-		if err != nil || frames > maxGIFFrames || area > maxGIFArea {
-			return ProcessedImage{}, ErrUnsupported
+		scaled, w, h, err := ScaleGIF(data, EmojiSide)
+		if err != nil {
+			return ProcessedImage{}, err
 		}
-		return ProcessedImage{Data: data, ContentType: "image/gif", Width: cfg.Width, Height: cfg.Height}, nil
+		return ProcessedImage{Data: scaled, ContentType: "image/gif", Width: w, Height: h}, nil
 	}
 	img, err := squareImage(data, contentType, EmojiSide)
 	if err != nil {
@@ -55,7 +59,7 @@ func EmojiImage(data []byte, contentType string) (ProcessedImage, error) {
 }
 
 func (s *Service) processEmoji(ctx context.Context, f *os.File, size int64, contentType string) (ProcessedImage, error) {
-	if size > MaxEmojiBytes {
+	if size > MaxEmojiSource {
 		return ProcessedImage{}, ErrTooLarge
 	}
 	select {
@@ -73,7 +77,7 @@ func (s *Service) processEmoji(ctx context.Context, f *os.File, size int64, cont
 		return ProcessedImage{}, err
 	}
 	if len(out.Data) > MaxEmojiBytes {
-		return ProcessedImage{}, ErrTooLarge
+		return ProcessedImage{}, fmt.Errorf("%w: the emoji is still over 256 KB after scaling; use fewer frames or colors", ErrTooLarge)
 	}
 	return out, nil
 }

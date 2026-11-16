@@ -27,6 +27,25 @@ func gifBytes(t *testing.T, side, frames int) []byte {
 	return buf.Bytes()
 }
 
+func TestScaleGIFKeepsFramesAndAspect(t *testing.T) {
+	scaled, w, h, err := media.ScaleGIF(gifBytes(t, 256, 4), media.EmojiSide)
+	if err != nil || w != media.EmojiSide || h != media.EmojiSide {
+		t.Fatalf("scaled %dx%d %v", w, h, err)
+	}
+	g, err := gif.DecodeAll(bytes.NewReader(scaled))
+	if err != nil || len(g.Image) != 4 || g.Image[0].Bounds().Dx() != media.EmojiSide {
+		t.Fatalf("frames %v %v", g, err)
+	}
+	wide := &gif.GIF{Image: []*image.Paletted{image.NewPaletted(image.Rect(0, 0, 400, 100), color.Palette{color.Black, color.White})}, Delay: []int{0}}
+	var buf bytes.Buffer
+	if err := gif.EncodeAll(&buf, wide); err != nil {
+		t.Fatal(err)
+	}
+	if _, w, h, err := media.ScaleGIF(buf.Bytes(), media.EmojiSide); err != nil || w != 128 || h != 32 {
+		t.Fatalf("wide gif %dx%d %v", w, h, err)
+	}
+}
+
 func TestEmojiUploads(t *testing.T) {
 	svc := memService(newMemStorage(0), newMemAttachments(), nil)
 	still, err := svc.Upload(t.Context(), media.Upload{UploaderID: 1, Purpose: media.PurposeEmoji, Filename: "e.jpg", Body: bytes.NewReader(photoJPEG(t, 400, 200))})
@@ -37,15 +56,16 @@ func TestEmojiUploads(t *testing.T) {
 	if err != nil || anim.MimeType != "image/gif" || *anim.Width != 64 {
 		t.Fatalf("animated emoji %+v %v", anim, err)
 	}
-	if _, err := svc.Upload(t.Context(), media.Upload{UploaderID: 1, Purpose: media.PurposeEmoji, Body: bytes.NewReader(gifBytes(t, 200, 2))}); !errors.Is(err, media.ErrImageTooLarge) {
-		t.Fatalf("big gif: %v", err)
+	big, err := svc.Upload(t.Context(), media.Upload{UploaderID: 1, Purpose: media.PurposeEmoji, Body: bytes.NewReader(gifBytes(t, 200, 3))})
+	if err != nil || big.MimeType != "image/gif" || *big.Width != media.EmojiSide || *big.Height != media.EmojiSide {
+		t.Fatalf("big gif is scaled: %+v %v", big, err)
 	}
 	if _, err := svc.Upload(t.Context(), media.Upload{UploaderID: 1, Purpose: media.PurposeEmoji, Body: bytes.NewReader([]byte("%PDF-1.7 not an image"))}); !errors.Is(err, media.ErrUnsupported) {
 		t.Fatalf("pdf: %v", err)
 	}
-	big := append(gifBytes(t, 64, 1), make([]byte, media.MaxEmojiBytes)...)
-	if _, err := svc.Upload(t.Context(), media.Upload{UploaderID: 1, Purpose: media.PurposeEmoji, Body: bytes.NewReader(big)}); !errors.Is(err, media.ErrTooLarge) {
-		t.Fatalf("over 256 KB: %v", err)
+	huge := append(gifBytes(t, 64, 1), make([]byte, media.MaxEmojiSource)...)
+	if _, err := svc.Upload(t.Context(), media.Upload{UploaderID: 1, Purpose: media.PurposeEmoji, Body: bytes.NewReader(huge)}); !errors.Is(err, media.ErrTooLarge) {
+		t.Fatalf("over the source limit: %v", err)
 	}
 	if _, err := svc.Upload(t.Context(), media.Upload{UploaderID: 1, Purpose: media.PurposeEmoji, Kind: media.KindAudio, Body: bytes.NewReader(photoJPEG(t, 10, 10))}); !errors.Is(err, media.ErrInvalid) {
 		t.Fatalf("emoji as audio: %v", err)
