@@ -233,6 +233,54 @@ func (e ClearHistoryRequestScope) Valid() bool {
 	}
 }
 
+// Defines values for ConnectionProvider.
+const (
+	Bluesky  ConnectionProvider = "bluesky"
+	Discord  ConnectionProvider = "discord"
+	Github   ConnectionProvider = "github"
+	Mastodon ConnectionProvider = "mastodon"
+	Reddit   ConnectionProvider = "reddit"
+	Roblox   ConnectionProvider = "roblox"
+	Spotify  ConnectionProvider = "spotify"
+	Steam    ConnectionProvider = "steam"
+	Twitch   ConnectionProvider = "twitch"
+	Website  ConnectionProvider = "website"
+	Xbox     ConnectionProvider = "xbox"
+	Youtube  ConnectionProvider = "youtube"
+)
+
+// Valid indicates whether the value is a known member of the ConnectionProvider enum.
+func (e ConnectionProvider) Valid() bool {
+	switch e {
+	case Bluesky:
+		return true
+	case Discord:
+		return true
+	case Github:
+		return true
+	case Mastodon:
+		return true
+	case Reddit:
+		return true
+	case Roblox:
+		return true
+	case Spotify:
+		return true
+	case Steam:
+		return true
+	case Twitch:
+		return true
+	case Website:
+		return true
+	case Xbox:
+		return true
+	case Youtube:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for DeleteMessagesRequestScope.
 const (
 	DeleteMessagesRequestScopeEveryone DeleteMessagesRequestScope = "everyone"
@@ -1422,6 +1470,61 @@ type CommonGroupPage struct {
 	NextCursor *Cursor `json:"next_cursor"`
 }
 
+// Connection defines model for Connection.
+type Connection struct {
+	DisplayName string `json:"display_name"`
+
+	// Id Decimal ID as a string (Snowflake IDs exceed 2^53).
+	//
+	// Examples: 7217400317439950848
+	Id Id `json:"id"`
+
+	// ProfileUrl The public https page of the account; `null` when the provider has none.
+	ProfileUrl *string `json:"profile_url"`
+
+	// Provider Providers that sign the user in: `github`, `spotify`, `steam`, `xbox`, `discord`, `twitch`, `youtube`,
+	// `reddit`, `roblox`. Verified with a published code: `bluesky`, `mastodon`, `website`. Clients show a generic
+	// icon for a provider they do not know.
+	Provider   ConnectionProvider `json:"provider"`
+	VerifiedAt Timestamp          `json:"verified_at"`
+}
+
+// ConnectionChallenge defines model for ConnectionChallenge.
+type ConnectionChallenge struct {
+	// Code The text to publish, such as `messenger-verify=ab12cd34ef56gh78`.
+	Code      string    `json:"code"`
+	ExpiresAt Timestamp `json:"expires_at"`
+
+	// Identifier The account or domain as the server understood it.
+	Identifier string `json:"identifier"`
+}
+
+// ConnectionClaimRequest defines model for ConnectionClaimRequest.
+type ConnectionClaimRequest struct {
+	// Identifier A Bluesky handle (`alice.bsky.social`), a Mastodon account (`@alice@mastodon.social` or its URL), or a domain or URL.
+	Identifier string `json:"identifier"`
+}
+
+// ConnectionList defines model for ConnectionList.
+type ConnectionList struct {
+	Items []Connection `json:"items"`
+}
+
+// ConnectionOrderRequest defines model for ConnectionOrderRequest.
+type ConnectionOrderRequest struct {
+	Ids []Id `json:"ids"`
+}
+
+// ConnectionProvider Providers that sign the user in: `github`, `spotify`, `steam`, `xbox`, `discord`, `twitch`, `youtube`,
+// `reddit`, `roblox`. Verified with a published code: `bluesky`, `mastodon`, `website`. Clients show a generic
+// icon for a provider they do not know.
+type ConnectionProvider string
+
+// ConnectionStart defines model for ConnectionStart.
+type ConnectionStart struct {
+	RedirectUrl string `json:"redirect_url"`
+}
+
 // ContactNameRequest defines model for ContactNameRequest.
 type ContactNameRequest struct {
 	ContactName string `json:"contact_name"`
@@ -1874,6 +1977,9 @@ type Meta struct {
 
 	// Commit Examples: abc1234
 	Commit string `json:"commit"`
+
+	// ConnectionProviders The connected-account providers this server offers.
+	ConnectionProviders []ConnectionProvider `json:"connection_providers"`
 
 	// MinClientApiVersion Examples: 2.0.0
 	MinClientApiVersion string `json:"min_client_api_version"`
@@ -2822,6 +2928,11 @@ type ClientApiVersion = string
 
 // ClientVersion defines model for ClientVersion.
 type ClientVersion = string
+
+// ConnectionProviderPath Providers that sign the user in: `github`, `spotify`, `steam`, `xbox`, `discord`, `twitch`, `youtube`,
+// `reddit`, `roblox`. Verified with a published code: `bluesky`, `mastodon`, `website`. Clients show a generic
+// icon for a provider they do not know.
+type ConnectionProviderPath = ConnectionProvider
 
 // Limit defines model for Limit.
 type Limit = int
@@ -3796,6 +3907,60 @@ type SetCallIdentityParams struct {
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
 }
 
+// ListMyConnectionsParams defines parameters for ListMyConnections.
+type ListMyConnectionsParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// ReorderMyConnectionsParams defines parameters for ReorderMyConnections.
+type ReorderMyConnectionsParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// DeleteMyConnectionParams defines parameters for DeleteMyConnection.
+type DeleteMyConnectionParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// ClaimConnectionParams defines parameters for ClaimConnection.
+type ClaimConnectionParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// StartConnectionParams defines parameters for StartConnection.
+type StartConnectionParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// VerifyConnectionParams defines parameters for VerifyConnection.
+type VerifyConnectionParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
 // RemoveRecoveryEmailParams defines parameters for RemoveRecoveryEmail.
 type RemoveRecoveryEmailParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
@@ -4264,6 +4429,15 @@ type ListCommonGroupsParams struct {
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
 }
 
+// ListUserConnectionsParams defines parameters for ListUserConnections.
+type ListUserConnectionsParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
 // RemoveContactNameParams defines parameters for RemoveContactName.
 type RemoveContactNameParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
@@ -4425,6 +4599,12 @@ type SetMyBackgroundJSONRequestBody = SetBackgroundRequest
 
 // SetCallIdentityJSONRequestBody defines body for SetCallIdentity for application/json ContentType.
 type SetCallIdentityJSONRequestBody = CallIdentityRequest
+
+// ReorderMyConnectionsJSONRequestBody defines body for ReorderMyConnections for application/json ContentType.
+type ReorderMyConnectionsJSONRequestBody = ConnectionOrderRequest
+
+// ClaimConnectionJSONRequestBody defines body for ClaimConnection for application/json ContentType.
+type ClaimConnectionJSONRequestBody = ConnectionClaimRequest
 
 // RemoveRecoveryEmailJSONRequestBody defines body for RemoveRecoveryEmail for application/json ContentType.
 type RemoveRecoveryEmailJSONRequestBody = RemoveRecoveryEmail
@@ -4978,6 +5158,9 @@ type ServerInterface interface {
 	// DeleteUnsentMessage Discard a rejected send
 	// (DELETE /chats/{chat_id}/unsent/{client_temp_id})
 	DeleteUnsentMessage(w http.ResponseWriter, r *http.Request, chatId ChatId, clientTempId ClientTempId, params DeleteUnsentMessageParams)
+	// ConnectionCallback Where a provider sends the browser back
+	// (GET /connections/callback/{provider})
+	ConnectionCallback(w http.ResponseWriter, r *http.Request, provider ConnectionProviderPath)
 	// ListGroups My groups
 	// (GET /groups)
 	ListGroups(w http.ResponseWriter, r *http.Request, params ListGroupsParams)
@@ -5071,6 +5254,24 @@ type ServerInterface interface {
 	// SetCallIdentity Register this session's call identity public key
 	// (PUT /me/call-identity)
 	SetCallIdentity(w http.ResponseWriter, r *http.Request, params SetCallIdentityParams)
+	// ListMyConnections Your connected accounts
+	// (GET /me/connections)
+	ListMyConnections(w http.ResponseWriter, r *http.Request, params ListMyConnectionsParams)
+	// ReorderMyConnections Order your connected accounts
+	// (PUT /me/connections/order)
+	ReorderMyConnections(w http.ResponseWriter, r *http.Request, params ReorderMyConnectionsParams)
+	// DeleteMyConnection Remove a connected account
+	// (DELETE /me/connections/{connection_id})
+	DeleteMyConnection(w http.ResponseWriter, r *http.Request, connectionId Id, params DeleteMyConnectionParams)
+	// ClaimConnection Start verifying a Bluesky handle, a Mastodon account or a website
+	// (POST /me/connections/{provider}/claim)
+	ClaimConnection(w http.ResponseWriter, r *http.Request, provider ConnectionProviderPath, params ClaimConnectionParams)
+	// StartConnection Start connecting an account at a provider that signs you in
+	// (POST /me/connections/{provider}/start)
+	StartConnection(w http.ResponseWriter, r *http.Request, provider ConnectionProviderPath, params StartConnectionParams)
+	// VerifyConnection Check the published code and connect the account
+	// (POST /me/connections/{provider}/verify)
+	VerifyConnection(w http.ResponseWriter, r *http.Request, provider ConnectionProviderPath, params VerifyConnectionParams)
 	// RemoveRecoveryEmail Remove the recovery email after password verification
 	// (DELETE /me/email)
 	RemoveRecoveryEmail(w http.ResponseWriter, r *http.Request, params RemoveRecoveryEmailParams)
@@ -5230,6 +5431,9 @@ type ServerInterface interface {
 	// ListCommonGroups Groups the caller and the user are both in
 	// (GET /users/{user_id}/common-groups)
 	ListCommonGroups(w http.ResponseWriter, r *http.Request, userId Id, params ListCommonGroupsParams)
+	// ListUserConnections A user's connected accounts
+	// (GET /users/{user_id}/connections)
+	ListUserConnections(w http.ResponseWriter, r *http.Request, userId Id, params ListUserConnectionsParams)
 	// RemoveContactName Remove your display name for a user
 	// (DELETE /users/{user_id}/contact-name)
 	RemoveContactName(w http.ResponseWriter, r *http.Request, userId UserId, params RemoveContactNameParams)
@@ -9491,6 +9695,32 @@ func (siw *ServerInterfaceWrapper) DeleteUnsentMessage(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
+// ConnectionCallback operation middleware
+func (siw *ServerInterfaceWrapper) ConnectionCallback(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "provider" -------------
+	var provider ConnectionProviderPath
+
+	err = runtime.BindStyledParameterWithOptions("simple", "provider", r.PathValue("provider"), &provider, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "provider", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ConnectionCallback(w, r, provider)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListGroups operation middleware
 func (siw *ServerInterfaceWrapper) ListGroups(w http.ResponseWriter, r *http.Request) {
 
@@ -11634,6 +11864,402 @@ func (siw *ServerInterfaceWrapper) SetCallIdentity(w http.ResponseWriter, r *htt
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.SetCallIdentity(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListMyConnections operation middleware
+func (siw *ServerInterfaceWrapper) ListMyConnections(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListMyConnectionsParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListMyConnections(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReorderMyConnections operation middleware
+func (siw *ServerInterfaceWrapper) ReorderMyConnections(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ReorderMyConnectionsParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReorderMyConnections(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteMyConnection operation middleware
+func (siw *ServerInterfaceWrapper) DeleteMyConnection(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "connection_id" -------------
+	var connectionId Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "connection_id", r.PathValue("connection_id"), &connectionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "connection_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteMyConnectionParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteMyConnection(w, r, connectionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ClaimConnection operation middleware
+func (siw *ServerInterfaceWrapper) ClaimConnection(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "provider" -------------
+	var provider ConnectionProviderPath
+
+	err = runtime.BindStyledParameterWithOptions("simple", "provider", r.PathValue("provider"), &provider, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "provider", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ClaimConnectionParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ClaimConnection(w, r, provider, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// StartConnection operation middleware
+func (siw *ServerInterfaceWrapper) StartConnection(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "provider" -------------
+	var provider ConnectionProviderPath
+
+	err = runtime.BindStyledParameterWithOptions("simple", "provider", r.PathValue("provider"), &provider, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "provider", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params StartConnectionParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StartConnection(w, r, provider, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// VerifyConnection operation middleware
+func (siw *ServerInterfaceWrapper) VerifyConnection(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "provider" -------------
+	var provider ConnectionProviderPath
+
+	err = runtime.BindStyledParameterWithOptions("simple", "provider", r.PathValue("provider"), &provider, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "provider", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params VerifyConnectionParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.VerifyConnection(w, r, provider, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -15010,6 +15636,75 @@ func (siw *ServerInterfaceWrapper) ListCommonGroups(w http.ResponseWriter, r *ht
 	handler.ServeHTTP(w, r)
 }
 
+// ListUserConnections operation middleware
+func (siw *ServerInterfaceWrapper) ListUserConnections(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "user_id" -------------
+	var userId Id
+
+	err = runtime.BindStyledParameterWithOptions("simple", "user_id", r.PathValue("user_id"), &userId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "user_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListUserConnectionsParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListUserConnections(w, r, userId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // RemoveContactName operation middleware
 func (siw *ServerInterfaceWrapper) RemoveContactName(w http.ResponseWriter, r *http.Request) {
 
@@ -15365,6 +16060,14 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/me/blocked-users/{user_id}", wrapper.BlockUser)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/users", wrapper.SearchUsers)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/usernames/{username}", wrapper.GetUserByUsername)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/connections", wrapper.ListMyConnections)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/me/connections/order", wrapper.ReorderMyConnections)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/me/connections/{connection_id}", wrapper.DeleteMyConnection)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/me/connections/{provider}/start", wrapper.StartConnection)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/me/connections/{provider}/claim", wrapper.ClaimConnection)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/me/connections/{provider}/verify", wrapper.VerifyConnection)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/connections/callback/{provider}", wrapper.ConnectionCallback)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/users/{user_id}/connections", wrapper.ListUserConnections)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/users/{user_id}/common-groups", wrapper.ListCommonGroups)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/users/{user_id}", wrapper.GetUser)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/users/{user_id}/avatar", wrapper.GetUserAvatar)
@@ -22772,6 +23475,46 @@ func (response DeleteUnsentMessage426ApplicationProblemPlusJSONResponse) VisitDe
 	return err
 }
 
+type ConnectionCallbackRequestObject struct {
+	Provider ConnectionProviderPath `json:"provider"`
+}
+
+type ConnectionCallbackResponseObject interface {
+	VisitConnectionCallbackResponse(w http.ResponseWriter) error
+}
+
+type ConnectionCallback302ResponseHeaders struct {
+	Location *string
+}
+
+type ConnectionCallback302Response struct {
+	Headers ConnectionCallback302ResponseHeaders
+}
+
+func (response ConnectionCallback302Response) VisitConnectionCallbackResponse(w http.ResponseWriter) error {
+	if response.Headers.Location != nil {
+		w.Header().Set("Location", fmt.Sprint(*response.Headers.Location))
+	}
+	w.WriteHeader(302)
+	return nil
+}
+
+type ConnectionCallback400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response ConnectionCallback400ApplicationProblemPlusJSONResponse) VisitConnectionCallbackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListGroupsRequestObject struct {
 	Params ListGroupsParams
 }
@@ -25834,6 +26577,611 @@ func (response SetCallIdentity503ApplicationProblemPlusJSONResponse) VisitSetCal
 		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
 	}
 	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListMyConnectionsRequestObject struct {
+	Params ListMyConnectionsParams
+}
+
+type ListMyConnectionsResponseObject interface {
+	VisitListMyConnectionsResponse(w http.ResponseWriter) error
+}
+
+type ListMyConnections200JSONResponse ConnectionList
+
+func (response ListMyConnections200JSONResponse) VisitListMyConnectionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListMyConnections401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ListMyConnections401ApplicationProblemPlusJSONResponse) VisitListMyConnectionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListMyConnections426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response ListMyConnections426ApplicationProblemPlusJSONResponse) VisitListMyConnectionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReorderMyConnectionsRequestObject struct {
+	Params ReorderMyConnectionsParams
+	Body   *ReorderMyConnectionsJSONRequestBody
+}
+
+type ReorderMyConnectionsResponseObject interface {
+	VisitReorderMyConnectionsResponse(w http.ResponseWriter) error
+}
+
+type ReorderMyConnections200JSONResponse ConnectionList
+
+func (response ReorderMyConnections200JSONResponse) VisitReorderMyConnectionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReorderMyConnections400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response ReorderMyConnections400ApplicationProblemPlusJSONResponse) VisitReorderMyConnectionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReorderMyConnections401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ReorderMyConnections401ApplicationProblemPlusJSONResponse) VisitReorderMyConnectionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReorderMyConnections422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response ReorderMyConnections422ApplicationProblemPlusJSONResponse) VisitReorderMyConnectionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReorderMyConnections426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response ReorderMyConnections426ApplicationProblemPlusJSONResponse) VisitReorderMyConnectionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMyConnectionRequestObject struct {
+	ConnectionId Id `json:"connection_id"`
+	Params       DeleteMyConnectionParams
+}
+
+type DeleteMyConnectionResponseObject interface {
+	VisitDeleteMyConnectionResponse(w http.ResponseWriter) error
+}
+
+type DeleteMyConnection204Response struct {
+}
+
+func (response DeleteMyConnection204Response) VisitDeleteMyConnectionResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteMyConnection400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteMyConnection400ApplicationProblemPlusJSONResponse) VisitDeleteMyConnectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMyConnection401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteMyConnection401ApplicationProblemPlusJSONResponse) VisitDeleteMyConnectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMyConnection404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteMyConnection404ApplicationProblemPlusJSONResponse) VisitDeleteMyConnectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMyConnection426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteMyConnection426ApplicationProblemPlusJSONResponse) VisitDeleteMyConnectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ClaimConnectionRequestObject struct {
+	Provider ConnectionProviderPath `json:"provider"`
+	Params   ClaimConnectionParams
+	Body     *ClaimConnectionJSONRequestBody
+}
+
+type ClaimConnectionResponseObject interface {
+	VisitClaimConnectionResponse(w http.ResponseWriter) error
+}
+
+type ClaimConnection200JSONResponse ConnectionChallenge
+
+func (response ClaimConnection200JSONResponse) VisitClaimConnectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ClaimConnection400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response ClaimConnection400ApplicationProblemPlusJSONResponse) VisitClaimConnectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ClaimConnection401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ClaimConnection401ApplicationProblemPlusJSONResponse) VisitClaimConnectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ClaimConnection404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response ClaimConnection404ApplicationProblemPlusJSONResponse) VisitClaimConnectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ClaimConnection409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response ClaimConnection409ApplicationProblemPlusJSONResponse) VisitClaimConnectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ClaimConnection422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response ClaimConnection422ApplicationProblemPlusJSONResponse) VisitClaimConnectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ClaimConnection426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response ClaimConnection426ApplicationProblemPlusJSONResponse) VisitClaimConnectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ClaimConnection429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response ClaimConnection429ApplicationProblemPlusJSONResponse) VisitClaimConnectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartConnectionRequestObject struct {
+	Provider ConnectionProviderPath `json:"provider"`
+	Params   StartConnectionParams
+}
+
+type StartConnectionResponseObject interface {
+	VisitStartConnectionResponse(w http.ResponseWriter) error
+}
+
+type StartConnection200JSONResponse ConnectionStart
+
+func (response StartConnection200JSONResponse) VisitStartConnectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartConnection401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response StartConnection401ApplicationProblemPlusJSONResponse) VisitStartConnectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartConnection404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response StartConnection404ApplicationProblemPlusJSONResponse) VisitStartConnectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartConnection409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response StartConnection409ApplicationProblemPlusJSONResponse) VisitStartConnectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartConnection422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response StartConnection422ApplicationProblemPlusJSONResponse) VisitStartConnectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartConnection426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response StartConnection426ApplicationProblemPlusJSONResponse) VisitStartConnectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartConnection429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response StartConnection429ApplicationProblemPlusJSONResponse) VisitStartConnectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifyConnectionRequestObject struct {
+	Provider ConnectionProviderPath `json:"provider"`
+	Params   VerifyConnectionParams
+}
+
+type VerifyConnectionResponseObject interface {
+	VisitVerifyConnectionResponse(w http.ResponseWriter) error
+}
+
+type VerifyConnection201JSONResponse Connection
+
+func (response VerifyConnection201JSONResponse) VisitVerifyConnectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifyConnection401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response VerifyConnection401ApplicationProblemPlusJSONResponse) VisitVerifyConnectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifyConnection404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response VerifyConnection404ApplicationProblemPlusJSONResponse) VisitVerifyConnectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifyConnection409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response VerifyConnection409ApplicationProblemPlusJSONResponse) VisitVerifyConnectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifyConnection422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response VerifyConnection422ApplicationProblemPlusJSONResponse) VisitVerifyConnectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifyConnection426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response VerifyConnection426ApplicationProblemPlusJSONResponse) VisitVerifyConnectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifyConnection429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response VerifyConnection429ApplicationProblemPlusJSONResponse) VisitVerifyConnectionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -31089,6 +32437,101 @@ func (response ListCommonGroups426ApplicationProblemPlusJSONResponse) VisitListC
 	return err
 }
 
+type ListUserConnectionsRequestObject struct {
+	UserId Id `json:"user_id"`
+	Params ListUserConnectionsParams
+}
+
+type ListUserConnectionsResponseObject interface {
+	VisitListUserConnectionsResponse(w http.ResponseWriter) error
+}
+
+type ListUserConnections200JSONResponse ConnectionList
+
+func (response ListUserConnections200JSONResponse) VisitListUserConnectionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListUserConnections304Response struct {
+}
+
+func (response ListUserConnections304Response) VisitListUserConnectionsResponse(w http.ResponseWriter) error {
+	w.WriteHeader(304)
+	return nil
+}
+
+type ListUserConnections400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response ListUserConnections400ApplicationProblemPlusJSONResponse) VisitListUserConnectionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListUserConnections401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ListUserConnections401ApplicationProblemPlusJSONResponse) VisitListUserConnectionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListUserConnections404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response ListUserConnections404ApplicationProblemPlusJSONResponse) VisitListUserConnectionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListUserConnections426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response ListUserConnections426ApplicationProblemPlusJSONResponse) VisitListUserConnectionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type RemoveContactNameRequestObject struct {
 	UserId UserId `json:"user_id"`
 	Params RemoveContactNameParams
@@ -31570,6 +33013,9 @@ type StrictServerInterface interface {
 	// DeleteUnsentMessage Discard a rejected send
 	// (DELETE /chats/{chat_id}/unsent/{client_temp_id})
 	DeleteUnsentMessage(ctx context.Context, request DeleteUnsentMessageRequestObject) (DeleteUnsentMessageResponseObject, error)
+	// ConnectionCallback Where a provider sends the browser back
+	// (GET /connections/callback/{provider})
+	ConnectionCallback(ctx context.Context, request ConnectionCallbackRequestObject) (ConnectionCallbackResponseObject, error)
 	// ListGroups My groups
 	// (GET /groups)
 	ListGroups(ctx context.Context, request ListGroupsRequestObject) (ListGroupsResponseObject, error)
@@ -31663,6 +33109,24 @@ type StrictServerInterface interface {
 	// SetCallIdentity Register this session's call identity public key
 	// (PUT /me/call-identity)
 	SetCallIdentity(ctx context.Context, request SetCallIdentityRequestObject) (SetCallIdentityResponseObject, error)
+	// ListMyConnections Your connected accounts
+	// (GET /me/connections)
+	ListMyConnections(ctx context.Context, request ListMyConnectionsRequestObject) (ListMyConnectionsResponseObject, error)
+	// ReorderMyConnections Order your connected accounts
+	// (PUT /me/connections/order)
+	ReorderMyConnections(ctx context.Context, request ReorderMyConnectionsRequestObject) (ReorderMyConnectionsResponseObject, error)
+	// DeleteMyConnection Remove a connected account
+	// (DELETE /me/connections/{connection_id})
+	DeleteMyConnection(ctx context.Context, request DeleteMyConnectionRequestObject) (DeleteMyConnectionResponseObject, error)
+	// ClaimConnection Start verifying a Bluesky handle, a Mastodon account or a website
+	// (POST /me/connections/{provider}/claim)
+	ClaimConnection(ctx context.Context, request ClaimConnectionRequestObject) (ClaimConnectionResponseObject, error)
+	// StartConnection Start connecting an account at a provider that signs you in
+	// (POST /me/connections/{provider}/start)
+	StartConnection(ctx context.Context, request StartConnectionRequestObject) (StartConnectionResponseObject, error)
+	// VerifyConnection Check the published code and connect the account
+	// (POST /me/connections/{provider}/verify)
+	VerifyConnection(ctx context.Context, request VerifyConnectionRequestObject) (VerifyConnectionResponseObject, error)
 	// RemoveRecoveryEmail Remove the recovery email after password verification
 	// (DELETE /me/email)
 	RemoveRecoveryEmail(ctx context.Context, request RemoveRecoveryEmailRequestObject) (RemoveRecoveryEmailResponseObject, error)
@@ -31822,6 +33286,9 @@ type StrictServerInterface interface {
 	// ListCommonGroups Groups the caller and the user are both in
 	// (GET /users/{user_id}/common-groups)
 	ListCommonGroups(ctx context.Context, request ListCommonGroupsRequestObject) (ListCommonGroupsResponseObject, error)
+	// ListUserConnections A user's connected accounts
+	// (GET /users/{user_id}/connections)
+	ListUserConnections(ctx context.Context, request ListUserConnectionsRequestObject) (ListUserConnectionsResponseObject, error)
 	// RemoveContactName Remove your display name for a user
 	// (DELETE /users/{user_id}/contact-name)
 	RemoveContactName(ctx context.Context, request RemoveContactNameRequestObject) (RemoveContactNameResponseObject, error)
@@ -33740,6 +35207,32 @@ func (sh *strictHandler) DeleteUnsentMessage(w http.ResponseWriter, r *http.Requ
 	}
 }
 
+// ConnectionCallback operation middleware
+func (sh *strictHandler) ConnectionCallback(w http.ResponseWriter, r *http.Request, provider ConnectionProviderPath) {
+	var request ConnectionCallbackRequestObject
+
+	request.Provider = provider
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ConnectionCallback(ctx, request.(ConnectionCallbackRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ConnectionCallback")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ConnectionCallbackResponseObject); ok {
+		if err := validResponse.VisitConnectionCallbackResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListGroups operation middleware
 func (sh *strictHandler) ListGroups(w http.ResponseWriter, r *http.Request, params ListGroupsParams) {
 	var request ListGroupsRequestObject
@@ -34662,6 +36155,180 @@ func (sh *strictHandler) SetCallIdentity(w http.ResponseWriter, r *http.Request,
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(SetCallIdentityResponseObject); ok {
 		if err := validResponse.VisitSetCallIdentityResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListMyConnections operation middleware
+func (sh *strictHandler) ListMyConnections(w http.ResponseWriter, r *http.Request, params ListMyConnectionsParams) {
+	var request ListMyConnectionsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListMyConnections(ctx, request.(ListMyConnectionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListMyConnections")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListMyConnectionsResponseObject); ok {
+		if err := validResponse.VisitListMyConnectionsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ReorderMyConnections operation middleware
+func (sh *strictHandler) ReorderMyConnections(w http.ResponseWriter, r *http.Request, params ReorderMyConnectionsParams) {
+	var request ReorderMyConnectionsRequestObject
+
+	request.Params = params
+
+	var body ReorderMyConnectionsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ReorderMyConnections(ctx, request.(ReorderMyConnectionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ReorderMyConnections")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ReorderMyConnectionsResponseObject); ok {
+		if err := validResponse.VisitReorderMyConnectionsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteMyConnection operation middleware
+func (sh *strictHandler) DeleteMyConnection(w http.ResponseWriter, r *http.Request, connectionId Id, params DeleteMyConnectionParams) {
+	var request DeleteMyConnectionRequestObject
+
+	request.ConnectionId = connectionId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteMyConnection(ctx, request.(DeleteMyConnectionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteMyConnection")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteMyConnectionResponseObject); ok {
+		if err := validResponse.VisitDeleteMyConnectionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ClaimConnection operation middleware
+func (sh *strictHandler) ClaimConnection(w http.ResponseWriter, r *http.Request, provider ConnectionProviderPath, params ClaimConnectionParams) {
+	var request ClaimConnectionRequestObject
+
+	request.Provider = provider
+	request.Params = params
+
+	var body ClaimConnectionJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ClaimConnection(ctx, request.(ClaimConnectionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ClaimConnection")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ClaimConnectionResponseObject); ok {
+		if err := validResponse.VisitClaimConnectionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// StartConnection operation middleware
+func (sh *strictHandler) StartConnection(w http.ResponseWriter, r *http.Request, provider ConnectionProviderPath, params StartConnectionParams) {
+	var request StartConnectionRequestObject
+
+	request.Provider = provider
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.StartConnection(ctx, request.(StartConnectionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "StartConnection")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(StartConnectionResponseObject); ok {
+		if err := validResponse.VisitStartConnectionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// VerifyConnection operation middleware
+func (sh *strictHandler) VerifyConnection(w http.ResponseWriter, r *http.Request, provider ConnectionProviderPath, params VerifyConnectionParams) {
+	var request VerifyConnectionRequestObject
+
+	request.Provider = provider
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.VerifyConnection(ctx, request.(VerifyConnectionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "VerifyConnection")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(VerifyConnectionResponseObject); ok {
+		if err := validResponse.VisitVerifyConnectionResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -36191,6 +37858,33 @@ func (sh *strictHandler) ListCommonGroups(w http.ResponseWriter, r *http.Request
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListCommonGroupsResponseObject); ok {
 		if err := validResponse.VisitListCommonGroupsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListUserConnections operation middleware
+func (sh *strictHandler) ListUserConnections(w http.ResponseWriter, r *http.Request, userId Id, params ListUserConnectionsParams) {
+	var request ListUserConnectionsRequestObject
+
+	request.UserId = userId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListUserConnections(ctx, request.(ListUserConnectionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListUserConnections")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListUserConnectionsResponseObject); ok {
+		if err := validResponse.VisitListUserConnectionsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

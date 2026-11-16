@@ -16,6 +16,7 @@ type Server struct {
 	notifications *NotificationOptions
 	calls         *CallServer
 	stickers      *StickerServer
+	connections   *ConnectionServer
 }
 
 // WithMessages adds history, sending, editing, deleting and forwarding over HTTP, and the media lists.
@@ -160,7 +161,13 @@ func (s *Server) WithChats(c *ChatServer) *Server { s.chats = c; return s }
 func (s *Server) WithAccount(a *AccountServer) *Server { s.account = a; return s }
 
 // WithMeta sets what GET /meta reports.
-func (s *Server) WithMeta(m MetaInfo) *Server { s.meta = m; return s }
+func (s *Server) WithMeta(m MetaInfo) *Server {
+	if m.ConnectionProviders == nil {
+		m.ConnectionProviders = s.meta.ConnectionProviders
+	}
+	s.meta = m
+	return s
+}
 
 // GetMeta implements GET /meta.
 func (s *Server) GetMeta(w http.ResponseWriter, _ *http.Request) { s.meta.serve(w) }

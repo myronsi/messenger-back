@@ -2,6 +2,18 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.30
+
+- Connected accounts (`Connection`, `ConnectionList`, `ConnectionProvider`): `GET /me/connections`,
+  `PUT /me/connections/order`, `DELETE /me/connections/{connection_id}` and `GET /users/{user_id}/connections`
+  (visible like the bio). At most 15 per user.
+- Providers that sign the user in: `POST /me/connections/{provider}/start` returns a `redirect_url`; the provider
+  sends the browser back to `GET /connections/callback/{provider}`, which redirects to the web app with `provider` and
+  `result`.
+- Bluesky, Mastodon and websites: `POST /me/connections/{provider}/claim` returns a code to publish,
+  `POST /me/connections/{provider}/verify` checks it.
+- `Meta` gains the required `connection_providers`: the providers this server offers.
+
 ## 2.1.0-alpha.29
 
 - `User` gains the required `pronouns`, `birthday` (`Birthday`: day, month, optional year), `music`

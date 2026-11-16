@@ -98,3 +98,5 @@ func newClient(allow func(netip.Addr) bool, anyPort bool) *http.Client {
 		},
 	}
 }
+
+func SafeClient() *http.Client { return newClient(PublicAddr, false) }
