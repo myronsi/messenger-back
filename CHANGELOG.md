@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.18.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.17.0-alpha.1...v1.18.0-alpha.1) (2026-11-16)
+
+
+### Features
+
+* **profiles:** pronouns, birthdays, profile music and backgrounds ([#193](https://github.com/myronsi/messenger-back/issues/193)) ([2b6bc46](https://github.com/myronsi/messenger-back/commit/2b6bc46be47a9f8ef106974a277fb3a41046bb83))
+
 ## [1.17.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.16.0-alpha.1...v1.17.0-alpha.1) (2026-11-12)
 
 
