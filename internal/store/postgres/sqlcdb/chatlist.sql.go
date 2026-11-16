@@ -237,7 +237,7 @@ func (q *Queries) GetApprovalRequest(ctx context.Context, id int64) (ApprovalReq
 }
 
 const getChatEntry = `-- name: GetChatEntry :one
-SELECT c.id, c.type, c.name, c.description, c.avatar_url, c.direct_key, c.created_by, c.created_at, c.updated_at, c.avatar_attachment_id, c.last_message_id, c.last_activity_at, c.cleared_before_message_id, p.role, p.last_read_message_id, p.archived_at, p.cleared_before_message_id AS my_cleared_before_message_id, p.hidden_at,
+SELECT c.id, c.type, c.name, c.description, c.avatar_url, c.direct_key, c.created_by, c.created_at, c.updated_at, c.avatar_attachment_id, c.last_message_id, c.last_activity_at, c.cleared_before_message_id, c.background_kind, c.background_attachment_id, c.background_preset, c.background_colors, p.role, p.last_read_message_id, p.archived_at, p.cleared_before_message_id AS my_cleared_before_message_id, p.hidden_at,
        pin.pinned_at, pin.position AS pin_position,
        COALESCE(pin.pinned_at, c.last_activity_at)::timestamptz AS sort_at
 FROM participants p
@@ -265,6 +265,10 @@ type GetChatEntryRow struct {
 	LastMessageID            *int64
 	LastActivityAt           time.Time
 	ClearedBeforeMessageID   *int64
+	BackgroundKind           *string
+	BackgroundAttachmentID   *uuid.UUID
+	BackgroundPreset         *string
+	BackgroundColors         []string
 	Role                     string
 	LastReadMessageID        *int64
 	ArchivedAt               *time.Time
@@ -292,6 +296,10 @@ func (q *Queries) GetChatEntry(ctx context.Context, arg GetChatEntryParams) (Get
 		&i.LastMessageID,
 		&i.LastActivityAt,
 		&i.ClearedBeforeMessageID,
+		&i.BackgroundKind,
+		&i.BackgroundAttachmentID,
+		&i.BackgroundPreset,
+		&i.BackgroundColors,
 		&i.Role,
 		&i.LastReadMessageID,
 		&i.ArchivedAt,
@@ -305,7 +313,7 @@ func (q *Queries) GetChatEntry(ctx context.Context, arg GetChatEntryParams) (Get
 }
 
 const listChatEntries = `-- name: ListChatEntries :many
-SELECT c.id, c.type, c.name, c.description, c.avatar_url, c.direct_key, c.created_by, c.created_at, c.updated_at, c.avatar_attachment_id, c.last_message_id, c.last_activity_at, c.cleared_before_message_id, p.role, p.last_read_message_id, p.archived_at, p.cleared_before_message_id AS my_cleared_before_message_id, p.hidden_at,
+SELECT c.id, c.type, c.name, c.description, c.avatar_url, c.direct_key, c.created_by, c.created_at, c.updated_at, c.avatar_attachment_id, c.last_message_id, c.last_activity_at, c.cleared_before_message_id, c.background_kind, c.background_attachment_id, c.background_preset, c.background_colors, p.role, p.last_read_message_id, p.archived_at, p.cleared_before_message_id AS my_cleared_before_message_id, p.hidden_at,
        pin.pinned_at, pin.position AS pin_position,
        COALESCE(pin.pinned_at, c.last_activity_at)::timestamptz AS sort_at
 FROM participants p
@@ -353,6 +361,10 @@ type ListChatEntriesRow struct {
 	LastMessageID            *int64
 	LastActivityAt           time.Time
 	ClearedBeforeMessageID   *int64
+	BackgroundKind           *string
+	BackgroundAttachmentID   *uuid.UUID
+	BackgroundPreset         *string
+	BackgroundColors         []string
 	Role                     string
 	LastReadMessageID        *int64
 	ArchivedAt               *time.Time
@@ -397,6 +409,10 @@ func (q *Queries) ListChatEntries(ctx context.Context, arg ListChatEntriesParams
 			&i.LastMessageID,
 			&i.LastActivityAt,
 			&i.ClearedBeforeMessageID,
+			&i.BackgroundKind,
+			&i.BackgroundAttachmentID,
+			&i.BackgroundPreset,
+			&i.BackgroundColors,
 			&i.Role,
 			&i.LastReadMessageID,
 			&i.ArchivedAt,

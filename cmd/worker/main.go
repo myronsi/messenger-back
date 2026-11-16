@@ -99,6 +99,8 @@ func run() error {
 	pushWorker := &notifications.Worker{Queue: pg.Notifications(), Chats: pg.Chats(), Social: pg.Social(), Users: pg.Users(), Messages: msgs, Sender: pushSender, Tokens: notifications.NewActionTokens(cfg.Notifications.VAPIDPrivate.Reveal()), Log: log}
 	pushWorker.OnResult = p.Metrics.Notification
 	wg.Go(func() { pushWorker.Run(bg) })
+	birthdays := &notifications.Birthdays{Store: pg.Users(), Privacy: pg.Social(), Devices: pg.Notifications(), Sender: pushSender, Log: log}
+	wg.Go(func() { birthdays.Run(bg, birthdayEvery) })
 	storage, _, err := media.StorageFrom(cfg.Media)
 	if err != nil {
 		return err

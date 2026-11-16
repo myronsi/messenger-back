@@ -216,6 +216,30 @@ func (Unimplemented) UpdateGroup(w http.ResponseWriter, r *http.Request, chatId 
 	notImplemented(w, r)
 }
 
+func (Unimplemented) SetGroupBackground(w http.ResponseWriter, r *http.Request, chatId ChatId, params SetGroupBackgroundParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) DeleteGroupBackground(w http.ResponseWriter, r *http.Request, chatId ChatId, params DeleteGroupBackgroundParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) SetMyMusic(w http.ResponseWriter, r *http.Request, params SetMyMusicParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) DeleteMyMusic(w http.ResponseWriter, r *http.Request, params DeleteMyMusicParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) SetMyBackground(w http.ResponseWriter, r *http.Request, params SetMyBackgroundParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) DeleteMyBackground(w http.ResponseWriter, r *http.Request, params DeleteMyBackgroundParams) {
+	notImplemented(w, r)
+}
+
 func (Unimplemented) SetGroupAvatar(w http.ResponseWriter, r *http.Request, chatId ChatId, params SetGroupAvatarParams) {
 	notImplemented(w, r)
 }

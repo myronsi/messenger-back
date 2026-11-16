@@ -87,6 +87,23 @@ func (r attachmentRepo) Get(ctx context.Context, id uuid.UUID) (Attachment, erro
 	return attachmentFrom(row), nil
 }
 
+func (r attachmentRepo) GetMany(ctx context.Context, ids []uuid.UUID) (map[uuid.UUID]Attachment, error) {
+	out := make(map[uuid.UUID]Attachment, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	rows, err := r.s.q.ListAttachmentsByIDs(ctx, ids)
+	if err != nil {
+		return nil, mapError(err)
+	}
+	for _, row := range rows {
+		out[row.ID] = attachmentFrom(row)
+	}
+	return out, nil
+}
+
 func (r attachmentRepo) ListByChat(ctx context.Context, chatID int64, limit int) ([]Attachment, error) {
 	ctx, cancel := r.s.call(ctx)
 	defer cancel()
@@ -291,6 +308,20 @@ func (r attachmentRepo) ChatsWithAvatar(ctx context.Context, attachmentID uuid.U
 	ctx, cancel := r.s.call(ctx)
 	defer cancel()
 	ids, err := r.s.q.ChatsWithAvatar(ctx, &attachmentID)
+	return ids, mapError(err)
+}
+
+func (r attachmentRepo) UsersWithProfileMedia(ctx context.Context, attachmentID uuid.UUID) ([]int64, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	ids, err := r.s.q.UsersWithProfileMedia(ctx, &attachmentID)
+	return ids, mapError(err)
+}
+
+func (r attachmentRepo) ChatsWithBackground(ctx context.Context, attachmentID uuid.UUID) ([]int64, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	ids, err := r.s.q.ChatsWithBackground(ctx, &attachmentID)
 	return ids, mapError(err)
 }
 

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.28
+  version: 2.1.0-alpha.29
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -427,6 +427,77 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+  /me/music:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    put:
+      tags: [me]
+      operationId: setMyMusic
+      summary: Set the profile music
+      description: "Upload the file with `POST /attachments` (`purpose: profile_music`) first."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SetMusicRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+    delete:
+      tags: [me]
+      operationId: deleteMyMusic
+      summary: Remove the profile music
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /me/background:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    put:
+      tags: [me]
+      operationId: setMyBackground
+      summary: Set the profile background
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SetBackgroundRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+    delete:
+      tags: [me]
+      operationId: deleteMyBackground
+      summary: Remove the profile background
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
   /me/password:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
@@ -653,7 +724,7 @@ paths:
         required: true
         schema:
           type: string
-          enum: [avatar_visibility, profile_visibility, presence_visibility, last_seen_visibility, group_invites, direct_messages, search_visibility]
+          enum: [avatar_visibility, profile_visibility, presence_visibility, last_seen_visibility, birthday_visibility, group_invites, direct_messages, search_visibility]
       - name: effect
         in: path
         required: true
@@ -1858,6 +1929,49 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
+  /groups/{chat_id}/background:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ChatId"
+    put:
+      tags: [groups]
+      operationId: setGroupBackground
+      summary: Set the group background
+      description: |
+        Owner and admins. For `media`, the caller uploads the file with purpose `profile_background` first.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SetBackgroundRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Updated group
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Group" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+    delete:
+      tags: [groups]
+      operationId: deleteGroupBackground
+      summary: Remove the group background
+      description: Owner and admins.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "200":
+          description: Updated group
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Group" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /groups/{chat_id}/participants:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
@@ -4473,6 +4587,11 @@ components:
           type: boolean
         previews:
           type: boolean
+        birthday_reminders:
+          type: boolean
+          description: |
+            A push at 09:00 (in `Me.time_zone`) when someone you have a direct chat with has a birthday. Always sent
+            by the server; when a `PUT` leaves it out, it stays as it is. Defaults to `true`.
     NotificationSettings:
       type: object
       required:
@@ -4790,6 +4909,18 @@ components:
       properties:
         display_name: { type: string, minLength: 1, maxLength: 64 }
         bio: { type: [string, "null"], maxLength: 500 }
+        pronouns:
+          type: [string, "null"]
+          maxLength: 40
+          description: Free text; `null` or an empty string removes it.
+        birthday:
+          description: |
+            `null` removes it. With a `year` the date must exist (no 29 February in other years); without one,
+            29 February is allowed.
+          oneOf:
+            - $ref: "#/components/schemas/Birthday"
+            - type: "null"
+        time_zone: { $ref: "#/components/schemas/TimeZone" }
     SetAvatarRequest:
       type: object
       required: [attachment_id]
@@ -4900,6 +5031,7 @@ components:
         - profile_visibility
         - presence_visibility
         - last_seen_visibility
+        - birthday_visibility
         - read_receipts_enabled
         - direct_messages
         - group_invites
@@ -4915,6 +5047,9 @@ components:
           allOf: [{ $ref: "#/components/schemas/Visibility" }]
         last_seen_visibility:
           description: Who sees when the user was last online (`User.last_seen`, `presence` events).
+          allOf: [{ $ref: "#/components/schemas/Visibility" }]
+        birthday_visibility:
+          description: Who sees the birthday (`User.birthday`) and gets a reminder on the day. Defaults to `contacts`.
           allOf: [{ $ref: "#/components/schemas/Visibility" }]
         read_receipts_enabled: { type: boolean }
         direct_messages: { $ref: "#/components/schemas/DirectMessagePolicy" }
@@ -4935,6 +5070,7 @@ components:
         profile_visibility: { $ref: "#/components/schemas/Visibility" }
         presence_visibility: { $ref: "#/components/schemas/Visibility" }
         last_seen_visibility: { $ref: "#/components/schemas/Visibility" }
+        birthday_visibility: { $ref: "#/components/schemas/Visibility" }
         read_receipts_enabled: { type: boolean }
         direct_messages: { $ref: "#/components/schemas/DirectMessagePolicy" }
         group_invites: { $ref: "#/components/schemas/GroupInvitePolicy" }
@@ -4954,13 +5090,34 @@ components:
     User:
       type: object
       description: A user as visible to the requesting user; hidden fields are `null`.
-      required: [id, username, display_name, avatar_url, bio, is_online, last_seen, is_deleted, profile_version]
+      required: [id, username, display_name, avatar_url, bio, pronouns, birthday, music, background, is_online, last_seen, is_deleted, profile_version]
       properties:
         id: { $ref: "#/components/schemas/Id" }
         profile_version:
           type: integer
           minimum: 0
-          description: Grows whenever the username, display name, bio or avatar changes (not with presence). Clients keep a stored profile until a higher version arrives.
+          description: |
+            Grows whenever the username, display name, bio, avatar, pronouns, birthday, profile music or profile
+            background changes (not with presence). Clients keep a stored profile until a higher version arrives.
+        pronouns:
+          type: [string, "null"]
+          maxLength: 40
+          description: Free text such as "she/her". Visible like the bio (`profile_visibility`).
+        birthday:
+          description: Visible by `birthday_visibility`; `null` when not set or hidden.
+          oneOf:
+            - $ref: "#/components/schemas/Birthday"
+            - type: "null"
+        music:
+          description: A short song on the profile, visible like the bio. Clients never play it on their own.
+          oneOf:
+            - $ref: "#/components/schemas/ProfileMusic"
+            - type: "null"
+        background:
+          description: The banner and page background of the profile, visible like the bio.
+          oneOf:
+            - $ref: "#/components/schemas/ProfileBackground"
+            - type: "null"
         username: { $ref: "#/components/schemas/Username" }
         display_name: { type: string }
         contact_name:
@@ -4980,10 +5137,99 @@ components:
       allOf:
         - $ref: "#/components/schemas/User"
         - type: object
-          required: [created_at]
+          required: [created_at, time_zone]
           properties:
             created_at: { $ref: "#/components/schemas/Timestamp" }
             recovery_setup_required: { type: boolean }
+            time_zone:
+              allOf: [{ $ref: "#/components/schemas/TimeZone" }]
+              description: The user's time zone; birthday reminders arrive at 09:00 in it. `UTC` until a client sets it.
+    TimeZone:
+      type: string
+      minLength: 1
+      maxLength: 64
+      description: An IANA time zone name such as `Europe/Berlin`.
+      examples: [Europe/Berlin]
+    Birthday:
+      type: object
+      required: [day, month, year]
+      properties:
+        day: { type: integer, minimum: 1, maximum: 31 }
+        month: { type: integer, minimum: 1, maximum: 12 }
+        year:
+          type: [integer, "null"]
+          minimum: 1900
+          maximum: 2100
+          description: Optional; `null` when the user keeps the year to themselves.
+    ProfileMusic:
+      type: object
+      required: [attachment, title, artist]
+      properties:
+        attachment:
+          allOf: [{ $ref: "#/components/schemas/Attachment" }]
+          description: The clip (at most 30 s). `thumbnail_url` is the cover when the file had one.
+        title: { type: [string, "null"], maxLength: 100 }
+        artist: { type: [string, "null"], maxLength: 100 }
+    ProfileBackgroundKind:
+      type: string
+      description: |
+        `media` an uploaded image, GIF or short video (`attachment`), `preset` one of the clients' built-in
+        gradients (`preset`), `color` one color or a gradient of two (`colors`).
+      enum: [media, preset, color]
+    BackgroundPreset:
+      type: string
+      pattern: "^[a-z0-9_-]{1,32}$"
+      description: Name of a built-in gradient. Clients show their default background for a name they do not know.
+    BackgroundColor:
+      type: string
+      pattern: "^#[0-9a-f]{6}$"
+      examples: ["#3366ff"]
+    ProfileBackground:
+      type: object
+      required: [kind]
+      properties:
+        kind: { $ref: "#/components/schemas/ProfileBackgroundKind" }
+        attachment:
+          allOf: [{ $ref: "#/components/schemas/Attachment" }]
+          description: |
+            Set for `media`. An image, an animated GIF or a muted video of at most 15 s; `thumbnail_url` is a still
+            frame to show while it loads and when the viewer prefers reduced motion.
+        preset: { $ref: "#/components/schemas/BackgroundPreset" }
+        colors:
+          type: array
+          minItems: 1
+          maxItems: 2
+          items: { $ref: "#/components/schemas/BackgroundColor" }
+    SetBackgroundRequest:
+      type: object
+      required: [kind]
+      description: |
+        `media` needs `attachment_id` (uploaded with purpose `profile_background`), `preset` needs `preset`, `color`
+        needs `colors`; other fields must be absent (`422` otherwise).
+      properties:
+        kind: { $ref: "#/components/schemas/ProfileBackgroundKind" }
+        attachment_id: { $ref: "#/components/schemas/AttachmentRef" }
+        preset: { $ref: "#/components/schemas/BackgroundPreset" }
+        colors:
+          type: array
+          minItems: 1
+          maxItems: 2
+          items: { $ref: "#/components/schemas/BackgroundColor" }
+    SetMusicRequest:
+      type: object
+      required: [attachment_id]
+      properties:
+        attachment_id:
+          allOf: [{ $ref: "#/components/schemas/AttachmentRef" }]
+          description: An upload of the caller with purpose `profile_music`.
+        title:
+          type: [string, "null"]
+          maxLength: 100
+          description: Shown title. Clients fill it in from `Attachment.tags` of the upload and let the user edit it.
+        artist:
+          type: [string, "null"]
+          maxLength: 100
+          description: Shown artist, filled in the same way.
     UserPage:
       type: object
       required: [items, next_cursor]
@@ -5015,7 +5261,14 @@ components:
         `sticker`: a PNG, JPEG or still WebP of at most 5 MB. The server fits it into 512 x 512 px with a transparent
         border and stores a WebP (`413` when that is still over 512 KB). Only its uploader can load it until it is
         added to a pack.
-      enum: [message, avatar, sticker]
+
+        `profile_music`: an audio file of at most 20 MB. The server keeps at most 30 s of it (from `start_ms` to
+        `end_ms`, or the first 30 s), stored as AAC, reads the title and artist into `tags` and the embedded cover
+        into `thumbnail_url`. Use it with `PUT /me/music`.
+
+        `profile_background`: an image (10 MB), an animated GIF (15 MB) or a video of at most 15 s (15 MB). Use it
+        with `PUT /me/background` or `PUT /groups/{chat_id}/background`.
+      enum: [message, avatar, sticker, profile_music, profile_background]
     UploadAttachmentRequest:
       type: object
       required: [file, purpose]
@@ -5034,6 +5287,14 @@ components:
           description: Amplitude samples (0-255) of a voice message
           maxItems: 128
           items: { type: integer, minimum: 0, maximum: 255 }
+        start_ms:
+          type: integer
+          minimum: 0
+          description: "`profile_music` only: where the kept part starts."
+        end_ms:
+          type: integer
+          minimum: 1
+          description: "`profile_music` only: where the kept part ends, at most 30 s after `start_ms`."
     Attachment:
       type: object
       required: [id, kind, filename, content_type, size, url]
@@ -5063,12 +5324,21 @@ components:
         waveform:
           type: [array, "null"]
           items: { type: integer, minimum: 0, maximum: 255 }
+        tags:
+          description: Only in the answer to a `profile_music` upload; what the file says about itself.
+          $ref: "#/components/schemas/AudioTags"
         drawing:
           description: |
             What the sender drew on this image of this message. Clients show the image with the drawing on top
             and never without it. Absent when the image has no drawing. The same image can carry another drawing
             in another message.
           $ref: "#/components/schemas/Drawing"
+    AudioTags:
+      type: object
+      required: [title, artist]
+      properties:
+        title: { type: [string, "null"], maxLength: 100 }
+        artist: { type: [string, "null"], maxLength: 100 }
     Drawing:
       type: object
       description: |
@@ -5775,12 +6045,17 @@ components:
         joined_at: { $ref: "#/components/schemas/Timestamp" }
     Group:
       type: object
-      required: [id, name, description, avatar_url, owner_id, my_role, members, created_at]
+      required: [id, name, description, avatar_url, background, owner_id, my_role, members, created_at]
       properties:
         id: { $ref: "#/components/schemas/Id" }
         name: { type: string, minLength: 1, maxLength: 64 }
         description: { type: [string, "null"], maxLength: 500 }
         avatar_url: { type: [string, "null"] }
+        background:
+          description: The banner and page background of the group profile; set by the owner and admins.
+          oneOf:
+            - $ref: "#/components/schemas/ProfileBackground"
+            - type: "null"
         owner_id: { $ref: "#/components/schemas/Id" }
         my_role: { $ref: "#/components/schemas/GroupRole" }
         members:

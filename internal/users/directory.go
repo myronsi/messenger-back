@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 )
 
@@ -29,6 +31,83 @@ type View struct {
 	IsDeleted      bool
 	Findable       bool
 	ProfileVersion int64
+	Pronouns       *string
+	Birthday       *postgres.Birthday
+	Music          *Music
+	Background     *Background
+	BasePath       string
+}
+
+type Music struct {
+	Attachment postgres.Attachment
+	Title      *string
+	Artist     *string
+}
+
+type Background struct {
+	Kind       string
+	Attachment *postgres.Attachment
+	Preset     *string
+	Colors     []string
+}
+
+type Media map[uuid.UUID]postgres.Attachment
+
+func (m Media) MusicOf(u postgres.User) *Music {
+	if u.MusicAttachmentID == nil {
+		return nil
+	}
+	a, ok := m[*u.MusicAttachmentID]
+	if !ok {
+		return nil
+	}
+	return &Music{Attachment: a, Title: u.MusicTitle, Artist: u.MusicArtist}
+}
+
+func (m Media) BackgroundOf(bg *postgres.Background) *Background {
+	if bg == nil {
+		return nil
+	}
+	out := &Background{Kind: bg.Kind, Preset: bg.Preset, Colors: bg.Colors}
+	if bg.Kind == postgres.BackgroundMedia {
+		if bg.AttachmentID == nil {
+			return nil
+		}
+		a, ok := m[*bg.AttachmentID]
+		if !ok {
+			return nil
+		}
+		out.Attachment = &a
+	}
+	return out
+}
+
+func mediaIDs(us ...postgres.User) []uuid.UUID {
+	var ids []uuid.UUID
+	for _, u := range us {
+		if u.MusicAttachmentID != nil {
+			ids = append(ids, *u.MusicAttachmentID)
+		}
+		if u.Background != nil && u.Background.AttachmentID != nil {
+			ids = append(ids, *u.Background.AttachmentID)
+		}
+	}
+	return ids
+}
+
+func (d *Directory) MediaOf(ctx context.Context, us ...postgres.User) (Media, error) {
+	ids := mediaIDs(us...)
+	if len(ids) == 0 {
+		return Media{}, nil
+	}
+	return d.store.Attachments().GetMany(ctx, ids)
+}
+
+func (d *Directory) LoadMedia(ctx context.Context, ids ...uuid.UUID) (Media, error) {
+	if len(ids) == 0 {
+		return Media{}, nil
+	}
+	return d.store.Attachments().GetMany(ctx, ids)
 }
 
 // Visible reports whether a field guarded by a privacy setting with value setting is visible to a viewer,
@@ -71,6 +150,7 @@ type Online interface {
 type Store interface {
 	Users() postgres.UserRepository
 	Social() postgres.SocialRepository
+	Attachments() postgres.AttachmentRepository
 }
 
 // Directory renders users as seen by other users.
@@ -113,8 +193,8 @@ type facts struct {
 	blocked bool
 }
 
-func (d *Directory) render(u postgres.User, viewer int64, f facts) View {
-	v := View{ID: u.ID, Username: u.Username, DisplayName: u.DisplayName, ContactName: f.contact, ProfileVersion: u.ProfileVersion}
+func (d *Directory) render(u postgres.User, viewer int64, f facts, media Media) View {
+	v := View{ID: u.ID, Username: u.Username, DisplayName: u.DisplayName, ContactName: f.contact, ProfileVersion: u.ProfileVersion, BasePath: d.basePath}
 	self := u.ID == viewer
 	v.Findable = self || f.shares || Findable(f.settings.SearchVisibility, f.exceptions[postgres.SettingSearch])
 	allowed := func(setting, key string) bool {
@@ -126,6 +206,13 @@ func (d *Directory) render(u postgres.User, viewer int64, f facts) View {
 	}
 	if allowed(f.settings.ProfileVisibility, postgres.SettingProfile) {
 		v.Bio = u.Bio
+		v.Pronouns = u.Pronouns
+		v.Music = media.MusicOf(u)
+		v.Background = media.BackgroundOf(u.Background)
+	}
+	if u.Birthday != nil && allowed(f.settings.BirthdayVisibility, postgres.SettingBirthday) {
+		b := *u.Birthday
+		v.Birthday = &b
 	}
 	showOnline := allowed(f.settings.PresenceVisibility, postgres.SettingPresence)
 	if showOnline {
@@ -170,6 +257,14 @@ func (d *Directory) ForViewer(ctx context.Context, viewer int64, ids []int64) (m
 		return nil, err
 	}
 	online := d.onlineOf(ctx, ids)
+	list := make([]postgres.User, 0, len(users))
+	for _, u := range users {
+		list = append(list, u)
+	}
+	media, err := d.MediaOf(ctx, list...)
+	if err != nil {
+		return nil, err
+	}
 	for _, id := range ids {
 		u, ok := users[id]
 		if !ok {
@@ -180,7 +275,7 @@ func (d *Directory) ForViewer(ctx context.Context, viewer int64, ids []int64) (m
 		if n, ok := names[id]; ok {
 			f.contact = &n
 		}
-		out[id] = d.render(u, viewer, f)
+		out[id] = d.render(u, viewer, f, media)
 	}
 	return out, nil
 }
@@ -228,12 +323,16 @@ func (d *Directory) ToViewers(ctx context.Context, subject int64, viewers []int6
 		return nil, err
 	}
 	online := d.onlineOf(ctx, []int64{subject})[subject]
+	media, err := d.MediaOf(ctx, u)
+	if err != nil {
+		return nil, err
+	}
 	for _, v := range viewers {
 		f := facts{settings: settings[subject], exceptions: exceptions[v], shares: sharesChat || shared[v], online: online, blocked: blocks[[2]int64{subject, v}]}
 		if n, ok := names[v]; ok {
 			f.contact = &n
 		}
-		out[v] = d.render(u, v, f)
+		out[v] = d.render(u, v, f, media)
 	}
 	return out, nil
 }
@@ -248,6 +347,33 @@ func (d *Directory) onlineOf(ctx context.Context, ids []int64) map[int64]bool {
 		return nil
 	}
 	return m
+}
+
+func (d *Directory) ProfileVisible(ctx context.Context, viewer, subject int64) (bool, error) {
+	if viewer == subject {
+		return true, nil
+	}
+	social := d.store.Social()
+	settings, err := social.Privacy(ctx, []int64{subject})
+	if err != nil {
+		return false, err
+	}
+	exceptions, err := social.ExceptionsOf(ctx, subject, []int64{viewer})
+	if err != nil {
+		return false, err
+	}
+	shared, err := social.SharedChatViewers(ctx, subject, []int64{viewer})
+	if err != nil {
+		return false, err
+	}
+	blocks, err := social.Blocks(ctx, []int64{subject}, []int64{viewer})
+	if err != nil {
+		return false, err
+	}
+	if blocks[[2]int64{subject, viewer}] {
+		return false, nil
+	}
+	return Visible(settings[subject].ProfileVisibility, exceptions[viewer][postgres.SettingProfile], shared[viewer]), nil
 }
 
 type PresenceAccess struct {

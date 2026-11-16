@@ -34,10 +34,11 @@ type Member struct {
 
 // GroupView is a group as one member sees it.
 type GroupView struct {
-	Chat    postgres.Chat
-	OwnerID int64
-	MyRole  postgres.Role
-	Members []Member
+	Chat       postgres.Chat
+	OwnerID    int64
+	MyRole     postgres.Role
+	Members    []Member
+	Background *users.Background
 }
 
 // GroupNotifier delivers group changes (realtime.Fanout).
@@ -154,13 +155,20 @@ func (s *Service) groupViews(ctx context.Context, chatID int64, viewers []int64,
 			owner = p.UserID
 		}
 	}
+	var media users.Media
+	if chat.Background != nil && chat.Background.AttachmentID != nil {
+		if media, err = s.d.Directory.LoadMedia(ctx, *chat.Background.AttachmentID); err != nil {
+			return nil, unavailable(err)
+		}
+	}
+	background := media.BackgroundOf(chat.Background)
 	out := make(map[int64]GroupView, len(viewers))
 	for _, v := range viewers {
 		role, member := roles[v]
 		if !member {
 			continue
 		}
-		g := GroupView{Chat: chat, OwnerID: owner, MyRole: role, Members: []Member{}}
+		g := GroupView{Chat: chat, OwnerID: owner, MyRole: role, Members: []Member{}, Background: background}
 		if withMembers {
 			people, err := s.d.Directory.ForViewer(ctx, v, ids)
 			if err != nil {
@@ -496,6 +504,26 @@ func (s *Service) removedChat(ctx context.Context, chatID, actor int64, members 
 		}
 	}
 	return stale
+}
+
+func (s *Service) SetGroupBackground(ctx context.Context, userID, chatID int64, bg *postgres.Background) (GroupView, error) {
+	if bg != nil && bg.Kind == postgres.BackgroundMedia {
+		if bg.AttachmentID == nil {
+			return GroupView{}, fmt.Errorf("%w: attachment_id is required", ErrInvalid)
+		}
+		a, err := s.d.Store.Attachments().Get(ctx, *bg.AttachmentID)
+		if errors.Is(err, postgres.ErrNotFound) || (err == nil && (a.UploaderID == nil || *a.UploaderID != userID || a.Purpose != postgres.PurposeProfileBackground)) {
+			return GroupView{}, fmt.Errorf("%w: attachment_id is not one of your background uploads", ErrInvalid)
+		}
+		if err != nil {
+			return GroupView{}, unavailable(err)
+		}
+	}
+	if err := s.d.Store.Chats().SetGroupBackgroundAs(ctx, chatID, userID, bg); err != nil {
+		return GroupView{}, groupError(err)
+	}
+	s.changed(ctx, chatID)
+	return s.group(ctx, userID, chatID)
 }
 
 // SetGroupAvatar sets the group's avatar to an image the caller uploaded (purpose avatar).

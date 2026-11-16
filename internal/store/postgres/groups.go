@@ -220,6 +220,17 @@ func (r chatRepo) SetGroupAvatarAs(ctx context.Context, chatID, actorID int64, a
 	}))
 }
 
+func (r chatRepo) SetGroupBackgroundAs(ctx context.Context, chatID, actorID int64, bg *Background) error {
+	kind, attachmentID, preset, colors := backgroundParams(bg)
+	return mapError(r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
+		if err := actingIn(ctx, q, chatID, actorID, managers); err != nil {
+			return err
+		}
+		_, err := q.SetChatBackground(ctx, sqlcdb.SetChatBackgroundParams{ChatID: chatID, Kind: kind, AttachmentID: attachmentID, Preset: preset, Colors: colors})
+		return err
+	}))
+}
+
 func (r chatRepo) InviteAs(ctx context.Context, chatID, actorID, userID int64) (ApprovalRequest, bool, error) {
 	var (
 		req     ApprovalRequest

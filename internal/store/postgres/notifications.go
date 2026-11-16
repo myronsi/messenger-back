@@ -10,9 +10,10 @@ import (
 )
 
 type NotificationPreferences struct {
-	Enabled  bool `json:"enabled"`
-	Sound    bool `json:"sound"`
-	Previews bool `json:"previews"`
+	Enabled           bool `json:"enabled"`
+	Sound             bool `json:"sound"`
+	Previews          bool `json:"previews"`
+	BirthdayReminders bool `json:"birthday_reminders"`
 }
 type NotificationMute struct {
 	ChatID string    `json:"chat_id"`
@@ -46,6 +47,7 @@ type NotificationRepository interface {
 	Claim(context.Context) (NotificationJob, error)
 	Finish(context.Context, int64) error
 	Devices(context.Context, int64, int64, int64) ([]NotificationDevice, error)
+	UserDevices(context.Context, int64) ([]NotificationDevice, error)
 	Delivered(context.Context, int64, uuid.UUID) error
 	RemoveDevice(context.Context, uuid.UUID) error
 	DeviceActive(context.Context, int64, uuid.UUID, uuid.UUID) (bool, error)
@@ -57,8 +59,8 @@ func (s *Store) Notifications() NotificationRepository { return notificationRepo
 func (r notificationRepo) Preferences(ctx context.Context, uid int64) (NotificationPreferences, error) {
 	ctx, cancel := r.s.call(ctx)
 	defer cancel()
-	p := NotificationPreferences{Enabled: true}
-	err := r.s.pool.QueryRow(ctx, `SELECT enabled,sound,previews FROM notification_preferences WHERE user_id=$1`, uid).Scan(&p.Enabled, &p.Sound, &p.Previews)
+	p := NotificationPreferences{Enabled: true, BirthdayReminders: true}
+	err := r.s.pool.QueryRow(ctx, `SELECT enabled,sound,previews,birthday_reminders FROM notification_preferences WHERE user_id=$1`, uid).Scan(&p.Enabled, &p.Sound, &p.Previews, &p.BirthdayReminders)
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = nil
 	}
@@ -67,8 +69,8 @@ func (r notificationRepo) Preferences(ctx context.Context, uid int64) (Notificat
 func (r notificationRepo) SetPreferences(ctx context.Context, uid int64, p NotificationPreferences) error {
 	ctx, cancel := r.s.call(ctx)
 	defer cancel()
-	_, err := r.s.pool.Exec(ctx, `INSERT INTO notification_preferences(user_id,enabled,sound,previews) VALUES($1,$2,$3,$4)
- ON CONFLICT(user_id) DO UPDATE SET enabled=$2,sound=$3,previews=$4`, uid, p.Enabled, p.Sound, p.Previews)
+	_, err := r.s.pool.Exec(ctx, `INSERT INTO notification_preferences(user_id,enabled,sound,previews,birthday_reminders) VALUES($1,$2,$3,$4,$5)
+ ON CONFLICT(user_id) DO UPDATE SET enabled=$2,sound=$3,previews=$4,birthday_reminders=$5`, uid, p.Enabled, p.Sound, p.Previews, p.BirthdayReminders)
 	return err
 }
 func (r notificationRepo) Mutes(ctx context.Context, uid int64) ([]NotificationMute, error) {
@@ -182,6 +184,28 @@ func (r notificationRepo) Devices(ctx context.Context, uid, cid, mid int64) ([]N
 	}
 	return out, rows.Err()
 }
+func (r notificationRepo) UserDevices(ctx context.Context, uid int64) ([]NotificationDevice, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	rows, err := r.s.pool.Query(ctx, `SELECT d.id,d.platform,d.destination,d.p256dh,d.auth,d.session_id FROM notification_devices d
+ JOIN user_sessions s ON s.id=d.session_id
+ LEFT JOIN notification_preferences n ON n.user_id=d.user_id
+ WHERE d.user_id=$1 AND s.revoked_at IS NULL AND s.expires_at>now() AND COALESCE(n.enabled,true)`, uid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []NotificationDevice{}
+	for rows.Next() {
+		var d NotificationDevice
+		if err := rows.Scan(&d.ID, &d.Platform, &d.Destination, &d.P256dh, &d.Auth, &d.SessionID); err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
 func (r notificationRepo) Delivered(ctx context.Context, mid int64, id uuid.UUID) error {
 	ctx, cancel := r.s.call(ctx)
 	defer cancel()

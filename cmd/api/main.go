@@ -164,7 +164,7 @@ func run() error {
 	}
 	prober := media.NewProber(cfg.Media.FFprobe, cfg.Media.FFmpeg)
 	mediaSvc := media.NewService(media.Options{
-		Storage: storage, Attachments: pg.Attachments(), Visibility: rt.messages, Membership: rt.messages,
+		Storage: storage, Attachments: pg.Attachments(), Visibility: rt.messages, Membership: rt.messages, Profiles: rt.directory,
 		Prober: prober, SignedURLs: cfg.Media.SignedURLs, ImageWorkers: cfg.Media.ImageWorkers, Log: log,
 	})
 	if !prober.Available() {
@@ -194,6 +194,7 @@ func run() error {
 				CookiePath:     cfg.Auth.RefreshCookiePath,
 				CookieSecure:   cfg.Auth.CookieSecure,
 				TrustedProxies: trustedProxies,
+				Directory:      rt.directory,
 			}),
 			httpapi.NewMediaServer(httpapi.MediaOptions{
 				Service: mediaSvc, Store: pg, Directory: rt.directory, Limiter: rt.limiter, Events: rt.events, BasePath: cfg.HTTP.BasePath, Log: log,

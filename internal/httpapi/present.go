@@ -38,6 +38,8 @@ func PresentUser(v users.View) User {
 	u := User{
 		Id: FormatID(v.ID), Username: v.Username, DisplayName: v.DisplayName, ContactName: v.ContactName,
 		AvatarUrl: v.AvatarURL, Bio: v.Bio, IsOnline: v.IsOnline, IsDeleted: v.IsDeleted, ProfileVersion: int(v.ProfileVersion),
+		Pronouns: v.Pronouns, Birthday: presentBirthday(v.Birthday), Music: presentMusic(v.Music, v.BasePath),
+		Background: presentBackground(v.Background, v.BasePath),
 	}
 	if v.LastSeen != nil {
 		t := utc(*v.LastSeen)
@@ -50,10 +52,14 @@ func PresentUser(v users.View) User {
 const KindVoiceString = "voice"
 
 // PresentMe renders the caller's own account.
-func PresentMe(u postgres.User, basePath string) Me {
+func PresentMe(u postgres.User, basePath string, media users.Media) Me {
 	id := FormatID(u.ID)
 	me := Me{Id: id, Username: u.Username, DisplayName: u.DisplayName, Bio: u.Bio, CreatedAt: utc(u.CreatedAt), IsOnline: true,
-		ProfileVersion: int(u.ProfileVersion)}
+		ProfileVersion: int(u.ProfileVersion), Pronouns: u.Pronouns, Birthday: presentBirthday(u.Birthday), TimeZone: u.TimeZone,
+		Music: presentMusic(media.MusicOf(u), basePath), Background: presentBackground(media.BackgroundOf(u.Background), basePath)}
+	if me.TimeZone == "" {
+		me.TimeZone = "UTC"
+	}
 	if !u.LastSeenAt.IsZero() {
 		seen := utc(u.LastSeenAt)
 		me.LastSeen = &seen

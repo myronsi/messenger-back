@@ -19,6 +19,7 @@ import (
 const (
 	maintenanceEvery   = time.Hour
 	deletionSweepEvery = 5 * time.Minute
+	birthdayEvery      = 10 * time.Minute
 	deletionLostAfter  = 15 * time.Minute
 	// sessionRetention is how long ended sessions and the refresh rotation history are kept. After that a
 	// replayed old refresh token is simply unknown instead of being recognised as reuse.

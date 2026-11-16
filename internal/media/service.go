@@ -68,12 +68,17 @@ type Membership interface {
 	IsMember(ctx context.Context, chatID, userID int64) (bool, error)
 }
 
+type ProfileAccess interface {
+	ProfileVisible(ctx context.Context, viewerID, subjectID int64) (bool, error)
+}
+
 // Options configures the service.
 type Options struct {
 	Storage     Storage
 	Attachments postgres.AttachmentRepository
 	Visibility  Visibility
 	Membership  Membership
+	Profiles    ProfileAccess
 	Prober      *Prober
 	Limits      Limits
 	// SignedURLs answers downloads with a redirect to object storage (when the backend can sign) instead of
@@ -146,6 +151,8 @@ type Upload struct {
 	// cannot measure it itself.
 	DurationMS *int
 	Waveform   []int
+	StartMS    *int
+	EndMS      *int
 }
 
 // cleanName keeps a display name for the file: the base name, printable, at most 255 bytes.
@@ -174,14 +181,36 @@ func cleanName(name, contentType string) string {
 // Upload checks and stores a file and records it. Nothing about the result depends on the file name or the
 // client's content type.
 func (s *Service) Upload(ctx context.Context, u Upload) (postgres.Attachment, error) {
+	a, _, err := s.UploadWithTags(ctx, u)
+	return a, err
+}
+
+func (s *Service) UploadWithTags(ctx context.Context, u Upload) (postgres.Attachment, Tags, error) {
+	var tags Tags
+	a, err := s.upload(ctx, u, &tags)
+	return a, tags, err
+}
+
+func (s *Service) upload(ctx context.Context, u Upload, tags *Tags) (postgres.Attachment, error) {
 	switch u.Purpose {
 	case PurposeMessage, PurposeAvatar:
 	case PurposeSticker:
 		if u.Kind != "" && u.Kind != KindImage {
 			return postgres.Attachment{}, fmt.Errorf("%w: a sticker is an image", ErrInvalid)
 		}
+	case PurposeProfileMusic:
+		if u.Kind != "" && u.Kind != KindAudio {
+			return postgres.Attachment{}, fmt.Errorf("%w: profile music is audio", ErrInvalid)
+		}
+	case PurposeProfileBackground:
+		if u.Kind != "" && u.Kind != KindImage && u.Kind != KindVideo {
+			return postgres.Attachment{}, fmt.Errorf("%w: a background is an image or a video", ErrInvalid)
+		}
 	default:
-		return postgres.Attachment{}, fmt.Errorf("%w: purpose must be message, avatar or sticker", ErrInvalid)
+		return postgres.Attachment{}, fmt.Errorf("%w: unknown purpose", ErrInvalid)
+	}
+	if (u.StartMS != nil || u.EndMS != nil) && u.Purpose != PurposeProfileMusic {
+		return postgres.Attachment{}, fmt.Errorf("%w: start_ms and end_ms are for profile music", ErrInvalid)
 	}
 	switch u.Kind {
 	case "", KindImage, KindAudio, KindVoice, KindVideo, KindFile:
@@ -204,14 +233,26 @@ func (s *Service) Upload(ctx context.Context, u Upload) (postgres.Attachment, er
 	if _, err := tmp.ReadAt(head, 0); err != nil && !errors.Is(err, io.EOF) {
 		return postgres.Attachment{}, err
 	}
-	det, err := Detect(head, u.Purpose, u.Kind)
+	var det Detected
+	if isProfilePurpose(u.Purpose) {
+		det, err = detectProfile(head, u.Purpose)
+	} else {
+		det, err = Detect(head, u.Purpose, u.Kind)
+	}
 	if err != nil {
 		return postgres.Attachment{}, err
 	}
 	if det.ContentType == "video/webm" {
 		det = s.webmKind(ctx, tmp.Name(), det)
+		if u.Purpose == PurposeProfileBackground && det.Kind != KindVideo {
+			return postgres.Attachment{}, ErrUnsupported
+		}
 	}
-	if size > s.o.Limits.of(u.Purpose, det.Kind) {
+	limitOf := s.o.Limits.of(u.Purpose, det.Kind)
+	if isProfilePurpose(u.Purpose) {
+		limitOf = profileLimit(u.Purpose, det)
+	}
+	if size > limitOf {
 		return postgres.Attachment{}, ErrTooLarge
 	}
 
@@ -222,6 +263,8 @@ func (s *Service) Upload(ctx context.Context, u Upload) (postgres.Attachment, er
 		prefix = "avatars/"
 	case PurposeSticker:
 		prefix = "stickers/"
+	case PurposeProfileMusic, PurposeProfileBackground:
+		prefix = "profiles/"
 	}
 	rec := postgres.NewAttachment{
 		UploaderID: &u.UploaderID, Purpose: u.Purpose, Kind: det.Kind, Filename: cleanName(u.Filename, det.ContentType),
@@ -230,6 +273,33 @@ func (s *Service) Upload(ctx context.Context, u Upload) (postgres.Attachment, er
 	var thumb []byte
 	var body io.Reader
 	switch {
+	case u.Purpose == PurposeProfileMusic:
+		clip, err := s.processMusic(ctx, tmp.Name(), u.StartMS, u.EndMS)
+		if err != nil {
+			if errors.Is(err, ErrNotAudio) {
+				return postgres.Attachment{}, ErrUnsupported
+			}
+			if errors.Is(err, ErrMeasureTimeout) {
+				return postgres.Attachment{}, ErrBusy
+			}
+			return postgres.Attachment{}, err
+		}
+		secs := clip.duration.Seconds()
+		rec.Kind, rec.MimeType, rec.Size, rec.Duration, rec.Filename = KindAudio, "audio/mp4", int64(len(clip.data)), &secs, "music.m4a"
+		body, thumb, *tags = bytes.NewReader(clip.data), clip.cover, clip.tags
+	case u.Purpose == PurposeProfileBackground && det.Kind == KindVideo:
+		if d, ok := s.o.Prober.duration(ctx, tmp.Name()); ok && d > MaxBackgroundVideo+musicClipTolerance {
+			return postgres.Attachment{}, fmt.Errorf("%w: a background video is at most 15 s", ErrInvalid)
+		}
+		thumb = s.processVideoThumbnail(ctx, tmp.Name(), det.ContentType)
+		if frame, err := jpeg.DecodeConfig(bytes.NewReader(thumb)); err == nil {
+			w, h := int32(frame.Width), int32(frame.Height) //nolint:gosec // bounded by the thumbnail filter
+			rec.Width, rec.Height = &w, &h
+		}
+		if _, err := tmp.Seek(0, io.SeekStart); err != nil {
+			return postgres.Attachment{}, err
+		}
+		body = tmp
 	case u.Purpose == PurposeSticker:
 		img, err := s.processSticker(ctx, tmp, size, det.ContentType)
 		if err != nil {
@@ -411,6 +481,8 @@ func (s *Service) Open(ctx context.Context, viewerID int64, id uuid.UUID, v Vari
 		ok, err = s.canSeeSticker(ctx, viewerID, a)
 	case PurposeAvatar:
 		ok, err = s.canSeeAvatar(ctx, viewerID, a)
+	case PurposeProfileMusic, PurposeProfileBackground:
+		ok, err = s.canSeeProfileMedia(ctx, viewerID, a)
 	default:
 		ok, err = s.CanSee(ctx, viewerID, a)
 	}

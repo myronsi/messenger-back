@@ -119,6 +119,8 @@ type uploadForm struct {
 	kind       string
 	durationMS *int
 	waveform   []int
+	startMS    *int
+	endMS      *int
 }
 
 func (f *uploadForm) close() {
@@ -199,6 +201,17 @@ func readUploadForm(r *http.Request, limit int64) (*uploadForm, error) {
 				return nil, errFormInvalid
 			}
 			f.durationMS = &n
+		case "start_ms", "end_ms":
+			n, err := strconv.Atoi(v)
+			if err != nil || n < 0 {
+				f.close()
+				return nil, errFormInvalid
+			}
+			if name == "start_ms" {
+				f.startMS = &n
+			} else {
+				f.endMS = &n
+			}
 		case "waveform":
 			// A JSON array, or one value per field.
 			if strings.HasPrefix(v, "[") {
@@ -213,7 +226,7 @@ func readUploadForm(r *http.Request, limit int64) (*uploadForm, error) {
 			}
 		}
 	}
-	if f.file == nil || (f.purpose != string(UploadPurposeMessage) && f.purpose != string(UploadPurposeAvatar) && f.purpose != string(UploadPurposeSticker)) {
+	if f.file == nil || !UploadPurpose(f.purpose).Valid() {
 		f.close()
 		return nil, errFormInvalid
 	}
@@ -240,15 +253,19 @@ func (m *MediaServer) UploadAttachment(w http.ResponseWriter, r *http.Request, _
 		return
 	}
 	defer form.close()
-	a, err := m.o.Service.Upload(r.Context(), media.Upload{
+	a, tags, err := m.o.Service.UploadWithTags(r.Context(), media.Upload{
 		UploaderID: p.UserID, Purpose: form.purpose, Kind: form.kind, Filename: form.filename,
-		Body: form.file, DurationMS: form.durationMS, Waveform: form.waveform,
+		Body: form.file, DurationMS: form.durationMS, Waveform: form.waveform, StartMS: form.startMS, EndMS: form.endMS,
 	})
 	if err != nil {
 		m.uploadFailed(w, r, err)
 		return
 	}
-	writeJSONStatus(w, http.StatusCreated, PresentAttachment(a, "", m.o.BasePath))
+	out := PresentAttachment(a, "", m.o.BasePath)
+	if form.purpose == string(UploadPurposeProfileMusic) {
+		out.Tags = &AudioTags{Title: tags.Title, Artist: tags.Artist}
+	}
+	writeJSONStatus(w, http.StatusCreated, out)
 }
 
 func (m *MediaServer) uploadFailed(w http.ResponseWriter, r *http.Request, err error) {
@@ -400,8 +417,13 @@ func (m *MediaServer) answerMe(w http.ResponseWriter, r *http.Request, userID in
 	if m.o.ProfileChanged != nil && u.ProfileVersion != before {
 		m.o.ProfileChanged(context.WithoutCancel(r.Context()), userID, u.ProfileVersion)
 	}
+	media, err := m.o.Directory.MediaOf(r.Context(), u)
+	if err != nil {
+		WriteProblem(w, http.StatusInternalServerError, ErrorCodeInternalError)
+		return
+	}
 	noStore(w)
-	writeJSONStatus(w, http.StatusOK, PresentMe(u, m.o.BasePath))
+	writeJSONStatus(w, http.StatusOK, PresentMe(u, m.o.BasePath, media))
 }
 
 // avatarVisible tells whether the viewer may see the user's avatar, and returns the user.

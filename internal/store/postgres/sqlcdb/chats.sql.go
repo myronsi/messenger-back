@@ -63,7 +63,7 @@ func (q *Queries) DeleteFinishedChatDeletion(ctx context.Context, chatID int64) 
 }
 
 const getChat = `-- name: GetChat :one
-SELECT id, type, name, description, avatar_url, direct_key, created_by, created_at, updated_at, avatar_attachment_id, last_message_id, last_activity_at, cleared_before_message_id FROM chats WHERE id = $1
+SELECT id, type, name, description, avatar_url, direct_key, created_by, created_at, updated_at, avatar_attachment_id, last_message_id, last_activity_at, cleared_before_message_id, background_kind, background_attachment_id, background_preset, background_colors FROM chats WHERE id = $1
 `
 
 func (q *Queries) GetChat(ctx context.Context, id int64) (Chat, error) {
@@ -83,12 +83,16 @@ func (q *Queries) GetChat(ctx context.Context, id int64) (Chat, error) {
 		&i.LastMessageID,
 		&i.LastActivityAt,
 		&i.ClearedBeforeMessageID,
+		&i.BackgroundKind,
+		&i.BackgroundAttachmentID,
+		&i.BackgroundPreset,
+		&i.BackgroundColors,
 	)
 	return i, err
 }
 
 const getDirectChat = `-- name: GetDirectChat :one
-SELECT id, type, name, description, avatar_url, direct_key, created_by, created_at, updated_at, avatar_attachment_id, last_message_id, last_activity_at, cleared_before_message_id FROM chats WHERE direct_key = $1
+SELECT id, type, name, description, avatar_url, direct_key, created_by, created_at, updated_at, avatar_attachment_id, last_message_id, last_activity_at, cleared_before_message_id, background_kind, background_attachment_id, background_preset, background_colors FROM chats WHERE direct_key = $1
 `
 
 func (q *Queries) GetDirectChat(ctx context.Context, directKey *string) (Chat, error) {
@@ -108,6 +112,10 @@ func (q *Queries) GetDirectChat(ctx context.Context, directKey *string) (Chat, e
 		&i.LastMessageID,
 		&i.LastActivityAt,
 		&i.ClearedBeforeMessageID,
+		&i.BackgroundKind,
+		&i.BackgroundAttachmentID,
+		&i.BackgroundPreset,
+		&i.BackgroundColors,
 	)
 	return i, err
 }
@@ -142,7 +150,7 @@ const insertDirectChat = `-- name: InsertDirectChat :one
 INSERT INTO chats (type, direct_key, created_by)
 VALUES ('direct', $1, $2)
 ON CONFLICT (direct_key) DO NOTHING
-RETURNING id, type, name, description, avatar_url, direct_key, created_by, created_at, updated_at, avatar_attachment_id, last_message_id, last_activity_at, cleared_before_message_id
+RETURNING id, type, name, description, avatar_url, direct_key, created_by, created_at, updated_at, avatar_attachment_id, last_message_id, last_activity_at, cleared_before_message_id, background_kind, background_attachment_id, background_preset, background_colors
 `
 
 type InsertDirectChatParams struct {
@@ -168,6 +176,10 @@ func (q *Queries) InsertDirectChat(ctx context.Context, arg InsertDirectChatPara
 		&i.LastMessageID,
 		&i.LastActivityAt,
 		&i.ClearedBeforeMessageID,
+		&i.BackgroundKind,
+		&i.BackgroundAttachmentID,
+		&i.BackgroundPreset,
+		&i.BackgroundColors,
 	)
 	return i, err
 }
@@ -175,7 +187,7 @@ func (q *Queries) InsertDirectChat(ctx context.Context, arg InsertDirectChatPara
 const insertGroupChat = `-- name: InsertGroupChat :one
 INSERT INTO chats (type, name, description, avatar_url, created_by)
 VALUES ('group', $1, $2, $3, $4)
-RETURNING id, type, name, description, avatar_url, direct_key, created_by, created_at, updated_at, avatar_attachment_id, last_message_id, last_activity_at, cleared_before_message_id
+RETURNING id, type, name, description, avatar_url, direct_key, created_by, created_at, updated_at, avatar_attachment_id, last_message_id, last_activity_at, cleared_before_message_id, background_kind, background_attachment_id, background_preset, background_colors
 `
 
 type InsertGroupChatParams struct {
@@ -207,6 +219,10 @@ func (q *Queries) InsertGroupChat(ctx context.Context, arg InsertGroupChatParams
 		&i.LastMessageID,
 		&i.LastActivityAt,
 		&i.ClearedBeforeMessageID,
+		&i.BackgroundKind,
+		&i.BackgroundAttachmentID,
+		&i.BackgroundPreset,
+		&i.BackgroundColors,
 	)
 	return i, err
 }
@@ -365,7 +381,7 @@ func (q *Queries) ListStaleChatDeletions(ctx context.Context, arg ListStaleChatD
 }
 
 const listUserChats = `-- name: ListUserChats :many
-SELECT c.id, c.type, c.name, c.description, c.avatar_url, c.direct_key, c.created_by, c.created_at, c.updated_at, c.avatar_attachment_id, c.last_message_id, c.last_activity_at, c.cleared_before_message_id
+SELECT c.id, c.type, c.name, c.description, c.avatar_url, c.direct_key, c.created_by, c.created_at, c.updated_at, c.avatar_attachment_id, c.last_message_id, c.last_activity_at, c.cleared_before_message_id, c.background_kind, c.background_attachment_id, c.background_preset, c.background_colors
 FROM chats c
 JOIN participants p ON p.chat_id = c.id
 WHERE p.user_id = $1
@@ -401,6 +417,10 @@ func (q *Queries) ListUserChats(ctx context.Context, arg ListUserChatsParams) ([
 			&i.LastMessageID,
 			&i.LastActivityAt,
 			&i.ClearedBeforeMessageID,
+			&i.BackgroundKind,
+			&i.BackgroundAttachmentID,
+			&i.BackgroundPreset,
+			&i.BackgroundColors,
 		); err != nil {
 			return nil, err
 		}
@@ -413,7 +433,7 @@ func (q *Queries) ListUserChats(ctx context.Context, arg ListUserChatsParams) ([
 }
 
 const lockChat = `-- name: LockChat :one
-SELECT id, type, name, description, avatar_url, direct_key, created_by, created_at, updated_at, avatar_attachment_id, last_message_id, last_activity_at, cleared_before_message_id FROM chats WHERE id = $1 FOR UPDATE
+SELECT id, type, name, description, avatar_url, direct_key, created_by, created_at, updated_at, avatar_attachment_id, last_message_id, last_activity_at, cleared_before_message_id, background_kind, background_attachment_id, background_preset, background_colors FROM chats WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) LockChat(ctx context.Context, id int64) (Chat, error) {
@@ -433,6 +453,10 @@ func (q *Queries) LockChat(ctx context.Context, id int64) (Chat, error) {
 		&i.LastMessageID,
 		&i.LastActivityAt,
 		&i.ClearedBeforeMessageID,
+		&i.BackgroundKind,
+		&i.BackgroundAttachmentID,
+		&i.BackgroundPreset,
+		&i.BackgroundColors,
 	)
 	return i, err
 }

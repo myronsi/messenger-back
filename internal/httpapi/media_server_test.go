@@ -95,7 +95,7 @@ func newMediaEnv(t *testing.T) *mediaEnv {
 	}
 	rules := memberRules{store}
 	msvc := media.NewService(media.Options{Storage: disk, Attachments: store.Attachments(), Visibility: rules, Membership: rules,
-		Prober: media.NewProber("/none", "/none"), Limits: media.Limits{Image: 1 << 20, Audio: 1 << 20, Video: 1 << 20, File: 1 << 20, Avatar: 1 << 20, Sticker: 1 << 20}})
+		Profiles: users.NewDirectory(store, nil, apiBase), Prober: media.NewProber("/none", "/none"), Limits: media.Limits{Image: 1 << 20, Audio: 1 << 20, Video: 1 << 20, File: 1 << 20, Avatar: 1 << 20, Sticker: 1 << 20}})
 	tokens := notifications.NewActionTokens("test-secret")
 	emitted := &mediaEvents{}
 	r := NewRouter(Options{
