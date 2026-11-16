@@ -19,7 +19,7 @@ MIGRATE := go run -tags 'postgres,cassandra' github.com/golang-migrate/migrate/v
 IMAGE ?= messenger-api:local
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 
-.PHONY: help run run-worker build test lint vet vuln fmt generate tidy migrate migrate-postgres migrate-postgres-down migrate-scylla migrate-scylla-down docker env up down dev-logs
+.PHONY: help run run-worker build test test-deps test-deps-down test-integration lint vet vuln fmt generate tidy migrate migrate-postgres migrate-postgres-down migrate-scylla migrate-scylla-down docker env up down dev-logs
 
 help: ## List the targets
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
@@ -35,6 +35,15 @@ build: ## Build all binaries into bin/
 
 test: ## Run the tests with the race detector
 	go test -race ./...
+
+test-deps: ## Start in-memory PostgreSQL, Redis, ScyllaDB and S3 for the integration tests and write .env.test
+	sh scripts/test-deps.sh up
+
+test-deps-down: ## Stop the integration test databases and delete their data
+	sh scripts/test-deps.sh down
+
+test-integration: ## Run all tests against the databases from make test-deps
+	set -a; . ./.env.test; set +a; go test ./...
 
 lint: vet ## Run golangci-lint and go vet
 	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run ./...
