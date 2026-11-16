@@ -856,6 +856,190 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
+  /me/connections:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    get:
+      tags: [me]
+      operationId: listMyConnections
+      summary: Your connected accounts
+      description: In your order. At most 15.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "200":
+          description: Connected accounts
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConnectionList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /me/connections/order:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    put:
+      tags: [me]
+      operationId: reorderMyConnections
+      summary: Order your connected accounts
+      description: "`ids` must name every connected account once (`422` otherwise)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConnectionOrderRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "200":
+          description: Connected accounts in the new order
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConnectionList" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+  /me/connections/{connection_id}:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - name: connection_id
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/Id" }
+    delete:
+      tags: [me]
+      operationId: deleteMyConnection
+      summary: Remove a connected account
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "204":
+          description: Removed
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /me/connections/{provider}/start:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ConnectionProviderPath"
+    post:
+      tags: [me]
+      operationId: startConnection
+      summary: Start connecting an account at a provider that signs you in
+      description: |
+        For the providers that sign the user in (GitHub, Spotify, Steam, Xbox, Discord, Twitch, YouTube, Reddit,
+        Roblox, TikTok). Send the browser to `redirect_url`; it comes back through `GET /connections/callback/{provider}`,
+        which ends on the web app with `?provider=` and `result=` (`connected`, `denied`, `failed`, `limit`). The link
+        is valid for 10 minutes. `404` when the provider is not enabled on this server, `422` for a provider that is
+        verified with `claim` and `verify` instead.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "200":
+          description: Where to send the browser
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConnectionStart" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /me/connections/{provider}/claim:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ConnectionProviderPath"
+    post:
+      tags: [me]
+      operationId: claimConnection
+      summary: Start verifying a Bluesky handle, a Mastodon account or a website
+      description: |
+        Returns a code the user puts where only the owner can: the Bluesky profile description, the Mastodon bio
+        or a profile field, or for a website a DNS TXT record on the domain or a
+        `<meta name="messenger-verification" content="...">` tag on its home page. Then call `verify` within an
+        hour. A new claim replaces the previous one for the same provider.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConnectionClaimRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "200":
+          description: The code to publish
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConnectionChallenge" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /me/connections/{provider}/verify:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ConnectionProviderPath"
+    post:
+      tags: [me]
+      operationId: verifyConnection
+      summary: Check the published code and connect the account
+      description: "`422` when there is no open claim or the code was not found; the claim stays open until it expires."
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "201":
+          description: Connected
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Connection" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /connections/callback/{provider}:
+    parameters:
+      - $ref: "#/components/parameters/ConnectionProviderPath"
+    get:
+      tags: [me]
+      operationId: connectionCallback
+      summary: Where a provider sends the browser back
+      description: |
+        No authentication: the one-time `state` from `start` names the user. Always answers with a redirect to the
+        web app (`?provider=` and `result=`).
+      security: []
+      responses:
+        "302":
+          description: Back to the web app
+          headers:
+            Location:
+              schema: { type: string }
+        "400": { $ref: "#/components/responses/BadRequest" }
+  /users/{user_id}/connections:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - name: user_id
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/Id" }
+    get:
+      tags: [users]
+      operationId: listUserConnections
+      summary: A user's connected accounts
+      description: Visible like the bio (`profile_visibility`); empty when hidden.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "304":
+          description: Not modified; the response's `ETag` matches `If-None-Match`.
+        "200":
+          description: Connected accounts
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConnectionList" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /users/{user_id}/common-groups:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
@@ -4721,6 +4905,11 @@ components:
       schema: { type: string }
 
   parameters:
+    ConnectionProviderPath:
+      name: provider
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/ConnectionProvider" }
     QrLoginRequestId:
       name: requestId
       in: path
@@ -5091,12 +5280,76 @@ components:
       additionalProperties: true
     Meta:
       type: object
-      required: [backend_version, commit, api_version, min_client_api_version]
+      required: [backend_version, commit, api_version, min_client_api_version, connection_providers]
       properties:
         backend_version: { type: string, examples: ["1.0.3"] }
         commit: { type: string, examples: ["abc1234"] }
         api_version: { type: string, examples: ["2.0.0"] }
         min_client_api_version: { type: string, examples: ["2.0.0"] }
+        connection_providers:
+          type: array
+          description: The connected-account providers this server offers.
+          items: { $ref: "#/components/schemas/ConnectionProvider" }
+    ConnectionProvider:
+      type: string
+      description: |
+        Providers that sign the user in: `github`, `spotify`, `steam`, `xbox`, `discord`, `twitch`, `youtube`,
+        `reddit`, `roblox`, `tiktok`. Verified with a published code: `bluesky`, `mastodon`, `website`. Clients show a generic
+        icon for a provider they do not know.
+      enum: [github, spotify, steam, xbox, discord, twitch, youtube, reddit, roblox, tiktok, bluesky, mastodon, website]
+    Connection:
+      type: object
+      required: [id, provider, display_name, profile_url, verified_at]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        provider: { $ref: "#/components/schemas/ConnectionProvider" }
+        display_name: { type: string, minLength: 1, maxLength: 100 }
+        profile_url:
+          type: [string, "null"]
+          description: The public https page of the account; `null` when the provider has none.
+        verified_at: { $ref: "#/components/schemas/Timestamp" }
+    ConnectionList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 15
+          items: { $ref: "#/components/schemas/Connection" }
+    ConnectionOrderRequest:
+      type: object
+      required: [ids]
+      properties:
+        ids:
+          type: array
+          maxItems: 15
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/Id" }
+    ConnectionStart:
+      type: object
+      required: [redirect_url]
+      properties:
+        redirect_url: { type: string }
+    ConnectionClaimRequest:
+      type: object
+      required: [identifier]
+      properties:
+        identifier:
+          type: string
+          minLength: 1
+          maxLength: 300
+          description: "A Bluesky handle (`alice.bsky.social`), a Mastodon account (`@alice@mastodon.social` or its URL), or a domain or URL."
+    ConnectionChallenge:
+      type: object
+      required: [identifier, code, expires_at]
+      properties:
+        identifier:
+          type: string
+          description: The account or domain as the server understood it.
+        code:
+          type: string
+          description: The text to publish, such as `messenger-verify=ab12cd34ef56gh78`.
+        expires_at: { $ref: "#/components/schemas/Timestamp" }
 
     # ------------------------------------------------------------ auth
     RegisterRequest:

@@ -229,6 +229,8 @@ func run() error {
 			Service: emoji.New(pg), Images: mediaSvc, BasePath: cfg.HTTP.BasePath, Log: log,
 		})).WithCalls(httpapi.NewCallServer(httpapi.CallOptions{
 			Service: callsSvc, Limits: callLimits(cfg.Calls), Limiter: rt.limiter, Log: log,
+		})).WithConnections(httpapi.NewConnectionServer(httpapi.ConnectionOptions{
+			Service: connectionService(cfg.Connections, pg, rd.Client()), Users: pg.Users(), Directory: rt.directory, Limiter: rt.limiter, Log: log,
 		})).WithNotifications(httpapi.NotificationOptions{Store: pg.Notifications(), Config: cfg.Notifications, Tokens: notifications.NewActionTokens(cfg.Notifications.VAPIDPrivate.Reveal())}).WithMeta(httpapi.MetaInfo{
 			BackendVersion: version.Backend, Commit: os.Getenv("APP_COMMIT"), MinClientAPIVersion: cfg.Realtime.MinClientAPIVersion,
 		}),

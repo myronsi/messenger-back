@@ -259,7 +259,7 @@ func TestContractCheckRejectsViolations(t *testing.T) {
 		body               string
 		ok                 bool
 	}{
-		{"valid meta", "GET", apiBase + "/meta", 200, `{"backend_version":"1","commit":"x","api_version":"2.0.0","min_client_api_version":"2.0.0"}`, true},
+		{"valid meta", "GET", apiBase + "/meta", 200, `{"backend_version":"1","commit":"x","api_version":"2.0.0","min_client_api_version":"2.0.0","connection_providers":[]}`, true},
 		{"missing field", "GET", apiBase + "/meta", 200, `{"backend_version":"1"}`, false},
 		{"unlisted status", "GET", apiBase + "/meta", 404, `{}`, false},
 		{"wrong type", "GET", apiBase + "/chats/1", 200, `{"id":1}`, false},

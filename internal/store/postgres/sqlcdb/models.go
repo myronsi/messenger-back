@@ -411,6 +411,17 @@ type UserChatPin struct {
 	Position int32
 }
 
+type UserConnection struct {
+	ID          int64
+	UserID      int64
+	Provider    string
+	ExternalID  string
+	DisplayName string
+	ProfileUrl  *string
+	Position    int32
+	VerifiedAt  time.Time
+}
+
 type UserContactName struct {
 	OwnerID     int64
 	TargetID    int64
