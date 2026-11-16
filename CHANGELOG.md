@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.19.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.18.0-alpha.1...v1.19.0-alpha.1) (2026-11-16)
+
+
+### Features
+
+* **profiles:** connected accounts with OAuth and published codes ([#196](https://github.com/myronsi/messenger-back/issues/196)) ([40a1c76](https://github.com/myronsi/messenger-back/commit/40a1c76b3a8a2bdba0f39a217a2b2be0abc173f0))
+
 ## [1.18.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.17.0-alpha.1...v1.18.0-alpha.1) (2026-11-16)
 
 
