@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.20.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.19.0-alpha.1...v1.20.0-alpha.1) (2026-11-16)
+
+
+### Features
+
+* **emoji:** custom emoji packs, group emoji and emoji tokens ([#195](https://github.com/myronsi/messenger-back/issues/195)) ([d0d9b81](https://github.com/myronsi/messenger-back/commit/d0d9b81d760c7252fad5d2dadbecfd7dab48fdc7))
+
 ## [1.19.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.18.0-alpha.1...v1.19.0-alpha.1) (2026-11-16)
 
 
