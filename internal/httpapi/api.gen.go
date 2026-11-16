@@ -2412,13 +2412,13 @@ type SetBackgroundRequest struct {
 
 // SetMusicRequest defines model for SetMusicRequest.
 type SetMusicRequest struct {
-	// Artist Shown artist; when absent the artist read from the file is used.
+	// Artist Shown artist, filled in the same way.
 	Artist *string `json:"artist,omitempty"`
 
 	// AttachmentId An upload of the caller with purpose `profile_music`.
 	AttachmentId AttachmentRef `json:"attachment_id"`
 
-	// Title Shown title; when absent the title read from the file is used.
+	// Title Shown title. Clients fill it in from `Attachment.tags` of the upload and let the user edit it.
 	Title *string `json:"title,omitempty"`
 }
 
