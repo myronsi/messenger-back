@@ -105,11 +105,17 @@ type MetaInfo struct {
 	BackendVersion      string
 	Commit              string
 	MinClientAPIVersion string
+	ConnectionProviders []string
 }
 
 func (m MetaInfo) serve(w http.ResponseWriter) {
 	w.Header().Set("Cache-Control", "public, max-age=60")
+	providers := make([]ConnectionProvider, len(m.ConnectionProviders))
+	for i, p := range m.ConnectionProviders {
+		providers[i] = ConnectionProvider(p)
+	}
 	writeJSONStatus(w, http.StatusOK, Meta{
 		BackendVersion: m.BackendVersion, Commit: m.Commit, ApiVersion: version.API, MinClientApiVersion: m.MinClientAPIVersion,
+		ConnectionProviders: providers,
 	})
 }
