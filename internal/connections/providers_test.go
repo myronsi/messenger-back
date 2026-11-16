@@ -49,6 +49,12 @@ func TestProviderProfiles(t *testing.T) {
 		},
 		"/api/v1/me":         func(r *http.Request) any { return map[string]any{"id": "r1", "name": "redditor"} },
 		"/oauth/v1/userinfo": func(r *http.Request) any { return map[string]any{"sub": "rb1", "preferred_username": "builder"} },
+		"/v2/user/info/": func(r *http.Request) any {
+			if !bearer(r) || r.URL.Query().Get("fields") != "open_id,display_name,username" {
+				return nil
+			}
+			return map[string]any{"data": map[string]any{"user": map[string]string{"open_id": "tt1", "display_name": "Dancer", "username": "dancer"}}}
+		},
 		"/user/authenticate": func(r *http.Request) any {
 			var body struct {
 				Properties struct{ RpsTicket string }
@@ -77,6 +83,7 @@ func TestProviderProfiles(t *testing.T) {
 		{"youtube", youtubeProfile(srv.URL), Account{ExternalID: "UC1", DisplayName: "My Channel", ProfileURL: str("https://www.youtube.com/@mine")}},
 		{"reddit", redditProfile(srv.URL), Account{ExternalID: "r1", DisplayName: "u/redditor", ProfileURL: str("https://www.reddit.com/user/redditor")}},
 		{"roblox", robloxProfile(srv.URL), Account{ExternalID: "rb1", DisplayName: "builder", ProfileURL: str("https://www.roblox.com/users/rb1/profile")}},
+		{"tiktok", tiktokProfile(srv.URL), Account{ExternalID: "tt1", DisplayName: "@dancer", ProfileURL: str("https://www.tiktok.com/@dancer")}},
 		{"xbox", xboxProfile(srv.URL, srv.URL), Account{ExternalID: "x1", DisplayName: "Gamer Tag", ProfileURL: str("https://www.xbox.com/play/user/Gamer%20Tag")}},
 	}
 	for _, c := range cases {
@@ -94,7 +101,7 @@ func TestProviderProfiles(t *testing.T) {
 
 func TestProviderDefinitions(t *testing.T) {
 	c := Credentials{ClientID: "id", ClientSecret: "secret"}
-	for _, p := range []*OAuth{GitHub(c), Spotify(c), Xbox(c), Discord(c), Twitch(c), YouTube(c), Reddit(c), Roblox(c)} {
+	for _, p := range []*OAuth{GitHub(c), Spotify(c), Xbox(c), Discord(c), Twitch(c), YouTube(c), Reddit(c), Roblox(c), TikTok(c)} {
 		u, err := url.Parse(p.AuthURL("st", "ch", "https://app.example/cb"))
 		if err != nil || u.Scheme != "https" || u.Query().Get("state") != "st" || u.Query().Get("code_challenge") != "ch" {
 			t.Fatalf("%s: %v %v", p.Name(), u, err)
@@ -102,6 +109,10 @@ func TestProviderDefinitions(t *testing.T) {
 	}
 	if Reddit(c).AuthURL("s", "c", "r") == "" || !Reddit(c).BasicAuth || !Spotify(c).BasicAuth {
 		t.Fatal("reddit and spotify send the client as basic auth")
+	}
+	tiktok, _ := url.Parse(TikTok(c).AuthURL("st", "ch", "https://app.example/cb"))
+	if q := tiktok.Query(); q.Get("client_key") != "id" || q.Has("client_id") || q.Get("scope") != "user.info.basic,user.info.profile" {
+		t.Fatalf("tiktok names the client client_key and joins scopes with commas: %v", q)
 	}
 }
 
@@ -154,5 +165,28 @@ func TestSteamOpenID(t *testing.T) {
 	}
 	if _, err := s.Complete(context.Background(), url.Values{"openid.mode": {"cancel"}}, "", redirect); !errors.Is(err, ErrDenied) {
 		t.Fatalf("cancel: %v", err)
+	}
+}
+
+func TestTikTokTokenUsesClientKey(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/token":
+			_ = r.ParseForm()
+			if r.PostForm.Get("client_key") != "key" || r.PostForm.Has("client_id") || r.PostForm.Get("client_secret") != "secret" {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]string{"access_token": "tok"})
+		case "/v2/user/info/":
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"user": map[string]string{"open_id": "tt1", "display_name": "Dancer"}}})
+		}
+	}))
+	t.Cleanup(srv.Close)
+	p := TikTok(Credentials{ClientID: "key", ClientSecret: "secret"})
+	p.ExchangeURL, p.Profile, p.Client = srv.URL+"/token", tiktokProfile(srv.URL), srv.Client()
+	a, err := p.Complete(context.Background(), url.Values{"code": {"c"}}, "v", "https://app.example/cb")
+	if err != nil || a.ExternalID != "tt1" || a.DisplayName != "Dancer" || a.ProfileURL != nil {
+		t.Fatalf("without a username there is no link: %+v %v", a, err)
 	}
 }

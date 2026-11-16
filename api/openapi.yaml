@@ -925,7 +925,7 @@ paths:
       summary: Start connecting an account at a provider that signs you in
       description: |
         For the providers that sign the user in (GitHub, Spotify, Steam, Xbox, Discord, Twitch, YouTube, Reddit,
-        Roblox). Send the browser to `redirect_url`; it comes back through `GET /connections/callback/{provider}`,
+        Roblox, TikTok). Send the browser to `redirect_url`; it comes back through `GET /connections/callback/{provider}`,
         which ends on the web app with `?provider=` and `result=` (`connected`, `denied`, `failed`, `limit`). The link
         is valid for 10 minutes. `404` when the provider is not enabled on this server, `422` for a provider that is
         verified with `claim` and `verify` instead.
@@ -4977,9 +4977,9 @@ components:
       type: string
       description: |
         Providers that sign the user in: `github`, `spotify`, `steam`, `xbox`, `discord`, `twitch`, `youtube`,
-        `reddit`, `roblox`. Verified with a published code: `bluesky`, `mastodon`, `website`. Clients show a generic
+        `reddit`, `roblox`, `tiktok`. Verified with a published code: `bluesky`, `mastodon`, `website`. Clients show a generic
         icon for a provider they do not know.
-      enum: [github, spotify, steam, xbox, discord, twitch, youtube, reddit, roblox, bluesky, mastodon, website]
+      enum: [github, spotify, steam, xbox, discord, twitch, youtube, reddit, roblox, tiktok, bluesky, mastodon, website]
     Connection:
       type: object
       required: [id, provider, display_name, profile_url, verified_at]

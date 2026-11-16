@@ -25,6 +25,8 @@ type Connections struct {
 	RedditClientSecret  Secret `env:"CONNECT_REDDIT_CLIENT_SECRET"`
 	RobloxClientID      string `env:"CONNECT_ROBLOX_CLIENT_ID"`
 	RobloxClientSecret  Secret `env:"CONNECT_ROBLOX_CLIENT_SECRET"`
+	TikTokClientKey     string `env:"CONNECT_TIKTOK_CLIENT_KEY"`
+	TikTokClientSecret  Secret `env:"CONNECT_TIKTOK_CLIENT_SECRET"`
 	SteamAPIKey         Secret `env:"CONNECT_STEAM_API_KEY"`
 }
 
@@ -44,6 +46,7 @@ func (c Connections) Pairs() []OAuthPair {
 		{"YOUTUBE", c.YouTubeClientID, c.YouTubeClientSecret},
 		{"REDDIT", c.RedditClientID, c.RedditClientSecret},
 		{"ROBLOX", c.RobloxClientID, c.RobloxClientSecret},
+		{"TIKTOK", c.TikTokClientKey, c.TikTokClientSecret},
 	}
 }
 
@@ -57,7 +60,11 @@ func (c Connections) validate() []string {
 	configured := c.SteamAPIKey != ""
 	for _, p := range c.Pairs() {
 		if (p.ID == "") != (p.Secret == "") {
-			problems = append(problems, "set both CONNECT_"+p.Name+"_CLIENT_ID and CONNECT_"+p.Name+"_CLIENT_SECRET")
+			idVar := "_CLIENT_ID"
+			if p.Name == "TIKTOK" {
+				idVar = "_CLIENT_KEY"
+			}
+			problems = append(problems, "set both CONNECT_"+p.Name+idVar+" and CONNECT_"+p.Name+"_CLIENT_SECRET")
 		}
 		configured = configured || p.ID != ""
 	}

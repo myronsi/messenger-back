@@ -26,6 +26,7 @@ func connectionService(cfg config.Connections, pg *postgres.Store, rdb goredis.C
 		{creds(cfg.YouTubeClientID, cfg.YouTubeClientSecret), connections.YouTube},
 		{creds(cfg.RedditClientID, cfg.RedditClientSecret), connections.Reddit},
 		{creds(cfg.RobloxClientID, cfg.RobloxClientSecret), connections.Roblox},
+		{creds(cfg.TikTokClientKey, cfg.TikTokClientSecret), connections.TikTok},
 	} {
 		if p.c.Set() {
 			providers = append(providers, p.new(p.c))

@@ -243,6 +243,7 @@ const (
 	Roblox   ConnectionProvider = "roblox"
 	Spotify  ConnectionProvider = "spotify"
 	Steam    ConnectionProvider = "steam"
+	Tiktok   ConnectionProvider = "tiktok"
 	Twitch   ConnectionProvider = "twitch"
 	Website  ConnectionProvider = "website"
 	Xbox     ConnectionProvider = "xbox"
@@ -267,6 +268,8 @@ func (e ConnectionProvider) Valid() bool {
 	case Spotify:
 		return true
 	case Steam:
+		return true
+	case Tiktok:
 		return true
 	case Twitch:
 		return true
@@ -1483,7 +1486,7 @@ type Connection struct {
 	ProfileUrl *string `json:"profile_url"`
 
 	// Provider Providers that sign the user in: `github`, `spotify`, `steam`, `xbox`, `discord`, `twitch`, `youtube`,
-	// `reddit`, `roblox`. Verified with a published code: `bluesky`, `mastodon`, `website`. Clients show a generic
+	// `reddit`, `roblox`, `tiktok`. Verified with a published code: `bluesky`, `mastodon`, `website`. Clients show a generic
 	// icon for a provider they do not know.
 	Provider   ConnectionProvider `json:"provider"`
 	VerifiedAt Timestamp          `json:"verified_at"`
@@ -1516,7 +1519,7 @@ type ConnectionOrderRequest struct {
 }
 
 // ConnectionProvider Providers that sign the user in: `github`, `spotify`, `steam`, `xbox`, `discord`, `twitch`, `youtube`,
-// `reddit`, `roblox`. Verified with a published code: `bluesky`, `mastodon`, `website`. Clients show a generic
+// `reddit`, `roblox`, `tiktok`. Verified with a published code: `bluesky`, `mastodon`, `website`. Clients show a generic
 // icon for a provider they do not know.
 type ConnectionProvider string
 
@@ -2930,7 +2933,7 @@ type ClientApiVersion = string
 type ClientVersion = string
 
 // ConnectionProviderPath Providers that sign the user in: `github`, `spotify`, `steam`, `xbox`, `discord`, `twitch`, `youtube`,
-// `reddit`, `roblox`. Verified with a published code: `bluesky`, `mastodon`, `website`. Clients show a generic
+// `reddit`, `roblox`, `tiktok`. Verified with a published code: `bluesky`, `mastodon`, `website`. Clients show a generic
 // icon for a provider they do not know.
 type ConnectionProviderPath = ConnectionProvider
 

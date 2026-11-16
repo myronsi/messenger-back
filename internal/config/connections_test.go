@@ -12,6 +12,7 @@ func TestConnectionConfiguration(t *testing.T) {
 	}
 	for name, c := range map[string]Connections{
 		"half a pair":        {CallbackURL: ok.CallbackURL, WebURL: ok.WebURL, TwitchClientID: "id"},
+		"tiktok without key": {CallbackURL: ok.CallbackURL, WebURL: ok.WebURL, TikTokClientSecret: "s"},
 		"no callback URL":    {WebURL: ok.WebURL, GitHubClientID: "id", GitHubClientSecret: "s"},
 		"steam without URLs": {SteamAPIKey: "k"},
 		"bad web URL":        {CallbackURL: ok.CallbackURL, WebURL: "app.example"},

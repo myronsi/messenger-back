@@ -21,7 +21,7 @@ const (
 	CodePrefix = "messenger-verify="
 )
 
-var Order = []string{"github", "spotify", "steam", "xbox", "discord", "twitch", "youtube", "reddit", "roblox", "bluesky", "mastodon", "website"}
+var Order = []string{"github", "spotify", "steam", "xbox", "discord", "twitch", "youtube", "reddit", "roblox", "tiktok", "bluesky", "mastodon", "website"}
 
 const (
 	ResultConnected = "connected"

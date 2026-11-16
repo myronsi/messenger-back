@@ -53,6 +53,8 @@ type OAuth struct {
 	Scopes       []string
 	ExtraAuth    url.Values
 	BasicAuth    bool
+	ClientParam  string
+	ScopeSep     string
 	Profile      ProfileFunc
 	Client       *http.Client
 }
@@ -64,14 +66,25 @@ func pkceChallenge(verifier string) string {
 	return base64.RawURLEncoding.EncodeToString(sum[:])
 }
 
+func (o *OAuth) clientParam() string {
+	if o.ClientParam != "" {
+		return o.ClientParam
+	}
+	return "client_id"
+}
+
 func (o *OAuth) AuthURL(state, challenge, redirect string) string {
 	q := url.Values{}
 	q.Set("response_type", "code")
-	q.Set("client_id", o.ClientID)
+	q.Set(o.clientParam(), o.ClientID)
 	q.Set("redirect_uri", redirect)
 	q.Set("state", state)
 	if len(o.Scopes) > 0 {
-		q.Set("scope", strings.Join(o.Scopes, " "))
+		sep := o.ScopeSep
+		if sep == "" {
+			sep = " "
+		}
+		q.Set("scope", strings.Join(o.Scopes, sep))
 	}
 	q.Set("code_challenge", challenge)
 	q.Set("code_challenge_method", "S256")
@@ -106,7 +119,7 @@ func (o *OAuth) Complete(ctx context.Context, query url.Values, verifier, redire
 	form.Set("code", code)
 	form.Set("redirect_uri", redirect)
 	form.Set("code_verifier", verifier)
-	form.Set("client_id", o.ClientID)
+	form.Set(o.clientParam(), o.ClientID)
 	if !o.BasicAuth {
 		form.Set("client_secret", o.ClientSecret)
 	}

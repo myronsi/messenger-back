@@ -186,6 +186,39 @@ func robloxProfile(api string) ProfileFunc {
 	}
 }
 
+func TikTok(c Credentials) *OAuth {
+	return &OAuth{ProviderName: "tiktok", ClientID: c.ClientID, ClientSecret: c.ClientSecret, ClientParam: "client_key", ScopeSep: ",",
+		AuthorizeURL: "https://www.tiktok.com/v2/auth/authorize/", ExchangeURL: "https://open.tiktokapis.com/v2/oauth/token/",
+		Scopes: []string{"user.info.basic", "user.info.profile"}, Profile: tiktokProfile("https://open.tiktokapis.com")}
+}
+
+func tiktokProfile(api string) ProfileFunc {
+	return func(ctx context.Context, c *http.Client, token string) (Account, error) {
+		var out struct {
+			Data struct {
+				User struct {
+					OpenID      string `json:"open_id"`
+					DisplayName string `json:"display_name"`
+					Username    string `json:"username"`
+				} `json:"user"`
+			} `json:"data"`
+		}
+		if err := getJSON(ctx, c, api+"/v2/user/info/?fields=open_id,display_name,username", token, nil, &out); err != nil {
+			return Account{}, err
+		}
+		u := out.Data.User
+		if u.OpenID == "" {
+			return Account{}, errors.New("no user")
+		}
+		a := Account{ExternalID: u.OpenID, DisplayName: u.DisplayName}
+		if u.Username != "" {
+			a.DisplayName = "@" + u.Username
+			a.ProfileURL = str("https://www.tiktok.com/@" + url.PathEscape(u.Username))
+		}
+		return a, nil
+	}
+}
+
 func Xbox(c Credentials) *OAuth {
 	return &OAuth{ProviderName: "xbox", ClientID: c.ClientID, ClientSecret: c.ClientSecret,
 		AuthorizeURL: "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize",

@@ -6,7 +6,7 @@ to read the account and are never stored. At most 15 accounts per user; they are
 
 Two kinds of providers:
 
-- **Sign-in providers** (GitHub, Spotify, Steam, Xbox, Discord, Twitch, YouTube, Reddit, Roblox). The user is sent to
+- **Sign-in providers** (GitHub, Spotify, Steam, Xbox, Discord, Twitch, YouTube, Reddit, Roblox, TikTok). The user is sent to
   the provider and comes back to `GET {CONNECTIONS_CALLBACK_URL}/connections/callback/{provider}`. The one-time `state`
   (Redis, 10 minutes) names the user; PKCE (S256) protects the code. The browser then lands on
   `{CONNECTIONS_WEB_URL}/settings/connections?provider=…&result=connected|denied|failed|limit`.
@@ -42,6 +42,7 @@ Each sign-in provider is enabled only when both of its variables are set. Regist
 | YouTube | console.cloud.google.com → APIs: enable YouTube Data API v3, OAuth client "Web application", consent screen | `youtube.readonly` | `CONNECT_YOUTUBE_CLIENT_ID`, `CONNECT_YOUTUBE_CLIENT_SECRET` |
 | Reddit | reddit.com/prefs/apps → "web app" | `identity` | `CONNECT_REDDIT_CLIENT_ID`, `CONNECT_REDDIT_CLIENT_SECRET` |
 | Roblox | create.roblox.com → Credentials → OAuth 2.0 apps | `openid`, `profile` | `CONNECT_ROBLOX_CLIENT_ID`, `CONNECT_ROBLOX_CLIENT_SECRET` |
+| TikTok | developers.tiktok.com → Manage apps → Login Kit (web), redirect URI as above; the app needs review before others can use it | `user.info.basic`, `user.info.profile` | `CONNECT_TIKTOK_CLIENT_KEY`, `CONNECT_TIKTOK_CLIENT_SECRET` |
 | Steam | steamcommunity.com/dev/apikey (Web API key; the domain is the web app's) | OpenID 2.0, no app | `CONNECT_STEAM_API_KEY` |
 
 Notes:
