@@ -208,6 +208,7 @@ WHERE a.id = $1
   AND NOT EXISTS (SELECT 1 FROM chats c WHERE c.background_attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM user_avatar_history h WHERE h.attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM stickers s WHERE s.attachment_id = a.id)
+  AND NOT EXISTS (SELECT 1 FROM custom_emoji e WHERE e.attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM unsent_messages m WHERE m.attachment_ids @> ARRAY[a.id])
 RETURNING a.storage_key, a.thumbnail_key
 `
@@ -628,6 +629,7 @@ WHERE a.created_at < $1
   AND NOT EXISTS (SELECT 1 FROM chats c WHERE c.background_attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM user_avatar_history h WHERE h.attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM stickers s WHERE s.attachment_id = a.id)
+  AND NOT EXISTS (SELECT 1 FROM custom_emoji e WHERE e.attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM unsent_messages m WHERE m.attachment_ids @> ARRAY[a.id])
 ORDER BY a.created_at
 LIMIT $2

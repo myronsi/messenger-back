@@ -150,6 +150,17 @@ type ChatLink struct {
 	CreatedAt time.Time
 }
 
+type CustomEmoji struct {
+	ID           int64
+	PackID       int64
+	AttachmentID uuid.UUID
+	Shortcode    string
+	IsAnimated   bool
+	Position     int32
+	DeletedAt    *time.Time
+	CreatedAt    time.Time
+}
+
 type EmailToken struct {
 	TokenHash string
 	UserID    int64
@@ -157,6 +168,25 @@ type EmailToken struct {
 	Purpose   string
 	ExpiresAt time.Time
 	UsedAt    *time.Time
+}
+
+type EmojiPack struct {
+	ID        int64
+	OwnerID   *int64
+	ChatID    *int64
+	Title     string
+	Slug      *string
+	Version   int64
+	HiddenAt  *time.Time
+	DeletedAt *time.Time
+	CreatedAt time.Time
+}
+
+type EmojiPackReport struct {
+	PackID     int64
+	ReporterID int64
+	Reason     string
+	CreatedAt  time.Time
 }
 
 type GroupRoleEvent struct {
@@ -397,6 +427,12 @@ type UserContactName struct {
 	TargetID    int64
 	DisplayName string
 	UpdatedAt   time.Time
+}
+
+type UserEmojiPack struct {
+	UserID    int64
+	PackID    int64
+	ChangedAt time.Time
 }
 
 type UserPasskey struct {

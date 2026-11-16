@@ -12,6 +12,7 @@ import (
 
 	"github.com/myronsi/messenger-back/internal/app"
 	"github.com/myronsi/messenger-back/internal/calls"
+	"github.com/myronsi/messenger-back/internal/emoji"
 	"github.com/myronsi/messenger-back/internal/events"
 	"github.com/myronsi/messenger-back/internal/ids"
 	"github.com/myronsi/messenger-back/internal/media"
@@ -178,7 +179,7 @@ func startRealtime(p *app.Process, pg *postgres.Store, rd *redis.Store, sc *scyl
 	svc = messages.New(messages.Deps{
 		Messages: repo, Store: pg, Members: members, Unread: redis.NewUnread(rdb, ""),
 		Dedup: redis.NewDedup(rdb, "", 0), IDs: idsrc, Notifier: fan, Accepted: p.Metrics.MessageAccepted, Log: log,
-		Events: st.events, QueueNotification: pg.Notifications().Enqueue,
+		Events: st.events, QueueNotification: pg.Notifications().Enqueue, Emoji: emoji.New(pg),
 	})
 	gw, err = realtime.New(realtime.Options{
 		Auth: ticketAuth, Messages: svc, Fanout: fan, Bus: bus, Presence: presence,

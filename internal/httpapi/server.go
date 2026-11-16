@@ -16,6 +16,7 @@ type Server struct {
 	notifications *NotificationOptions
 	calls         *CallServer
 	stickers      *StickerServer
+	emoji         *EmojiServer
 	connections   *ConnectionServer
 }
 
@@ -25,6 +26,8 @@ func (s *Server) WithMessages(m *MessageServer) *Server { s.messages = m; return
 func (s *Server) WithLinkPreviews(l *LinkPreviewServer) *Server { s.linkPreviews = l; return s }
 
 func (s *Server) WithStickers(st *StickerServer) *Server { s.stickers = st; return s }
+
+func (s *Server) WithEmoji(e *EmojiServer) *Server { s.emoji = e; return s }
 
 func (s *Server) ListStickerPacks(w http.ResponseWriter, r *http.Request, params ListStickerPacksParams) {
 	if s.stickers == nil {
@@ -749,4 +752,124 @@ func (s *Server) SearchAllMessages(w http.ResponseWriter, r *http.Request, param
 		return
 	}
 	s.messages.SearchAllMessages(w, r, params)
+}
+
+func (s *Server) ListEmojiPacks(w http.ResponseWriter, r *http.Request, params ListEmojiPacksParams) {
+	if s.emoji == nil {
+		s.AuthServer.ListEmojiPacks(w, r, params)
+		return
+	}
+	s.emoji.ListEmojiPacks(w, r, params)
+}
+
+func (s *Server) CreateEmojiPack(w http.ResponseWriter, r *http.Request, params CreateEmojiPackParams) {
+	if s.emoji == nil {
+		s.AuthServer.CreateEmojiPack(w, r, params)
+		return
+	}
+	s.emoji.CreateEmojiPack(w, r, params)
+}
+
+func (s *Server) GetEmojiPack(w http.ResponseWriter, r *http.Request, packId EmojiPackId, params GetEmojiPackParams) {
+	if s.emoji == nil {
+		s.AuthServer.GetEmojiPack(w, r, packId, params)
+		return
+	}
+	s.emoji.GetEmojiPack(w, r, packId, params)
+}
+
+func (s *Server) UpdateEmojiPack(w http.ResponseWriter, r *http.Request, packId EmojiPackId, params UpdateEmojiPackParams) {
+	if s.emoji == nil {
+		s.AuthServer.UpdateEmojiPack(w, r, packId, params)
+		return
+	}
+	s.emoji.UpdateEmojiPack(w, r, packId, params)
+}
+
+func (s *Server) DeleteEmojiPack(w http.ResponseWriter, r *http.Request, packId EmojiPackId, params DeleteEmojiPackParams) {
+	if s.emoji == nil {
+		s.AuthServer.DeleteEmojiPack(w, r, packId, params)
+		return
+	}
+	s.emoji.DeleteEmojiPack(w, r, packId, params)
+}
+
+func (s *Server) AddEmojiPack(w http.ResponseWriter, r *http.Request, packId EmojiPackId, params AddEmojiPackParams) {
+	if s.emoji == nil {
+		s.AuthServer.AddEmojiPack(w, r, packId, params)
+		return
+	}
+	s.emoji.AddEmojiPack(w, r, packId, params)
+}
+
+func (s *Server) RemoveEmojiPack(w http.ResponseWriter, r *http.Request, packId EmojiPackId, params RemoveEmojiPackParams) {
+	if s.emoji == nil {
+		s.AuthServer.RemoveEmojiPack(w, r, packId, params)
+		return
+	}
+	s.emoji.RemoveEmojiPack(w, r, packId, params)
+}
+
+func (s *Server) AddCustomEmoji(w http.ResponseWriter, r *http.Request, packId EmojiPackId, params AddCustomEmojiParams) {
+	if s.emoji == nil {
+		s.AuthServer.AddCustomEmoji(w, r, packId, params)
+		return
+	}
+	s.emoji.AddCustomEmoji(w, r, packId, params)
+}
+
+func (s *Server) UpdateCustomEmoji(w http.ResponseWriter, r *http.Request, packId EmojiPackId, emojiId EmojiId, params UpdateCustomEmojiParams) {
+	if s.emoji == nil {
+		s.AuthServer.UpdateCustomEmoji(w, r, packId, emojiId, params)
+		return
+	}
+	s.emoji.UpdateCustomEmoji(w, r, packId, emojiId, params)
+}
+
+func (s *Server) DeleteCustomEmoji(w http.ResponseWriter, r *http.Request, packId EmojiPackId, emojiId EmojiId, params DeleteCustomEmojiParams) {
+	if s.emoji == nil {
+		s.AuthServer.DeleteCustomEmoji(w, r, packId, emojiId, params)
+		return
+	}
+	s.emoji.DeleteCustomEmoji(w, r, packId, emojiId, params)
+}
+
+func (s *Server) ReportEmojiPack(w http.ResponseWriter, r *http.Request, packId EmojiPackId, params ReportEmojiPackParams) {
+	if s.emoji == nil {
+		s.AuthServer.ReportEmojiPack(w, r, packId, params)
+		return
+	}
+	s.emoji.ReportEmojiPack(w, r, packId, params)
+}
+
+func (s *Server) GetEmojiPackByLink(w http.ResponseWriter, r *http.Request, slug StickerPackSlug, params GetEmojiPackByLinkParams) {
+	if s.emoji == nil {
+		s.AuthServer.GetEmojiPackByLink(w, r, slug, params)
+		return
+	}
+	s.emoji.GetEmojiPackByLink(w, r, slug, params)
+}
+
+func (s *Server) GetCustomEmoji(w http.ResponseWriter, r *http.Request, emojiId EmojiId, params GetCustomEmojiParams) {
+	if s.emoji == nil {
+		s.AuthServer.GetCustomEmoji(w, r, emojiId, params)
+		return
+	}
+	s.emoji.GetCustomEmoji(w, r, emojiId, params)
+}
+
+func (s *Server) GetCustomEmojiImage(w http.ResponseWriter, r *http.Request, emojiId EmojiId, params GetCustomEmojiImageParams) {
+	if s.emoji == nil {
+		s.AuthServer.GetCustomEmojiImage(w, r, emojiId, params)
+		return
+	}
+	s.emoji.GetCustomEmojiImage(w, r, emojiId, params)
+}
+
+func (s *Server) GetGroupEmoji(w http.ResponseWriter, r *http.Request, chatId ChatId, params GetGroupEmojiParams) {
+	if s.emoji == nil {
+		s.AuthServer.GetGroupEmoji(w, r, chatId, params)
+		return
+	}
+	s.emoji.GetGroupEmoji(w, r, chatId, params)
 }

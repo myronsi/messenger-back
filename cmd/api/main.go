@@ -21,6 +21,7 @@ import (
 	"github.com/myronsi/messenger-back/internal/calls"
 	"github.com/myronsi/messenger-back/internal/chats"
 	"github.com/myronsi/messenger-back/internal/config"
+	"github.com/myronsi/messenger-back/internal/emoji"
 	"github.com/myronsi/messenger-back/internal/geoip"
 	"github.com/myronsi/messenger-back/internal/httpapi"
 	"github.com/myronsi/messenger-back/internal/linkpreview"
@@ -201,7 +202,7 @@ func run() error {
 				ProfileChanged: rt.profileChanged,
 			}),
 		).WithAccount(httpapi.NewAccountServer(httpapi.AccountOptions{
-			Store: pg, Directory: rt.directory, Deleter: authSvc, AfterDeletion: rt.accountDeleted(storage, callsSvc, log),
+			Store: pg, Directory: rt.directory, Deleter: authSvc, AfterDeletion: rt.accountDeleted(storage, callsSvc, log), Emoji: emoji.New(pg),
 			OnBlocked: func(ctx context.Context, blocker, blocked int64) {
 				if callsSvc != nil {
 					callsSvc.Blocked(ctx, blocker, blocked)
@@ -224,6 +225,8 @@ func run() error {
 			Limiter: rt.limiter, BasePath: cfg.HTTP.BasePath, Log: log,
 		})).WithStickers(httpapi.NewStickerServer(httpapi.StickerOptions{
 			Service: stickers.New(pg.Stickers()), BasePath: cfg.HTTP.BasePath, Log: log,
+		})).WithEmoji(httpapi.NewEmojiServer(httpapi.EmojiOptions{
+			Service: emoji.New(pg), Images: mediaSvc, BasePath: cfg.HTTP.BasePath, Log: log,
 		})).WithCalls(httpapi.NewCallServer(httpapi.CallOptions{
 			Service: callsSvc, Limits: callLimits(cfg.Calls), Limiter: rt.limiter, Log: log,
 		})).WithConnections(httpapi.NewConnectionServer(httpapi.ConnectionOptions{

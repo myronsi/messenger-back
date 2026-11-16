@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/myronsi/messenger-back/internal/emoji"
 	"github.com/myronsi/messenger-back/internal/events"
 	"github.com/myronsi/messenger-back/internal/ids"
 	"github.com/myronsi/messenger-back/internal/store/elastic"
@@ -113,7 +114,7 @@ func (in *Indexer) doc(ctx context.Context, m scylla.Message) Doc {
 		d.SenderID = id(*m.SenderID)
 	}
 	if m.Content != nil {
-		d.Content = *m.Content
+		d.Content = emoji.Plain(*m.Content)
 	}
 	if m.AttachmentID != nil {
 		if a, err := in.files.Get(ctx, uuid.UUID(*m.AttachmentID)); err == nil {

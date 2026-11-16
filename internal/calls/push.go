@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/myronsi/messenger-back/internal/emoji"
 	"github.com/myronsi/messenger-back/internal/notifications"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 )
@@ -94,7 +95,7 @@ func (s *Service) pushOne(ctx context.Context, c postgres.Call, d postgres.CallP
 func (s *Service) pushTitle(ctx context.Context, c postgres.Call) string {
 	if c.Kind == postgres.ChatDirect {
 		if u, err := s.d.Store.Users().Get(ctx, c.InitiatorID); err == nil && u.DisplayName != "" {
-			return u.DisplayName
+			return emoji.Plain(u.DisplayName)
 		}
 		return "Messenger"
 	}

@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/myronsi/messenger-back/internal/auth"
+	"github.com/myronsi/messenger-back/internal/emoji"
 	"github.com/myronsi/messenger-back/internal/events"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/users"
@@ -47,6 +48,7 @@ type AccountOptions struct {
 	OnBlocked      func(ctx context.Context, blockerID, blockedID int64)
 	Events         EventEmitter
 	ProfileChanged func(ctx context.Context, userID, version int64)
+	Emoji          EmojiCleaner
 	Limiter        RateAllower
 	BasePath       string
 	Log            *slog.Logger
@@ -117,7 +119,8 @@ func (a *AccountServer) UpdateMe(w http.ResponseWriter, r *http.Request, _ Updat
 		switch k {
 		case "display_name":
 			var name string
-			if json.Unmarshal(v, &name) != nil || strings.TrimSpace(name) == "" || utf8.RuneCountInString(name) > 64 {
+			if json.Unmarshal(v, &name) != nil || strings.TrimSpace(emoji.Plain(name)) == "" || utf8.RuneCountInString(emoji.Plain(name)) > 64 ||
+				utf8.RuneCountInString(name) > maxRawDisplayName {
 				WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "display_name", Message: "1 to 64 characters"})
 				return
 			}
@@ -125,7 +128,7 @@ func (a *AccountServer) UpdateMe(w http.ResponseWriter, r *http.Request, _ Updat
 			prof.DisplayName = &name
 		case "bio":
 			var bio *string
-			if json.Unmarshal(v, &bio) != nil || (bio != nil && utf8.RuneCountInString(*bio) > 500) {
+			if json.Unmarshal(v, &bio) != nil || (bio != nil && (utf8.RuneCountInString(emoji.Plain(*bio)) > 500 || utf8.RuneCountInString(*bio) > maxRawBio)) {
 				WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "bio", Message: "at most 500 characters or null"})
 				return
 			}
@@ -166,6 +169,9 @@ func (a *AccountServer) UpdateMe(w http.ResponseWriter, r *http.Request, _ Updat
 			WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: k, Message: "unknown field"})
 			return
 		}
+	}
+	if !a.cleanProfileEmoji(w, r, p.UserID, &prof) {
+		return
 	}
 	before := profileVersionOf(r.Context(), a.o.Store.Users(), p.UserID)
 	u, err := a.o.Store.Users().PatchProfile(r.Context(), p.UserID, prof)

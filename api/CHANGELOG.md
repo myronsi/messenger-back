@@ -2,6 +2,17 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.31
+
+- Custom emoji: `CustomEmoji`, `EmojiPack` and the `emoji` tag with `GET`/`POST /emoji/packs`, `GET`/`PATCH`/`DELETE
+  /emoji/packs/{pack_id}`, `PUT`/`DELETE /emoji/packs/{pack_id}/installation`, `POST /emoji/packs/{pack_id}/emoji`,
+  `PATCH`/`DELETE /emoji/packs/{pack_id}/emoji/{emoji_id}`, `POST /emoji/packs/{pack_id}/report`, `GET /emoji/links/{slug}`,
+  `GET /emoji/items/{emoji_id}`, `GET /emoji/items/{emoji_id}/image` and `GET /groups/{chat_id}/emoji` (one set per group, edited by the
+  owner and admins).
+- Message text, captions, display names and bios may hold the tokens `<:shortcode:id>` and `<a:shortcode:id>`; the
+  server turns tokens the sender may not use into `:shortcode:`. `Reaction.emoji` may be `c:<id>`.
+- `UploadPurpose` gains `emoji`. `UpdateMeRequest.display_name` allows up to 400 characters and `bio` up to 4000 (the
+  visible text keeps its limits of 64 and 500, counting each token as its `:shortcode:`).
 ## 2.1.0-alpha.30
 
 - Connected accounts (`Connection`, `ConnectionList`, `ConnectionProvider`): `GET /me/connections`,

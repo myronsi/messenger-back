@@ -22,7 +22,8 @@
         "emoji": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 32
+          "maxLength": 32,
+          "description": "A Unicode emoji, or c:<id> for a custom emoji the user may use (custom ones are only checked when added)."
         }
       },
       "required": [

@@ -10,6 +10,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/myronsi/messenger-back/internal/emoji"
 	"github.com/myronsi/messenger-back/internal/store/elastic"
 	"github.com/myronsi/messenger-back/internal/store/scylla"
 )
@@ -344,7 +345,7 @@ func (s *Searcher) check(ctx context.Context, userID int64, raw []esHit) ([]*Hit
 func current(h map[string][]string, m scylla.Message) *string {
 	strip := strings.NewReplacer(MarkStart, "", MarkEnd, "")
 	if e := best(h, contentHighlights, func(excerpt string) bool {
-		return m.Content != nil && strings.Contains(*m.Content, strip.Replace(excerpt))
+		return m.Content != nil && strings.Contains(emoji.Plain(*m.Content), strip.Replace(excerpt))
 	}); e != nil {
 		return e
 	}

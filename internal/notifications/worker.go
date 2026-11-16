@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/myronsi/messenger-back/internal/emoji"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/scylla"
 )
@@ -116,9 +117,9 @@ func (w *Worker) Handle(ctx context.Context, j postgres.NotificationJob) error {
 			if err != nil {
 				return err
 			}
-			p.Title = sender.DisplayName
+			p.Title = emoji.Plain(sender.DisplayName)
 			if m.Type == scylla.TypeText && m.Content != nil {
-				r := []rune(*m.Content)
+				r := []rune(emoji.Plain(*m.Content))
 				if len(r) > 160 {
 					r = r[:160]
 				}

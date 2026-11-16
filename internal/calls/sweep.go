@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/myronsi/messenger-back/internal/emoji"
 	"github.com/myronsi/messenger-back/internal/messages"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 )
@@ -200,7 +201,7 @@ func (s *Service) postSummary(ctx context.Context, callID int64) {
 	}
 	name := ""
 	if u, err := s.d.Store.Users().Get(ctx, c.InitiatorID); err == nil {
-		name = u.DisplayName
+		name = emoji.Plain(u.DisplayName)
 		if name == "" {
 			name = u.Username
 		}

@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/myronsi/messenger-back/internal/drawing"
+	"github.com/myronsi/messenger-back/internal/emoji"
 	"github.com/myronsi/messenger-back/internal/events"
 	"github.com/myronsi/messenger-back/internal/ids"
 	"github.com/myronsi/messenger-back/internal/linkpreview"
@@ -103,7 +104,13 @@ type Deps struct {
 	QueueNotification func(context.Context, int64, int64, []int64) error
 	// Accepted is called for every new message (the messages-per-second metric). Optional.
 	Accepted func()
+	Emoji    EmojiFilter
 	Log      *slog.Logger
+}
+
+type EmojiFilter interface {
+	Clean(ctx context.Context, userID int64, text string) (string, error)
+	Allowed(ctx context.Context, userID, emojiID int64) (bool, error)
 }
 
 // EventLog appends domain events (events.Log).
@@ -316,6 +323,13 @@ func (s *Service) send(ctx context.Context, r SendRequest) (Sent, error) {
 	}
 	if err := s.requireMember(ctx, r.ChatID, r.SenderID); err != nil {
 		return Sent{}, err
+	}
+	if r.Content != nil {
+		cleaned, err := s.cleanEmoji(ctx, r.SenderID, *r.Content)
+		if err != nil {
+			return Sent{}, err
+		}
+		r.Content = &cleaned
 	}
 	chat, err := s.d.Store.Chats().Get(ctx, r.ChatID)
 	if errors.Is(err, postgres.ErrNotFound) {
@@ -646,6 +660,10 @@ func (s *Service) Edit(ctx context.Context, userID, chatID, messageID int64, con
 	if err := s.requireMember(ctx, chatID, userID); err != nil {
 		return scylla.Message{}, err
 	}
+	content, err := s.cleanEmoji(ctx, userID, content)
+	if err != nil {
+		return scylla.Message{}, err
+	}
 	m, err := s.message(ctx, chatID, messageID)
 	if err != nil {
 		return scylla.Message{}, err
@@ -856,6 +874,35 @@ func ValidEmoji(e string) bool {
 	return true
 }
 
+func (s *Service) cleanEmoji(ctx context.Context, userID int64, text string) (string, error) {
+	if s.d.Emoji == nil {
+		return emoji.Plain(text), nil
+	}
+	cleaned, err := s.d.Emoji.Clean(ctx, userID, text)
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", ErrUnavailable, err)
+	}
+	return cleaned, nil
+}
+
+func (s *Service) checkCustomReaction(ctx context.Context, userID int64, reaction string) error {
+	if !strings.HasPrefix(reaction, emoji.ReactionPrefix) {
+		return nil
+	}
+	id, ok := emoji.ReactionID(reaction)
+	if !ok || s.d.Emoji == nil {
+		return invalid("emoji is not a custom emoji you can use")
+	}
+	allowed, err := s.d.Emoji.Allowed(ctx, userID, id)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrUnavailable, err)
+	}
+	if !allowed {
+		return invalid("emoji is not a custom emoji you can use")
+	}
+	return nil
+}
+
 // React adds or removes the user's reaction to a message.
 func (s *Service) React(ctx context.Context, userID, chatID, messageID int64, emoji string, add bool) error {
 	if !ValidEmoji(emoji) {
@@ -863,6 +910,11 @@ func (s *Service) React(ctx context.Context, userID, chatID, messageID int64, em
 	}
 	if err := s.requireMember(ctx, chatID, userID); err != nil {
 		return err
+	}
+	if add {
+		if err := s.checkCustomReaction(ctx, userID, emoji); err != nil {
+			return err
+		}
 	}
 	m, err := s.message(ctx, chatID, messageID)
 	if err != nil {

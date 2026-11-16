@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.30
+  version: 2.1.0-alpha.31
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -56,6 +56,8 @@ tags:
     description: File and voice uploads
   - name: stickers
     description: Sticker packs, the sticker panel and recently sent stickers
+  - name: emoji
+    description: Custom emoji packs and group emoji
   - name: requests
     description: Approval requests (direct messages and group invites)
   - name: websocket
@@ -2607,6 +2609,311 @@ paths:
               schema: { $ref: "#/components/schemas/StickerPack" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+  /emoji/packs:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    get:
+      tags: [emoji]
+      operationId: listEmojiPacks
+      summary: The custom emoji the user can use
+      description: |
+        The user's own packs, the packs they added, and the group emoji of every group they are in (`chat_id`
+        set). Each pack lists its emoji in order. At most 100 packs.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: The packs
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EmojiPackList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [emoji]
+      operationId: createEmojiPack
+      summary: Create an emoji pack
+      description: A new, empty pack owned by the user. Its `slug` is the share link (`/emoji/links/{slug}`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EmojiPackTitleRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "201":
+          description: The new pack
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EmojiPack" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+  /emoji/packs/{pack_id}:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/EmojiPackId"
+    get:
+      tags: [emoji]
+      operationId: getEmojiPack
+      summary: An emoji pack
+      description: |
+        The user's own pack, a pack they added, or the group emoji of a group they are in (`404` otherwise, so
+        packs cannot be found by guessing IDs). Open other packs with `GET /emoji/links/{slug}`.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: The pack
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EmojiPack" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [emoji]
+      operationId: updateEmojiPack
+      summary: Rename an emoji pack
+      description: Only the owner (`403` otherwise). Group emoji take the group's name and cannot be renamed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EmojiPackTitleRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: The pack
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EmojiPack" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+    delete:
+      tags: [emoji]
+      operationId: deleteEmojiPack
+      summary: Delete an emoji pack
+      description: Only the owner. Emoji already sent from it turn into their `:shortcode:` text in clients.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Deleted
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /emoji/packs/{pack_id}/installation:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/EmojiPackId"
+    put:
+      tags: [emoji]
+      operationId: addEmojiPack
+      summary: Add an emoji pack
+      description: Lets the user use the pack's emoji. A pack of another user is found by its link first.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Added
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [emoji]
+      operationId: removeEmojiPack
+      summary: Remove an added emoji pack
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Removed
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /emoji/packs/{pack_id}/emoji:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/EmojiPackId"
+    post:
+      tags: [emoji]
+      operationId: addCustomEmoji
+      summary: Add an emoji to a pack
+      description: |
+        The owner of a pack, or the owner and admins of a group for its group emoji. Upload the image with
+        `POST /attachments` (`purpose: emoji`) first. At most 200 emoji per pack and 50 per group (`409`), and a
+        shortcode once per pack (`409`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AddCustomEmojiRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "201":
+          description: The emoji
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomEmoji" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+  /emoji/packs/{pack_id}/emoji/{emoji_id}:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/EmojiPackId"
+      - $ref: "#/components/parameters/EmojiId"
+    patch:
+      tags: [emoji]
+      operationId: updateCustomEmoji
+      summary: Change an emoji's shortcode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateCustomEmojiRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: The emoji
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomEmoji" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+    delete:
+      tags: [emoji]
+      operationId: deleteCustomEmoji
+      summary: Remove an emoji from a pack
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Removed
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /emoji/packs/{pack_id}/report:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/EmojiPackId"
+    post:
+      tags: [emoji]
+      operationId: reportEmojiPack
+      summary: Report an emoji pack
+      description: Packs with enough reports are hidden. At most 20 reports per user and day (`429`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReportStickerPackRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Reported
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /emoji/links/{slug}:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/StickerPackSlug"
+    get:
+      tags: [emoji]
+      operationId: getEmojiPackByLink
+      summary: An emoji pack by its share link
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: The pack
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EmojiPack" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /emoji/items/{emoji_id}:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/EmojiId"
+    get:
+      tags: [emoji]
+      operationId: getCustomEmoji
+      summary: One custom emoji
+      description: "Any signed-in user. For tooltips of `c:<id>` reactions and to open the pack (`pack_slug`)."
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: The emoji
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomEmoji" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /emoji/items/{emoji_id}/image:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/EmojiId"
+    get:
+      tags: [emoji]
+      operationId: getCustomEmojiImage
+      summary: The image of a custom emoji
+      description: |
+        Any signed-in user; a PNG of 128 x 128 px or a GIF. Cached as immutable. `404` once the emoji or its pack
+        is deleted: clients then show the token's `:shortcode:` text.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Image
+          content:
+            image/*:
+              schema: { type: string, format: binary }
+        "302":
+          description: Redirect to a short-lived signed URL in object storage
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /groups/{chat_id}/emoji:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ChatId"
+    get:
+      tags: [emoji]
+      operationId: getGroupEmoji
+      summary: The group's emoji
+      description: |
+        Members only. Created empty on first use; owner and admins add and remove emoji through
+        `/emoji/packs/{pack_id}/emoji` (`can_edit`). Members can use them in any chat while they are members.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: The group's pack
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EmojiPack" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /stickers/recent:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
@@ -4654,6 +4961,16 @@ components:
       in: path
       required: true
       schema: { $ref: "#/components/schemas/Id" }
+    EmojiPackId:
+      name: pack_id
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/Id" }
+    EmojiId:
+      name: emoji_id
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/Id" }
     StickerPackSlug:
       name: slug
       in: path
@@ -5160,8 +5477,17 @@ components:
       type: object
       minProperties: 1
       properties:
-        display_name: { type: string, minLength: 1, maxLength: 64 }
-        bio: { type: [string, "null"], maxLength: 500 }
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 400
+          description: |
+            At most 64 characters, counting each custom emoji token (`<:shortcode:id>`) as its `:shortcode:` text.
+            Tokens the user may not use become `:shortcode:`.
+        bio:
+          type: [string, "null"]
+          maxLength: 4000
+          description: At most 500 characters, counting custom emoji tokens as their `:shortcode:` text.
         pronouns:
           type: [string, "null"]
           maxLength: 40
@@ -5521,7 +5847,11 @@ components:
 
         `profile_background`: an image (10 MB), an animated GIF (15 MB) or a video of at most 15 s (15 MB). Use it
         with `PUT /me/background` or `PUT /groups/{chat_id}/background`.
-      enum: [message, avatar, sticker, profile_music, profile_background]
+
+        `emoji`: a PNG, JPEG, still WebP or GIF of at most 8 MB. The server scales it into 128 x 128 px (a GIF frame
+        by frame) and refuses it with `413` when the result is still over 256 KB. Use it with
+        `POST /emoji/packs/{pack_id}/emoji`.
+      enum: [message, avatar, sticker, profile_music, profile_background, emoji]
     UploadAttachmentRequest:
       type: object
       required: [file, purpose]
@@ -5774,6 +6104,81 @@ components:
           type: array
           maxItems: 120
           items: { $ref: "#/components/schemas/Id" }
+    CustomEmoji:
+      type: object
+      description: |
+        A custom emoji. In text it is written as the token `<:shortcode:id>` (`<a:shortcode:id>` when animated) and
+        drawn with `GET /emoji/items/{id}/image`; in reactions as `c:<id>`.
+      required: [id, pack_id, shortcode, is_animated, url]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        pack_id: { $ref: "#/components/schemas/Id" }
+        shortcode: { $ref: "#/components/schemas/EmojiShortcode" }
+        is_animated: { type: boolean }
+        url:
+          type: string
+          description: Same-origin path of the image (`/api/v2/emoji/items/{id}/image`).
+        pack_slug:
+          allOf: [{ $ref: "#/components/schemas/StickerPackSlug" }]
+          description: The share link of the emoji's pack; missing for group emoji.
+    EmojiShortcode:
+      type: string
+      pattern: "^[a-z0-9_]{2,32}$"
+    EmojiPack:
+      type: object
+      required: [id, title, version, is_mine, is_installed, is_hidden, can_edit, emoji]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        title: { type: string, minLength: 1, maxLength: 64 }
+        version:
+          type: integer
+          minimum: 0
+          description: Grows whenever the title or the emoji of the pack change.
+        slug:
+          allOf: [{ $ref: "#/components/schemas/StickerPackSlug" }]
+          description: The share link; missing for group emoji.
+        chat_id:
+          allOf: [{ $ref: "#/components/schemas/Id" }]
+          description: Set for the group emoji of that group.
+        owner_id: { $ref: "#/components/schemas/Id" }
+        is_mine: { type: boolean }
+        is_installed: { type: boolean }
+        is_hidden:
+          type: boolean
+          description: Hidden after reports; only the owner sees and uses it.
+        can_edit:
+          type: boolean
+          description: The user may add, rename and remove emoji (owner of the pack, or owner or admin of the group).
+        emoji:
+          type: array
+          maxItems: 200
+          items: { $ref: "#/components/schemas/CustomEmoji" }
+    EmojiPackList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/EmojiPack" }
+    EmojiPackTitleRequest:
+      type: object
+      additionalProperties: false
+      required: [title]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 64 }
+    AddCustomEmojiRequest:
+      type: object
+      additionalProperties: false
+      required: [attachment_id, shortcode]
+      properties:
+        attachment_id: { $ref: "#/components/schemas/AttachmentRef" }
+        shortcode: { $ref: "#/components/schemas/EmojiShortcode" }
+    UpdateCustomEmojiRequest:
+      type: object
+      additionalProperties: false
+      required: [shortcode]
+      properties:
+        shortcode: { $ref: "#/components/schemas/EmojiShortcode" }
     StickerPackReportReason:
       type: string
       enum: [spam, violence, sexual, hate, copyright, other]
@@ -5795,7 +6200,11 @@ components:
       type: object
       required: [emoji, user_id]
       properties:
-        emoji: { type: string, minLength: 1, maxLength: 32 }
+        emoji:
+          type: string
+          minLength: 1
+          maxLength: 32
+          description: A Unicode emoji, or `c:<id>` for a custom emoji (`GET /emoji/items/{id}/image`).
         user_id: { $ref: "#/components/schemas/Id" }
     ReadReceipt:
       type: object
