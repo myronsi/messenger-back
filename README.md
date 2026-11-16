@@ -14,6 +14,7 @@ make up
 The API is served at `http://127.0.0.1:8080/api/v2`; readiness is `/readyz`.
 Audio calls (end-to-end encrypted, through a LiveKit media server) are off by default; see [calls](docs/calls.md).
 Use `make test`, `make lint` and `make docker` for validation and builds.
+Integration tests need PostgreSQL, Redis, ScyllaDB and S3: `make test-deps` (or `sh scripts/test-deps.sh` without make) starts them in memory in about 15 seconds and writes `.env.test`; then `make test-integration`, or `set -a; . ./.env.test; set +a` before `go test`. `make test-deps-down` removes them.
 
 ## Deployment
 
