@@ -57,9 +57,10 @@ func (s *Server) UpdateNotificationSettings(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	var b struct {
-		Enabled  *bool `json:"enabled"`
-		Sound    *bool `json:"sound"`
-		Previews *bool `json:"previews"`
+		Enabled           *bool `json:"enabled"`
+		Sound             *bool `json:"sound"`
+		Previews          *bool `json:"previews"`
+		BirthdayReminders *bool `json:"birthday_reminders"`
 	}
 	if !decode(w, r, &b) {
 		return
@@ -68,7 +69,18 @@ func (s *Server) UpdateNotificationSettings(w http.ResponseWriter, r *http.Reque
 		WriteProblem(w, 400, ErrorCodeInvalidRequest)
 		return
 	}
-	if err := s.notifications.Store.SetPreferences(r.Context(), p.UserID, postgres.NotificationPreferences{Enabled: *b.Enabled, Sound: *b.Sound, Previews: *b.Previews}); err != nil {
+	prefs := postgres.NotificationPreferences{Enabled: *b.Enabled, Sound: *b.Sound, Previews: *b.Previews, BirthdayReminders: true}
+	if b.BirthdayReminders != nil {
+		prefs.BirthdayReminders = *b.BirthdayReminders
+	} else {
+		current, err := s.notifications.Store.Preferences(r.Context(), p.UserID)
+		if err != nil {
+			WriteProblem(w, 503, ErrorCodeInternalError)
+			return
+		}
+		prefs.BirthdayReminders = current.BirthdayReminders
+	}
+	if err := s.notifications.Store.SetPreferences(r.Context(), p.UserID, prefs); err != nil {
 		WriteProblem(w, 503, ErrorCodeInternalError)
 		return
 	}

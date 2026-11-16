@@ -13,6 +13,7 @@ import (
 
 	"github.com/myronsi/messenger-back/internal/auth"
 	"github.com/myronsi/messenger-back/internal/geoip"
+	"github.com/myronsi/messenger-back/internal/users"
 )
 
 // RefreshCookieName is the name of the refresh token cookie (the same as in the Python backend, so
@@ -31,6 +32,7 @@ type AuthOptions struct {
 	CookieSecure bool
 	// TrustedProxies are the reverse proxies whose X-Forwarded-For and X-Real-IP headers are believed.
 	TrustedProxies []netip.Prefix
+	Directory      *users.Directory
 }
 
 // AuthServer implements the authentication, session and two-factor operations of the contract. The
@@ -44,6 +46,7 @@ type AuthServer struct {
 	cookieSecure bool
 
 	trustedProxies []netip.Prefix
+	directory      *users.Directory
 }
 
 var _ ServerInterface = (*AuthServer)(nil)
@@ -58,7 +61,7 @@ func NewAuthServer(o AuthOptions) *AuthServer {
 	if path == "" {
 		path = o.BasePath + "/auth/refresh"
 	}
-	return &AuthServer{svc: o.Service, log: log, basePath: o.BasePath, cookiePath: path, cookieSecure: o.CookieSecure, trustedProxies: o.TrustedProxies}
+	return &AuthServer{svc: o.Service, log: log, basePath: o.BasePath, cookiePath: path, cookieSecure: o.CookieSecure, trustedProxies: o.TrustedProxies, directory: o.Directory}
 }
 
 // ---------------------------------------------------------------- request and response helpers
@@ -346,7 +349,14 @@ func (a *AuthServer) GetMe(w http.ResponseWriter, r *http.Request, _ GetMeParams
 		a.fail(w, r, err, true)
 		return
 	}
-	me := PresentMe(u, a.basePath)
+	var media users.Media
+	if a.directory != nil {
+		if media, err = a.directory.MediaOf(r.Context(), u); err != nil {
+			a.fail(w, r, err, true)
+			return
+		}
+	}
+	me := PresentMe(u, a.basePath, media)
 	status, err := a.svc.RecoveryKeyStatus(r.Context(), p)
 	if err != nil {
 		a.fail(w, r, err, true)

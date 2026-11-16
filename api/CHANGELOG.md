@@ -2,6 +2,19 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.29
+
+- `User` gains the required `pronouns`, `birthday` (`Birthday`: day, month, optional year), `music`
+  (`ProfileMusic`) and `background` (`ProfileBackground`: an uploaded image, GIF or short video, a built-in preset or
+  one or two colors); all grow `profile_version`. `Me` gains the required `time_zone`.
+- `PATCH /me` accepts `pronouns`, `birthday` and `time_zone`.
+- `PUT`/`DELETE /me/music`, `PUT`/`DELETE /me/background`, `PUT`/`DELETE /groups/{chat_id}/background`.
+  `Group` gains the required `background`.
+- `UploadPurpose` gains `profile_music` (cut to at most 30 s with the new `start_ms` and `end_ms`, tags in the new
+  `Attachment.tags`) and `profile_background`.
+- `PrivacySettings` gains the required `birthday_visibility`; `birthday_visibility` is a new privacy exception key.
+- `NotificationPreferences` gains the optional `birthday_reminders`.
+
 ## 2.1.0-alpha.28
 
 - `MediaKind` gains `voice` (voice messages only) and `link` (messages whose text or caption contains a web link) for

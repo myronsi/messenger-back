@@ -226,6 +226,38 @@ func (s *Server) ListUserAvatars(w http.ResponseWriter, r *http.Request, userID 
 }
 
 // UpdateMe delegates to the account endpoints.
+func (s *Server) SetMyMusic(w http.ResponseWriter, r *http.Request, params SetMyMusicParams) {
+	if s.account == nil {
+		s.AuthServer.SetMyMusic(w, r, params)
+		return
+	}
+	s.account.SetMyMusic(w, r, params)
+}
+
+func (s *Server) DeleteMyMusic(w http.ResponseWriter, r *http.Request, params DeleteMyMusicParams) {
+	if s.account == nil {
+		s.AuthServer.DeleteMyMusic(w, r, params)
+		return
+	}
+	s.account.DeleteMyMusic(w, r, params)
+}
+
+func (s *Server) SetMyBackground(w http.ResponseWriter, r *http.Request, params SetMyBackgroundParams) {
+	if s.account == nil {
+		s.AuthServer.SetMyBackground(w, r, params)
+		return
+	}
+	s.account.SetMyBackground(w, r, params)
+}
+
+func (s *Server) DeleteMyBackground(w http.ResponseWriter, r *http.Request, params DeleteMyBackgroundParams) {
+	if s.account == nil {
+		s.AuthServer.DeleteMyBackground(w, r, params)
+		return
+	}
+	s.account.DeleteMyBackground(w, r, params)
+}
+
 func (s *Server) UpdateMe(w http.ResponseWriter, r *http.Request, params UpdateMeParams) {
 	if s.account == nil {
 		s.AuthServer.UpdateMe(w, r, params)
@@ -617,6 +649,22 @@ func (s *Server) DeleteGroup(w http.ResponseWriter, r *http.Request, chatID Chat
 }
 
 // SetGroupAvatar delegates to the group endpoints.
+func (s *Server) SetGroupBackground(w http.ResponseWriter, r *http.Request, chatID ChatId, params SetGroupBackgroundParams) {
+	if s.chats == nil {
+		s.AuthServer.SetGroupBackground(w, r, chatID, params)
+		return
+	}
+	s.chats.SetGroupBackground(w, r, chatID, params)
+}
+
+func (s *Server) DeleteGroupBackground(w http.ResponseWriter, r *http.Request, chatID ChatId, params DeleteGroupBackgroundParams) {
+	if s.chats == nil {
+		s.AuthServer.DeleteGroupBackground(w, r, chatID, params)
+		return
+	}
+	s.chats.DeleteGroupBackground(w, r, chatID, params)
+}
+
 func (s *Server) SetGroupAvatar(w http.ResponseWriter, r *http.Request, chatID ChatId, params SetGroupAvatarParams) {
 	if s.chats == nil {
 		s.AuthServer.SetGroupAvatar(w, r, chatID, params)

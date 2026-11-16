@@ -7,6 +7,7 @@ package sqlcdb
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -14,7 +15,7 @@ import (
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (username, display_name, password_hash)
 VALUES ($1, $2, $3)
-RETURNING id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id, profile_version
+RETURNING id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id, profile_version, pronouns, birthday_day, birthday_month, birthday_year, time_zone, music_attachment_id, music_title, music_artist, background_kind, background_attachment_id, background_preset, background_colors
 `
 
 type CreateUserParams struct {
@@ -38,6 +39,18 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.UpdatedAt,
 		&i.AvatarAttachmentID,
 		&i.ProfileVersion,
+		&i.Pronouns,
+		&i.BirthdayDay,
+		&i.BirthdayMonth,
+		&i.BirthdayYear,
+		&i.TimeZone,
+		&i.MusicAttachmentID,
+		&i.MusicTitle,
+		&i.MusicArtist,
+		&i.BackgroundKind,
+		&i.BackgroundAttachmentID,
+		&i.BackgroundPreset,
+		&i.BackgroundColors,
 	)
 	return i, err
 }
@@ -88,7 +101,7 @@ func (q *Queries) EnsurePrivacySettings(ctx context.Context, userID int64) error
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id, profile_version FROM users WHERE id = $1
+SELECT id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id, profile_version, pronouns, birthday_day, birthday_month, birthday_year, time_zone, music_attachment_id, music_title, music_artist, background_kind, background_attachment_id, background_preset, background_colors FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
@@ -106,12 +119,24 @@ func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
 		&i.UpdatedAt,
 		&i.AvatarAttachmentID,
 		&i.ProfileVersion,
+		&i.Pronouns,
+		&i.BirthdayDay,
+		&i.BirthdayMonth,
+		&i.BirthdayYear,
+		&i.TimeZone,
+		&i.MusicAttachmentID,
+		&i.MusicTitle,
+		&i.MusicArtist,
+		&i.BackgroundKind,
+		&i.BackgroundAttachmentID,
+		&i.BackgroundPreset,
+		&i.BackgroundColors,
 	)
 	return i, err
 }
 
 const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id, profile_version FROM users WHERE LOWER(username) = LOWER($1)
+SELECT id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id, profile_version, pronouns, birthday_day, birthday_month, birthday_year, time_zone, music_attachment_id, music_title, music_artist, background_kind, background_attachment_id, background_preset, background_colors FROM users WHERE LOWER(username) = LOWER($1)
 `
 
 func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User, error) {
@@ -129,12 +154,97 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 		&i.UpdatedAt,
 		&i.AvatarAttachmentID,
 		&i.ProfileVersion,
+		&i.Pronouns,
+		&i.BirthdayDay,
+		&i.BirthdayMonth,
+		&i.BirthdayYear,
+		&i.TimeZone,
+		&i.MusicAttachmentID,
+		&i.MusicTitle,
+		&i.MusicArtist,
+		&i.BackgroundKind,
+		&i.BackgroundAttachmentID,
+		&i.BackgroundPreset,
+		&i.BackgroundColors,
 	)
 	return i, err
 }
 
+const listBirthdayCandidates = `-- name: ListBirthdayCandidates :many
+SELECT r.id AS receiver_id, u.id AS user_id, u.display_name, c.id AS chat_id,
+       date_part('year', timezone(r.time_zone, $1::timestamptz))::smallint AS local_year
+FROM users r
+LEFT JOIN notification_preferences n ON n.user_id = r.id
+JOIN participants pr ON pr.user_id = r.id
+JOIN chats c ON c.id = pr.chat_id AND c.type = 'direct'
+JOIN participants pu ON pu.chat_id = c.id AND pu.user_id <> r.id
+JOIN users u ON u.id = pu.user_id
+WHERE COALESCE(n.enabled, true) AND COALESCE(n.birthday_reminders, true)
+  AND u.birthday_month = ANY($2::smallint[])
+  AND u.birthday_day = ANY($3::smallint[])
+  AND date_part('hour', timezone(r.time_zone, $1::timestamptz)) >= $4::int
+  AND u.birthday_month = date_part('month', timezone(r.time_zone, $1::timestamptz))::smallint
+  AND (u.birthday_day = date_part('day', timezone(r.time_zone, $1::timestamptz))::smallint
+       OR (u.birthday_month = 2 AND u.birthday_day = 29 AND date_part('day', timezone(r.time_zone, $1::timestamptz)) = 28
+           AND date_part('day', date_trunc('month', timezone(r.time_zone, $1::timestamptz)) + interval '1 month - 1 day') = 28))
+  AND NOT EXISTS (SELECT 1 FROM birthday_reminders_sent s
+                  WHERE s.user_id = u.id AND s.receiver_id = r.id AND s.year = date_part('year', timezone(r.time_zone, $1::timestamptz))::smallint)
+  AND NOT EXISTS (SELECT 1 FROM user_blocks b
+                  WHERE (b.blocker_id = u.id AND b.blocked_id = r.id) OR (b.blocker_id = r.id AND b.blocked_id = u.id))
+ORDER BY r.id, u.id
+LIMIT $5
+`
+
+type ListBirthdayCandidatesParams struct {
+	Now      time.Time
+	Months   []int16
+	Days     []int16
+	FromHour int32
+	MaxRows  int32
+}
+
+type ListBirthdayCandidatesRow struct {
+	ReceiverID  int64
+	UserID      int64
+	DisplayName string
+	ChatID      int64
+	LocalYear   int16
+}
+
+func (q *Queries) ListBirthdayCandidates(ctx context.Context, arg ListBirthdayCandidatesParams) ([]ListBirthdayCandidatesRow, error) {
+	rows, err := q.db.Query(ctx, listBirthdayCandidates,
+		arg.Now,
+		arg.Months,
+		arg.Days,
+		arg.FromHour,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListBirthdayCandidatesRow{}
+	for rows.Next() {
+		var i ListBirthdayCandidatesRow
+		if err := rows.Scan(
+			&i.ReceiverID,
+			&i.UserID,
+			&i.DisplayName,
+			&i.ChatID,
+			&i.LocalYear,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUsersByIDs = `-- name: ListUsersByIDs :many
-SELECT id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id, profile_version FROM users WHERE id = ANY($1::BIGINT[])
+SELECT id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id, profile_version, pronouns, birthday_day, birthday_month, birthday_year, time_zone, music_attachment_id, music_title, music_artist, background_kind, background_attachment_id, background_preset, background_colors FROM users WHERE id = ANY($1::BIGINT[])
 `
 
 func (q *Queries) ListUsersByIDs(ctx context.Context, ids []int64) ([]User, error) {
@@ -158,6 +268,18 @@ func (q *Queries) ListUsersByIDs(ctx context.Context, ids []int64) ([]User, erro
 			&i.UpdatedAt,
 			&i.AvatarAttachmentID,
 			&i.ProfileVersion,
+			&i.Pronouns,
+			&i.BirthdayDay,
+			&i.BirthdayMonth,
+			&i.BirthdayYear,
+			&i.TimeZone,
+			&i.MusicAttachmentID,
+			&i.MusicTitle,
+			&i.MusicArtist,
+			&i.BackgroundKind,
+			&i.BackgroundAttachmentID,
+			&i.BackgroundPreset,
+			&i.BackgroundColors,
 		); err != nil {
 			return nil, err
 		}
@@ -170,7 +292,7 @@ func (q *Queries) ListUsersByIDs(ctx context.Context, ids []int64) ([]User, erro
 }
 
 const lockUser = `-- name: LockUser :one
-SELECT id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id, profile_version FROM users WHERE id = $1 FOR UPDATE
+SELECT id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id, profile_version, pronouns, birthday_day, birthday_month, birthday_year, time_zone, music_attachment_id, music_title, music_artist, background_kind, background_attachment_id, background_preset, background_colors FROM users WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) LockUser(ctx context.Context, id int64) (User, error) {
@@ -188,6 +310,18 @@ func (q *Queries) LockUser(ctx context.Context, id int64) (User, error) {
 		&i.UpdatedAt,
 		&i.AvatarAttachmentID,
 		&i.ProfileVersion,
+		&i.Pronouns,
+		&i.BirthdayDay,
+		&i.BirthdayMonth,
+		&i.BirthdayYear,
+		&i.TimeZone,
+		&i.MusicAttachmentID,
+		&i.MusicTitle,
+		&i.MusicArtist,
+		&i.BackgroundKind,
+		&i.BackgroundAttachmentID,
+		&i.BackgroundPreset,
+		&i.BackgroundColors,
 	)
 	return i, err
 }
@@ -205,19 +339,50 @@ func (q *Queries) LockUserShared(ctx context.Context, id int64) (int64, error) {
 	return id_2, err
 }
 
+const markBirthdayReminder = `-- name: MarkBirthdayReminder :execrows
+INSERT INTO birthday_reminders_sent (user_id, receiver_id, year) VALUES ($1, $2, $3)
+ON CONFLICT DO NOTHING
+`
+
+type MarkBirthdayReminderParams struct {
+	UserID     int64
+	ReceiverID int64
+	Year       int16
+}
+
+func (q *Queries) MarkBirthdayReminder(ctx context.Context, arg MarkBirthdayReminderParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markBirthdayReminder, arg.UserID, arg.ReceiverID, arg.Year)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const patchUserProfile = `-- name: PatchUserProfile :one
 UPDATE users
 SET display_name = COALESCE($1, display_name),
-    bio = CASE WHEN $2::bool THEN $3 ELSE bio END
-WHERE id = $4
-RETURNING id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id, profile_version
+    bio = CASE WHEN $2::bool THEN $3 ELSE bio END,
+    pronouns = CASE WHEN $4::bool THEN $5 ELSE pronouns END,
+    birthday_day = CASE WHEN $6::bool THEN $7::smallint ELSE birthday_day END,
+    birthday_month = CASE WHEN $6::bool THEN $8::smallint ELSE birthday_month END,
+    birthday_year = CASE WHEN $6::bool THEN $9::smallint ELSE birthday_year END,
+    time_zone = COALESCE($10, time_zone)
+WHERE id = $11
+RETURNING id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id, profile_version, pronouns, birthday_day, birthday_month, birthday_year, time_zone, music_attachment_id, music_title, music_artist, background_kind, background_attachment_id, background_preset, background_colors
 `
 
 type PatchUserProfileParams struct {
-	DisplayName *string
-	SetBio      bool
-	Bio         *string
-	ID          int64
+	DisplayName   *string
+	SetBio        bool
+	Bio           *string
+	SetPronouns   bool
+	Pronouns      *string
+	SetBirthday   bool
+	BirthdayDay   *int16
+	BirthdayMonth *int16
+	BirthdayYear  *int16
+	TimeZone      *string
+	ID            int64
 }
 
 // Changes only what is given, so concurrent edits of different fields do not undo each other.
@@ -226,6 +391,13 @@ func (q *Queries) PatchUserProfile(ctx context.Context, arg PatchUserProfilePara
 		arg.DisplayName,
 		arg.SetBio,
 		arg.Bio,
+		arg.SetPronouns,
+		arg.Pronouns,
+		arg.SetBirthday,
+		arg.BirthdayDay,
+		arg.BirthdayMonth,
+		arg.BirthdayYear,
+		arg.TimeZone,
 		arg.ID,
 	)
 	var i User
@@ -241,6 +413,18 @@ func (q *Queries) PatchUserProfile(ctx context.Context, arg PatchUserProfilePara
 		&i.UpdatedAt,
 		&i.AvatarAttachmentID,
 		&i.ProfileVersion,
+		&i.Pronouns,
+		&i.BirthdayDay,
+		&i.BirthdayMonth,
+		&i.BirthdayYear,
+		&i.TimeZone,
+		&i.MusicAttachmentID,
+		&i.MusicTitle,
+		&i.MusicArtist,
+		&i.BackgroundKind,
+		&i.BackgroundAttachmentID,
+		&i.BackgroundPreset,
+		&i.BackgroundColors,
 	)
 	return i, err
 }
@@ -281,6 +465,109 @@ func (q *Queries) SetPasswordHash(ctx context.Context, arg SetPasswordHashParams
 	return result.RowsAffected(), nil
 }
 
+const setUserBackground = `-- name: SetUserBackground :one
+UPDATE users
+SET background_kind = $1, background_attachment_id = $2,
+    background_preset = $3, background_colors = $4::text[]
+WHERE id = $5
+RETURNING id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id, profile_version, pronouns, birthday_day, birthday_month, birthday_year, time_zone, music_attachment_id, music_title, music_artist, background_kind, background_attachment_id, background_preset, background_colors
+`
+
+type SetUserBackgroundParams struct {
+	Kind         *string
+	AttachmentID *uuid.UUID
+	Preset       *string
+	Colors       []string
+	ID           int64
+}
+
+func (q *Queries) SetUserBackground(ctx context.Context, arg SetUserBackgroundParams) (User, error) {
+	row := q.db.QueryRow(ctx, setUserBackground,
+		arg.Kind,
+		arg.AttachmentID,
+		arg.Preset,
+		arg.Colors,
+		arg.ID,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.DisplayName,
+		&i.PasswordHash,
+		&i.AvatarUrl,
+		&i.Bio,
+		&i.LastSeenAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.AvatarAttachmentID,
+		&i.ProfileVersion,
+		&i.Pronouns,
+		&i.BirthdayDay,
+		&i.BirthdayMonth,
+		&i.BirthdayYear,
+		&i.TimeZone,
+		&i.MusicAttachmentID,
+		&i.MusicTitle,
+		&i.MusicArtist,
+		&i.BackgroundKind,
+		&i.BackgroundAttachmentID,
+		&i.BackgroundPreset,
+		&i.BackgroundColors,
+	)
+	return i, err
+}
+
+const setUserMusic = `-- name: SetUserMusic :one
+UPDATE users
+SET music_attachment_id = $1, music_title = $2, music_artist = $3
+WHERE id = $4
+RETURNING id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id, profile_version, pronouns, birthday_day, birthday_month, birthday_year, time_zone, music_attachment_id, music_title, music_artist, background_kind, background_attachment_id, background_preset, background_colors
+`
+
+type SetUserMusicParams struct {
+	AttachmentID *uuid.UUID
+	Title        *string
+	Artist       *string
+	ID           int64
+}
+
+func (q *Queries) SetUserMusic(ctx context.Context, arg SetUserMusicParams) (User, error) {
+	row := q.db.QueryRow(ctx, setUserMusic,
+		arg.AttachmentID,
+		arg.Title,
+		arg.Artist,
+		arg.ID,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.DisplayName,
+		&i.PasswordHash,
+		&i.AvatarUrl,
+		&i.Bio,
+		&i.LastSeenAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.AvatarAttachmentID,
+		&i.ProfileVersion,
+		&i.Pronouns,
+		&i.BirthdayDay,
+		&i.BirthdayMonth,
+		&i.BirthdayYear,
+		&i.TimeZone,
+		&i.MusicAttachmentID,
+		&i.MusicTitle,
+		&i.MusicArtist,
+		&i.BackgroundKind,
+		&i.BackgroundAttachmentID,
+		&i.BackgroundPreset,
+		&i.BackgroundColors,
+	)
+	return i, err
+}
+
 const touchLastSeen = `-- name: TouchLastSeen :execrows
 UPDATE users SET last_seen_at = now() WHERE id = $1
 `
@@ -297,7 +584,7 @@ const updateUserProfile = `-- name: UpdateUserProfile :one
 UPDATE users
 SET display_name = $1, bio = $2, avatar_url = $3
 WHERE id = $4
-RETURNING id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id, profile_version
+RETURNING id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id, profile_version, pronouns, birthday_day, birthday_month, birthday_year, time_zone, music_attachment_id, music_title, music_artist, background_kind, background_attachment_id, background_preset, background_colors
 `
 
 type UpdateUserProfileParams struct {
@@ -327,6 +614,18 @@ func (q *Queries) UpdateUserProfile(ctx context.Context, arg UpdateUserProfilePa
 		&i.UpdatedAt,
 		&i.AvatarAttachmentID,
 		&i.ProfileVersion,
+		&i.Pronouns,
+		&i.BirthdayDay,
+		&i.BirthdayMonth,
+		&i.BirthdayYear,
+		&i.TimeZone,
+		&i.MusicAttachmentID,
+		&i.MusicTitle,
+		&i.MusicArtist,
+		&i.BackgroundKind,
+		&i.BackgroundAttachmentID,
+		&i.BackgroundPreset,
+		&i.BackgroundColors,
 	)
 	return i, err
 }

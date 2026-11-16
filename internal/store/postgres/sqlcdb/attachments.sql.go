@@ -90,6 +90,30 @@ func (q *Queries) ChatsWithAvatar(ctx context.Context, attachmentID *uuid.UUID) 
 	return items, nil
 }
 
+const chatsWithBackground = `-- name: ChatsWithBackground :many
+SELECT id FROM chats WHERE background_attachment_id = $1
+`
+
+func (q *Queries) ChatsWithBackground(ctx context.Context, attachmentID *uuid.UUID) ([]int64, error) {
+	rows, err := q.db.Query(ctx, chatsWithBackground, attachmentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int64{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const clearCurrentAvatar = `-- name: ClearCurrentAvatar :exec
 UPDATE user_avatar_history SET is_current = FALSE WHERE user_id = $1 AND is_current
 `
@@ -180,6 +204,8 @@ WHERE a.id = $1
   AND NOT EXISTS (SELECT 1 FROM attachment_links l WHERE l.attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM users u WHERE u.avatar_attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM chats c WHERE c.avatar_attachment_id = a.id)
+  AND NOT EXISTS (SELECT 1 FROM users u WHERE u.music_attachment_id = a.id OR u.background_attachment_id = a.id)
+  AND NOT EXISTS (SELECT 1 FROM chats c WHERE c.background_attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM user_avatar_history h WHERE h.attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM stickers s WHERE s.attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM unsent_messages m WHERE m.attachment_ids @> ARRAY[a.id])
@@ -329,6 +355,46 @@ func (q *Queries) ListAttachmentKeysOfChats(ctx context.Context, chatIds []int64
 			return nil, err
 		}
 		items = append(items, k)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAttachmentsByIDs = `-- name: ListAttachmentsByIDs :many
+SELECT id, uploader_id, chat_id, storage_key, mime_type, size, width, height, duration, waveform, created_at, purpose, kind, filename, thumbnail_key FROM attachments WHERE id = ANY($1::uuid[])
+`
+
+func (q *Queries) ListAttachmentsByIDs(ctx context.Context, ids []uuid.UUID) ([]Attachment, error) {
+	rows, err := q.db.Query(ctx, listAttachmentsByIDs, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Attachment{}
+	for rows.Next() {
+		var i Attachment
+		if err := rows.Scan(
+			&i.ID,
+			&i.UploaderID,
+			&i.ChatID,
+			&i.StorageKey,
+			&i.MimeType,
+			&i.Size,
+			&i.Width,
+			&i.Height,
+			&i.Duration,
+			&i.Waveform,
+			&i.CreatedAt,
+			&i.Purpose,
+			&i.Kind,
+			&i.Filename,
+			&i.ThumbnailKey,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -558,6 +624,8 @@ WHERE a.created_at < $1
   AND NOT EXISTS (SELECT 1 FROM attachment_links l WHERE l.attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM users u WHERE u.avatar_attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM chats c WHERE c.avatar_attachment_id = a.id)
+  AND NOT EXISTS (SELECT 1 FROM users u WHERE u.music_attachment_id = a.id OR u.background_attachment_id = a.id)
+  AND NOT EXISTS (SELECT 1 FROM chats c WHERE c.background_attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM user_avatar_history h WHERE h.attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM stickers s WHERE s.attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM unsent_messages m WHERE m.attachment_ids @> ARRAY[a.id])
@@ -642,6 +710,35 @@ func (q *Queries) SetChatAvatar(ctx context.Context, arg SetChatAvatarParams) (i
 	return result.RowsAffected(), nil
 }
 
+const setChatBackground = `-- name: SetChatBackground :execrows
+UPDATE chats
+SET background_kind = $1, background_attachment_id = $2,
+    background_preset = $3, background_colors = $4::text[]
+WHERE id = $5
+`
+
+type SetChatBackgroundParams struct {
+	Kind         *string
+	AttachmentID *uuid.UUID
+	Preset       *string
+	Colors       []string
+	ChatID       int64
+}
+
+func (q *Queries) SetChatBackground(ctx context.Context, arg SetChatBackgroundParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setChatBackground,
+		arg.Kind,
+		arg.AttachmentID,
+		arg.Preset,
+		arg.Colors,
+		arg.ChatID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setUserAvatar = `-- name: SetUserAvatar :execrows
 UPDATE users SET avatar_attachment_id = $1 WHERE id = $2
 `
@@ -685,4 +782,28 @@ type UnlinkMessagesUpToParams struct {
 func (q *Queries) UnlinkMessagesUpTo(ctx context.Context, arg UnlinkMessagesUpToParams) error {
 	_, err := q.db.Exec(ctx, unlinkMessagesUpTo, arg.ChatID, arg.MessageID)
 	return err
+}
+
+const usersWithProfileMedia = `-- name: UsersWithProfileMedia :many
+SELECT id FROM users WHERE music_attachment_id = $1 OR background_attachment_id = $1
+`
+
+func (q *Queries) UsersWithProfileMedia(ctx context.Context, attachmentID *uuid.UUID) ([]int64, error) {
+	rows, err := q.db.Query(ctx, usersWithProfileMedia, attachmentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int64{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

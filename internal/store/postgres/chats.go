@@ -32,6 +32,7 @@ func chatFrom(c sqlcdb.Chat) Chat {
 		LastActivityAt:     c.LastActivityAt,
 
 		ClearedBeforeMessageID: c.ClearedBeforeMessageID,
+		Background:             backgroundFrom(c.BackgroundKind, c.BackgroundAttachmentID, c.BackgroundPreset, c.BackgroundColors),
 	}
 }
 

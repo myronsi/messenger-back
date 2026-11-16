@@ -23,6 +23,40 @@ type User struct {
 	LastSeenAt         time.Time
 	CreatedAt          time.Time
 	ProfileVersion     int64
+	Pronouns           *string
+	Birthday           *Birthday
+	TimeZone           string
+	MusicAttachmentID  *uuid.UUID
+	MusicTitle         *string
+	MusicArtist        *string
+	Background         *Background
+}
+
+type Birthday struct {
+	Day   int
+	Month int
+	Year  *int
+}
+
+const (
+	BackgroundMedia  = "media"
+	BackgroundPreset = "preset"
+	BackgroundColor  = "color"
+)
+
+type Background struct {
+	Kind         string
+	AttachmentID *uuid.UUID
+	Preset       *string
+	Colors       []string
+}
+
+type BirthdayCandidate struct {
+	ReceiverID  int64
+	UserID      int64
+	DisplayName string
+	ChatID      int64
+	Year        int
 }
 
 // HasAvatar reports whether the user has an avatar of either generation.
@@ -46,6 +80,11 @@ type ProfilePatch struct {
 	DisplayName *string
 	SetBio      bool
 	Bio         *string
+	SetPronouns bool
+	Pronouns    *string
+	SetBirthday bool
+	Birthday    *Birthday
+	TimeZone    *string
 }
 
 // DeletedAccount reports what a deletion left behind for the caller to clean up.
@@ -75,6 +114,11 @@ type UserRepository interface {
 	UpdateProfile(ctx context.Context, id int64, p Profile) (User, error)
 	// PatchProfile changes only the given fields.
 	PatchProfile(ctx context.Context, id int64, p ProfilePatch) (User, error)
+	SetMusic(ctx context.Context, id int64, attachmentID *uuid.UUID, title, artist *string) (User, error)
+	SetBackground(ctx context.Context, id int64, bg *Background) (User, error)
+	BirthdayCandidates(ctx context.Context, now time.Time, fromHour, limit int) ([]BirthdayCandidate, error)
+	MarkBirthdayReminder(ctx context.Context, userID, receiverID int64, year int) (bool, error)
+	KnownTimeZone(ctx context.Context, name string) (bool, error)
 	SetPasswordHash(ctx context.Context, id int64, passwordHash string) error
 	// Register creates the account together with its settings rows in one transaction.
 	Register(ctx context.Context, username, displayName, passwordHash string) (User, error)
@@ -130,6 +174,7 @@ type Chat struct {
 	LastMessageID          *int64
 	LastActivityAt         time.Time
 	ClearedBeforeMessageID *int64
+	Background             *Background
 }
 
 // ChatEntry is a chat in one user's list: the chat and the user's own relation to it.
@@ -316,6 +361,7 @@ type ChatRepository interface {
 	SearchDropped(ctx context.Context, chatID int64) error
 	// SetGroupAvatarAs sets (or with nil clears) the group's avatar.
 	SetGroupAvatarAs(ctx context.Context, chatID, actorID int64, attachmentID *uuid.UUID) error
+	SetGroupBackgroundAs(ctx context.Context, chatID, actorID int64, bg *Background) error
 	// InviteAs makes a group invitation for a user who approves invitations (a pending one is reused).
 	InviteAs(ctx context.Context, chatID, actorID, userID int64) (req ApprovalRequest, created bool, err error)
 	// RoleEvents returns the role changes of a group, newest first. limit is capped at 500.
@@ -344,8 +390,10 @@ type ApprovalRepository interface {
 
 // Attachment purposes and kinds (see media).
 const (
-	PurposeMessage = "message"
-	PurposeAvatar  = "avatar"
+	PurposeMessage           = "message"
+	PurposeAvatar            = "avatar"
+	PurposeProfileMusic      = "profile_music"
+	PurposeProfileBackground = "profile_background"
 )
 
 // Attachment is the metadata of an uploaded file.
@@ -425,6 +473,7 @@ type AvatarVersion struct {
 type AttachmentRepository interface {
 	Create(ctx context.Context, a NewAttachment) (Attachment, error)
 	Get(ctx context.Context, id uuid.UUID) (Attachment, error)
+	GetMany(ctx context.Context, ids []uuid.UUID) (map[uuid.UUID]Attachment, error)
 	// ListByChat returns the newest v1 attachments of a chat. limit is capped at 500.
 	ListByChat(ctx context.Context, chatID int64, limit int) ([]Attachment, error)
 	// Delete removes the row and returns the storage keys (file and thumbnail), so the caller can delete the objects.
@@ -455,6 +504,8 @@ type AttachmentRepository interface {
 	SetChatAvatar(ctx context.Context, chatID int64, attachmentID *uuid.UUID) error
 	// ChatsWithAvatar returns the groups that use the attachment as their avatar.
 	ChatsWithAvatar(ctx context.Context, attachmentID uuid.UUID) ([]int64, error)
+	UsersWithProfileMedia(ctx context.Context, attachmentID uuid.UUID) ([]int64, error)
+	ChatsWithBackground(ctx context.Context, attachmentID uuid.UUID) ([]int64, error)
 	IsStickerImage(ctx context.Context, attachmentID uuid.UUID) (bool, error)
 }
 

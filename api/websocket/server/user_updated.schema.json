@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ServerUserUpdatedEvent",
-  "description": "A user you share a chat with changed their username, display name, bio or avatar. Fetch GET /users/{user_id} again when profile_version is higher than the one you keep.",
+  "description": "A user you share a chat with changed their username, display name, bio, avatar, pronouns, birthday, profile music or profile background. Fetch GET /users/{user_id} again when profile_version is higher than the one you keep.",
   "type": "object",
   "properties": {
     "type": {

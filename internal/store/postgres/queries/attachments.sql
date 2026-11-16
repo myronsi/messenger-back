@@ -6,6 +6,9 @@ RETURNING *;
 -- name: GetAttachment :one
 SELECT * FROM attachments WHERE id = @id;
 
+-- name: ListAttachmentsByIDs :many
+SELECT * FROM attachments WHERE id = ANY(@ids::uuid[]);
+
 -- name: ListChatAttachments :many
 SELECT * FROM attachments
 WHERE chat_id = @chat_id
@@ -67,6 +70,8 @@ WHERE a.created_at < @older_than
   AND NOT EXISTS (SELECT 1 FROM attachment_links l WHERE l.attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM users u WHERE u.avatar_attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM chats c WHERE c.avatar_attachment_id = a.id)
+  AND NOT EXISTS (SELECT 1 FROM users u WHERE u.music_attachment_id = a.id OR u.background_attachment_id = a.id)
+  AND NOT EXISTS (SELECT 1 FROM chats c WHERE c.background_attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM user_avatar_history h WHERE h.attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM stickers s WHERE s.attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM unsent_messages m WHERE m.attachment_ids @> ARRAY[a.id])
@@ -86,6 +91,8 @@ WHERE a.id = @id
   AND NOT EXISTS (SELECT 1 FROM attachment_links l WHERE l.attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM users u WHERE u.avatar_attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM chats c WHERE c.avatar_attachment_id = a.id)
+  AND NOT EXISTS (SELECT 1 FROM users u WHERE u.music_attachment_id = a.id OR u.background_attachment_id = a.id)
+  AND NOT EXISTS (SELECT 1 FROM chats c WHERE c.background_attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM user_avatar_history h WHERE h.attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM stickers s WHERE s.attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM unsent_messages m WHERE m.attachment_ids @> ARRAY[a.id])
@@ -126,6 +133,18 @@ UPDATE chats SET avatar_attachment_id = sqlc.narg(attachment_id) WHERE id = @cha
 
 -- name: ChatsWithAvatar :many
 SELECT id FROM chats WHERE avatar_attachment_id = @attachment_id;
+
+-- name: UsersWithProfileMedia :many
+SELECT id FROM users WHERE music_attachment_id = @attachment_id OR background_attachment_id = @attachment_id;
+
+-- name: ChatsWithBackground :many
+SELECT id FROM chats WHERE background_attachment_id = @attachment_id;
+
+-- name: SetChatBackground :execrows
+UPDATE chats
+SET background_kind = sqlc.narg(kind), background_attachment_id = sqlc.narg(attachment_id),
+    background_preset = sqlc.narg(preset), background_colors = sqlc.narg(colors)::text[]
+WHERE id = @chat_id;
 
 -- name: IsStickerImage :one
 SELECT EXISTS (SELECT 1 FROM stickers WHERE attachment_id = @attachment_id);

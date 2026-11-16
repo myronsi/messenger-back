@@ -49,6 +49,13 @@ type AttachmentLink struct {
 	Drawing      []byte
 }
 
+type BirthdayRemindersSent struct {
+	UserID     int64
+	ReceiverID int64
+	Year       int16
+	SentAt     time.Time
+}
+
 type Call struct {
 	ID               int64
 	ChatID           *int64
@@ -122,6 +129,10 @@ type Chat struct {
 	LastMessageID          *int64
 	LastActivityAt         time.Time
 	ClearedBeforeMessageID *int64
+	BackgroundKind         *string
+	BackgroundAttachmentID *uuid.UUID
+	BackgroundPreset       *string
+	BackgroundColors       []string
 }
 
 type ChatDeletion struct {
@@ -196,10 +207,11 @@ type NotificationMute struct {
 }
 
 type NotificationPreference struct {
-	UserID   int64
-	Enabled  bool
-	Sound    bool
-	Previews bool
+	UserID            int64
+	Enabled           bool
+	Sound             bool
+	Previews          bool
+	BirthdayReminders bool
 }
 
 type Participant struct {
@@ -314,17 +326,29 @@ type UnsentMessage struct {
 }
 
 type User struct {
-	ID                 int64
-	Username           string
-	DisplayName        string
-	PasswordHash       string
-	AvatarUrl          *string
-	Bio                *string
-	LastSeenAt         time.Time
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
-	AvatarAttachmentID *uuid.UUID
-	ProfileVersion     int64
+	ID                     int64
+	Username               string
+	DisplayName            string
+	PasswordHash           string
+	AvatarUrl              *string
+	Bio                    *string
+	LastSeenAt             time.Time
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
+	AvatarAttachmentID     *uuid.UUID
+	ProfileVersion         int64
+	Pronouns               *string
+	BirthdayDay            *int16
+	BirthdayMonth          *int16
+	BirthdayYear           *int16
+	TimeZone               string
+	MusicAttachmentID      *uuid.UUID
+	MusicTitle             *string
+	MusicArtist            *string
+	BackgroundKind         *string
+	BackgroundAttachmentID *uuid.UUID
+	BackgroundPreset       *string
+	BackgroundColors       []string
 }
 
 type User2faRecoveryCode struct {
@@ -393,6 +417,7 @@ type UserPrivacySetting struct {
 	CallsEnabled            bool
 	TypingIndicatorsEnabled bool
 	LastSeenVisibility      string
+	BirthdayVisibility      string
 }
 
 type UserRecentSticker struct {

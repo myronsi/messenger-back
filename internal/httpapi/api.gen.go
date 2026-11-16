@@ -590,6 +590,27 @@ func (e NotificationMuteRequestDuration) Valid() bool {
 	}
 }
 
+// Defines values for ProfileBackgroundKind.
+const (
+	Color  ProfileBackgroundKind = "color"
+	Media  ProfileBackgroundKind = "media"
+	Preset ProfileBackgroundKind = "preset"
+)
+
+// Valid indicates whether the value is a known member of the ProfileBackgroundKind enum.
+func (e ProfileBackgroundKind) Valid() bool {
+	switch e {
+	case Color:
+		return true
+	case Media:
+		return true
+	case Preset:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for QrLoginPollResult0Status.
 const (
 	QrLoginPollResult0StatusDenied  QrLoginPollResult0Status = "denied"
@@ -886,9 +907,11 @@ func (e UpdateRoleRequestRole) Valid() bool {
 
 // Defines values for UploadPurpose.
 const (
-	UploadPurposeAvatar  UploadPurpose = "avatar"
-	UploadPurposeMessage UploadPurpose = "message"
-	UploadPurposeSticker UploadPurpose = "sticker"
+	UploadPurposeAvatar            UploadPurpose = "avatar"
+	UploadPurposeMessage           UploadPurpose = "message"
+	UploadPurposeProfileBackground UploadPurpose = "profile_background"
+	UploadPurposeProfileMusic      UploadPurpose = "profile_music"
+	UploadPurposeSticker           UploadPurpose = "sticker"
 )
 
 // Valid indicates whether the value is a known member of the UploadPurpose enum.
@@ -897,6 +920,10 @@ func (e UploadPurpose) Valid() bool {
 	case UploadPurposeAvatar:
 		return true
 	case UploadPurposeMessage:
+		return true
+	case UploadPurposeProfileBackground:
+		return true
+	case UploadPurposeProfileMusic:
 		return true
 	case UploadPurposeSticker:
 		return true
@@ -1077,8 +1104,11 @@ type Attachment struct {
 	Kind AttachmentKind `json:"kind"`
 
 	// Size Bytes
-	Size         int     `json:"size"`
-	ThumbnailUrl *string `json:"thumbnail_url,omitempty"`
+	Size int `json:"size"`
+
+	// Tags Only in the answer to a `profile_music` upload; what the file says about itself.
+	Tags         *AudioTags `json:"tags,omitempty"`
+	ThumbnailUrl *string    `json:"thumbnail_url,omitempty"`
 
 	// Url Same-origin path (`/api/v2/attachments/{id}/content`) set by the server.
 	Url      *string `json:"url,omitempty"`
@@ -1107,6 +1137,12 @@ type AttachmentKind string
 // Examples: 5f0c8a64-2f2b-4c7e-9d0e-6b1f3a2c4d5e
 type AttachmentRef = openapi_types.UUID
 
+// AudioTags defines model for AudioTags.
+type AudioTags struct {
+	Artist *string `json:"artist"`
+	Title  *string `json:"title"`
+}
+
 // AvatarVersion defines model for AvatarVersion.
 type AvatarVersion struct {
 	CreatedAt Timestamp `json:"created_at"`
@@ -1116,6 +1152,21 @@ type AvatarVersion struct {
 	// Examples: 7217400317439950848
 	Id  Id     `json:"id"`
 	Url string `json:"url"`
+}
+
+// BackgroundColor Examples: #3366ff
+type BackgroundColor = string
+
+// BackgroundPreset Name of a built-in gradient. Clients show their default background for a name they do not know.
+type BackgroundPreset = string
+
+// Birthday defines model for Birthday.
+type Birthday struct {
+	Day   int `json:"day"`
+	Month int `json:"month"`
+
+	// Year Optional; `null` when the user keeps the year to themselves.
+	Year *int `json:"year"`
 }
 
 // Call defines model for Call.
@@ -1557,9 +1608,12 @@ type ForwardedFrom struct {
 
 // Group defines model for Group.
 type Group struct {
-	AvatarUrl   *string   `json:"avatar_url"`
-	CreatedAt   Timestamp `json:"created_at"`
-	Description *string   `json:"description"`
+	AvatarUrl *string `json:"avatar_url"`
+
+	// Background The banner and page background of the group profile; set by the owner and admins.
+	Background  *ProfileBackground `json:"background"`
+	CreatedAt   Timestamp          `json:"created_at"`
+	Description *string            `json:"description"`
 
 	// Id Decimal ID as a string (Snowflake IDs exceed 2^53).
 	//
@@ -1695,7 +1749,13 @@ type MarkReadRequest struct {
 type Me struct {
 	// AvatarUrl Path of the avatar, always same-origin (`/api/v2/users/{id}/avatar?rev={revision}`).
 	AvatarUrl *string `json:"avatar_url"`
-	Bio       *string `json:"bio"`
+
+	// Background The banner and page background of the profile, visible like the bio.
+	Background *ProfileBackground `json:"background"`
+	Bio        *string            `json:"bio"`
+
+	// Birthday Visible by `birthday_visibility`; `null` when not set or hidden.
+	Birthday *Birthday `json:"birthday"`
 
 	// ContactName The requesting user's own name for this user, if set.
 	ContactName *string   `json:"contact_name,omitempty"`
@@ -1710,10 +1770,20 @@ type Me struct {
 	IsOnline  bool       `json:"is_online"`
 	LastSeen  *Timestamp `json:"last_seen"`
 
-	// ProfileVersion Grows whenever the username, display name, bio or avatar changes (not with presence). Clients keep a stored profile until a higher version arrives.
-	ProfileVersion        int      `json:"profile_version"`
-	RecoverySetupRequired *bool    `json:"recovery_setup_required,omitempty"`
-	Username              Username `json:"username"`
+	// Music A short song on the profile, visible like the bio. Clients never play it on their own.
+	Music *ProfileMusic `json:"music"`
+
+	// ProfileVersion Grows whenever the username, display name, bio, avatar, pronouns, birthday, profile music or profile
+	// background changes (not with presence). Clients keep a stored profile until a higher version arrives.
+	ProfileVersion int `json:"profile_version"`
+
+	// Pronouns Free text such as "she/her". Visible like the bio (`profile_visibility`).
+	Pronouns              *string `json:"pronouns"`
+	RecoverySetupRequired *bool   `json:"recovery_setup_required,omitempty"`
+
+	// TimeZone The user's time zone; birthday reminders arrive at 09:00 in it. `UTC` until a client sets it.
+	TimeZone TimeZone `json:"time_zone"`
+	Username Username `json:"username"`
 }
 
 // MediaKind `image` photos, `visual` photos and videos, `audio` audio files and voice messages, `voice` voice messages only,
@@ -1841,9 +1911,12 @@ type NotificationMuteRequestDuration string
 
 // NotificationPreferences defines model for NotificationPreferences.
 type NotificationPreferences struct {
-	Enabled  bool `json:"enabled"`
-	Previews bool `json:"previews"`
-	Sound    bool `json:"sound"`
+	// BirthdayReminders A push at 09:00 (in `Me.time_zone`) when someone you have a direct chat with has a birthday. Always sent
+	// by the server; when a `PUT` leaves it out, it stays as it is. Defaults to `true`.
+	BirthdayReminders *bool `json:"birthday_reminders,omitempty"`
+	Enabled           bool  `json:"enabled"`
+	Previews          bool  `json:"previews"`
+	Sound             bool  `json:"sound"`
 }
 
 // NotificationSettings defines model for NotificationSettings.
@@ -1943,6 +2016,9 @@ type PrivacySettings struct {
 	// `contacts` are the users you share a group with, or a direct chat that you opened or read in.
 	AvatarVisibility Visibility `json:"avatar_visibility"`
 
+	// BirthdayVisibility Who sees the birthday (`User.birthday`) and gets a reminder on the day. Defaults to `contacts`.
+	BirthdayVisibility Visibility `json:"birthday_visibility"`
+
 	// CallsEnabled Whether others may ring this user. Calls are only possible from an existing direct chat or a shared group.
 	CallsEnabled   bool                `json:"calls_enabled"`
 	DirectMessages DirectMessagePolicy `json:"direct_messages"`
@@ -1993,6 +2069,34 @@ type Problem struct {
 	// Type URI reference identifying the problem type (`about:blank` when `code` says it all).
 	Type                 string                 `json:"type"`
 	AdditionalProperties map[string]interface{} `json:"-"`
+}
+
+// ProfileBackground defines model for ProfileBackground.
+type ProfileBackground struct {
+	// Attachment Set for `media`. An image, an animated GIF or a muted video of at most 15 s; `thumbnail_url` is a still
+	// frame to show while it loads and when the viewer prefers reduced motion.
+	Attachment *Attachment        `json:"attachment,omitempty"`
+	Colors     *[]BackgroundColor `json:"colors,omitempty"`
+
+	// Kind `media` an uploaded image, GIF or short video (`attachment`), `preset` one of the clients' built-in
+	// gradients (`preset`), `color` one color or a gradient of two (`colors`).
+	Kind ProfileBackgroundKind `json:"kind"`
+
+	// Preset Name of a built-in gradient. Clients show their default background for a name they do not know.
+	Preset *BackgroundPreset `json:"preset,omitempty"`
+}
+
+// ProfileBackgroundKind `media` an uploaded image, GIF or short video (`attachment`), `preset` one of the clients' built-in
+// gradients (`preset`), `color` one color or a gradient of two (`colors`).
+type ProfileBackgroundKind string
+
+// ProfileMusic defines model for ProfileMusic.
+type ProfileMusic struct {
+	Artist *string `json:"artist"`
+
+	// Attachment The clip (at most 30 s). `thumbnail_url` is the cover when the file had one.
+	Attachment Attachment `json:"attachment"`
+	Title      *string    `json:"title"`
 }
 
 // QrLoginApproval defines model for QrLoginApproval.
@@ -2289,6 +2393,35 @@ type SetAvatarRequest struct {
 	AttachmentId AttachmentRef `json:"attachment_id"`
 }
 
+// SetBackgroundRequest `media` needs `attachment_id` (uploaded with purpose `profile_background`), `preset` needs `preset`, `color`
+// needs `colors`; other fields must be absent (`422` otherwise).
+type SetBackgroundRequest struct {
+	// AttachmentId ID of an uploaded attachment (a UUID, unlike the decimal IDs of messages, users and chats).
+	//
+	// Examples: 5f0c8a64-2f2b-4c7e-9d0e-6b1f3a2c4d5e
+	AttachmentId *AttachmentRef     `json:"attachment_id,omitempty"`
+	Colors       *[]BackgroundColor `json:"colors,omitempty"`
+
+	// Kind `media` an uploaded image, GIF or short video (`attachment`), `preset` one of the clients' built-in
+	// gradients (`preset`), `color` one color or a gradient of two (`colors`).
+	Kind ProfileBackgroundKind `json:"kind"`
+
+	// Preset Name of a built-in gradient. Clients show their default background for a name they do not know.
+	Preset *BackgroundPreset `json:"preset,omitempty"`
+}
+
+// SetMusicRequest defines model for SetMusicRequest.
+type SetMusicRequest struct {
+	// Artist Shown artist, filled in the same way.
+	Artist *string `json:"artist,omitempty"`
+
+	// AttachmentId An upload of the caller with purpose `profile_music`.
+	AttachmentId AttachmentRef `json:"attachment_id"`
+
+	// Title Shown title. Clients fill it in from `Attachment.tags` of the upload and let the user edit it.
+	Title *string `json:"title,omitempty"`
+}
+
 // SetRecoveryEmail defines model for SetRecoveryEmail.
 type SetRecoveryEmail struct {
 	Code     *string             `json:"code,omitempty"`
@@ -2396,6 +2529,11 @@ type SystemEvent struct {
 // SystemEventKind defines model for SystemEventKind.
 type SystemEventKind string
 
+// TimeZone An IANA time zone name such as `Europe/Berlin`.
+//
+// Examples: Europe/Berlin
+type TimeZone = string
+
 // Timestamp defines model for Timestamp.
 type Timestamp = time.Time
 
@@ -2489,18 +2627,34 @@ type UpdateGroupRequest struct {
 
 // UpdateMeRequest defines model for UpdateMeRequest.
 type UpdateMeRequest struct {
-	Bio         *string `json:"bio,omitempty"`
-	DisplayName *string `json:"display_name,omitempty"`
+	Bio *string `json:"bio,omitempty"`
+
+	// Birthday `null` removes it. With a `year` the date must exist (no 29 February in other years); without one,
+	// 29 February is allowed.
+	Birthday    *Birthday `json:"birthday,omitempty"`
+	DisplayName *string   `json:"display_name,omitempty"`
+
+	// Pronouns Free text; `null` or an empty string removes it.
+	Pronouns *string `json:"pronouns,omitempty"`
+
+	// TimeZone An IANA time zone name such as `Europe/Berlin`.
+	//
+	// Examples: Europe/Berlin
+	TimeZone *TimeZone `json:"time_zone,omitempty"`
 }
 
 // UpdatePrivacySettingsRequest defines model for UpdatePrivacySettingsRequest.
 type UpdatePrivacySettingsRequest struct {
 	// AvatarVisibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
 	// `contacts` are the users you share a group with, or a direct chat that you opened or read in.
-	AvatarVisibility *Visibility          `json:"avatar_visibility,omitempty"`
-	CallsEnabled     *bool                `json:"calls_enabled,omitempty"`
-	DirectMessages   *DirectMessagePolicy `json:"direct_messages,omitempty"`
-	GroupInvites     *GroupInvitePolicy   `json:"group_invites,omitempty"`
+	AvatarVisibility *Visibility `json:"avatar_visibility,omitempty"`
+
+	// BirthdayVisibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
+	// `contacts` are the users you share a group with, or a direct chat that you opened or read in.
+	BirthdayVisibility *Visibility          `json:"birthday_visibility,omitempty"`
+	CallsEnabled       *bool                `json:"calls_enabled,omitempty"`
+	DirectMessages     *DirectMessagePolicy `json:"direct_messages,omitempty"`
+	GroupInvites       *GroupInvitePolicy   `json:"group_invites,omitempty"`
 
 	// LastSeenVisibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
 	// `contacts` are the users you share a group with, or a direct chat that you opened or read in.
@@ -2544,14 +2698,27 @@ type UpdateStickerRequest struct {
 // UploadAttachmentRequest defines model for UploadAttachmentRequest.
 type UploadAttachmentRequest struct {
 	// DurationMs Length of a voice message
-	DurationMs *int               `json:"duration_ms,omitempty"`
-	File       openapi_types.File `json:"file"`
-	Kind       *AttachmentKind    `json:"kind,omitempty"`
+	DurationMs *int `json:"duration_ms,omitempty"`
+
+	// EndMs `profile_music` only: where the kept part ends, at most 30 s after `start_ms`.
+	EndMs *int               `json:"end_ms,omitempty"`
+	File  openapi_types.File `json:"file"`
+	Kind  *AttachmentKind    `json:"kind,omitempty"`
 
 	// Purpose `sticker`: a PNG, JPEG or still WebP of at most 5 MB. The server fits it into 512 x 512 px with a transparent
 	// border and stores a WebP (`413` when that is still over 512 KB). Only its uploader can load it until it is
 	// added to a pack.
+	//
+	// `profile_music`: an audio file of at most 20 MB. The server keeps at most 30 s of it (from `start_ms` to
+	// `end_ms`, or the first 30 s), stored as AAC, reads the title and artist into `tags` and the embedded cover
+	// into `thumbnail_url`. Use it with `PUT /me/music`.
+	//
+	// `profile_background`: an image (10 MB), an animated GIF (15 MB) or a video of at most 15 s (15 MB). Use it
+	// with `PUT /me/background` or `PUT /groups/{chat_id}/background`.
 	Purpose UploadPurpose `json:"purpose"`
+
+	// StartMs `profile_music` only: where the kept part starts.
+	StartMs *int `json:"start_ms,omitempty"`
 
 	// Waveform Amplitude samples (0-255) of a voice message
 	Waveform *[]int `json:"waveform,omitempty"`
@@ -2560,13 +2727,26 @@ type UploadAttachmentRequest struct {
 // UploadPurpose `sticker`: a PNG, JPEG or still WebP of at most 5 MB. The server fits it into 512 x 512 px with a transparent
 // border and stores a WebP (`413` when that is still over 512 KB). Only its uploader can load it until it is
 // added to a pack.
+//
+// `profile_music`: an audio file of at most 20 MB. The server keeps at most 30 s of it (from `start_ms` to
+// `end_ms`, or the first 30 s), stored as AAC, reads the title and artist into `tags` and the embedded cover
+// into `thumbnail_url`. Use it with `PUT /me/music`.
+//
+// `profile_background`: an image (10 MB), an animated GIF (15 MB) or a video of at most 15 s (15 MB). Use it
+// with `PUT /me/background` or `PUT /groups/{chat_id}/background`.
 type UploadPurpose string
 
 // User A user as visible to the requesting user; hidden fields are `null`.
 type User struct {
 	// AvatarUrl Path of the avatar, always same-origin (`/api/v2/users/{id}/avatar?rev={revision}`).
 	AvatarUrl *string `json:"avatar_url"`
-	Bio       *string `json:"bio"`
+
+	// Background The banner and page background of the profile, visible like the bio.
+	Background *ProfileBackground `json:"background"`
+	Bio        *string            `json:"bio"`
+
+	// Birthday Visible by `birthday_visibility`; `null` when not set or hidden.
+	Birthday *Birthday `json:"birthday"`
 
 	// ContactName The requesting user's own name for this user, if set.
 	ContactName *string `json:"contact_name,omitempty"`
@@ -2580,9 +2760,16 @@ type User struct {
 	IsOnline  bool       `json:"is_online"`
 	LastSeen  *Timestamp `json:"last_seen"`
 
-	// ProfileVersion Grows whenever the username, display name, bio or avatar changes (not with presence). Clients keep a stored profile until a higher version arrives.
-	ProfileVersion int      `json:"profile_version"`
-	Username       Username `json:"username"`
+	// Music A short song on the profile, visible like the bio. Clients never play it on their own.
+	Music *ProfileMusic `json:"music"`
+
+	// ProfileVersion Grows whenever the username, display name, bio, avatar, pronouns, birthday, profile music or profile
+	// background changes (not with presence). Clients keep a stored profile until a higher version arrives.
+	ProfileVersion int `json:"profile_version"`
+
+	// Pronouns Free text such as "she/her". Visible like the bio (`profile_visibility`).
+	Pronouns *string  `json:"pronouns"`
+	Username Username `json:"username"`
 }
 
 // UserPage defines model for UserPage.
@@ -3365,6 +3552,24 @@ type SetGroupAvatarParams struct {
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
 }
 
+// DeleteGroupBackgroundParams defines parameters for DeleteGroupBackground.
+type DeleteGroupBackgroundParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// SetGroupBackgroundParams defines parameters for SetGroupBackground.
+type SetGroupBackgroundParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
 // LeaveGroupParams defines parameters for LeaveGroup.
 type LeaveGroupParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
@@ -3531,6 +3736,24 @@ type DeleteMyAvatarParams struct {
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
 }
 
+// DeleteMyBackgroundParams defines parameters for DeleteMyBackground.
+type DeleteMyBackgroundParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// SetMyBackgroundParams defines parameters for SetMyBackground.
+type SetMyBackgroundParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
 // ListBlockedUsersParams defines parameters for ListBlockedUsers.
 type ListBlockedUsersParams struct {
 	// Limit Page size
@@ -3593,6 +3816,24 @@ type GetRecoveryEmailParams struct {
 
 // SetRecoveryEmailParams defines parameters for SetRecoveryEmail.
 type SetRecoveryEmailParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// DeleteMyMusicParams defines parameters for DeleteMyMusic.
+type DeleteMyMusicParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// SetMyMusicParams defines parameters for SetMyMusic.
+type SetMyMusicParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
@@ -4149,6 +4390,9 @@ type UpdateGroupJSONRequestBody = UpdateGroupRequest
 // SetGroupAvatarJSONRequestBody defines body for SetGroupAvatar for application/json ContentType.
 type SetGroupAvatarJSONRequestBody = SetAvatarRequest
 
+// SetGroupBackgroundJSONRequestBody defines body for SetGroupBackground for application/json ContentType.
+type SetGroupBackgroundJSONRequestBody = SetBackgroundRequest
+
 // AddGroupParticipantJSONRequestBody defines body for AddGroupParticipant for application/json ContentType.
 type AddGroupParticipantJSONRequestBody = AddParticipantRequest
 
@@ -4176,6 +4420,9 @@ type SetupTwoFactorJSONRequestBody = PasswordConfirmation
 // SetMyAvatarJSONRequestBody defines body for SetMyAvatar for application/json ContentType.
 type SetMyAvatarJSONRequestBody = SetAvatarRequest
 
+// SetMyBackgroundJSONRequestBody defines body for SetMyBackground for application/json ContentType.
+type SetMyBackgroundJSONRequestBody = SetBackgroundRequest
+
 // SetCallIdentityJSONRequestBody defines body for SetCallIdentity for application/json ContentType.
 type SetCallIdentityJSONRequestBody = CallIdentityRequest
 
@@ -4184,6 +4431,9 @@ type RemoveRecoveryEmailJSONRequestBody = RemoveRecoveryEmail
 
 // SetRecoveryEmailJSONRequestBody defines body for SetRecoveryEmail for application/json ContentType.
 type SetRecoveryEmailJSONRequestBody = SetRecoveryEmail
+
+// SetMyMusicJSONRequestBody defines body for SetMyMusic for application/json ContentType.
+type SetMyMusicJSONRequestBody = SetMusicRequest
 
 // RegisterNotificationDeviceJSONRequestBody defines body for RegisterNotificationDevice for application/json ContentType.
 type RegisterNotificationDeviceJSONRequestBody = NotificationDeviceRequest
@@ -4746,6 +4996,12 @@ type ServerInterface interface {
 	// SetGroupAvatar Set the group avatar from an uploaded attachment
 	// (PUT /groups/{chat_id}/avatar)
 	SetGroupAvatar(w http.ResponseWriter, r *http.Request, chatId ChatId, params SetGroupAvatarParams)
+	// DeleteGroupBackground Remove the group background
+	// (DELETE /groups/{chat_id}/background)
+	DeleteGroupBackground(w http.ResponseWriter, r *http.Request, chatId ChatId, params DeleteGroupBackgroundParams)
+	// SetGroupBackground Set the group background
+	// (PUT /groups/{chat_id}/background)
+	SetGroupBackground(w http.ResponseWriter, r *http.Request, chatId ChatId, params SetGroupBackgroundParams)
 	// LeaveGroup Leave the group
 	// (POST /groups/{chat_id}/leave)
 	LeaveGroup(w http.ResponseWriter, r *http.Request, chatId ChatId, params LeaveGroupParams)
@@ -4797,6 +5053,12 @@ type ServerInterface interface {
 	// DeleteMyAvatar Delete one of your avatars
 	// (DELETE /me/avatars/{avatar_id})
 	DeleteMyAvatar(w http.ResponseWriter, r *http.Request, avatarId Id, params DeleteMyAvatarParams)
+	// DeleteMyBackground Remove the profile background
+	// (DELETE /me/background)
+	DeleteMyBackground(w http.ResponseWriter, r *http.Request, params DeleteMyBackgroundParams)
+	// SetMyBackground Set the profile background
+	// (PUT /me/background)
+	SetMyBackground(w http.ResponseWriter, r *http.Request, params SetMyBackgroundParams)
 	// ListBlockedUsers Blocked users
 	// (GET /me/blocked-users)
 	ListBlockedUsers(w http.ResponseWriter, r *http.Request, params ListBlockedUsersParams)
@@ -4818,6 +5080,12 @@ type ServerInterface interface {
 	// SetRecoveryEmail Set or resend a private recovery email for verification
 	// (PUT /me/email)
 	SetRecoveryEmail(w http.ResponseWriter, r *http.Request, params SetRecoveryEmailParams)
+	// DeleteMyMusic Remove the profile music
+	// (DELETE /me/music)
+	DeleteMyMusic(w http.ResponseWriter, r *http.Request, params DeleteMyMusicParams)
+	// SetMyMusic Set the profile music
+	// (PUT /me/music)
+	SetMyMusic(w http.ResponseWriter, r *http.Request, params SetMyMusicParams)
 	// RegisterNotificationDevice Register a push destination for the current session
 	// (POST /me/notification-devices)
 	RegisterNotificationDevice(w http.ResponseWriter, r *http.Request)
@@ -9645,6 +9913,144 @@ func (siw *ServerInterfaceWrapper) SetGroupAvatar(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// DeleteGroupBackground operation middleware
+func (siw *ServerInterfaceWrapper) DeleteGroupBackground(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteGroupBackgroundParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteGroupBackground(w, r, chatId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetGroupBackground operation middleware
+func (siw *ServerInterfaceWrapper) SetGroupBackground(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SetGroupBackgroundParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetGroupBackground(w, r, chatId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // LeaveGroup operation middleware
 func (siw *ServerInterfaceWrapper) LeaveGroup(w http.ResponseWriter, r *http.Request) {
 
@@ -10833,6 +11239,126 @@ func (siw *ServerInterfaceWrapper) DeleteMyAvatar(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// DeleteMyBackground operation middleware
+func (siw *ServerInterfaceWrapper) DeleteMyBackground(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteMyBackgroundParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteMyBackground(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetMyBackground operation middleware
+func (siw *ServerInterfaceWrapper) SetMyBackground(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SetMyBackgroundParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetMyBackground(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListBlockedUsers operation middleware
 func (siw *ServerInterfaceWrapper) ListBlockedUsers(w http.ResponseWriter, r *http.Request) {
 
@@ -11288,6 +11814,126 @@ func (siw *ServerInterfaceWrapper) SetRecoveryEmail(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.SetRecoveryEmail(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteMyMusic operation middleware
+func (siw *ServerInterfaceWrapper) DeleteMyMusic(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteMyMusicParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteMyMusic(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetMyMusic operation middleware
+func (siw *ServerInterfaceWrapper) SetMyMusic(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SetMyMusicParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetMyMusic(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -14698,6 +15344,10 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/me", wrapper.UpdateMe)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/me/avatar", wrapper.SetMyAvatar)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/me/avatars/{avatar_id}", wrapper.DeleteMyAvatar)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/me/music", wrapper.DeleteMyMusic)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/me/music", wrapper.SetMyMusic)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/me/background", wrapper.DeleteMyBackground)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/me/background", wrapper.SetMyBackground)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/me/password", wrapper.ChangePassword)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/security", wrapper.GetSecuritySettings)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/me/security", wrapper.UpdateSecuritySettings)
@@ -14755,6 +15405,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/groups/{chat_id}", wrapper.GetGroup)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/groups/{chat_id}", wrapper.UpdateGroup)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/groups/{chat_id}/avatar", wrapper.SetGroupAvatar)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/groups/{chat_id}/background", wrapper.DeleteGroupBackground)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/groups/{chat_id}/background", wrapper.SetGroupBackground)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/groups/{chat_id}/participants", wrapper.ListGroupMembers)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/groups/{chat_id}/participants", wrapper.AddGroupParticipant)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/groups/{chat_id}/participants/{user_id}", wrapper.RemoveGroupParticipant)
@@ -22744,6 +23396,213 @@ func (response SetGroupAvatar426ApplicationProblemPlusJSONResponse) VisitSetGrou
 	return err
 }
 
+type DeleteGroupBackgroundRequestObject struct {
+	ChatId ChatId `json:"chat_id"`
+	Params DeleteGroupBackgroundParams
+}
+
+type DeleteGroupBackgroundResponseObject interface {
+	VisitDeleteGroupBackgroundResponse(w http.ResponseWriter) error
+}
+
+type DeleteGroupBackground200JSONResponse Group
+
+func (response DeleteGroupBackground200JSONResponse) VisitDeleteGroupBackgroundResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteGroupBackground401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteGroupBackground401ApplicationProblemPlusJSONResponse) VisitDeleteGroupBackgroundResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteGroupBackground403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteGroupBackground403ApplicationProblemPlusJSONResponse) VisitDeleteGroupBackgroundResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteGroupBackground404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteGroupBackground404ApplicationProblemPlusJSONResponse) VisitDeleteGroupBackgroundResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteGroupBackground426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteGroupBackground426ApplicationProblemPlusJSONResponse) VisitDeleteGroupBackgroundResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetGroupBackgroundRequestObject struct {
+	ChatId ChatId `json:"chat_id"`
+	Params SetGroupBackgroundParams
+	Body   *SetGroupBackgroundJSONRequestBody
+}
+
+type SetGroupBackgroundResponseObject interface {
+	VisitSetGroupBackgroundResponse(w http.ResponseWriter) error
+}
+
+type SetGroupBackground200JSONResponse Group
+
+func (response SetGroupBackground200JSONResponse) VisitSetGroupBackgroundResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetGroupBackground400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response SetGroupBackground400ApplicationProblemPlusJSONResponse) VisitSetGroupBackgroundResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetGroupBackground401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response SetGroupBackground401ApplicationProblemPlusJSONResponse) VisitSetGroupBackgroundResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetGroupBackground403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response SetGroupBackground403ApplicationProblemPlusJSONResponse) VisitSetGroupBackgroundResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetGroupBackground404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response SetGroupBackground404ApplicationProblemPlusJSONResponse) VisitSetGroupBackgroundResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetGroupBackground422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response SetGroupBackground422ApplicationProblemPlusJSONResponse) VisitSetGroupBackgroundResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetGroupBackground426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response SetGroupBackground426ApplicationProblemPlusJSONResponse) VisitSetGroupBackgroundResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type LeaveGroupRequestObject struct {
 	ChatId ChatId `json:"chat_id"`
 	Params LeaveGroupParams
@@ -24487,6 +25346,147 @@ func (response DeleteMyAvatar426ApplicationProblemPlusJSONResponse) VisitDeleteM
 	return err
 }
 
+type DeleteMyBackgroundRequestObject struct {
+	Params DeleteMyBackgroundParams
+}
+
+type DeleteMyBackgroundResponseObject interface {
+	VisitDeleteMyBackgroundResponse(w http.ResponseWriter) error
+}
+
+type DeleteMyBackground200JSONResponse Me
+
+func (response DeleteMyBackground200JSONResponse) VisitDeleteMyBackgroundResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMyBackground401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteMyBackground401ApplicationProblemPlusJSONResponse) VisitDeleteMyBackgroundResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMyBackground426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteMyBackground426ApplicationProblemPlusJSONResponse) VisitDeleteMyBackgroundResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetMyBackgroundRequestObject struct {
+	Params SetMyBackgroundParams
+	Body   *SetMyBackgroundJSONRequestBody
+}
+
+type SetMyBackgroundResponseObject interface {
+	VisitSetMyBackgroundResponse(w http.ResponseWriter) error
+}
+
+type SetMyBackground200JSONResponse Me
+
+func (response SetMyBackground200JSONResponse) VisitSetMyBackgroundResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetMyBackground400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response SetMyBackground400ApplicationProblemPlusJSONResponse) VisitSetMyBackgroundResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetMyBackground401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response SetMyBackground401ApplicationProblemPlusJSONResponse) VisitSetMyBackgroundResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetMyBackground422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response SetMyBackground422ApplicationProblemPlusJSONResponse) VisitSetMyBackgroundResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetMyBackground426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response SetMyBackground426ApplicationProblemPlusJSONResponse) VisitSetMyBackgroundResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListBlockedUsersRequestObject struct {
 	Params ListBlockedUsersParams
 }
@@ -25230,6 +26230,147 @@ func (response SetRecoveryEmail503ApplicationProblemPlusJSONResponse) VisitSetRe
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMyMusicRequestObject struct {
+	Params DeleteMyMusicParams
+}
+
+type DeleteMyMusicResponseObject interface {
+	VisitDeleteMyMusicResponse(w http.ResponseWriter) error
+}
+
+type DeleteMyMusic200JSONResponse Me
+
+func (response DeleteMyMusic200JSONResponse) VisitDeleteMyMusicResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMyMusic401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteMyMusic401ApplicationProblemPlusJSONResponse) VisitDeleteMyMusicResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMyMusic426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteMyMusic426ApplicationProblemPlusJSONResponse) VisitDeleteMyMusicResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetMyMusicRequestObject struct {
+	Params SetMyMusicParams
+	Body   *SetMyMusicJSONRequestBody
+}
+
+type SetMyMusicResponseObject interface {
+	VisitSetMyMusicResponse(w http.ResponseWriter) error
+}
+
+type SetMyMusic200JSONResponse Me
+
+func (response SetMyMusic200JSONResponse) VisitSetMyMusicResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetMyMusic400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response SetMyMusic400ApplicationProblemPlusJSONResponse) VisitSetMyMusicResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetMyMusic401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response SetMyMusic401ApplicationProblemPlusJSONResponse) VisitSetMyMusicResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetMyMusic422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response SetMyMusic422ApplicationProblemPlusJSONResponse) VisitSetMyMusicResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetMyMusic426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response SetMyMusic426ApplicationProblemPlusJSONResponse) VisitSetMyMusicResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -30447,6 +31588,12 @@ type StrictServerInterface interface {
 	// SetGroupAvatar Set the group avatar from an uploaded attachment
 	// (PUT /groups/{chat_id}/avatar)
 	SetGroupAvatar(ctx context.Context, request SetGroupAvatarRequestObject) (SetGroupAvatarResponseObject, error)
+	// DeleteGroupBackground Remove the group background
+	// (DELETE /groups/{chat_id}/background)
+	DeleteGroupBackground(ctx context.Context, request DeleteGroupBackgroundRequestObject) (DeleteGroupBackgroundResponseObject, error)
+	// SetGroupBackground Set the group background
+	// (PUT /groups/{chat_id}/background)
+	SetGroupBackground(ctx context.Context, request SetGroupBackgroundRequestObject) (SetGroupBackgroundResponseObject, error)
 	// LeaveGroup Leave the group
 	// (POST /groups/{chat_id}/leave)
 	LeaveGroup(ctx context.Context, request LeaveGroupRequestObject) (LeaveGroupResponseObject, error)
@@ -30498,6 +31645,12 @@ type StrictServerInterface interface {
 	// DeleteMyAvatar Delete one of your avatars
 	// (DELETE /me/avatars/{avatar_id})
 	DeleteMyAvatar(ctx context.Context, request DeleteMyAvatarRequestObject) (DeleteMyAvatarResponseObject, error)
+	// DeleteMyBackground Remove the profile background
+	// (DELETE /me/background)
+	DeleteMyBackground(ctx context.Context, request DeleteMyBackgroundRequestObject) (DeleteMyBackgroundResponseObject, error)
+	// SetMyBackground Set the profile background
+	// (PUT /me/background)
+	SetMyBackground(ctx context.Context, request SetMyBackgroundRequestObject) (SetMyBackgroundResponseObject, error)
 	// ListBlockedUsers Blocked users
 	// (GET /me/blocked-users)
 	ListBlockedUsers(ctx context.Context, request ListBlockedUsersRequestObject) (ListBlockedUsersResponseObject, error)
@@ -30519,6 +31672,12 @@ type StrictServerInterface interface {
 	// SetRecoveryEmail Set or resend a private recovery email for verification
 	// (PUT /me/email)
 	SetRecoveryEmail(ctx context.Context, request SetRecoveryEmailRequestObject) (SetRecoveryEmailResponseObject, error)
+	// DeleteMyMusic Remove the profile music
+	// (DELETE /me/music)
+	DeleteMyMusic(ctx context.Context, request DeleteMyMusicRequestObject) (DeleteMyMusicResponseObject, error)
+	// SetMyMusic Set the profile music
+	// (PUT /me/music)
+	SetMyMusic(ctx context.Context, request SetMyMusicRequestObject) (SetMyMusicResponseObject, error)
 	// RegisterNotificationDevice Register a push destination for the current session
 	// (POST /me/notification-devices)
 	RegisterNotificationDevice(ctx context.Context, request RegisterNotificationDeviceRequestObject) (RegisterNotificationDeviceResponseObject, error)
@@ -32762,6 +33921,67 @@ func (sh *strictHandler) SetGroupAvatar(w http.ResponseWriter, r *http.Request, 
 	}
 }
 
+// DeleteGroupBackground operation middleware
+func (sh *strictHandler) DeleteGroupBackground(w http.ResponseWriter, r *http.Request, chatId ChatId, params DeleteGroupBackgroundParams) {
+	var request DeleteGroupBackgroundRequestObject
+
+	request.ChatId = chatId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteGroupBackground(ctx, request.(DeleteGroupBackgroundRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteGroupBackground")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteGroupBackgroundResponseObject); ok {
+		if err := validResponse.VisitDeleteGroupBackgroundResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SetGroupBackground operation middleware
+func (sh *strictHandler) SetGroupBackground(w http.ResponseWriter, r *http.Request, chatId ChatId, params SetGroupBackgroundParams) {
+	var request SetGroupBackgroundRequestObject
+
+	request.ChatId = chatId
+	request.Params = params
+
+	var body SetGroupBackgroundJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SetGroupBackground(ctx, request.(SetGroupBackgroundRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SetGroupBackground")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SetGroupBackgroundResponseObject); ok {
+		if err := validResponse.VisitSetGroupBackgroundResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // LeaveGroup operation middleware
 func (sh *strictHandler) LeaveGroup(w http.ResponseWriter, r *http.Request, chatId ChatId, params LeaveGroupParams) {
 	var request LeaveGroupRequestObject
@@ -33277,6 +34497,65 @@ func (sh *strictHandler) DeleteMyAvatar(w http.ResponseWriter, r *http.Request, 
 	}
 }
 
+// DeleteMyBackground operation middleware
+func (sh *strictHandler) DeleteMyBackground(w http.ResponseWriter, r *http.Request, params DeleteMyBackgroundParams) {
+	var request DeleteMyBackgroundRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteMyBackground(ctx, request.(DeleteMyBackgroundRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteMyBackground")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteMyBackgroundResponseObject); ok {
+		if err := validResponse.VisitDeleteMyBackgroundResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SetMyBackground operation middleware
+func (sh *strictHandler) SetMyBackground(w http.ResponseWriter, r *http.Request, params SetMyBackgroundParams) {
+	var request SetMyBackgroundRequestObject
+
+	request.Params = params
+
+	var body SetMyBackgroundJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SetMyBackground(ctx, request.(SetMyBackgroundRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SetMyBackground")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SetMyBackgroundResponseObject); ok {
+		if err := validResponse.VisitSetMyBackgroundResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListBlockedUsers operation middleware
 func (sh *strictHandler) ListBlockedUsers(w http.ResponseWriter, r *http.Request, params ListBlockedUsersParams) {
 	var request ListBlockedUsersRequestObject
@@ -33475,6 +34754,65 @@ func (sh *strictHandler) SetRecoveryEmail(w http.ResponseWriter, r *http.Request
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(SetRecoveryEmailResponseObject); ok {
 		if err := validResponse.VisitSetRecoveryEmailResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteMyMusic operation middleware
+func (sh *strictHandler) DeleteMyMusic(w http.ResponseWriter, r *http.Request, params DeleteMyMusicParams) {
+	var request DeleteMyMusicRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteMyMusic(ctx, request.(DeleteMyMusicRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteMyMusic")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteMyMusicResponseObject); ok {
+		if err := validResponse.VisitDeleteMyMusicResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SetMyMusic operation middleware
+func (sh *strictHandler) SetMyMusic(w http.ResponseWriter, r *http.Request, params SetMyMusicParams) {
+	var request SetMyMusicRequestObject
+
+	request.Params = params
+
+	var body SetMyMusicJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SetMyMusic(ctx, request.(SetMyMusicRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SetMyMusic")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SetMyMusicResponseObject); ok {
+		if err := validResponse.VisitSetMyMusicResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

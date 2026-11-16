@@ -33,6 +33,7 @@ type Payload struct {
 	SenderID    string `json:"sender_id,omitempty"`
 	AvatarToken string `json:"avatar_token,omitempty"`
 	ReadToken   string `json:"read_token,omitempty"`
+	Kind        string `json:"kind,omitempty"`
 }
 
 var ErrUnregistered = errors.New("notification destination expired")

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
@@ -29,7 +30,57 @@ func userFrom(u sqlcdb.User) User {
 
 		AvatarAttachmentID: u.AvatarAttachmentID,
 		ProfileVersion:     u.ProfileVersion,
+		Pronouns:           u.Pronouns,
+		Birthday:           birthdayFrom(u.BirthdayDay, u.BirthdayMonth, u.BirthdayYear),
+		TimeZone:           u.TimeZone,
+		MusicAttachmentID:  u.MusicAttachmentID,
+		MusicTitle:         u.MusicTitle,
+		MusicArtist:        u.MusicArtist,
+		Background:         backgroundFrom(u.BackgroundKind, u.BackgroundAttachmentID, u.BackgroundPreset, u.BackgroundColors),
 	}
+}
+
+func birthdayFrom(day, month, year *int16) *Birthday {
+	if day == nil || month == nil {
+		return nil
+	}
+	b := &Birthday{Day: int(*day), Month: int(*month)}
+	if year != nil {
+		y := int(*year)
+		b.Year = &y
+	}
+	return b
+}
+
+func backgroundFrom(kind *string, attachmentID *uuid.UUID, preset *string, colors []string) *Background {
+	if kind == nil || (*kind == BackgroundMedia && attachmentID == nil) {
+		return nil
+	}
+	return &Background{Kind: *kind, AttachmentID: attachmentID, Preset: preset, Colors: colors}
+}
+
+func smallint(v int) *int16 {
+	n := int16(v) //nolint:gosec // birthday parts are validated and checked by the schema
+	return &n
+}
+
+func birthdayParams(b *Birthday) (day, month, year *int16) {
+	if b == nil {
+		return nil, nil, nil
+	}
+	day, month = smallint(b.Day), smallint(b.Month)
+	if b.Year != nil {
+		year = smallint(*b.Year)
+	}
+	return day, month, year
+}
+
+func backgroundParams(bg *Background) (kind *string, attachmentID *uuid.UUID, preset *string, colors []string) {
+	if bg == nil {
+		return nil, nil, nil, nil
+	}
+	k := bg.Kind
+	return &k, bg.AttachmentID, bg.Preset, bg.Colors
 }
 
 func (r userRepo) Create(ctx context.Context, username, displayName, passwordHash string) (User, error) {
@@ -104,11 +155,93 @@ func (r userRepo) UpdateProfile(ctx context.Context, id int64, p Profile) (User,
 func (r userRepo) PatchProfile(ctx context.Context, id int64, p ProfilePatch) (User, error) {
 	ctx, cancel := r.s.call(ctx)
 	defer cancel()
-	u, err := r.s.q.PatchUserProfile(ctx, sqlcdb.PatchUserProfileParams{ID: id, DisplayName: p.DisplayName, SetBio: p.SetBio, Bio: p.Bio})
+	day, month, year := birthdayParams(p.Birthday)
+	u, err := r.s.q.PatchUserProfile(ctx, sqlcdb.PatchUserProfileParams{
+		ID: id, DisplayName: p.DisplayName, SetBio: p.SetBio, Bio: p.Bio, SetPronouns: p.SetPronouns, Pronouns: p.Pronouns,
+		SetBirthday: p.SetBirthday, BirthdayDay: day, BirthdayMonth: month, BirthdayYear: year, TimeZone: p.TimeZone,
+	})
 	if err != nil {
 		return User{}, mapError(err)
 	}
 	return userFrom(u), nil
+}
+
+func (r userRepo) SetMusic(ctx context.Context, id int64, attachmentID *uuid.UUID, title, artist *string) (User, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	if attachmentID == nil {
+		title, artist = nil, nil
+	}
+	u, err := r.s.q.SetUserMusic(ctx, sqlcdb.SetUserMusicParams{ID: id, AttachmentID: attachmentID, Title: title, Artist: artist})
+	if err != nil {
+		return User{}, mapError(err)
+	}
+	return userFrom(u), nil
+}
+
+func (r userRepo) SetBackground(ctx context.Context, id int64, bg *Background) (User, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	kind, attachmentID, preset, colors := backgroundParams(bg)
+	u, err := r.s.q.SetUserBackground(ctx, sqlcdb.SetUserBackgroundParams{ID: id, Kind: kind, AttachmentID: attachmentID, Preset: preset, Colors: colors})
+	if err != nil {
+		return User{}, mapError(err)
+	}
+	return userFrom(u), nil
+}
+
+func (r userRepo) BirthdayCandidates(ctx context.Context, now time.Time, fromHour, limit int) ([]BirthdayCandidate, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	months, days := birthdayWindow(now)
+	rows, err := r.s.q.ListBirthdayCandidates(ctx, sqlcdb.ListBirthdayCandidatesParams{
+		Now: now, FromHour: int32(fromHour), MaxRows: clampLimit(limit), Months: months, Days: days, //nolint:gosec // an hour of the day
+	})
+	if err != nil {
+		return nil, mapError(err)
+	}
+	out := make([]BirthdayCandidate, len(rows))
+	for i, row := range rows {
+		out[i] = BirthdayCandidate{ReceiverID: row.ReceiverID, UserID: row.UserID, DisplayName: row.DisplayName, ChatID: row.ChatID, Year: int(row.LocalYear)}
+	}
+	return out, nil
+}
+
+func (r userRepo) KnownTimeZone(ctx context.Context, name string) (bool, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	var ok bool
+	err := r.s.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pg_timezone_names WHERE name = $1)`, name).Scan(&ok)
+	return ok, mapError(err)
+}
+
+func birthdayWindow(now time.Time) (months, days []int16) {
+	seen := map[[2]int16]bool{}
+	add := func(month, day int16) {
+		if seen[[2]int16{month, day}] {
+			return
+		}
+		seen[[2]int16{month, day}] = true
+		months, days = append(months, month), append(days, day)
+	}
+	for _, offset := range []time.Duration{-12 * time.Hour, 0, 14 * time.Hour} {
+		t := now.UTC().Add(offset)
+		add(int16(t.Month()), int16(t.Day())) //nolint:gosec // a month and a day
+		if t.Month() == time.February && t.Day() == 28 {
+			add(2, 29)
+		}
+	}
+	return months, days
+}
+
+func (r userRepo) MarkBirthdayReminder(ctx context.Context, userID, receiverID int64, year int) (bool, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	n, err := r.s.q.MarkBirthdayReminder(ctx, sqlcdb.MarkBirthdayReminderParams{UserID: userID, ReceiverID: receiverID, Year: *smallint(year)})
+	if err != nil {
+		return false, mapError(err)
+	}
+	return n > 0, nil
 }
 
 func (r userRepo) SetPasswordHash(ctx context.Context, id int64, passwordHash string) error {

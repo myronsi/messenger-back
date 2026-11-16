@@ -21,6 +21,7 @@ import (
 type AccountStore interface {
 	Users() postgres.UserRepository
 	Social() postgres.SocialRepository
+	Attachments() postgres.AttachmentRepository
 }
 
 // AccountDeleter deletes accounts after checking the password (auth.Service).
@@ -136,6 +137,31 @@ func (a *AccountServer) UpdateMe(w http.ResponseWriter, r *http.Request, _ Updat
 				}
 			}
 			prof.Bio, prof.SetBio = bio, true
+		case "pronouns":
+			pronouns, ok := parsePronouns(v)
+			if !ok {
+				WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "pronouns", Message: "at most 40 characters or null"})
+				return
+			}
+			prof.Pronouns, prof.SetPronouns = pronouns, true
+		case "birthday":
+			birthday, ok := parseBirthday(v)
+			if !ok {
+				WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "birthday", Message: "a date that exists, or null"})
+				return
+			}
+			prof.Birthday, prof.SetBirthday = birthday, true
+		case "time_zone":
+			tz, ok, err := a.parseTimeZone(r.Context(), v)
+			if err != nil {
+				a.internal(w, r, "check time zone", err)
+				return
+			}
+			if !ok {
+				WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "time_zone", Message: "an IANA time zone such as Europe/Berlin"})
+				return
+			}
+			prof.TimeZone = tz
 		default:
 			WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: k, Message: "unknown field"})
 			return
@@ -152,7 +178,12 @@ func (a *AccountServer) UpdateMe(w http.ResponseWriter, r *http.Request, _ Updat
 		a.o.ProfileChanged(context.WithoutCancel(r.Context()), p.UserID, u.ProfileVersion)
 	}
 	noStore(w)
-	writeJSONStatus(w, http.StatusOK, PresentMe(u, a.o.BasePath))
+	me, err := a.presentMe(r.Context(), u)
+	if err != nil {
+		a.internal(w, r, "render profile", err)
+		return
+	}
+	writeJSONStatus(w, http.StatusOK, me)
 }
 
 // DeleteMe implements DELETE /me (with the password).
@@ -208,7 +239,8 @@ func visibilityFromDB(v string) string {
 }
 
 var exceptionSettings = []string{
-	postgres.SettingAvatar, postgres.SettingProfile, postgres.SettingPresence, postgres.SettingLastSeen, postgres.SettingGroupInvites,
+	postgres.SettingAvatar, postgres.SettingProfile, postgres.SettingPresence, postgres.SettingLastSeen, postgres.SettingBirthday,
+	postgres.SettingGroupInvites,
 	postgres.SettingDirectMessages, postgres.SettingSearch,
 }
 
@@ -227,6 +259,7 @@ func (a *AccountServer) privacy(ctx context.Context, userID int64) (PrivacySetti
 		ProfileVisibility:       Visibility(visibilityFromDB(s.ProfileVisibility)),
 		PresenceVisibility:      Visibility(visibilityFromDB(s.PresenceVisibility)),
 		LastSeenVisibility:      Visibility(visibilityFromDB(s.LastSeenVisibility)),
+		BirthdayVisibility:      Visibility(visibilityFromDB(s.BirthdayVisibility)),
 		ReadReceiptsEnabled:     s.ReadReceiptsEnabled,
 		DirectMessages:          DirectMessagePolicy(s.DirectMessages),
 		GroupInvites:            GroupInvitePolicy(visibilityFromDB(s.GroupInvites)),
@@ -295,7 +328,8 @@ func (a *AccountServer) UpdatePrivacySettings(w http.ResponseWriter, r *http.Req
 	if !vis(&s.AvatarVisibility, body.AvatarVisibility, "avatar_visibility") ||
 		!vis(&s.ProfileVisibility, body.ProfileVisibility, "profile_visibility") ||
 		!vis(&s.PresenceVisibility, body.PresenceVisibility, "presence_visibility") ||
-		!vis(&s.LastSeenVisibility, body.LastSeenVisibility, "last_seen_visibility") {
+		!vis(&s.LastSeenVisibility, body.LastSeenVisibility, "last_seen_visibility") ||
+		!vis(&s.BirthdayVisibility, body.BirthdayVisibility, "birthday_visibility") {
 		return
 	}
 	if body.ReadReceiptsEnabled != nil {

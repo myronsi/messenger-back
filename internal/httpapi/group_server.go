@@ -39,6 +39,7 @@ func PresentGroup(g chats.GroupView, basePath string) Group {
 		url := basePath + "/attachments/" + g.Chat.AvatarAttachmentID.String() + "/content"
 		out.AvatarUrl = &url
 	}
+	out.Background = presentBackground(g.Background, basePath)
 	for i, m := range g.Members {
 		out.Members[i] = GroupMember{User: PresentUser(m.User), Role: PresentRole(m.Role), JoinedAt: utc(m.JoinedAt)}
 	}
