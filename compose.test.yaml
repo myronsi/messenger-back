@@ -1,0 +1,66 @@
+name: messenger-test
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: test
+    command: ["postgres", "-c", "fsync=off", "-c", "synchronous_commit=off", "-c", "full_page_writes=off"]
+    ports:
+      - "127.0.0.1:${TEST_POSTGRES_PORT:-15432}:5432"
+    tmpfs:
+      - /var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test -d test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:8-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "127.0.0.1:${TEST_REDIS_PORT:-16379}:6379"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  scylla:
+    image: scylladb/scylla:2026.1
+    command:
+      - --smp=1
+      - --memory=750M
+      - --overprovisioned=1
+      - --developer-mode=1
+      - --rpc-address=0.0.0.0
+      - --broadcast-rpc-address=127.0.0.1
+      - --native-transport-port=${TEST_SCYLLA_PORT:-39042}
+      - --native-shard-aware-transport-port=${TEST_SCYLLA_SHARD_PORT:-39043}
+    ports:
+      - "127.0.0.1:${TEST_SCYLLA_PORT:-39042}:${TEST_SCYLLA_PORT:-39042}"
+      - "127.0.0.1:${TEST_SCYLLA_SHARD_PORT:-39043}:${TEST_SCYLLA_SHARD_PORT:-39043}"
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh 127.0.0.1 ${TEST_SCYLLA_PORT:-39042} -e 'DESCRIBE KEYSPACES' >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 10s
+      retries: 40
+      start_period: 20s
+
+  object-storage:
+    image: rustfs/rustfs:1.0.1
+    environment:
+      RUSTFS_ACCESS_KEY: testaccess
+      RUSTFS_SECRET_KEY: testsecret123
+    ports:
+      - "127.0.0.1:${TEST_S3_PORT:-19000}:9000"
+    tmpfs:
+      - /data:mode=1777
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:9000/health >/dev/null"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
