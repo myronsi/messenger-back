@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/myronsi/messenger-back/internal/emoji"
 	"github.com/myronsi/messenger-back/internal/events"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/users"
@@ -338,4 +339,40 @@ func (c *ChatServer) DeleteGroupBackground(w http.ResponseWriter, r *http.Reques
 	}
 	g, err := c.o.Service.SetGroupBackground(r.Context(), p.UserID, id, nil)
 	c.writeGroup(w, r, http.StatusOK, g, err, "delete group background")
+}
+
+const (
+	maxRawDisplayName = 400
+	maxRawBio         = 4000
+)
+
+type EmojiCleaner interface {
+	Clean(ctx context.Context, userID int64, text string) (string, error)
+}
+
+func (a *AccountServer) cleanText(ctx context.Context, userID int64, text string) (string, error) {
+	if a.o.Emoji == nil {
+		return emoji.Plain(text), nil
+	}
+	return a.o.Emoji.Clean(ctx, userID, text)
+}
+
+func (a *AccountServer) cleanProfileEmoji(w http.ResponseWriter, r *http.Request, userID int64, prof *postgres.ProfilePatch) bool {
+	if prof.DisplayName != nil {
+		name, err := a.cleanText(r.Context(), userID, *prof.DisplayName)
+		if err != nil {
+			a.internal(w, r, "check emoji", err)
+			return false
+		}
+		prof.DisplayName = &name
+	}
+	if prof.Bio != nil {
+		bio, err := a.cleanText(r.Context(), userID, *prof.Bio)
+		if err != nil {
+			a.internal(w, r, "check emoji", err)
+			return false
+		}
+		prof.Bio = &bio
+	}
+	return true
 }

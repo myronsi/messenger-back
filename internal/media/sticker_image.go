@@ -24,6 +24,10 @@ func animatedWebP(data []byte) bool {
 }
 
 func StickerImage(data []byte, contentType string) (*image.NRGBA, error) {
+	return squareImage(data, contentType, StickerSide)
+}
+
+func squareImage(data []byte, contentType string, side int) (*image.NRGBA, error) {
 	if !stickerTypes[contentType] || (contentType == "image/webp" && animatedWebP(data)) {
 		return nil, ErrUnsupported
 	}
@@ -42,14 +46,14 @@ func StickerImage(data []byte, contentType string) (*image.NRGBA, error) {
 		src = orient(src, jpegOrientation(data))
 	}
 	b := src.Bounds()
-	w, h := StickerSide, StickerSide
+	w, h := side, side
 	if b.Dx() > b.Dy() {
-		h = max(1, b.Dy()*StickerSide/b.Dx())
+		h = max(1, b.Dy()*side/b.Dx())
 	} else {
-		w = max(1, b.Dx()*StickerSide/b.Dy())
+		w = max(1, b.Dx()*side/b.Dy())
 	}
-	dst := image.NewNRGBA(image.Rect(0, 0, StickerSide, StickerSide))
-	at := image.Rect((StickerSide-w)/2, (StickerSide-h)/2, (StickerSide-w)/2+w, (StickerSide-h)/2+h)
+	dst := image.NewNRGBA(image.Rect(0, 0, side, side))
+	at := image.Rect((side-w)/2, (side-h)/2, (side-w)/2+w, (side-h)/2+h)
 	xdraw.CatmullRom.Scale(dst, at, src, b, xdraw.Src, nil)
 	return dst, nil
 }

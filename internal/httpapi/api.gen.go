@@ -908,6 +908,7 @@ func (e UpdateRoleRequestRole) Valid() bool {
 // Defines values for UploadPurpose.
 const (
 	UploadPurposeAvatar            UploadPurpose = "avatar"
+	UploadPurposeEmoji             UploadPurpose = "emoji"
 	UploadPurposeMessage           UploadPurpose = "message"
 	UploadPurposeProfileBackground UploadPurpose = "profile_background"
 	UploadPurposeProfileMusic      UploadPurpose = "profile_music"
@@ -918,6 +919,8 @@ const (
 func (e UploadPurpose) Valid() bool {
 	switch e {
 	case UploadPurposeAvatar:
+		return true
+	case UploadPurposeEmoji:
 		return true
 	case UploadPurposeMessage:
 		return true
@@ -1035,6 +1038,15 @@ func (e SearchAllMessagesParamsType) Valid() bool {
 	default:
 		return false
 	}
+}
+
+// AddCustomEmojiRequest defines model for AddCustomEmojiRequest.
+type AddCustomEmojiRequest struct {
+	// AttachmentId ID of an uploaded attachment (a UUID, unlike the decimal IDs of messages, users and chats).
+	//
+	// Examples: 5f0c8a64-2f2b-4c7e-9d0e-6b1f3a2c4d5e
+	AttachmentId AttachmentRef  `json:"attachment_id"`
+	Shortcode    EmojiShortcode `json:"shortcode"`
 }
 
 // AddParticipantRequest defines model for AddParticipantRequest.
@@ -1452,6 +1464,28 @@ type CreateStickerPackRequest struct {
 // Cursor Opaque cursor; `null` when there are no more results.
 type Cursor = string
 
+// CustomEmoji A custom emoji. In text it is written as the token `<:shortcode:id>` (`<a:shortcode:id>` when animated) and
+// drawn with `GET /emoji/items/{id}/image`; in reactions as `c:<id>`.
+type CustomEmoji struct {
+	// Id Decimal ID as a string (Snowflake IDs exceed 2^53).
+	//
+	// Examples: 7217400317439950848
+	Id         Id   `json:"id"`
+	IsAnimated bool `json:"is_animated"`
+
+	// PackId Decimal ID as a string (Snowflake IDs exceed 2^53).
+	//
+	// Examples: 7217400317439950848
+	PackId Id `json:"pack_id"`
+
+	// PackSlug The share link of the emoji's pack; missing for group emoji.
+	PackSlug  *StickerPackSlug `json:"pack_slug,omitempty"`
+	Shortcode EmojiShortcode   `json:"shortcode"`
+
+	// Url Same-origin path of the image (`/api/v2/emoji/items/{id}/image`).
+	Url string `json:"url"`
+}
+
 // DeleteMessagesRequest defines model for DeleteMessagesRequest.
 type DeleteMessagesRequest struct {
 	MessageIds []Id                       `json:"message_ids"`
@@ -1580,6 +1614,51 @@ type EmailResetConfirmation struct {
 type EmailResetRequest struct {
 	UsernameOrEmail string `json:"username_or_email"`
 }
+
+// EmojiPack defines model for EmojiPack.
+type EmojiPack struct {
+	// CanEdit The user may add, rename and remove emoji (owner of the pack, or owner or admin of the group).
+	CanEdit bool `json:"can_edit"`
+
+	// ChatId Set for the group emoji of that group.
+	ChatId *Id           `json:"chat_id,omitempty"`
+	Emoji  []CustomEmoji `json:"emoji"`
+
+	// Id Decimal ID as a string (Snowflake IDs exceed 2^53).
+	//
+	// Examples: 7217400317439950848
+	Id Id `json:"id"`
+
+	// IsHidden Hidden after reports; only the owner sees and uses it.
+	IsHidden    bool `json:"is_hidden"`
+	IsInstalled bool `json:"is_installed"`
+	IsMine      bool `json:"is_mine"`
+
+	// OwnerId Decimal ID as a string (Snowflake IDs exceed 2^53).
+	//
+	// Examples: 7217400317439950848
+	OwnerId *Id `json:"owner_id,omitempty"`
+
+	// Slug The share link; missing for group emoji.
+	Slug  *StickerPackSlug `json:"slug,omitempty"`
+	Title string           `json:"title"`
+
+	// Version Grows whenever the title or the emoji of the pack change.
+	Version int `json:"version"`
+}
+
+// EmojiPackList defines model for EmojiPackList.
+type EmojiPackList struct {
+	Items []EmojiPack `json:"items"`
+}
+
+// EmojiPackTitleRequest defines model for EmojiPackTitleRequest.
+type EmojiPackTitleRequest struct {
+	Title string `json:"title"`
+}
+
+// EmojiShortcode defines model for EmojiShortcode.
+type EmojiShortcode = string
 
 // ErrorCode Stable machine-readable error code. New codes can appear in MINOR versions; unknown
 // codes must be treated like `internal_error`.
@@ -2174,6 +2253,7 @@ type QrLoginStatus string
 
 // Reaction defines model for Reaction.
 type Reaction struct {
+	// Emoji A Unicode emoji, or `c:<id>` for a custom emoji (`GET /emoji/items/{id}/image`).
 	Emoji string `json:"emoji"`
 
 	// UserId Decimal ID as a string (Snowflake IDs exceed 2^53).
@@ -2619,6 +2699,11 @@ type UnsentMessage struct {
 // UnsentMessageType defines model for UnsentMessage.Type.
 type UnsentMessageType string
 
+// UpdateCustomEmojiRequest defines model for UpdateCustomEmojiRequest.
+type UpdateCustomEmojiRequest struct {
+	Shortcode EmojiShortcode `json:"shortcode"`
+}
+
 // UpdateGroupRequest defines model for UpdateGroupRequest.
 type UpdateGroupRequest struct {
 	Description *string `json:"description,omitempty"`
@@ -2627,12 +2712,16 @@ type UpdateGroupRequest struct {
 
 // UpdateMeRequest defines model for UpdateMeRequest.
 type UpdateMeRequest struct {
+	// Bio At most 500 characters, counting custom emoji tokens as their `:shortcode:` text.
 	Bio *string `json:"bio,omitempty"`
 
 	// Birthday `null` removes it. With a `year` the date must exist (no 29 February in other years); without one,
 	// 29 February is allowed.
-	Birthday    *Birthday `json:"birthday,omitempty"`
-	DisplayName *string   `json:"display_name,omitempty"`
+	Birthday *Birthday `json:"birthday,omitempty"`
+
+	// DisplayName At most 64 characters, counting each custom emoji token (`<:shortcode:id>`) as its `:shortcode:` text.
+	// Tokens the user may not use become `:shortcode:`.
+	DisplayName *string `json:"display_name,omitempty"`
 
 	// Pronouns Free text; `null` or an empty string removes it.
 	Pronouns *string `json:"pronouns,omitempty"`
@@ -2715,6 +2804,9 @@ type UploadAttachmentRequest struct {
 	//
 	// `profile_background`: an image (10 MB), an animated GIF (15 MB) or a video of at most 15 s (15 MB). Use it
 	// with `PUT /me/background` or `PUT /groups/{chat_id}/background`.
+	//
+	// `emoji`: a PNG, JPEG or still WebP (scaled into 128 x 128 px) or a GIF of at most 128 x 128 px, at most
+	// 256 KB. Use it with `POST /emoji/packs/{pack_id}/emoji`.
 	Purpose UploadPurpose `json:"purpose"`
 
 	// StartMs `profile_music` only: where the kept part starts.
@@ -2734,6 +2826,9 @@ type UploadAttachmentRequest struct {
 //
 // `profile_background`: an image (10 MB), an animated GIF (15 MB) or a video of at most 15 s (15 MB). Use it
 // with `PUT /me/background` or `PUT /groups/{chat_id}/background`.
+//
+// `emoji`: a PNG, JPEG or still WebP (scaled into 128 x 128 px) or a GIF of at most 128 x 128 px, at most
+// 256 KB. Use it with `POST /emoji/packs/{pack_id}/emoji`.
 type UploadPurpose string
 
 // User A user as visible to the requesting user; hidden fields are `null`.
@@ -2822,6 +2917,16 @@ type ClientApiVersion = string
 
 // ClientVersion defines model for ClientVersion.
 type ClientVersion = string
+
+// EmojiId Decimal ID as a string (Snowflake IDs exceed 2^53).
+//
+// Examples: 7217400317439950848
+type EmojiId = Id
+
+// EmojiPackId Decimal ID as a string (Snowflake IDs exceed 2^53).
+//
+// Examples: 7217400317439950848
+type EmojiPackId = Id
 
 // Limit defines model for Limit.
 type Limit = int
@@ -3492,6 +3597,132 @@ type DeleteUnsentMessageParams struct {
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
 }
 
+// GetCustomEmojiParams defines parameters for GetCustomEmoji.
+type GetCustomEmojiParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// GetCustomEmojiImageParams defines parameters for GetCustomEmojiImage.
+type GetCustomEmojiImageParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// GetEmojiPackByLinkParams defines parameters for GetEmojiPackByLink.
+type GetEmojiPackByLinkParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// ListEmojiPacksParams defines parameters for ListEmojiPacks.
+type ListEmojiPacksParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// CreateEmojiPackParams defines parameters for CreateEmojiPack.
+type CreateEmojiPackParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// DeleteEmojiPackParams defines parameters for DeleteEmojiPack.
+type DeleteEmojiPackParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// GetEmojiPackParams defines parameters for GetEmojiPack.
+type GetEmojiPackParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// UpdateEmojiPackParams defines parameters for UpdateEmojiPack.
+type UpdateEmojiPackParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// AddCustomEmojiParams defines parameters for AddCustomEmoji.
+type AddCustomEmojiParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// DeleteCustomEmojiParams defines parameters for DeleteCustomEmoji.
+type DeleteCustomEmojiParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// UpdateCustomEmojiParams defines parameters for UpdateCustomEmoji.
+type UpdateCustomEmojiParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// RemoveEmojiPackParams defines parameters for RemoveEmojiPack.
+type RemoveEmojiPackParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// AddEmojiPackParams defines parameters for AddEmojiPack.
+type AddEmojiPackParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// ReportEmojiPackParams defines parameters for ReportEmojiPack.
+type ReportEmojiPackParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
 // ListGroupsParams defines parameters for ListGroups.
 type ListGroupsParams struct {
 	// Limit Page size
@@ -3563,6 +3794,15 @@ type DeleteGroupBackgroundParams struct {
 
 // SetGroupBackgroundParams defines parameters for SetGroupBackground.
 type SetGroupBackgroundParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// GetGroupEmojiParams defines parameters for GetGroupEmoji.
+type GetGroupEmojiParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
@@ -4381,6 +4621,21 @@ type ForwardMessagesJSONRequestBody = ForwardMessagesRequest
 // MarkChatReadJSONRequestBody defines body for MarkChatRead for application/json ContentType.
 type MarkChatReadJSONRequestBody = MarkReadRequest
 
+// CreateEmojiPackJSONRequestBody defines body for CreateEmojiPack for application/json ContentType.
+type CreateEmojiPackJSONRequestBody = EmojiPackTitleRequest
+
+// UpdateEmojiPackJSONRequestBody defines body for UpdateEmojiPack for application/json ContentType.
+type UpdateEmojiPackJSONRequestBody = EmojiPackTitleRequest
+
+// AddCustomEmojiJSONRequestBody defines body for AddCustomEmoji for application/json ContentType.
+type AddCustomEmojiJSONRequestBody = AddCustomEmojiRequest
+
+// UpdateCustomEmojiJSONRequestBody defines body for UpdateCustomEmoji for application/json ContentType.
+type UpdateCustomEmojiJSONRequestBody = UpdateCustomEmojiRequest
+
+// ReportEmojiPackJSONRequestBody defines body for ReportEmojiPack for application/json ContentType.
+type ReportEmojiPackJSONRequestBody = ReportStickerPackRequest
+
 // CreateGroupJSONRequestBody defines body for CreateGroup for application/json ContentType.
 type CreateGroupJSONRequestBody = CreateGroupRequest
 
@@ -4978,6 +5233,48 @@ type ServerInterface interface {
 	// DeleteUnsentMessage Discard a rejected send
 	// (DELETE /chats/{chat_id}/unsent/{client_temp_id})
 	DeleteUnsentMessage(w http.ResponseWriter, r *http.Request, chatId ChatId, clientTempId ClientTempId, params DeleteUnsentMessageParams)
+	// GetCustomEmoji One custom emoji
+	// (GET /emoji/items/{emoji_id})
+	GetCustomEmoji(w http.ResponseWriter, r *http.Request, emojiId EmojiId, params GetCustomEmojiParams)
+	// GetCustomEmojiImage The image of a custom emoji
+	// (GET /emoji/items/{emoji_id}/image)
+	GetCustomEmojiImage(w http.ResponseWriter, r *http.Request, emojiId EmojiId, params GetCustomEmojiImageParams)
+	// GetEmojiPackByLink An emoji pack by its share link
+	// (GET /emoji/links/{slug})
+	GetEmojiPackByLink(w http.ResponseWriter, r *http.Request, slug StickerPackSlug, params GetEmojiPackByLinkParams)
+	// ListEmojiPacks The custom emoji the user can use
+	// (GET /emoji/packs)
+	ListEmojiPacks(w http.ResponseWriter, r *http.Request, params ListEmojiPacksParams)
+	// CreateEmojiPack Create an emoji pack
+	// (POST /emoji/packs)
+	CreateEmojiPack(w http.ResponseWriter, r *http.Request, params CreateEmojiPackParams)
+	// DeleteEmojiPack Delete an emoji pack
+	// (DELETE /emoji/packs/{pack_id})
+	DeleteEmojiPack(w http.ResponseWriter, r *http.Request, packId EmojiPackId, params DeleteEmojiPackParams)
+	// GetEmojiPack An emoji pack
+	// (GET /emoji/packs/{pack_id})
+	GetEmojiPack(w http.ResponseWriter, r *http.Request, packId EmojiPackId, params GetEmojiPackParams)
+	// UpdateEmojiPack Rename an emoji pack
+	// (PATCH /emoji/packs/{pack_id})
+	UpdateEmojiPack(w http.ResponseWriter, r *http.Request, packId EmojiPackId, params UpdateEmojiPackParams)
+	// AddCustomEmoji Add an emoji to a pack
+	// (POST /emoji/packs/{pack_id}/emoji)
+	AddCustomEmoji(w http.ResponseWriter, r *http.Request, packId EmojiPackId, params AddCustomEmojiParams)
+	// DeleteCustomEmoji Remove an emoji from a pack
+	// (DELETE /emoji/packs/{pack_id}/emoji/{emoji_id})
+	DeleteCustomEmoji(w http.ResponseWriter, r *http.Request, packId EmojiPackId, emojiId EmojiId, params DeleteCustomEmojiParams)
+	// UpdateCustomEmoji Change an emoji's shortcode
+	// (PATCH /emoji/packs/{pack_id}/emoji/{emoji_id})
+	UpdateCustomEmoji(w http.ResponseWriter, r *http.Request, packId EmojiPackId, emojiId EmojiId, params UpdateCustomEmojiParams)
+	// RemoveEmojiPack Remove an added emoji pack
+	// (DELETE /emoji/packs/{pack_id}/installation)
+	RemoveEmojiPack(w http.ResponseWriter, r *http.Request, packId EmojiPackId, params RemoveEmojiPackParams)
+	// AddEmojiPack Add an emoji pack
+	// (PUT /emoji/packs/{pack_id}/installation)
+	AddEmojiPack(w http.ResponseWriter, r *http.Request, packId EmojiPackId, params AddEmojiPackParams)
+	// ReportEmojiPack Report an emoji pack
+	// (POST /emoji/packs/{pack_id}/report)
+	ReportEmojiPack(w http.ResponseWriter, r *http.Request, packId EmojiPackId, params ReportEmojiPackParams)
 	// ListGroups My groups
 	// (GET /groups)
 	ListGroups(w http.ResponseWriter, r *http.Request, params ListGroupsParams)
@@ -5002,6 +5299,9 @@ type ServerInterface interface {
 	// SetGroupBackground Set the group background
 	// (PUT /groups/{chat_id}/background)
 	SetGroupBackground(w http.ResponseWriter, r *http.Request, chatId ChatId, params SetGroupBackgroundParams)
+	// GetGroupEmoji The group's emoji
+	// (GET /groups/{chat_id}/emoji)
+	GetGroupEmoji(w http.ResponseWriter, r *http.Request, chatId ChatId, params GetGroupEmojiParams)
 	// LeaveGroup Leave the group
 	// (POST /groups/{chat_id}/leave)
 	LeaveGroup(w http.ResponseWriter, r *http.Request, chatId ChatId, params LeaveGroupParams)
@@ -9491,6 +9791,972 @@ func (siw *ServerInterfaceWrapper) DeleteUnsentMessage(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
+// GetCustomEmoji operation middleware
+func (siw *ServerInterfaceWrapper) GetCustomEmoji(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "emoji_id" -------------
+	var emojiId EmojiId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "emoji_id", r.PathValue("emoji_id"), &emojiId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "emoji_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetCustomEmojiParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCustomEmoji(w, r, emojiId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetCustomEmojiImage operation middleware
+func (siw *ServerInterfaceWrapper) GetCustomEmojiImage(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "emoji_id" -------------
+	var emojiId EmojiId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "emoji_id", r.PathValue("emoji_id"), &emojiId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "emoji_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetCustomEmojiImageParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCustomEmojiImage(w, r, emojiId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetEmojiPackByLink operation middleware
+func (siw *ServerInterfaceWrapper) GetEmojiPackByLink(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "slug" -------------
+	var slug StickerPackSlug
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", r.PathValue("slug"), &slug, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetEmojiPackByLinkParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetEmojiPackByLink(w, r, slug, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListEmojiPacks operation middleware
+func (siw *ServerInterfaceWrapper) ListEmojiPacks(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListEmojiPacksParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListEmojiPacks(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateEmojiPack operation middleware
+func (siw *ServerInterfaceWrapper) CreateEmojiPack(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateEmojiPackParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateEmojiPack(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteEmojiPack operation middleware
+func (siw *ServerInterfaceWrapper) DeleteEmojiPack(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "pack_id" -------------
+	var packId EmojiPackId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "pack_id", r.PathValue("pack_id"), &packId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pack_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteEmojiPackParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteEmojiPack(w, r, packId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetEmojiPack operation middleware
+func (siw *ServerInterfaceWrapper) GetEmojiPack(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "pack_id" -------------
+	var packId EmojiPackId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "pack_id", r.PathValue("pack_id"), &packId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pack_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetEmojiPackParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetEmojiPack(w, r, packId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateEmojiPack operation middleware
+func (siw *ServerInterfaceWrapper) UpdateEmojiPack(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "pack_id" -------------
+	var packId EmojiPackId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "pack_id", r.PathValue("pack_id"), &packId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pack_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateEmojiPackParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateEmojiPack(w, r, packId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AddCustomEmoji operation middleware
+func (siw *ServerInterfaceWrapper) AddCustomEmoji(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "pack_id" -------------
+	var packId EmojiPackId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "pack_id", r.PathValue("pack_id"), &packId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pack_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params AddCustomEmojiParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddCustomEmoji(w, r, packId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteCustomEmoji operation middleware
+func (siw *ServerInterfaceWrapper) DeleteCustomEmoji(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "pack_id" -------------
+	var packId EmojiPackId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "pack_id", r.PathValue("pack_id"), &packId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pack_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "emoji_id" -------------
+	var emojiId EmojiId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "emoji_id", r.PathValue("emoji_id"), &emojiId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "emoji_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteCustomEmojiParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteCustomEmoji(w, r, packId, emojiId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateCustomEmoji operation middleware
+func (siw *ServerInterfaceWrapper) UpdateCustomEmoji(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "pack_id" -------------
+	var packId EmojiPackId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "pack_id", r.PathValue("pack_id"), &packId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pack_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "emoji_id" -------------
+	var emojiId EmojiId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "emoji_id", r.PathValue("emoji_id"), &emojiId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "emoji_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateCustomEmojiParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateCustomEmoji(w, r, packId, emojiId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RemoveEmojiPack operation middleware
+func (siw *ServerInterfaceWrapper) RemoveEmojiPack(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "pack_id" -------------
+	var packId EmojiPackId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "pack_id", r.PathValue("pack_id"), &packId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pack_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RemoveEmojiPackParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RemoveEmojiPack(w, r, packId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AddEmojiPack operation middleware
+func (siw *ServerInterfaceWrapper) AddEmojiPack(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "pack_id" -------------
+	var packId EmojiPackId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "pack_id", r.PathValue("pack_id"), &packId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pack_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params AddEmojiPackParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddEmojiPack(w, r, packId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReportEmojiPack operation middleware
+func (siw *ServerInterfaceWrapper) ReportEmojiPack(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "pack_id" -------------
+	var packId EmojiPackId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "pack_id", r.PathValue("pack_id"), &packId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pack_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ReportEmojiPackParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReportEmojiPack(w, r, packId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListGroups operation middleware
 func (siw *ServerInterfaceWrapper) ListGroups(w http.ResponseWriter, r *http.Request) {
 
@@ -10042,6 +11308,75 @@ func (siw *ServerInterfaceWrapper) SetGroupBackground(w http.ResponseWriter, r *
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.SetGroupBackground(w, r, chatId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetGroupEmoji operation middleware
+func (siw *ServerInterfaceWrapper) GetGroupEmoji(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetGroupEmojiParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetGroupEmoji(w, r, chatId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -15427,6 +16762,21 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/stickers/packs/{pack_id}/order", wrapper.ReorderStickers)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/stickers/packs/{pack_id}/report", wrapper.ReportStickerPack)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/stickers/links/{slug}", wrapper.GetStickerPackByLink)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/emoji/packs", wrapper.ListEmojiPacks)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/emoji/packs", wrapper.CreateEmojiPack)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/emoji/packs/{pack_id}", wrapper.DeleteEmojiPack)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/emoji/packs/{pack_id}", wrapper.GetEmojiPack)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/emoji/packs/{pack_id}", wrapper.UpdateEmojiPack)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/emoji/packs/{pack_id}/installation", wrapper.RemoveEmojiPack)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/emoji/packs/{pack_id}/installation", wrapper.AddEmojiPack)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/emoji/packs/{pack_id}/emoji", wrapper.AddCustomEmoji)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/emoji/packs/{pack_id}/emoji/{emoji_id}", wrapper.DeleteCustomEmoji)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/emoji/packs/{pack_id}/emoji/{emoji_id}", wrapper.UpdateCustomEmoji)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/emoji/packs/{pack_id}/report", wrapper.ReportEmojiPack)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/emoji/links/{slug}", wrapper.GetEmojiPackByLink)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/emoji/items/{emoji_id}", wrapper.GetCustomEmoji)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/emoji/items/{emoji_id}/image", wrapper.GetCustomEmojiImage)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/groups/{chat_id}/emoji", wrapper.GetGroupEmoji)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/stickers/recent", wrapper.ListRecentStickers)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/link-preview", wrapper.GetLinkPreview)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/link-preview/image", wrapper.GetLinkPreviewImage)
@@ -22772,6 +24122,1393 @@ func (response DeleteUnsentMessage426ApplicationProblemPlusJSONResponse) VisitDe
 	return err
 }
 
+type GetCustomEmojiRequestObject struct {
+	EmojiId EmojiId `json:"emoji_id"`
+	Params  GetCustomEmojiParams
+}
+
+type GetCustomEmojiResponseObject interface {
+	VisitGetCustomEmojiResponse(w http.ResponseWriter) error
+}
+
+type GetCustomEmoji200JSONResponse CustomEmoji
+
+func (response GetCustomEmoji200JSONResponse) VisitGetCustomEmojiResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCustomEmoji400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response GetCustomEmoji400ApplicationProblemPlusJSONResponse) VisitGetCustomEmojiResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCustomEmoji401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response GetCustomEmoji401ApplicationProblemPlusJSONResponse) VisitGetCustomEmojiResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCustomEmoji404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetCustomEmoji404ApplicationProblemPlusJSONResponse) VisitGetCustomEmojiResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCustomEmoji426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetCustomEmoji426ApplicationProblemPlusJSONResponse) VisitGetCustomEmojiResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCustomEmojiImageRequestObject struct {
+	EmojiId EmojiId `json:"emoji_id"`
+	Params  GetCustomEmojiImageParams
+}
+
+type GetCustomEmojiImageResponseObject interface {
+	VisitGetCustomEmojiImageResponse(w http.ResponseWriter) error
+}
+
+type GetCustomEmojiImage200ImageResponse struct {
+	Body          io.Reader
+	ContentType   string
+	ContentLength int64
+}
+
+func (response GetCustomEmojiImage200ImageResponse) VisitGetCustomEmojiImageResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", response.ContentType)
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type GetCustomEmojiImage302Response struct {
+}
+
+func (response GetCustomEmojiImage302Response) VisitGetCustomEmojiImageResponse(w http.ResponseWriter) error {
+	w.WriteHeader(302)
+	return nil
+}
+
+type GetCustomEmojiImage400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response GetCustomEmojiImage400ApplicationProblemPlusJSONResponse) VisitGetCustomEmojiImageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCustomEmojiImage401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response GetCustomEmojiImage401ApplicationProblemPlusJSONResponse) VisitGetCustomEmojiImageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCustomEmojiImage404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetCustomEmojiImage404ApplicationProblemPlusJSONResponse) VisitGetCustomEmojiImageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCustomEmojiImage426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetCustomEmojiImage426ApplicationProblemPlusJSONResponse) VisitGetCustomEmojiImageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetEmojiPackByLinkRequestObject struct {
+	Slug   StickerPackSlug `json:"slug"`
+	Params GetEmojiPackByLinkParams
+}
+
+type GetEmojiPackByLinkResponseObject interface {
+	VisitGetEmojiPackByLinkResponse(w http.ResponseWriter) error
+}
+
+type GetEmojiPackByLink200JSONResponse EmojiPack
+
+func (response GetEmojiPackByLink200JSONResponse) VisitGetEmojiPackByLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetEmojiPackByLink400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response GetEmojiPackByLink400ApplicationProblemPlusJSONResponse) VisitGetEmojiPackByLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetEmojiPackByLink401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response GetEmojiPackByLink401ApplicationProblemPlusJSONResponse) VisitGetEmojiPackByLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetEmojiPackByLink404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetEmojiPackByLink404ApplicationProblemPlusJSONResponse) VisitGetEmojiPackByLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetEmojiPackByLink426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetEmojiPackByLink426ApplicationProblemPlusJSONResponse) VisitGetEmojiPackByLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListEmojiPacksRequestObject struct {
+	Params ListEmojiPacksParams
+}
+
+type ListEmojiPacksResponseObject interface {
+	VisitListEmojiPacksResponse(w http.ResponseWriter) error
+}
+
+type ListEmojiPacks200JSONResponse EmojiPackList
+
+func (response ListEmojiPacks200JSONResponse) VisitListEmojiPacksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListEmojiPacks400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response ListEmojiPacks400ApplicationProblemPlusJSONResponse) VisitListEmojiPacksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListEmojiPacks401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ListEmojiPacks401ApplicationProblemPlusJSONResponse) VisitListEmojiPacksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListEmojiPacks426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response ListEmojiPacks426ApplicationProblemPlusJSONResponse) VisitListEmojiPacksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateEmojiPackRequestObject struct {
+	Params CreateEmojiPackParams
+	Body   *CreateEmojiPackJSONRequestBody
+}
+
+type CreateEmojiPackResponseObject interface {
+	VisitCreateEmojiPackResponse(w http.ResponseWriter) error
+}
+
+type CreateEmojiPack201JSONResponse EmojiPack
+
+func (response CreateEmojiPack201JSONResponse) VisitCreateEmojiPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateEmojiPack400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response CreateEmojiPack400ApplicationProblemPlusJSONResponse) VisitCreateEmojiPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateEmojiPack401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response CreateEmojiPack401ApplicationProblemPlusJSONResponse) VisitCreateEmojiPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateEmojiPack422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response CreateEmojiPack422ApplicationProblemPlusJSONResponse) VisitCreateEmojiPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateEmojiPack426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response CreateEmojiPack426ApplicationProblemPlusJSONResponse) VisitCreateEmojiPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteEmojiPackRequestObject struct {
+	PackId EmojiPackId `json:"pack_id"`
+	Params DeleteEmojiPackParams
+}
+
+type DeleteEmojiPackResponseObject interface {
+	VisitDeleteEmojiPackResponse(w http.ResponseWriter) error
+}
+
+type DeleteEmojiPack204Response struct {
+}
+
+func (response DeleteEmojiPack204Response) VisitDeleteEmojiPackResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteEmojiPack400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteEmojiPack400ApplicationProblemPlusJSONResponse) VisitDeleteEmojiPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteEmojiPack401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteEmojiPack401ApplicationProblemPlusJSONResponse) VisitDeleteEmojiPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteEmojiPack403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteEmojiPack403ApplicationProblemPlusJSONResponse) VisitDeleteEmojiPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteEmojiPack404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteEmojiPack404ApplicationProblemPlusJSONResponse) VisitDeleteEmojiPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteEmojiPack426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteEmojiPack426ApplicationProblemPlusJSONResponse) VisitDeleteEmojiPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetEmojiPackRequestObject struct {
+	PackId EmojiPackId `json:"pack_id"`
+	Params GetEmojiPackParams
+}
+
+type GetEmojiPackResponseObject interface {
+	VisitGetEmojiPackResponse(w http.ResponseWriter) error
+}
+
+type GetEmojiPack200JSONResponse EmojiPack
+
+func (response GetEmojiPack200JSONResponse) VisitGetEmojiPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetEmojiPack400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response GetEmojiPack400ApplicationProblemPlusJSONResponse) VisitGetEmojiPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetEmojiPack401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response GetEmojiPack401ApplicationProblemPlusJSONResponse) VisitGetEmojiPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetEmojiPack404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetEmojiPack404ApplicationProblemPlusJSONResponse) VisitGetEmojiPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetEmojiPack426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetEmojiPack426ApplicationProblemPlusJSONResponse) VisitGetEmojiPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateEmojiPackRequestObject struct {
+	PackId EmojiPackId `json:"pack_id"`
+	Params UpdateEmojiPackParams
+	Body   *UpdateEmojiPackJSONRequestBody
+}
+
+type UpdateEmojiPackResponseObject interface {
+	VisitUpdateEmojiPackResponse(w http.ResponseWriter) error
+}
+
+type UpdateEmojiPack200JSONResponse EmojiPack
+
+func (response UpdateEmojiPack200JSONResponse) VisitUpdateEmojiPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateEmojiPack400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateEmojiPack400ApplicationProblemPlusJSONResponse) VisitUpdateEmojiPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateEmojiPack401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateEmojiPack401ApplicationProblemPlusJSONResponse) VisitUpdateEmojiPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateEmojiPack403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateEmojiPack403ApplicationProblemPlusJSONResponse) VisitUpdateEmojiPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateEmojiPack404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateEmojiPack404ApplicationProblemPlusJSONResponse) VisitUpdateEmojiPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateEmojiPack422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateEmojiPack422ApplicationProblemPlusJSONResponse) VisitUpdateEmojiPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateEmojiPack426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateEmojiPack426ApplicationProblemPlusJSONResponse) VisitUpdateEmojiPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddCustomEmojiRequestObject struct {
+	PackId EmojiPackId `json:"pack_id"`
+	Params AddCustomEmojiParams
+	Body   *AddCustomEmojiJSONRequestBody
+}
+
+type AddCustomEmojiResponseObject interface {
+	VisitAddCustomEmojiResponse(w http.ResponseWriter) error
+}
+
+type AddCustomEmoji201JSONResponse CustomEmoji
+
+func (response AddCustomEmoji201JSONResponse) VisitAddCustomEmojiResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddCustomEmoji400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response AddCustomEmoji400ApplicationProblemPlusJSONResponse) VisitAddCustomEmojiResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddCustomEmoji401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response AddCustomEmoji401ApplicationProblemPlusJSONResponse) VisitAddCustomEmojiResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddCustomEmoji403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response AddCustomEmoji403ApplicationProblemPlusJSONResponse) VisitAddCustomEmojiResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddCustomEmoji404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response AddCustomEmoji404ApplicationProblemPlusJSONResponse) VisitAddCustomEmojiResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddCustomEmoji409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response AddCustomEmoji409ApplicationProblemPlusJSONResponse) VisitAddCustomEmojiResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddCustomEmoji422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response AddCustomEmoji422ApplicationProblemPlusJSONResponse) VisitAddCustomEmojiResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddCustomEmoji426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response AddCustomEmoji426ApplicationProblemPlusJSONResponse) VisitAddCustomEmojiResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteCustomEmojiRequestObject struct {
+	PackId  EmojiPackId `json:"pack_id"`
+	EmojiId EmojiId     `json:"emoji_id"`
+	Params  DeleteCustomEmojiParams
+}
+
+type DeleteCustomEmojiResponseObject interface {
+	VisitDeleteCustomEmojiResponse(w http.ResponseWriter) error
+}
+
+type DeleteCustomEmoji204Response struct {
+}
+
+func (response DeleteCustomEmoji204Response) VisitDeleteCustomEmojiResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteCustomEmoji400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteCustomEmoji400ApplicationProblemPlusJSONResponse) VisitDeleteCustomEmojiResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteCustomEmoji401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteCustomEmoji401ApplicationProblemPlusJSONResponse) VisitDeleteCustomEmojiResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteCustomEmoji403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteCustomEmoji403ApplicationProblemPlusJSONResponse) VisitDeleteCustomEmojiResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteCustomEmoji404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteCustomEmoji404ApplicationProblemPlusJSONResponse) VisitDeleteCustomEmojiResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteCustomEmoji426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteCustomEmoji426ApplicationProblemPlusJSONResponse) VisitDeleteCustomEmojiResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCustomEmojiRequestObject struct {
+	PackId  EmojiPackId `json:"pack_id"`
+	EmojiId EmojiId     `json:"emoji_id"`
+	Params  UpdateCustomEmojiParams
+	Body    *UpdateCustomEmojiJSONRequestBody
+}
+
+type UpdateCustomEmojiResponseObject interface {
+	VisitUpdateCustomEmojiResponse(w http.ResponseWriter) error
+}
+
+type UpdateCustomEmoji200JSONResponse CustomEmoji
+
+func (response UpdateCustomEmoji200JSONResponse) VisitUpdateCustomEmojiResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCustomEmoji400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateCustomEmoji400ApplicationProblemPlusJSONResponse) VisitUpdateCustomEmojiResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCustomEmoji401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateCustomEmoji401ApplicationProblemPlusJSONResponse) VisitUpdateCustomEmojiResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCustomEmoji403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateCustomEmoji403ApplicationProblemPlusJSONResponse) VisitUpdateCustomEmojiResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCustomEmoji404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateCustomEmoji404ApplicationProblemPlusJSONResponse) VisitUpdateCustomEmojiResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCustomEmoji409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateCustomEmoji409ApplicationProblemPlusJSONResponse) VisitUpdateCustomEmojiResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCustomEmoji422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateCustomEmoji422ApplicationProblemPlusJSONResponse) VisitUpdateCustomEmojiResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCustomEmoji426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateCustomEmoji426ApplicationProblemPlusJSONResponse) VisitUpdateCustomEmojiResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveEmojiPackRequestObject struct {
+	PackId EmojiPackId `json:"pack_id"`
+	Params RemoveEmojiPackParams
+}
+
+type RemoveEmojiPackResponseObject interface {
+	VisitRemoveEmojiPackResponse(w http.ResponseWriter) error
+}
+
+type RemoveEmojiPack204Response struct {
+}
+
+func (response RemoveEmojiPack204Response) VisitRemoveEmojiPackResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type RemoveEmojiPack400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response RemoveEmojiPack400ApplicationProblemPlusJSONResponse) VisitRemoveEmojiPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveEmojiPack401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response RemoveEmojiPack401ApplicationProblemPlusJSONResponse) VisitRemoveEmojiPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveEmojiPack404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response RemoveEmojiPack404ApplicationProblemPlusJSONResponse) VisitRemoveEmojiPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveEmojiPack426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response RemoveEmojiPack426ApplicationProblemPlusJSONResponse) VisitRemoveEmojiPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddEmojiPackRequestObject struct {
+	PackId EmojiPackId `json:"pack_id"`
+	Params AddEmojiPackParams
+}
+
+type AddEmojiPackResponseObject interface {
+	VisitAddEmojiPackResponse(w http.ResponseWriter) error
+}
+
+type AddEmojiPack204Response struct {
+}
+
+func (response AddEmojiPack204Response) VisitAddEmojiPackResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type AddEmojiPack400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response AddEmojiPack400ApplicationProblemPlusJSONResponse) VisitAddEmojiPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddEmojiPack401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response AddEmojiPack401ApplicationProblemPlusJSONResponse) VisitAddEmojiPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddEmojiPack404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response AddEmojiPack404ApplicationProblemPlusJSONResponse) VisitAddEmojiPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddEmojiPack426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response AddEmojiPack426ApplicationProblemPlusJSONResponse) VisitAddEmojiPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportEmojiPackRequestObject struct {
+	PackId EmojiPackId `json:"pack_id"`
+	Params ReportEmojiPackParams
+	Body   *ReportEmojiPackJSONRequestBody
+}
+
+type ReportEmojiPackResponseObject interface {
+	VisitReportEmojiPackResponse(w http.ResponseWriter) error
+}
+
+type ReportEmojiPack204Response struct {
+}
+
+func (response ReportEmojiPack204Response) VisitReportEmojiPackResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type ReportEmojiPack400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response ReportEmojiPack400ApplicationProblemPlusJSONResponse) VisitReportEmojiPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportEmojiPack401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ReportEmojiPack401ApplicationProblemPlusJSONResponse) VisitReportEmojiPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportEmojiPack403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response ReportEmojiPack403ApplicationProblemPlusJSONResponse) VisitReportEmojiPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportEmojiPack404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response ReportEmojiPack404ApplicationProblemPlusJSONResponse) VisitReportEmojiPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportEmojiPack426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response ReportEmojiPack426ApplicationProblemPlusJSONResponse) VisitReportEmojiPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportEmojiPack429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response ReportEmojiPack429ApplicationProblemPlusJSONResponse) VisitReportEmojiPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListGroupsRequestObject struct {
 	Params ListGroupsParams
 }
@@ -23592,6 +26329,93 @@ type SetGroupBackground426ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response SetGroupBackground426ApplicationProblemPlusJSONResponse) VisitSetGroupBackgroundResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetGroupEmojiRequestObject struct {
+	ChatId ChatId `json:"chat_id"`
+	Params GetGroupEmojiParams
+}
+
+type GetGroupEmojiResponseObject interface {
+	VisitGetGroupEmojiResponse(w http.ResponseWriter) error
+}
+
+type GetGroupEmoji200JSONResponse EmojiPack
+
+func (response GetGroupEmoji200JSONResponse) VisitGetGroupEmojiResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetGroupEmoji400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response GetGroupEmoji400ApplicationProblemPlusJSONResponse) VisitGetGroupEmojiResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetGroupEmoji401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response GetGroupEmoji401ApplicationProblemPlusJSONResponse) VisitGetGroupEmojiResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetGroupEmoji404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetGroupEmoji404ApplicationProblemPlusJSONResponse) VisitGetGroupEmojiResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetGroupEmoji426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetGroupEmoji426ApplicationProblemPlusJSONResponse) VisitGetGroupEmojiResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -31570,6 +34394,48 @@ type StrictServerInterface interface {
 	// DeleteUnsentMessage Discard a rejected send
 	// (DELETE /chats/{chat_id}/unsent/{client_temp_id})
 	DeleteUnsentMessage(ctx context.Context, request DeleteUnsentMessageRequestObject) (DeleteUnsentMessageResponseObject, error)
+	// GetCustomEmoji One custom emoji
+	// (GET /emoji/items/{emoji_id})
+	GetCustomEmoji(ctx context.Context, request GetCustomEmojiRequestObject) (GetCustomEmojiResponseObject, error)
+	// GetCustomEmojiImage The image of a custom emoji
+	// (GET /emoji/items/{emoji_id}/image)
+	GetCustomEmojiImage(ctx context.Context, request GetCustomEmojiImageRequestObject) (GetCustomEmojiImageResponseObject, error)
+	// GetEmojiPackByLink An emoji pack by its share link
+	// (GET /emoji/links/{slug})
+	GetEmojiPackByLink(ctx context.Context, request GetEmojiPackByLinkRequestObject) (GetEmojiPackByLinkResponseObject, error)
+	// ListEmojiPacks The custom emoji the user can use
+	// (GET /emoji/packs)
+	ListEmojiPacks(ctx context.Context, request ListEmojiPacksRequestObject) (ListEmojiPacksResponseObject, error)
+	// CreateEmojiPack Create an emoji pack
+	// (POST /emoji/packs)
+	CreateEmojiPack(ctx context.Context, request CreateEmojiPackRequestObject) (CreateEmojiPackResponseObject, error)
+	// DeleteEmojiPack Delete an emoji pack
+	// (DELETE /emoji/packs/{pack_id})
+	DeleteEmojiPack(ctx context.Context, request DeleteEmojiPackRequestObject) (DeleteEmojiPackResponseObject, error)
+	// GetEmojiPack An emoji pack
+	// (GET /emoji/packs/{pack_id})
+	GetEmojiPack(ctx context.Context, request GetEmojiPackRequestObject) (GetEmojiPackResponseObject, error)
+	// UpdateEmojiPack Rename an emoji pack
+	// (PATCH /emoji/packs/{pack_id})
+	UpdateEmojiPack(ctx context.Context, request UpdateEmojiPackRequestObject) (UpdateEmojiPackResponseObject, error)
+	// AddCustomEmoji Add an emoji to a pack
+	// (POST /emoji/packs/{pack_id}/emoji)
+	AddCustomEmoji(ctx context.Context, request AddCustomEmojiRequestObject) (AddCustomEmojiResponseObject, error)
+	// DeleteCustomEmoji Remove an emoji from a pack
+	// (DELETE /emoji/packs/{pack_id}/emoji/{emoji_id})
+	DeleteCustomEmoji(ctx context.Context, request DeleteCustomEmojiRequestObject) (DeleteCustomEmojiResponseObject, error)
+	// UpdateCustomEmoji Change an emoji's shortcode
+	// (PATCH /emoji/packs/{pack_id}/emoji/{emoji_id})
+	UpdateCustomEmoji(ctx context.Context, request UpdateCustomEmojiRequestObject) (UpdateCustomEmojiResponseObject, error)
+	// RemoveEmojiPack Remove an added emoji pack
+	// (DELETE /emoji/packs/{pack_id}/installation)
+	RemoveEmojiPack(ctx context.Context, request RemoveEmojiPackRequestObject) (RemoveEmojiPackResponseObject, error)
+	// AddEmojiPack Add an emoji pack
+	// (PUT /emoji/packs/{pack_id}/installation)
+	AddEmojiPack(ctx context.Context, request AddEmojiPackRequestObject) (AddEmojiPackResponseObject, error)
+	// ReportEmojiPack Report an emoji pack
+	// (POST /emoji/packs/{pack_id}/report)
+	ReportEmojiPack(ctx context.Context, request ReportEmojiPackRequestObject) (ReportEmojiPackResponseObject, error)
 	// ListGroups My groups
 	// (GET /groups)
 	ListGroups(ctx context.Context, request ListGroupsRequestObject) (ListGroupsResponseObject, error)
@@ -31594,6 +34460,9 @@ type StrictServerInterface interface {
 	// SetGroupBackground Set the group background
 	// (PUT /groups/{chat_id}/background)
 	SetGroupBackground(ctx context.Context, request SetGroupBackgroundRequestObject) (SetGroupBackgroundResponseObject, error)
+	// GetGroupEmoji The group's emoji
+	// (GET /groups/{chat_id}/emoji)
+	GetGroupEmoji(ctx context.Context, request GetGroupEmojiRequestObject) (GetGroupEmojiResponseObject, error)
 	// LeaveGroup Leave the group
 	// (POST /groups/{chat_id}/leave)
 	LeaveGroup(ctx context.Context, request LeaveGroupRequestObject) (LeaveGroupResponseObject, error)
@@ -33740,6 +36609,419 @@ func (sh *strictHandler) DeleteUnsentMessage(w http.ResponseWriter, r *http.Requ
 	}
 }
 
+// GetCustomEmoji operation middleware
+func (sh *strictHandler) GetCustomEmoji(w http.ResponseWriter, r *http.Request, emojiId EmojiId, params GetCustomEmojiParams) {
+	var request GetCustomEmojiRequestObject
+
+	request.EmojiId = emojiId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetCustomEmoji(ctx, request.(GetCustomEmojiRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetCustomEmoji")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetCustomEmojiResponseObject); ok {
+		if err := validResponse.VisitGetCustomEmojiResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetCustomEmojiImage operation middleware
+func (sh *strictHandler) GetCustomEmojiImage(w http.ResponseWriter, r *http.Request, emojiId EmojiId, params GetCustomEmojiImageParams) {
+	var request GetCustomEmojiImageRequestObject
+
+	request.EmojiId = emojiId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetCustomEmojiImage(ctx, request.(GetCustomEmojiImageRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetCustomEmojiImage")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetCustomEmojiImageResponseObject); ok {
+		if err := validResponse.VisitGetCustomEmojiImageResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetEmojiPackByLink operation middleware
+func (sh *strictHandler) GetEmojiPackByLink(w http.ResponseWriter, r *http.Request, slug StickerPackSlug, params GetEmojiPackByLinkParams) {
+	var request GetEmojiPackByLinkRequestObject
+
+	request.Slug = slug
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetEmojiPackByLink(ctx, request.(GetEmojiPackByLinkRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetEmojiPackByLink")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetEmojiPackByLinkResponseObject); ok {
+		if err := validResponse.VisitGetEmojiPackByLinkResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListEmojiPacks operation middleware
+func (sh *strictHandler) ListEmojiPacks(w http.ResponseWriter, r *http.Request, params ListEmojiPacksParams) {
+	var request ListEmojiPacksRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListEmojiPacks(ctx, request.(ListEmojiPacksRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListEmojiPacks")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListEmojiPacksResponseObject); ok {
+		if err := validResponse.VisitListEmojiPacksResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateEmojiPack operation middleware
+func (sh *strictHandler) CreateEmojiPack(w http.ResponseWriter, r *http.Request, params CreateEmojiPackParams) {
+	var request CreateEmojiPackRequestObject
+
+	request.Params = params
+
+	var body CreateEmojiPackJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateEmojiPack(ctx, request.(CreateEmojiPackRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateEmojiPack")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateEmojiPackResponseObject); ok {
+		if err := validResponse.VisitCreateEmojiPackResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteEmojiPack operation middleware
+func (sh *strictHandler) DeleteEmojiPack(w http.ResponseWriter, r *http.Request, packId EmojiPackId, params DeleteEmojiPackParams) {
+	var request DeleteEmojiPackRequestObject
+
+	request.PackId = packId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteEmojiPack(ctx, request.(DeleteEmojiPackRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteEmojiPack")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteEmojiPackResponseObject); ok {
+		if err := validResponse.VisitDeleteEmojiPackResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetEmojiPack operation middleware
+func (sh *strictHandler) GetEmojiPack(w http.ResponseWriter, r *http.Request, packId EmojiPackId, params GetEmojiPackParams) {
+	var request GetEmojiPackRequestObject
+
+	request.PackId = packId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetEmojiPack(ctx, request.(GetEmojiPackRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetEmojiPack")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetEmojiPackResponseObject); ok {
+		if err := validResponse.VisitGetEmojiPackResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateEmojiPack operation middleware
+func (sh *strictHandler) UpdateEmojiPack(w http.ResponseWriter, r *http.Request, packId EmojiPackId, params UpdateEmojiPackParams) {
+	var request UpdateEmojiPackRequestObject
+
+	request.PackId = packId
+	request.Params = params
+
+	var body UpdateEmojiPackJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateEmojiPack(ctx, request.(UpdateEmojiPackRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateEmojiPack")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateEmojiPackResponseObject); ok {
+		if err := validResponse.VisitUpdateEmojiPackResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AddCustomEmoji operation middleware
+func (sh *strictHandler) AddCustomEmoji(w http.ResponseWriter, r *http.Request, packId EmojiPackId, params AddCustomEmojiParams) {
+	var request AddCustomEmojiRequestObject
+
+	request.PackId = packId
+	request.Params = params
+
+	var body AddCustomEmojiJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AddCustomEmoji(ctx, request.(AddCustomEmojiRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AddCustomEmoji")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AddCustomEmojiResponseObject); ok {
+		if err := validResponse.VisitAddCustomEmojiResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteCustomEmoji operation middleware
+func (sh *strictHandler) DeleteCustomEmoji(w http.ResponseWriter, r *http.Request, packId EmojiPackId, emojiId EmojiId, params DeleteCustomEmojiParams) {
+	var request DeleteCustomEmojiRequestObject
+
+	request.PackId = packId
+	request.EmojiId = emojiId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteCustomEmoji(ctx, request.(DeleteCustomEmojiRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteCustomEmoji")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteCustomEmojiResponseObject); ok {
+		if err := validResponse.VisitDeleteCustomEmojiResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateCustomEmoji operation middleware
+func (sh *strictHandler) UpdateCustomEmoji(w http.ResponseWriter, r *http.Request, packId EmojiPackId, emojiId EmojiId, params UpdateCustomEmojiParams) {
+	var request UpdateCustomEmojiRequestObject
+
+	request.PackId = packId
+	request.EmojiId = emojiId
+	request.Params = params
+
+	var body UpdateCustomEmojiJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateCustomEmoji(ctx, request.(UpdateCustomEmojiRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateCustomEmoji")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateCustomEmojiResponseObject); ok {
+		if err := validResponse.VisitUpdateCustomEmojiResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RemoveEmojiPack operation middleware
+func (sh *strictHandler) RemoveEmojiPack(w http.ResponseWriter, r *http.Request, packId EmojiPackId, params RemoveEmojiPackParams) {
+	var request RemoveEmojiPackRequestObject
+
+	request.PackId = packId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RemoveEmojiPack(ctx, request.(RemoveEmojiPackRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RemoveEmojiPack")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RemoveEmojiPackResponseObject); ok {
+		if err := validResponse.VisitRemoveEmojiPackResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AddEmojiPack operation middleware
+func (sh *strictHandler) AddEmojiPack(w http.ResponseWriter, r *http.Request, packId EmojiPackId, params AddEmojiPackParams) {
+	var request AddEmojiPackRequestObject
+
+	request.PackId = packId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AddEmojiPack(ctx, request.(AddEmojiPackRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AddEmojiPack")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AddEmojiPackResponseObject); ok {
+		if err := validResponse.VisitAddEmojiPackResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ReportEmojiPack operation middleware
+func (sh *strictHandler) ReportEmojiPack(w http.ResponseWriter, r *http.Request, packId EmojiPackId, params ReportEmojiPackParams) {
+	var request ReportEmojiPackRequestObject
+
+	request.PackId = packId
+	request.Params = params
+
+	var body ReportEmojiPackJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ReportEmojiPack(ctx, request.(ReportEmojiPackRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ReportEmojiPack")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ReportEmojiPackResponseObject); ok {
+		if err := validResponse.VisitReportEmojiPackResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListGroups operation middleware
 func (sh *strictHandler) ListGroups(w http.ResponseWriter, r *http.Request, params ListGroupsParams) {
 	var request ListGroupsRequestObject
@@ -33975,6 +37257,33 @@ func (sh *strictHandler) SetGroupBackground(w http.ResponseWriter, r *http.Reque
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(SetGroupBackgroundResponseObject); ok {
 		if err := validResponse.VisitSetGroupBackgroundResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetGroupEmoji operation middleware
+func (sh *strictHandler) GetGroupEmoji(w http.ResponseWriter, r *http.Request, chatId ChatId, params GetGroupEmojiParams) {
+	var request GetGroupEmojiRequestObject
+
+	request.ChatId = chatId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetGroupEmoji(ctx, request.(GetGroupEmojiRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetGroupEmoji")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetGroupEmojiResponseObject); ok {
+		if err := validResponse.VisitGetGroupEmojiResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

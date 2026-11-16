@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/myronsi/messenger-back/internal/emoji"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/users"
 )
@@ -145,7 +146,8 @@ func (b *Birthdays) deliver(ctx context.Context, c postgres.BirthdayCandidate) e
 	}
 	if prefs.Previews {
 		p.Preview, p.SenderID = true, fmt.Sprint(c.UserID)
-		p.Title, p.Body = c.DisplayName, c.DisplayName+" has a birthday today"
+		name := emoji.Plain(c.DisplayName)
+		p.Title, p.Body = name, name+" has a birthday today"
 	}
 	var failed error
 	for _, d := range devices {

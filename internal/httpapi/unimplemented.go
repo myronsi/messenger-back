@@ -492,3 +492,63 @@ func (Unimplemented) ReorderStickers(w http.ResponseWriter, r *http.Request, _ S
 func (Unimplemented) ReportStickerPack(w http.ResponseWriter, r *http.Request, _ StickerPackId, _ ReportStickerPackParams) {
 	notImplemented(w, r)
 }
+
+func (Unimplemented) ListEmojiPacks(w http.ResponseWriter, r *http.Request, params ListEmojiPacksParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) CreateEmojiPack(w http.ResponseWriter, r *http.Request, params CreateEmojiPackParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) GetEmojiPack(w http.ResponseWriter, r *http.Request, packId EmojiPackId, params GetEmojiPackParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) UpdateEmojiPack(w http.ResponseWriter, r *http.Request, packId EmojiPackId, params UpdateEmojiPackParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) DeleteEmojiPack(w http.ResponseWriter, r *http.Request, packId EmojiPackId, params DeleteEmojiPackParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) AddEmojiPack(w http.ResponseWriter, r *http.Request, packId EmojiPackId, params AddEmojiPackParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) RemoveEmojiPack(w http.ResponseWriter, r *http.Request, packId EmojiPackId, params RemoveEmojiPackParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) AddCustomEmoji(w http.ResponseWriter, r *http.Request, packId EmojiPackId, params AddCustomEmojiParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) UpdateCustomEmoji(w http.ResponseWriter, r *http.Request, packId EmojiPackId, emojiId EmojiId, params UpdateCustomEmojiParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) DeleteCustomEmoji(w http.ResponseWriter, r *http.Request, packId EmojiPackId, emojiId EmojiId, params DeleteCustomEmojiParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) ReportEmojiPack(w http.ResponseWriter, r *http.Request, packId EmojiPackId, params ReportEmojiPackParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) GetEmojiPackByLink(w http.ResponseWriter, r *http.Request, slug StickerPackSlug, params GetEmojiPackByLinkParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) GetCustomEmoji(w http.ResponseWriter, r *http.Request, emojiId EmojiId, params GetCustomEmojiParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) GetCustomEmojiImage(w http.ResponseWriter, r *http.Request, emojiId EmojiId, params GetCustomEmojiImageParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) GetGroupEmoji(w http.ResponseWriter, r *http.Request, chatId ChatId, params GetGroupEmojiParams) {
+	notImplemented(w, r)
+}

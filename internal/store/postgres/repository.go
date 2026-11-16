@@ -507,6 +507,7 @@ type AttachmentRepository interface {
 	UsersWithProfileMedia(ctx context.Context, attachmentID uuid.UUID) ([]int64, error)
 	ChatsWithBackground(ctx context.Context, attachmentID uuid.UUID) ([]int64, error)
 	IsStickerImage(ctx context.Context, attachmentID uuid.UUID) (bool, error)
+	IsEmojiImage(ctx context.Context, attachmentID uuid.UUID) (bool, error)
 }
 
 // SecurityEvent is one entry of the security log of an account.

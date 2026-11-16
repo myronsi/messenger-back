@@ -292,6 +292,10 @@ const cacheForever = "private, max-age=31536000, immutable"
 // into a page. Byte ranges are served (players need them to seek, and Safari to play at all); etag names
 // the stored bytes, which never change.
 func (m *MediaServer) serve(w http.ResponseWriter, r *http.Request, d media.Download, cache, etag string) {
+	serveDownload(w, r, d, cache, etag)
+}
+
+func serveDownload(w http.ResponseWriter, r *http.Request, d media.Download, cache, etag string) {
 	h := w.Header()
 	h.Set("X-Content-Type-Options", "nosniff")
 	h.Add("Vary", "Authorization")

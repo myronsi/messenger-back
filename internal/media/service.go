@@ -206,6 +206,10 @@ func (s *Service) upload(ctx context.Context, u Upload, tags *Tags) (postgres.At
 		if u.Kind != "" && u.Kind != KindImage && u.Kind != KindVideo {
 			return postgres.Attachment{}, fmt.Errorf("%w: a background is an image or a video", ErrInvalid)
 		}
+	case PurposeEmoji:
+		if u.Kind != "" && u.Kind != KindImage {
+			return postgres.Attachment{}, fmt.Errorf("%w: an emoji is an image", ErrInvalid)
+		}
 	default:
 		return postgres.Attachment{}, fmt.Errorf("%w: unknown purpose", ErrInvalid)
 	}
@@ -234,9 +238,12 @@ func (s *Service) upload(ctx context.Context, u Upload, tags *Tags) (postgres.At
 		return postgres.Attachment{}, err
 	}
 	var det Detected
-	if isProfilePurpose(u.Purpose) {
+	switch {
+	case u.Purpose == PurposeEmoji:
+		det, err = detectEmoji(head)
+	case isProfilePurpose(u.Purpose):
 		det, err = detectProfile(head, u.Purpose)
-	} else {
+	default:
 		det, err = Detect(head, u.Purpose, u.Kind)
 	}
 	if err != nil {
@@ -265,6 +272,8 @@ func (s *Service) upload(ctx context.Context, u Upload, tags *Tags) (postgres.At
 		prefix = "stickers/"
 	case PurposeProfileMusic, PurposeProfileBackground:
 		prefix = "profiles/"
+	case PurposeEmoji:
+		prefix = "emoji/"
 	}
 	rec := postgres.NewAttachment{
 		UploaderID: &u.UploaderID, Purpose: u.Purpose, Kind: det.Kind, Filename: cleanName(u.Filename, det.ContentType),
@@ -273,6 +282,15 @@ func (s *Service) upload(ctx context.Context, u Upload, tags *Tags) (postgres.At
 	var thumb []byte
 	var body io.Reader
 	switch {
+	case u.Purpose == PurposeEmoji:
+		img, err := s.processEmoji(ctx, tmp, size, det.ContentType)
+		if err != nil {
+			return postgres.Attachment{}, err
+		}
+		w, h := int32(img.Width), int32(img.Height) //nolint:gosec // at most EmojiSide
+		rec.Width, rec.Height, rec.MimeType, rec.Size = &w, &h, img.ContentType, int64(len(img.Data))
+		rec.Filename = "emoji" + map[string]string{"image/gif": ".gif", "image/png": ".png"}[img.ContentType]
+		body = bytes.NewReader(img.Data)
 	case u.Purpose == PurposeProfileMusic:
 		clip, err := s.processMusic(ctx, tmp.Name(), u.StartMS, u.EndMS)
 		if err != nil {
@@ -483,6 +501,8 @@ func (s *Service) Open(ctx context.Context, viewerID int64, id uuid.UUID, v Vari
 		ok, err = s.canSeeAvatar(ctx, viewerID, a)
 	case PurposeProfileMusic, PurposeProfileBackground:
 		ok, err = s.canSeeProfileMedia(ctx, viewerID, a)
+	case PurposeEmoji:
+		ok, err = s.canSeeEmoji(ctx, viewerID, a)
 	default:
 		ok, err = s.CanSee(ctx, viewerID, a)
 	}
