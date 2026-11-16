@@ -254,7 +254,7 @@ func xboxProfile(userAuth, xsts string) ProfileFunc {
 		}
 		if err := postJSON(ctx, c, userAuth+"/user/authenticate", map[string]any{
 			"Properties":   map[string]any{"AuthMethod": "RPS", "SiteName": "user.auth.xboxlive.com", "RpsTicket": "d=" + token},
-			"RelyingParty": "http://auth.xboxlive.com", "TokenType": "JWT",
+			"RelyingParty": "http://auth.xboxlive.com", "TokenType": "JWT", // NOSONAR Xbox Live identifier, never requested
 		}, nil, &user); err != nil {
 			return Account{}, err
 		}
@@ -268,7 +268,7 @@ func xboxProfile(userAuth, xsts string) ProfileFunc {
 		}
 		if err := postJSON(ctx, c, xsts+"/xsts/authorize", map[string]any{
 			"Properties":   map[string]any{"SandboxId": "RETAIL", "UserTokens": []string{user.Token}},
-			"RelyingParty": "http://xboxlive.com", "TokenType": "JWT",
+			"RelyingParty": "http://xboxlive.com", "TokenType": "JWT", // NOSONAR Xbox Live identifier, never requested
 		}, http.Header{"x-xbl-contract-version": {"1"}}, &auth); err != nil {
 			return Account{}, err
 		}

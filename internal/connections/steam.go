@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-const openIDNS = "http://specs.openid.net/auth/2.0"
+const openIDNS = "http://specs.openid.net/auth/2.0" // NOSONAR OpenID 2.0 namespace, never requested
 
 var steamIDPattern = regexp.MustCompile(`^https://steamcommunity\.com/openid/id/(\d{17})$`)
 
