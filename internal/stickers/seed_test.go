@@ -3,6 +3,7 @@ package stickers_test
 import (
 	"context"
 	"io/fs"
+	"strings"
 	"sync"
 	"testing"
 	"testing/fstest"
@@ -159,7 +160,18 @@ func TestBuiltinPacksSeed(t *testing.T) {
 	if err != nil || len(packs) != 1 || packs[0].Title != "Noto Animated Emoji" || len(packs[0].Stickers) != 16 {
 		t.Fatalf("built-in packs: %+v %v", packs, err)
 	}
-	if len(p.keys) != 16 {
-		t.Fatalf("uploads: %d", len(p.keys))
+	panels := 0
+	for _, k := range p.keys {
+		if strings.HasSuffix(k, ".panel.webp") {
+			panels++
+		}
+	}
+	if len(p.keys) != 32 || panels != 16 {
+		t.Fatalf("uploads: %d, panel frames: %d", len(p.keys), panels)
+	}
+	for _, s := range packs[0].Stickers {
+		if _, ok := s.Image.Variants.Get("panel"); !ok {
+			t.Fatalf("sticker %s has no panel frame", s.Emoji)
+		}
 	}
 }
