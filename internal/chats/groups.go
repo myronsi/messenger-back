@@ -14,6 +14,7 @@ import (
 
 	"github.com/myronsi/messenger-back/internal/events"
 	"github.com/myronsi/messenger-back/internal/messages"
+	"github.com/myronsi/messenger-back/internal/moderation"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/users"
 )
@@ -355,6 +356,9 @@ func (s *Service) CreateGroup(ctx context.Context, owner int64, name string, des
 	if len(memberIDs) > MaxGroupInitial {
 		return GroupView{}, fmt.Errorf("%w: at most %d members at once", ErrInvalid, MaxGroupInitial)
 	}
+	if err := s.allow(ctx, owner, moderation.CreateGroup, 0); err != nil {
+		return GroupView{}, err
+	}
 	sorted := slices.Clone(memberIDs)
 	slices.Sort(sorted)
 	if len(slices.Compact(sorted)) != len(memberIDs) {
@@ -371,6 +375,9 @@ func (s *Service) CreateGroup(ctx context.Context, owner int64, name string, des
 		}
 		if _, ok := found[uid]; !ok {
 			return GroupView{}, fmt.Errorf("%w: user %d does not exist", ErrInvalid, uid)
+		}
+		if err := s.allow(ctx, owner, moderation.InviteToGroup, uid); err != nil {
+			return GroupView{}, err
 		}
 		allowed, approval, err := s.invitePermission(ctx, owner, uid)
 		if err != nil {
@@ -451,6 +458,9 @@ func (s *Service) Group(ctx context.Context, userID, chatID int64) (GroupView, e
 
 // UpdateGroup changes the name and, when setDescription, the description (nil clears it).
 func (s *Service) UpdateGroup(ctx context.Context, userID, chatID int64, name *string, setDescription bool, description *string) (GroupView, error) {
+	if err := s.allow(ctx, userID, moderation.ManageGroup, 0); err != nil {
+		return GroupView{}, err
+	}
 	if name != nil {
 		n, err := cleanName(*name)
 		if err != nil {
@@ -507,6 +517,9 @@ func (s *Service) removedChat(ctx context.Context, chatID, actor int64, members 
 }
 
 func (s *Service) SetGroupBackground(ctx context.Context, userID, chatID int64, bg *postgres.Background) (GroupView, error) {
+	if err := s.allow(ctx, userID, moderation.ManageGroup, 0); err != nil {
+		return GroupView{}, err
+	}
 	if bg != nil && bg.Kind == postgres.BackgroundMedia {
 		if bg.AttachmentID == nil {
 			return GroupView{}, fmt.Errorf("%w: attachment_id is required", ErrInvalid)
@@ -528,6 +541,9 @@ func (s *Service) SetGroupBackground(ctx context.Context, userID, chatID int64, 
 
 // SetGroupAvatar sets the group's avatar to an image the caller uploaded (purpose avatar).
 func (s *Service) SetGroupAvatar(ctx context.Context, userID, chatID int64, attachmentID uuid.UUID) (GroupView, error) {
+	if err := s.allow(ctx, userID, moderation.ManageGroup, 0); err != nil {
+		return GroupView{}, err
+	}
 	a, err := s.d.Store.Attachments().Get(ctx, attachmentID)
 	if errors.Is(err, postgres.ErrNotFound) || (err == nil && (a.UploaderID == nil || *a.UploaderID != userID || a.Purpose != postgres.PurposeAvatar || a.Kind != "image")) {
 		return GroupView{}, fmt.Errorf("%w: attachment_id is not one of your avatar uploads", ErrInvalid)
@@ -551,6 +567,9 @@ func (s *Service) AddMember(ctx context.Context, userID, chatID, target int64) (
 	}
 	if _, err := s.d.Store.Users().Get(ctx, target); err != nil {
 		return GroupView{}, notFoundOr(err)
+	}
+	if err := s.allow(ctx, userID, moderation.InviteToGroup, target); err != nil {
+		return GroupView{}, err
 	}
 	allowed, approval, err := s.invitePermission(ctx, userID, target)
 	if err != nil {
@@ -582,6 +601,11 @@ func (s *Service) AddMember(ctx context.Context, userID, chatID, target int64) (
 
 // RemoveMember removes a member (owner and admins; not the owner).
 func (s *Service) RemoveMember(ctx context.Context, userID, chatID, target int64) error {
+	if target != userID {
+		if err := s.allow(ctx, userID, moderation.ManageGroup, 0); err != nil {
+			return err
+		}
+	}
 	if target == userID {
 		err := s.Leave(ctx, userID, chatID)
 		if errors.Is(err, ErrConflict) {
@@ -624,6 +648,9 @@ func (s *Service) Leave(ctx context.Context, userID, chatID int64) error {
 
 // SetRole makes a member an admin, a moderator or a member again.
 func (s *Service) SetRole(ctx context.Context, userID, chatID, target int64, role postgres.Role) (GroupView, error) {
+	if err := s.allow(ctx, userID, moderation.ManageGroup, 0); err != nil {
+		return GroupView{}, err
+	}
 	if role != postgres.RoleAdmin && role != postgres.RoleModerator && role != postgres.RoleMember {
 		return GroupView{}, fmt.Errorf("%w: role must be admin, moderator or member", ErrInvalid)
 	}
@@ -639,6 +666,9 @@ func (s *Service) SetRole(ctx context.Context, userID, chatID, target int64, rol
 
 // TransferOwnership makes another member the owner; the previous owner becomes an admin.
 func (s *Service) TransferOwnership(ctx context.Context, userID, chatID, target int64) (GroupView, error) {
+	if err := s.allow(ctx, userID, moderation.ManageGroup, 0); err != nil {
+		return GroupView{}, err
+	}
 	if err := s.requireGroupMember(ctx, userID, chatID); err != nil {
 		return GroupView{}, err
 	}

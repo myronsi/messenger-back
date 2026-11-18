@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/myronsi/messenger-back/internal/moderation"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 )
 
@@ -242,6 +243,42 @@ func (s *Service) member(ctx context.Context, chatID, userID int64) (postgres.Pa
 	return m, nil
 }
 
+func (s *Service) allowCall(ctx context.Context, userID int64, chat postgres.Chat) error {
+	if s.d.Moderation == nil {
+		return nil
+	}
+	var target int64
+	if chat.Type == postgres.ChatDirect {
+		members, err := s.d.Members(ctx, chat.ID)
+		if err != nil {
+			return unavailable(err)
+		}
+		for _, m := range members {
+			if m != userID {
+				target = m
+			}
+		}
+		if target == 0 {
+			target = userID
+		}
+	}
+	return s.moderated(s.d.Moderation.Allow(ctx, userID, moderation.Call, target))
+}
+
+func (s *Service) moderated(err error) error {
+	if errors.Is(err, moderation.ErrUnavailable) {
+		return unavailable(err)
+	}
+	return err
+}
+
+func (s *Service) allowJoin(ctx context.Context, userID int64) error {
+	if s.d.Moderation == nil {
+		return nil
+	}
+	return s.moderated(s.d.Moderation.Allow(ctx, userID, moderation.Call, userID))
+}
+
 func (s *Service) Start(ctx context.Context, userID, chatID int64, requestID uuid.UUID) (postgres.Call, bool, error) {
 	if _, err := s.member(ctx, chatID, userID); err != nil {
 		return postgres.Call{}, false, err
@@ -261,6 +298,9 @@ func (s *Service) Start(ctx context.Context, userID, chatID int64, requestID uui
 	}
 	if err != nil {
 		return postgres.Call{}, false, unavailable(err)
+	}
+	if err := s.allowCall(ctx, userID, chat); err != nil {
+		return postgres.Call{}, false, err
 	}
 	now := s.now()
 	st, err := s.d.Store.Calls().Start(ctx, postgres.NewCall{
@@ -322,6 +362,10 @@ func (s *Service) directAllowed(ctx context.Context, c postgres.Call, userID int
 }
 
 func (s *Service) Join(ctx context.Context, userID int64, session uuid.UUID, callID int64, takeover bool) (postgres.Call, Grant, error) {
+	if err := s.allowJoin(ctx, userID); err != nil {
+		s.d.Metrics.CallJoinFailed(Code(err))
+		return postgres.Call{}, Grant{}, err
+	}
 	c, g, err := s.join(ctx, userID, session, callID, takeover)
 	if err != nil {
 		s.d.Metrics.CallJoinFailed(Code(err))

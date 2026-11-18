@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/myronsi/messenger-back/internal/messages"
+	"github.com/myronsi/messenger-back/internal/moderation"
 	"github.com/myronsi/messenger-back/internal/store/redis"
 )
 
@@ -329,6 +330,11 @@ func (c *conn) handle(ev clientEvent) {
 		return
 	}
 	if err != nil {
+		if action, ok := moderation.Restriction(err); ok {
+			raw, _ := c.gw.o.Fanout.encode("error", ev.ChatID, map[string]any{"code": "account_restricted", "message": "your account status does not allow this", "restriction": action}, ev.ClientTempID)
+			c.reply(raw)
+			return
+		}
 		code, msg := errorCode(err)
 		if code == "internal_error" {
 			c.gw.o.Log.WarnContext(ctx, "client event failed", "type", ev.Type, "error", err)

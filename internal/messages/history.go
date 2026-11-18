@@ -11,6 +11,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/myronsi/messenger-back/internal/ids"
+	"github.com/myronsi/messenger-back/internal/moderation"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/scylla"
 	"github.com/myronsi/messenger-back/internal/users"
@@ -286,9 +287,20 @@ func (s *Service) ForwardMany(ctx context.Context, userID, chatID int64, message
 	if err := s.requireMember(ctx, chatID, userID); err != nil {
 		return nil, err
 	}
+	if err := s.allow(ctx, userID, moderation.Send); err != nil {
+		return nil, err
+	}
 	sources, err := s.forwardSources(ctx, userID, chatID, messageIDs)
 	if err != nil {
 		return nil, err
+	}
+	for _, src := range sources {
+		if src.msg.Type != scylla.TypeSticker && (src.msg.AttachmentID != nil || len(src.msg.AlbumIDs) > 0) {
+			if err := s.allow(ctx, userID, moderation.Forward); err != nil {
+				return nil, err
+			}
+			break
+		}
 	}
 	// Every target is checked before anything is written, so a refused target forwards nothing.
 	type target struct {

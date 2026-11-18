@@ -22,10 +22,12 @@ import (
 	"github.com/myronsi/messenger-back/internal/chats"
 	"github.com/myronsi/messenger-back/internal/config"
 	"github.com/myronsi/messenger-back/internal/emoji"
+	"github.com/myronsi/messenger-back/internal/events"
 	"github.com/myronsi/messenger-back/internal/geoip"
 	"github.com/myronsi/messenger-back/internal/httpapi"
 	"github.com/myronsi/messenger-back/internal/linkpreview"
 	"github.com/myronsi/messenger-back/internal/media"
+	"github.com/myronsi/messenger-back/internal/moderation"
 	"github.com/myronsi/messenger-back/internal/notifications"
 	"github.com/myronsi/messenger-back/internal/search"
 	"github.com/myronsi/messenger-back/internal/stickers"
@@ -144,12 +146,26 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	rt, err = startRealtime(p, pg, rd, sc, authSvc)
+	modSvc := moderation.New(moderation.Deps{
+		Store: pg, Cache: redis.NewModerationCache(rd.Client(), "", 0), Events: events.NewLog(redis.NewStreams(rd.Client(), "", 0)),
+		Notifier: userNotifier(func(ctx context.Context, uid int64, kind string, data any) {
+			if rt != nil && rt.fanout != nil {
+				rt.fanout.NotifyUser(ctx, uid, kind, data)
+			}
+		}),
+		Metrics: p.Metrics, Log: log,
+		OnBlocked: func(ctx context.Context, blocker, blocked int64) {
+			if callsSvc != nil {
+				callsSvc.Blocked(ctx, blocker, blocked)
+			}
+		},
+	})
+	rt, err = startRealtime(p, pg, rd, sc, authSvc, modSvc)
 	if err != nil {
 		return err
 	}
 
-	callsSvc, err = startCalls(p, pg, rd, rt)
+	callsSvc, err = startCalls(p, pg, rd, rt, modSvc)
 	if err != nil {
 		return err
 	}
@@ -184,7 +200,8 @@ func run() error {
 	}
 	chatSvc := chats.New(chats.Deps{
 		Store: pg, Messages: rt.store, Unread: rt.unread, Members: rt.members, Sender: rt.messages,
-		Directory: rt.directory, Notifier: rt.fanout, Events: rt.events, DeleteFile: storage.Delete, Calls: callHooks, Log: log,
+		Directory: rt.directory, Notifier: rt.fanout, Events: rt.events, DeleteFile: storage.Delete, Calls: callHooks,
+		Moderation: modSvc, Log: log,
 	})
 	rt.messages.SetRequestAccepted(chatSvc.RequestAccepted)
 	router := httpapi.NewRouter(httpapi.Options{
@@ -215,8 +232,10 @@ func run() error {
 					callsSvc.Blocked(ctx, blocker, blocked)
 				}
 			},
-			Events: rt.events, Limiter: rt.limiter, BasePath: cfg.HTTP.BasePath, Log: log, ProfileChanged: rt.profileChanged,
+			Events: rt.events, Limiter: rt.limiter, Moderation: modSvc, BasePath: cfg.HTTP.BasePath, Log: log, ProfileChanged: rt.profileChanged,
 			PeersChanged: chatSvc.PeerPrivacyChanged,
+		})).WithModeration(httpapi.NewModerationServer(httpapi.ModerationOptions{
+			Service: modSvc, Log: log,
 		})).WithChats(httpapi.NewChatServer(httpapi.ChatOptions{
 			Service: chatSvc,
 			Limiter: rt.limiter, BasePath: cfg.HTTP.BasePath, Log: log,

@@ -20,6 +20,93 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for AccountLabel.
+const (
+	AccountLabelRestricted AccountLabel = "restricted"
+)
+
+// Valid indicates whether the value is a known member of the AccountLabel enum.
+func (e AccountLabel) Valid() bool {
+	switch e {
+	case AccountLabelRestricted:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AccountRestriction.
+const (
+	AccountRestrictionCall          AccountRestriction = "call"
+	AccountRestrictionCreateGroup   AccountRestriction = "create_group"
+	AccountRestrictionEditProfile   AccountRestriction = "edit_profile"
+	AccountRestrictionForward       AccountRestriction = "forward"
+	AccountRestrictionInviteToGroup AccountRestriction = "invite_to_group"
+	AccountRestrictionManageGroup   AccountRestriction = "manage_group"
+	AccountRestrictionPublishPack   AccountRestriction = "publish_pack"
+	AccountRestrictionSearch        AccountRestriction = "search"
+	AccountRestrictionSend          AccountRestriction = "send"
+	AccountRestrictionStartDirect   AccountRestriction = "start_direct"
+	AccountRestrictionUpload        AccountRestriction = "upload"
+)
+
+// Valid indicates whether the value is a known member of the AccountRestriction enum.
+func (e AccountRestriction) Valid() bool {
+	switch e {
+	case AccountRestrictionCall:
+		return true
+	case AccountRestrictionCreateGroup:
+		return true
+	case AccountRestrictionEditProfile:
+		return true
+	case AccountRestrictionForward:
+		return true
+	case AccountRestrictionInviteToGroup:
+		return true
+	case AccountRestrictionManageGroup:
+		return true
+	case AccountRestrictionPublishPack:
+		return true
+	case AccountRestrictionSearch:
+		return true
+	case AccountRestrictionSend:
+		return true
+	case AccountRestrictionStartDirect:
+		return true
+	case AccountRestrictionUpload:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AccountStatusLevel.
+const (
+	AccountStatusLevelGood       AccountStatusLevel = "good"
+	AccountStatusLevelLimited    AccountStatusLevel = "limited"
+	AccountStatusLevelRestricted AccountStatusLevel = "restricted"
+	AccountStatusLevelSuspended  AccountStatusLevel = "suspended"
+	AccountStatusLevelWarned     AccountStatusLevel = "warned"
+)
+
+// Valid indicates whether the value is a known member of the AccountStatusLevel enum.
+func (e AccountStatusLevel) Valid() bool {
+	switch e {
+	case AccountStatusLevelGood:
+		return true
+	case AccountStatusLevelLimited:
+		return true
+	case AccountStatusLevelRestricted:
+		return true
+	case AccountStatusLevelSuspended:
+		return true
+	case AccountStatusLevelWarned:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ApprovalRequestStatus.
 const (
 	ApprovalRequestStatusApproved ApprovalRequestStatus = "approved"
@@ -439,6 +526,7 @@ func (e DrawingItemType) Valid() bool {
 
 // Defines values for ErrorCode.
 const (
+	ErrorCodeAccountRestricted        ErrorCode = "account_restricted"
 	ErrorCodeAlreadyExists            ErrorCode = "already_exists"
 	ErrorCodeAlreadyInCall            ErrorCode = "already_in_call"
 	ErrorCodeApprovalRequired         ErrorCode = "approval_required"
@@ -473,6 +561,8 @@ const (
 // Valid indicates whether the value is a known member of the ErrorCode enum.
 func (e ErrorCode) Valid() bool {
 	switch e {
+	case ErrorCodeAccountRestricted:
+		return true
 	case ErrorCodeAlreadyExists:
 		return true
 	case ErrorCodeAlreadyInCall:
@@ -875,6 +965,36 @@ func (e RegisterResponseTokenType) Valid() bool {
 	}
 }
 
+// Defines values for ReportReason.
+const (
+	ReportReasonHarassment           ReportReason = "harassment"
+	ReportReasonImpersonation        ReportReason = "impersonation"
+	ReportReasonInappropriateProfile ReportReason = "inappropriate_profile"
+	ReportReasonOther                ReportReason = "other"
+	ReportReasonScam                 ReportReason = "scam"
+	ReportReasonSpam                 ReportReason = "spam"
+)
+
+// Valid indicates whether the value is a known member of the ReportReason enum.
+func (e ReportReason) Valid() bool {
+	switch e {
+	case ReportReasonHarassment:
+		return true
+	case ReportReasonImpersonation:
+		return true
+	case ReportReasonInappropriateProfile:
+		return true
+	case ReportReasonOther:
+		return true
+	case ReportReasonScam:
+		return true
+	case ReportReasonSpam:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SearchVisibility.
 const (
 	SearchVisibilityEveryone SearchVisibility = "everyone"
@@ -919,28 +1039,28 @@ func (e SendMessageRequestType) Valid() bool {
 
 // Defines values for StickerPackReportReason.
 const (
-	Copyright StickerPackReportReason = "copyright"
-	Hate      StickerPackReportReason = "hate"
-	Other     StickerPackReportReason = "other"
-	Sexual    StickerPackReportReason = "sexual"
-	Spam      StickerPackReportReason = "spam"
-	Violence  StickerPackReportReason = "violence"
+	StickerPackReportReasonCopyright StickerPackReportReason = "copyright"
+	StickerPackReportReasonHate      StickerPackReportReason = "hate"
+	StickerPackReportReasonOther     StickerPackReportReason = "other"
+	StickerPackReportReasonSexual    StickerPackReportReason = "sexual"
+	StickerPackReportReasonSpam      StickerPackReportReason = "spam"
+	StickerPackReportReasonViolence  StickerPackReportReason = "violence"
 )
 
 // Valid indicates whether the value is a known member of the StickerPackReportReason enum.
 func (e StickerPackReportReason) Valid() bool {
 	switch e {
-	case Copyright:
+	case StickerPackReportReasonCopyright:
 		return true
-	case Hate:
+	case StickerPackReportReasonHate:
 		return true
-	case Other:
+	case StickerPackReportReasonOther:
 		return true
-	case Sexual:
+	case StickerPackReportReasonSexual:
 		return true
-	case Spam:
+	case StickerPackReportReasonSpam:
 		return true
-	case Violence:
+	case StickerPackReportReasonViolence:
 		return true
 	default:
 		return false
@@ -1282,6 +1402,36 @@ func (e SearchAllMessagesParamsType) Valid() bool {
 		return false
 	}
 }
+
+// AccountLabel defines model for AccountLabel.
+type AccountLabel string
+
+// AccountRestriction An action the account status blocks. Unknown values must be shown as a generic restriction.
+type AccountRestriction string
+
+// AccountStatus defines model for AccountStatus.
+type AccountStatus struct {
+	CanAppeal bool `json:"can_appeal"`
+
+	// ProbationUntil End of the running probation after an appeal; `null` when none runs.
+	ProbationUntil *Timestamp           `json:"probation_until"`
+	Restrictions   []AccountRestriction `json:"restrictions"`
+
+	// Since When the account reached this status; `null` when it never changed.
+	Since *Timestamp `json:"since"`
+
+	// Status `good` no restrictions, `warned` no restrictions yet, `limited` no new contact with non-contacts and at most 5
+	// new direct chats a day, `restricted` also no groups, uploads, forwarded files, profile changes or sticker
+	// and emoji packs and hidden from search, `suspended` read-only (no sending, joining calls or managing groups).
+	// Unknown values must be treated like `restricted`.
+	Status AccountStatusLevel `json:"status"`
+}
+
+// AccountStatusLevel `good` no restrictions, `warned` no restrictions yet, `limited` no new contact with non-contacts and at most 5
+// new direct chats a day, `restricted` also no groups, uploads, forwarded files, profile changes or sticker
+// and emoji packs and hidden from search, `suspended` read-only (no sending, joining calls or managing groups).
+// Unknown values must be treated like `restricted`.
+type AccountStatusLevel string
 
 // AddCustomEmojiRequest defines model for AddCustomEmojiRequest.
 type AddCustomEmojiRequest struct {
@@ -2196,6 +2346,10 @@ type MarkReadRequest struct {
 
 // Me defines model for Me.
 type Me struct {
+	// AccountLabel `restricted` when the account is suspended by its automatic account status; clients show "Restricted
+	// account". Absent otherwise.
+	AccountLabel *AccountLabel `json:"account_label,omitempty"`
+
 	// AvatarUrl Path of the avatar, always same-origin (`/api/v2/users/{id}/avatar?rev={revision}`).
 	AvatarUrl *string `json:"avatar_url"`
 
@@ -2560,8 +2714,11 @@ type Problem struct {
 
 	// MinClientApiVersion Present when `code` is `client_outdated`.
 	MinClientApiVersion *string `json:"min_client_api_version,omitempty"`
-	Status              int     `json:"status"`
-	Title               string  `json:"title"`
+
+	// Restriction Present when `code` is `account_restricted` (`403`); names what the account status blocks.
+	Restriction *AccountRestriction `json:"restriction,omitempty"`
+	Status      int                 `json:"status"`
+	Title       string              `json:"title"`
 
 	// Type URI reference identifying the problem type (`about:blank` when `code` says it all).
 	Type                 string                 `json:"type"`
@@ -2790,9 +2947,22 @@ type ReplyPreview struct {
 	Type      MessageType `json:"type"`
 }
 
+// ReportReason defines model for ReportReason.
+type ReportReason string
+
 // ReportStickerPackRequest defines model for ReportStickerPackRequest.
 type ReportStickerPackRequest struct {
 	Reason StickerPackReportReason `json:"reason"`
+}
+
+// ReportUserRequest defines model for ReportUserRequest.
+type ReportUserRequest struct {
+	// Block Also block the user.
+	Block *bool `json:"block,omitempty"`
+
+	// Note Optional details for the report. Never shown to the reported user.
+	Note   *string      `json:"note,omitempty"`
+	Reason ReportReason `json:"reason"`
 }
 
 // SearchHit defines model for SearchHit.
@@ -3307,6 +3477,10 @@ type UploadSession struct {
 
 // User A user as visible to the requesting user; hidden fields are `null`.
 type User struct {
+	// AccountLabel `restricted` when the account is suspended by its automatic account status; clients show "Restricted
+	// account". Absent otherwise.
+	AccountLabel *AccountLabel `json:"account_label,omitempty"`
+
 	// AvatarUrl Path of the avatar, always same-origin (`/api/v2/users/{id}/avatar?rev={revision}`).
 	AvatarUrl *string `json:"avatar_url"`
 
@@ -4503,6 +4677,24 @@ type SetupTwoFactorParams struct {
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
 }
 
+// GetAccountStatusParams defines parameters for GetAccountStatus.
+type GetAccountStatusParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// AppealAccountStatusParams defines parameters for AppealAccountStatus.
+type AppealAccountStatusParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
 // SetMyAvatarParams defines parameters for SetMyAvatar.
 type SetMyAvatarParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
@@ -5181,6 +5373,24 @@ type SetContactNameParams struct {
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
 }
 
+// UnreportUserParams defines parameters for UnreportUser.
+type UnreportUserParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// ReportUserParams defines parameters for ReportUser.
+type ReportUserParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
 // CreateWebSocketTicketParams defines parameters for CreateWebSocketTicket.
 type CreateWebSocketTicketParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
@@ -5409,6 +5619,9 @@ type CreateUploadSessionJSONRequestBody = CreateUploadSessionRequest
 // SetContactNameJSONRequestBody defines body for SetContactName for application/json ContentType.
 type SetContactNameJSONRequestBody = ContactNameRequest
 
+// ReportUserJSONRequestBody defines body for ReportUser for application/json ContentType.
+type ReportUserJSONRequestBody = ReportUserRequest
+
 // Getter for additional properties for Problem. Returns the specified
 // element and whether it was found
 func (a Problem) Get(fieldName string) (value interface{}, found bool) {
@@ -5480,6 +5693,14 @@ func (a *Problem) UnmarshalJSON(b []byte) error {
 			return fmt.Errorf("error reading 'min_client_api_version': %w", err)
 		}
 		delete(object, "min_client_api_version")
+	}
+
+	if raw, found := object["restriction"]; found {
+		err = json.Unmarshal(raw, &a.Restriction)
+		if err != nil {
+			return fmt.Errorf("error reading 'restriction': %w", err)
+		}
+		delete(object, "restriction")
 	}
 
 	if raw, found := object["status"]; found {
@@ -5562,6 +5783,13 @@ func (a Problem) MarshalJSON() ([]byte, error) {
 		object["min_client_api_version"], err = json.Marshal(a.MinClientApiVersion)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'min_client_api_version': %w", err)
+		}
+	}
+
+	if a.Restriction != nil {
+		object["restriction"], err = json.Marshal(a.Restriction)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'restriction': %w", err)
 		}
 	}
 
@@ -6027,6 +6255,12 @@ type ServerInterface interface {
 	// SetupTwoFactor Start two-factor setup
 	// (POST /me/2fa/setup)
 	SetupTwoFactor(w http.ResponseWriter, r *http.Request, params SetupTwoFactorParams)
+	// GetAccountStatus The current user's account status
+	// (GET /me/account-status)
+	GetAccountStatus(w http.ResponseWriter, r *http.Request, params GetAccountStatusParams)
+	// AppealAccountStatus Appeal the account status
+	// (POST /me/account-status/appeal)
+	AppealAccountStatus(w http.ResponseWriter, r *http.Request, params AppealAccountStatusParams)
 	// SetMyAvatar Set the avatar from an uploaded attachment
 	// (PUT /me/avatar)
 	SetMyAvatar(w http.ResponseWriter, r *http.Request, params SetMyAvatarParams)
@@ -6252,6 +6486,12 @@ type ServerInterface interface {
 	// SetContactName Set your own display name for a user
 	// (PUT /users/{user_id}/contact-name)
 	SetContactName(w http.ResponseWriter, r *http.Request, userId UserId, params SetContactNameParams)
+	// UnreportUser Withdraw a report
+	// (DELETE /users/{user_id}/report)
+	UnreportUser(w http.ResponseWriter, r *http.Request, userId UserId, params UnreportUserParams)
+	// ReportUser Report a user
+	// (POST /users/{user_id}/report)
+	ReportUser(w http.ResponseWriter, r *http.Request, userId UserId, params ReportUserParams)
 	// CreateWebSocketTicket Get a one-time ticket for the WebSocket
 	// (POST /ws/ticket)
 	CreateWebSocketTicket(w http.ResponseWriter, r *http.Request, params CreateWebSocketTicketParams)
@@ -13437,6 +13677,126 @@ func (siw *ServerInterfaceWrapper) SetupTwoFactor(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// GetAccountStatus operation middleware
+func (siw *ServerInterfaceWrapper) GetAccountStatus(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAccountStatusParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAccountStatus(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AppealAccountStatus operation middleware
+func (siw *ServerInterfaceWrapper) AppealAccountStatus(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params AppealAccountStatusParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AppealAccountStatus(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // SetMyAvatar operation middleware
 func (siw *ServerInterfaceWrapper) SetMyAvatar(w http.ResponseWriter, r *http.Request) {
 
@@ -18302,6 +18662,144 @@ func (siw *ServerInterfaceWrapper) SetContactName(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// UnreportUser operation middleware
+func (siw *ServerInterfaceWrapper) UnreportUser(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "user_id" -------------
+	var userId UserId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "user_id", r.PathValue("user_id"), &userId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "user_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UnreportUserParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UnreportUser(w, r, userId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReportUser operation middleware
+func (siw *ServerInterfaceWrapper) ReportUser(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "user_id" -------------
+	var userId UserId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "user_id", r.PathValue("user_id"), &userId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "user_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ReportUserParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReportUser(w, r, userId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // CreateWebSocketTicket operation middleware
 func (siw *ServerInterfaceWrapper) CreateWebSocketTicket(w http.ResponseWriter, r *http.Request) {
 
@@ -18529,6 +19027,10 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/users/{user_id}/connections", wrapper.ListUserConnections)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/users/{user_id}/common-groups", wrapper.ListCommonGroups)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/users/{user_id}", wrapper.GetUser)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/users/{user_id}/report", wrapper.UnreportUser)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/users/{user_id}/report", wrapper.ReportUser)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/account-status", wrapper.GetAccountStatus)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/me/account-status/appeal", wrapper.AppealAccountStatus)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/users/{user_id}/avatar", wrapper.GetUserAvatar)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/users/{user_id}/avatars", wrapper.ListUserAvatars)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/users/{user_id}/contact-name", wrapper.RemoveContactName)
@@ -18755,6 +19257,22 @@ func (response UploadAttachment401ApplicationProblemPlusJSONResponse) VisitUploa
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadAttachment403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response UploadAttachment403ApplicationProblemPlusJSONResponse) VisitUploadAttachmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -26620,6 +27138,22 @@ func (response CreateEmojiPack401ApplicationProblemPlusJSONResponse) VisitCreate
 	return err
 }
 
+type CreateEmojiPack403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response CreateEmojiPack403ApplicationProblemPlusJSONResponse) VisitCreateEmojiPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type CreateEmojiPack422ApplicationProblemPlusJSONResponse struct {
 	ValidationFailedApplicationProblemPlusJSONResponse
 }
@@ -29736,6 +30270,22 @@ func (response UpdateMe401ApplicationProblemPlusJSONResponse) VisitUpdateMeRespo
 	return err
 }
 
+type UpdateMe403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateMe403ApplicationProblemPlusJSONResponse) VisitUpdateMeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type UpdateMe422ApplicationProblemPlusJSONResponse struct {
 	ValidationFailedApplicationProblemPlusJSONResponse
 }
@@ -30093,6 +30643,162 @@ func (response SetupTwoFactor426ApplicationProblemPlusJSONResponse) VisitSetupTw
 	return err
 }
 
+type GetAccountStatusRequestObject struct {
+	Params GetAccountStatusParams
+}
+
+type GetAccountStatusResponseObject interface {
+	VisitGetAccountStatusResponse(w http.ResponseWriter) error
+}
+
+type GetAccountStatus200JSONResponse AccountStatus
+
+func (response GetAccountStatus200JSONResponse) VisitGetAccountStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAccountStatus400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response GetAccountStatus400ApplicationProblemPlusJSONResponse) VisitGetAccountStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAccountStatus401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response GetAccountStatus401ApplicationProblemPlusJSONResponse) VisitGetAccountStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAccountStatus426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetAccountStatus426ApplicationProblemPlusJSONResponse) VisitGetAccountStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AppealAccountStatusRequestObject struct {
+	Params AppealAccountStatusParams
+}
+
+type AppealAccountStatusResponseObject interface {
+	VisitAppealAccountStatusResponse(w http.ResponseWriter) error
+}
+
+type AppealAccountStatus200JSONResponse AccountStatus
+
+func (response AppealAccountStatus200JSONResponse) VisitAppealAccountStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AppealAccountStatus400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response AppealAccountStatus400ApplicationProblemPlusJSONResponse) VisitAppealAccountStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AppealAccountStatus401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response AppealAccountStatus401ApplicationProblemPlusJSONResponse) VisitAppealAccountStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AppealAccountStatus409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response AppealAccountStatus409ApplicationProblemPlusJSONResponse) VisitAppealAccountStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AppealAccountStatus426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response AppealAccountStatus426ApplicationProblemPlusJSONResponse) VisitAppealAccountStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type SetMyAvatarRequestObject struct {
 	Params SetMyAvatarParams
 	Body   *SetMyAvatarJSONRequestBody
@@ -30144,6 +30850,22 @@ func (response SetMyAvatar401ApplicationProblemPlusJSONResponse) VisitSetMyAvata
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetMyAvatar403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response SetMyAvatar403ApplicationProblemPlusJSONResponse) VisitSetMyAvatarResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -30372,6 +31094,22 @@ func (response SetMyBackground401ApplicationProblemPlusJSONResponse) VisitSetMyB
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetMyBackground403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response SetMyBackground403ApplicationProblemPlusJSONResponse) VisitSetMyBackgroundResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -31865,6 +32603,22 @@ func (response SetMyMusic401ApplicationProblemPlusJSONResponse) VisitSetMyMusicR
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetMyMusic403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response SetMyMusic403ApplicationProblemPlusJSONResponse) VisitSetMyMusicResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -34805,6 +35559,22 @@ func (response CreateStickerPack401ApplicationProblemPlusJSONResponse) VisitCrea
 	return err
 }
 
+type CreateStickerPack403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response CreateStickerPack403ApplicationProblemPlusJSONResponse) VisitCreateStickerPackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type CreateStickerPack409ApplicationProblemPlusJSONResponse struct {
 	ConflictApplicationProblemPlusJSONResponse
 }
@@ -36050,6 +36820,22 @@ func (response CreateUploadSession401ApplicationProblemPlusJSONResponse) VisitCr
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateUploadSession403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response CreateUploadSession403ApplicationProblemPlusJSONResponse) VisitCreateUploadSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -37458,6 +38244,188 @@ func (response SetContactName429ApplicationProblemPlusJSONResponse) VisitSetCont
 	return err
 }
 
+type UnreportUserRequestObject struct {
+	UserId UserId `json:"user_id"`
+	Params UnreportUserParams
+}
+
+type UnreportUserResponseObject interface {
+	VisitUnreportUserResponse(w http.ResponseWriter) error
+}
+
+type UnreportUser204Response struct {
+}
+
+func (response UnreportUser204Response) VisitUnreportUserResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type UnreportUser400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response UnreportUser400ApplicationProblemPlusJSONResponse) VisitUnreportUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnreportUser401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response UnreportUser401ApplicationProblemPlusJSONResponse) VisitUnreportUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnreportUser426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response UnreportUser426ApplicationProblemPlusJSONResponse) VisitUnreportUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportUserRequestObject struct {
+	UserId UserId `json:"user_id"`
+	Params ReportUserParams
+	Body   *ReportUserJSONRequestBody
+}
+
+type ReportUserResponseObject interface {
+	VisitReportUserResponse(w http.ResponseWriter) error
+}
+
+type ReportUser204Response struct {
+}
+
+func (response ReportUser204Response) VisitReportUserResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type ReportUser400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response ReportUser400ApplicationProblemPlusJSONResponse) VisitReportUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportUser401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ReportUser401ApplicationProblemPlusJSONResponse) VisitReportUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportUser404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response ReportUser404ApplicationProblemPlusJSONResponse) VisitReportUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportUser422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response ReportUser422ApplicationProblemPlusJSONResponse) VisitReportUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportUser426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response ReportUser426ApplicationProblemPlusJSONResponse) VisitReportUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportUser429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response ReportUser429ApplicationProblemPlusJSONResponse) VisitReportUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type CreateWebSocketTicketRequestObject struct {
 	Params CreateWebSocketTicketParams
 }
@@ -37861,6 +38829,12 @@ type StrictServerInterface interface {
 	// SetupTwoFactor Start two-factor setup
 	// (POST /me/2fa/setup)
 	SetupTwoFactor(ctx context.Context, request SetupTwoFactorRequestObject) (SetupTwoFactorResponseObject, error)
+	// GetAccountStatus The current user's account status
+	// (GET /me/account-status)
+	GetAccountStatus(ctx context.Context, request GetAccountStatusRequestObject) (GetAccountStatusResponseObject, error)
+	// AppealAccountStatus Appeal the account status
+	// (POST /me/account-status/appeal)
+	AppealAccountStatus(ctx context.Context, request AppealAccountStatusRequestObject) (AppealAccountStatusResponseObject, error)
 	// SetMyAvatar Set the avatar from an uploaded attachment
 	// (PUT /me/avatar)
 	SetMyAvatar(ctx context.Context, request SetMyAvatarRequestObject) (SetMyAvatarResponseObject, error)
@@ -38086,6 +39060,12 @@ type StrictServerInterface interface {
 	// SetContactName Set your own display name for a user
 	// (PUT /users/{user_id}/contact-name)
 	SetContactName(ctx context.Context, request SetContactNameRequestObject) (SetContactNameResponseObject, error)
+	// UnreportUser Withdraw a report
+	// (DELETE /users/{user_id}/report)
+	UnreportUser(ctx context.Context, request UnreportUserRequestObject) (UnreportUserResponseObject, error)
+	// ReportUser Report a user
+	// (POST /users/{user_id}/report)
+	ReportUser(ctx context.Context, request ReportUserRequestObject) (ReportUserResponseObject, error)
 	// CreateWebSocketTicket Get a one-time ticket for the WebSocket
 	// (POST /ws/ticket)
 	CreateWebSocketTicket(ctx context.Context, request CreateWebSocketTicketRequestObject) (CreateWebSocketTicketResponseObject, error)
@@ -41241,6 +42221,58 @@ func (sh *strictHandler) SetupTwoFactor(w http.ResponseWriter, r *http.Request, 
 	}
 }
 
+// GetAccountStatus operation middleware
+func (sh *strictHandler) GetAccountStatus(w http.ResponseWriter, r *http.Request, params GetAccountStatusParams) {
+	var request GetAccountStatusRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAccountStatus(ctx, request.(GetAccountStatusRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAccountStatus")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAccountStatusResponseObject); ok {
+		if err := validResponse.VisitGetAccountStatusResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AppealAccountStatus operation middleware
+func (sh *strictHandler) AppealAccountStatus(w http.ResponseWriter, r *http.Request, params AppealAccountStatusParams) {
+	var request AppealAccountStatusRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AppealAccountStatus(ctx, request.(AppealAccountStatusRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AppealAccountStatus")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AppealAccountStatusResponseObject); ok {
+		if err := validResponse.VisitAppealAccountStatusResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // SetMyAvatar operation middleware
 func (sh *strictHandler) SetMyAvatar(w http.ResponseWriter, r *http.Request, params SetMyAvatarParams) {
 	var request SetMyAvatarRequestObject
@@ -43400,6 +44432,67 @@ func (sh *strictHandler) SetContactName(w http.ResponseWriter, r *http.Request, 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(SetContactNameResponseObject); ok {
 		if err := validResponse.VisitSetContactNameResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UnreportUser operation middleware
+func (sh *strictHandler) UnreportUser(w http.ResponseWriter, r *http.Request, userId UserId, params UnreportUserParams) {
+	var request UnreportUserRequestObject
+
+	request.UserId = userId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UnreportUser(ctx, request.(UnreportUserRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UnreportUser")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UnreportUserResponseObject); ok {
+		if err := validResponse.VisitUnreportUserResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ReportUser operation middleware
+func (sh *strictHandler) ReportUser(w http.ResponseWriter, r *http.Request, userId UserId, params ReportUserParams) {
+	var request ReportUserRequestObject
+
+	request.UserId = userId
+	request.Params = params
+
+	var body ReportUserJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ReportUser(ctx, request.(ReportUserRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ReportUser")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ReportUserResponseObject); ok {
+		if err := validResponse.VisitReportUserResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

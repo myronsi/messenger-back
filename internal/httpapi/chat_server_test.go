@@ -24,6 +24,7 @@ import (
 	"github.com/myronsi/messenger-back/internal/ids"
 	"github.com/myronsi/messenger-back/internal/linkpreview"
 	"github.com/myronsi/messenger-back/internal/messages"
+	"github.com/myronsi/messenger-back/internal/moderation"
 	"github.com/myronsi/messenger-back/internal/notifications"
 	"github.com/myronsi/messenger-back/internal/observability"
 	"github.com/myronsi/messenger-back/internal/search"
@@ -112,6 +113,7 @@ type chatEnv struct {
 	index     *search.Index
 	cacheDown *atomic.Bool
 	cleared   *atomic.Int32
+	modCache  *redis.ModerationCache
 	peersDone chan int64
 }
 
@@ -185,8 +187,10 @@ func newChatEnvWith(t *testing.T, withSearch bool) *chatEnv {
 	gen, _ := ids.NewGenerator(1)
 	members := redis.NewMembers(rdb, prefix, time.Minute)
 	unread := redis.NewUnread(rdb, prefix)
+	modCache := redis.NewModerationCache(rdb, prefix, time.Minute)
+	modSvc := moderation.New(moderation.Deps{Store: store, Cache: modCache})
 	deps := messages.Deps{
-		Messages: repo, Store: store, Members: members, Unread: unread, Dedup: redis.NewDedup(rdb, prefix, 0), IDs: gen,
+		Messages: repo, Store: store, Members: members, Unread: unread, Dedup: redis.NewDedup(rdb, prefix, 0), IDs: gen, Moderation: modSvc,
 	}
 	var index *search.Index
 	if withSearch {
@@ -198,12 +202,13 @@ func newChatEnvWith(t *testing.T, withSearch bool) *chatEnv {
 		deps.Events = indexLog{search.NewIndexer(index, repo, store.Attachments(), nil)}
 	}
 	msgs := messages.New(deps)
-	dir := users.NewDirectory(store, nil, apiBase)
+	dir := users.NewDirectory(store, nil, apiBase).WithLabels(modSvc)
 	ev := &chatEvents{created: map[int64][]int64{}, updated: map[int64][]int64{}, removed: map[int64][]int64{},
 		groupCreated: map[int64][]int64{}, groupUpdates: map[int64]int{}, updatedViews: map[int64]chats.View{}}
 	tokens := notifications.NewActionTokens("test-secret")
 	cacheDown, cleared := new(atomic.Bool), new(atomic.Int32)
-	svc := chats.New(chats.Deps{Store: store, Messages: repo, Unread: unread, Members: flakyMembers{members, cacheDown, cleared}, Sender: msgs, Directory: dir, Notifier: ev})
+	svc := chats.New(chats.Deps{Store: store, Messages: repo, Unread: unread, Members: flakyMembers{members, cacheDown, cleared}, Sender: msgs, Directory: dir, Notifier: ev,
+		Moderation: modSvc})
 	msgs.SetRequestAccepted(svc.RequestAccepted)
 	peersDone := make(chan int64, 8)
 	peersChanged := func(ctx context.Context, userID int64) {
@@ -211,7 +216,8 @@ func newChatEnvWith(t *testing.T, withSearch bool) *chatEnv {
 		peersDone <- userID
 	}
 	api := NewServer(NewAuthServer(AuthOptions{Service: authSvc, Log: log, BasePath: apiBase, CookieSecure: true}), nil).
-		WithAccount(NewAccountServer(AccountOptions{Store: store, Directory: dir, Deleter: authSvc, BasePath: apiBase, Log: log, PeersChanged: peersChanged})).
+		WithAccount(NewAccountServer(AccountOptions{Store: store, Directory: dir, Deleter: authSvc, Moderation: modSvc, BasePath: apiBase, Log: log, PeersChanged: peersChanged})).
+		WithModeration(NewModerationServer(ModerationOptions{Service: modSvc, Log: log})).
 		WithChats(NewChatServer(ChatOptions{Service: svc, BasePath: apiBase, Log: log})).
 		WithMessages(NewMessageServer(MessageOptions{Service: msgs, Store: store, Directory: dir, BasePath: apiBase, Log: log, Searcher: searcher(index, msgs, store, repo)})).
 		WithNotifications(NotificationOptions{Store: store.Notifications(), Tokens: tokens}).
@@ -228,7 +234,7 @@ func newChatEnvWith(t *testing.T, withSearch bool) *chatEnv {
 			API:           api,
 			Authenticator: authSvc,
 		})},
-		store: store, events: ev, index: index, tokens: tokens, cacheDown: cacheDown, cleared: cleared, peersDone: peersDone,
+		store: store, events: ev, index: index, tokens: tokens, cacheDown: cacheDown, cleared: cleared, modCache: modCache, peersDone: peersDone,
 	}
 }
 

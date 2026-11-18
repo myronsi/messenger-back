@@ -2,6 +2,17 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.36
+
+- User reports: `POST /users/{user_id}/report` (`ReportUserRequest`: `ReportReason`, optional `note`, `block`
+  default `true`) and `DELETE /users/{user_id}/report`.
+- Automatic account status: `GET /me/account-status` and `POST /me/account-status/appeal` return `AccountStatus`
+  (`AccountStatusLevel`, `AccountRestriction`, including `manage_group` for group changes of a suspended
+  account); the WebSocket event `account_status` carries it to the user's own sessions.
+- `ErrorCode` gains `account_restricted` (`403`); `Problem.restriction` and the WebSocket `error` event's
+  `data.restriction` name the blocked action.
+- `User.account_label` (`AccountLabel`: `restricted`) marks suspended accounts.
+
 ## 2.1.0-alpha.35
 
 - `PrivacySettings` gains the required `voice_video_messages` (`VoiceVideoPolicy`: `everyone`, `contacts`) and

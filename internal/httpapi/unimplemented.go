@@ -581,6 +581,22 @@ func (Unimplemented) CompleteUploadSession(w http.ResponseWriter, r *http.Reques
 	notImplemented(w, r)
 }
 
+func (Unimplemented) ReportUser(w http.ResponseWriter, r *http.Request, _ UserId, _ ReportUserParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) UnreportUser(w http.ResponseWriter, r *http.Request, _ UserId, _ UnreportUserParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) GetAccountStatus(w http.ResponseWriter, r *http.Request, _ GetAccountStatusParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) AppealAccountStatus(w http.ResponseWriter, r *http.Request, _ AppealAccountStatusParams) {
+	notImplemented(w, r)
+}
+
 func (Unimplemented) AcceptChatRequest(w http.ResponseWriter, r *http.Request, chatId ChatId, params AcceptChatRequestParams) {
 	notImplemented(w, r)
 }

@@ -1,0 +1,207 @@
+package httpapi
+
+import (
+	"context"
+	"net/http"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/myronsi/messenger-back/internal/moderation"
+	"github.com/myronsi/messenger-back/internal/store/postgres"
+)
+
+func (e *chatEnv) setStatus(t *testing.T, id string, st moderation.Status) {
+	t.Helper()
+	uid := mustID(t, id)
+	now := time.Now()
+	_, _, err := e.store.Moderation().Transition(context.Background(), uid, now, now, func(cur postgres.ModerationState, _ []postgres.ReportFact) postgres.ModerationState {
+		cur.Status, cur.Since, cur.Cause = string(st), now, "test"
+		return cur
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.modCache.Invalidate(context.Background(), uid); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func restrictedBy(t *testing.T, r reply, action string) {
+	t.Helper()
+	if r.Code != http.StatusForbidden {
+		t.Fatalf("want 403 account_restricted, got %d %s", r.Code, r.Body)
+	}
+	body := r.json()
+	if body["code"] != "account_restricted" || body["restriction"] != action {
+		t.Fatalf("problem %v, want account_restricted with %s", body, action)
+	}
+}
+
+func TestReportUserEndpoints(t *testing.T) {
+	e := newChatEnv(t)
+	alice, bob := e.register(t, "alice"), e.register(t, "bob")
+	aliceID, bobID := e.uid(t, alice), e.uid(t, bob)
+	report := func(s session, id string, body any) reply {
+		return e.do(t, request{method: http.MethodPost, path: "/users/" + id + "/report", token: s.access, body: body})
+	}
+	if r := report(alice, bobID, map[string]any{"reason": "spam", "note": "links", "block": false}); r.Code != http.StatusNoContent {
+		t.Fatalf("report: %d %s", r.Code, r.Body)
+	}
+	if blocked, _ := e.store.Social().BlockedEither(context.Background(), mustID(t, aliceID), mustID(t, bobID)); blocked {
+		t.Fatal("block false blocked")
+	}
+	if r := report(alice, bobID, map[string]any{"reason": "harassment"}); r.Code != http.StatusNoContent {
+		t.Fatalf("report again: %d %s", r.Code, r.Body)
+	}
+	if blocked, _ := e.store.Social().BlockedEither(context.Background(), mustID(t, aliceID), mustID(t, bobID)); !blocked {
+		t.Fatal("block defaults to true")
+	}
+	if r := report(alice, aliceID, map[string]any{"reason": "spam"}); r.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("self report: %d %s", r.Code, r.Body)
+	}
+	if r := report(alice, bobID, map[string]any{"reason": "spam", "note": strings.Repeat("n", 501)}); r.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("long note: %d %s", r.Code, r.Body)
+	}
+	if r := report(alice, "999999999", map[string]any{"reason": "spam"}); r.Code != http.StatusNotFound {
+		t.Fatalf("unknown user: %d %s", r.Code, r.Body)
+	}
+	if r := e.do(t, request{method: http.MethodDelete, path: "/users/" + bobID + "/report", token: alice.access}); r.Code != http.StatusNoContent {
+		t.Fatalf("withdraw: %d %s", r.Code, r.Body)
+	}
+}
+
+func TestAccountStatusAndAppeal(t *testing.T) {
+	e := newChatEnv(t)
+	alice := e.register(t, "alice")
+	status := func() map[string]any {
+		r := e.do(t, request{method: http.MethodGet, path: "/me/account-status", token: alice.access})
+		if r.Code != http.StatusOK {
+			t.Fatalf("status: %d %s", r.Code, r.Body)
+		}
+		return r.json()
+	}
+	if s := status(); s["status"] != "good" || s["since"] != nil || s["can_appeal"] != false || len(s["restrictions"].([]any)) != 0 {
+		t.Fatalf("new account %v", s)
+	}
+	appeal := func() reply {
+		return e.do(t, request{method: http.MethodPost, path: "/me/account-status/appeal", token: alice.access})
+	}
+	if r := appeal(); r.Code != http.StatusConflict {
+		t.Fatalf("appeal of a good account: %d %s", r.Code, r.Body)
+	}
+	e.setStatus(t, e.uid(t, alice), moderation.Limited)
+	if s := status(); s["status"] != "limited" || s["can_appeal"] != true || len(s["restrictions"].([]any)) != 3 {
+		t.Fatalf("limited %v", s)
+	}
+	r := appeal()
+	if r.Code != http.StatusOK || r.json()["status"] != "warned" || r.json()["probation_until"] == nil {
+		t.Fatalf("appeal: %d %s", r.Code, r.Body)
+	}
+	if r := appeal(); r.Code != http.StatusConflict {
+		t.Fatalf("second appeal: %d %s", r.Code, r.Body)
+	}
+}
+
+func TestRestrictedActions(t *testing.T) {
+	e := newChatEnv(t)
+	alice, bob, carol := e.register(t, "alice"), e.register(t, "bob"), e.register(t, "carol")
+	aliceID, bobID, carolID := e.uid(t, alice), e.uid(t, bob), e.uid(t, carol)
+	chat := e.create(t, bob, aliceID, "hi")
+	if chat.Code != http.StatusCreated && chat.Code != http.StatusOK {
+		t.Fatalf("bob opens a chat: %d %s", chat.Code, chat.Body)
+	}
+	chatID := chat.json()["id"].(string)
+	group := e.do(t, request{method: http.MethodPost, path: "/groups", token: alice.access, body: map[string]any{"name": "Mine", "member_ids": []string{bobID}}})
+	if group.Code != http.StatusCreated {
+		t.Fatalf("alice creates a group: %d %s", group.Code, group.Body)
+	}
+	groupID := group.json()["id"].(string)
+
+	e.setStatus(t, aliceID, moderation.Limited)
+	restrictedBy(t, e.create(t, alice, carolID, ""), "start_direct")
+	if r := e.create(t, alice, bobID, ""); r.Code != http.StatusOK && r.Code != http.StatusCreated {
+		t.Fatalf("limited opens the chat with a contact: %d %s", r.Code, r.Body)
+	}
+	restrictedBy(t, e.do(t, request{method: http.MethodPost, path: "/groups", token: alice.access, body: map[string]any{"name": "G", "member_ids": []string{carolID}}}), "invite_to_group")
+	if r := e.do(t, request{method: http.MethodPatch, path: "/me", token: alice.access, body: map[string]any{"display_name": "New"}}); r.Code != http.StatusOK {
+		t.Fatalf("limited renames: %d %s", r.Code, r.Body)
+	}
+
+	e.setStatus(t, aliceID, moderation.Restricted)
+	restrictedBy(t, e.do(t, request{method: http.MethodPost, path: "/groups", token: alice.access, body: map[string]any{"name": "G", "member_ids": []string{bobID}}}), "create_group")
+	restrictedBy(t, e.do(t, request{method: http.MethodPatch, path: "/me", token: alice.access, body: map[string]any{"display_name": "Other"}}), "edit_profile")
+	if r := e.do(t, request{method: http.MethodPatch, path: "/me", token: alice.access, body: map[string]any{"bio": "still mine"}}); r.Code != http.StatusOK {
+		t.Fatalf("restricted edits the bio: %d %s", r.Code, r.Body)
+	}
+	restrictedBy(t, e.do(t, request{method: http.MethodPost, path: "/stickers/packs", token: alice.access, body: map[string]any{"title": "Mine"}}), "publish_pack")
+	search := e.do(t, request{method: http.MethodGet, path: "/users?q=alice", token: bob.access})
+	if search.Code != http.StatusOK || len(search.json()["items"].([]any)) != 0 {
+		t.Fatalf("restricted account found by search: %d %s", search.Code, search.Body)
+	}
+	if own := e.do(t, request{method: http.MethodGet, path: "/users?q=alice", token: alice.access}); len(own.json()["items"].([]any)) != 1 {
+		t.Fatalf("restricted account hidden from itself: %s", own.Body)
+	}
+	send := map[string]any{"client_temp_id": "t1", "type": "text", "content": "still here"}
+	if r := e.do(t, request{method: http.MethodPost, path: "/chats/" + chatID + "/messages", token: alice.access, body: send}); r.Code != http.StatusCreated && r.Code != http.StatusOK {
+		t.Fatalf("restricted sends: %d %s", r.Code, r.Body)
+	}
+	if profile := e.do(t, request{method: http.MethodGet, path: "/users/" + aliceID, token: bob.access}); profile.json()["account_label"] != nil {
+		t.Fatalf("restricted account labelled: %s", profile.Body)
+	}
+
+	e.setStatus(t, aliceID, moderation.Suspended)
+	send["client_temp_id"] = "t2"
+	restrictedBy(t, e.do(t, request{method: http.MethodPost, path: "/chats/" + chatID + "/messages", token: alice.access, body: send}), "send")
+	if r := e.do(t, request{method: http.MethodGet, path: "/chats", token: alice.access}); r.Code != http.StatusOK {
+		t.Fatalf("suspended reads the chat list: %d %s", r.Code, r.Body)
+	}
+	restrictedBy(t, e.do(t, request{method: http.MethodPatch, path: "/groups/" + groupID, token: alice.access, body: map[string]any{"name": "Renamed"}}), "manage_group")
+	restrictedBy(t, e.do(t, request{method: http.MethodDelete, path: "/groups/" + groupID + "/participants/" + bobID, token: alice.access}), "manage_group")
+	if r := e.do(t, request{method: http.MethodGet, path: "/me/account-status", token: alice.access}); r.Code != http.StatusOK || r.json()["status"] != "suspended" {
+		t.Fatalf("suspended status page: %d %s", r.Code, r.Body)
+	}
+	if profile := e.do(t, request{method: http.MethodGet, path: "/users/" + aliceID, token: bob.access}); profile.json()["account_label"] != "restricted" {
+		t.Fatalf("suspended account not labelled: %s", profile.Body)
+	}
+	chats := items(t, e.do(t, request{method: http.MethodGet, path: "/chats", token: bob.access}))
+	if len(chats) == 0 || chats[0]["peer"].(map[string]any)["account_label"] != "restricted" {
+		t.Fatalf("chat entry without the label: %v", chats)
+	}
+}
+
+func TestLimitedChatsLandInRequests(t *testing.T) {
+	e := newChatEnv(t)
+	alice, dave, carol := e.register(t, "alice"), e.register(t, "dave"), e.register(t, "carol")
+	aliceID, daveID, carolID := e.uid(t, alice), e.uid(t, dave), e.uid(t, carol)
+	if _, err := e.store.Chats().CreateGroup(context.Background(), postgres.NewGroup{OwnerID: mustID(t, carolID), Name: "Club", MemberIDs: []int64{mustID(t, aliceID), mustID(t, daveID)}}); err != nil {
+		t.Fatal(err)
+	}
+	folder := func(s session, query string) []string {
+		t.Helper()
+		out := []string{}
+		for _, c := range items(t, e.do(t, request{method: http.MethodGet, path: "/chats" + query, token: s.access})) {
+			out = append(out, c["id"].(string))
+		}
+		return out
+	}
+	e.setStatus(t, aliceID, moderation.Limited)
+	limited := e.create(t, alice, carolID, "hello")
+	if limited.Code != http.StatusCreated || limited.json()["is_request"] != false {
+		t.Fatalf("limited opens a chat with a contact: %d %s", limited.Code, limited.Body)
+	}
+	limitedChat := limited.json()["id"].(string)
+	good := e.create(t, dave, carolID, "hello")
+	if good.Code != http.StatusCreated {
+		t.Fatalf("good opens a chat with a contact: %d %s", good.Code, good.Body)
+	}
+	goodChat := good.json()["id"].(string)
+	requests, main := folder(carol, "?folder=requests"), folder(carol, "")
+	if !slices.Contains(requests, limitedChat) || slices.Contains(main, limitedChat) {
+		t.Fatalf("the limited account's chat is not in the requests folder: requests %v, main %v", requests, main)
+	}
+	if slices.Contains(requests, goodChat) || !slices.Contains(main, goodChat) {
+		t.Fatalf("a contact's chat landed in requests: requests %v, main %v", requests, main)
+	}
+}

@@ -34,7 +34,7 @@ order). Old clients that do not send it get only the main list. `archived` still
    - `nobody` refuses every new chat and every request (`403`); chats that exist stay;
    - `wait_approval` makes a request (`202` with the `ApprovalRequest`, the requester as they see themselves). Asking again returns the same pending request; asking after the chat was opened meanwhile returns the chat.
 
-   An allow exception for the requester opens the chat whatever the setting, a deny exception refuses it. A block in either direction is `403`.
+   An allow exception for the requester opens the chat whatever the setting, a deny exception refuses it. A block in either direction is `403`. Before the setting is asked, the requester's account status must allow a new chat with that user: `limited` and worse only with contacts and at most 5 new chats in 24 hours, `suspended` none (`403 account_restricted`, [moderation.md](moderation.md)). A new chat of a `limited` or worse requester always lands in the recipient's Requests folder.
 3. A new chat is `201`. Both users get `chat_created` (before any message of the chat), and `initial_message` becomes its first message.
 4. When the other user does not count the requester as a contact, the new chat lands in their [Requests folder](#requests-folder).
 

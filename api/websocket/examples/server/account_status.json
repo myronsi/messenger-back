@@ -1,0 +1,12 @@
+{
+  "type": "account_status",
+  "event_id": "7217400317439950011",
+  "chat_id": null,
+  "data": {
+    "status": "limited",
+    "since": "2026-11-18T09:30:00Z",
+    "restrictions": ["start_direct", "invite_to_group", "call"],
+    "can_appeal": true,
+    "probation_until": null
+  }
+}

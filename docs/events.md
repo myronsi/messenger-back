@@ -25,7 +25,7 @@ which keeps entries small and handlers idempotent.
 |---|---|---|
 | `events:messages` | `message.created`, `message.edited`, `message.deleted`, `message.hidden` (deleted for one user), `reaction.changed` | `chat_id`, `message_id`, `actor_id`; `user_id` for `message.hidden` |
 | `events:chats` | `chat.member_added`, `chat.member_removed`, `chat.deleted` | `chat_id`, `user_id` (the member), `actor_id` |
-| `events:users` | `user.updated`, `user.deleted` | `user_id` |
+| `events:users` | `user.updated`, `user.deleted`, `user.reported` | `user_id`; `actor_id` (the reporter) for `user.reported` |
 
 Every stream is trimmed to about a million entries (`MAXLEN ~`).
 
@@ -64,6 +64,7 @@ were in flight are reclaimed.
 |---|---|---|
 | `chat-cleanup` | `events:chats` | `chat.deleted`: deletes the chat's messages from ScyllaDB, then once more after the grace period (`scylla.DeleteGracePeriod`) for writes that were in flight, then marks the messages done in `chat_deletions`; `chat.member_removed`: drops the chat from the member's unread counters unless they are a member again by then (entries can be handled late or replayed) |
 | `search-indexer` | `events:messages`, `events:chats` | keeps the message search index current ([search.md](search.md)) |
+| `moderation` | `events:users` | `user.reported`: recomputes the reported user's score and account status, writes the audit log and sends `account_status` to the user's sessions; other types are skipped ([moderation.md](moderation.md)) |
 
 ## Reconciliation
 

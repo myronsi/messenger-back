@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/myronsi/messenger-back/internal/messages"
+	"github.com/myronsi/messenger-back/internal/moderation"
 	"github.com/myronsi/messenger-back/internal/notifications"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/scylla"
@@ -124,17 +125,22 @@ type Once interface {
 }
 
 type Deps struct {
-	Store    Store
-	Members  func(ctx context.Context, chatID int64) ([]int64, error)
-	Notifier Notifier
-	System   SystemSender
-	Media    Media
-	Grants   *Grants
-	Push     Pusher
-	Tokens   *notifications.ActionTokens
-	Metrics  Metrics
-	Webhooks Once
-	Log      *slog.Logger
+	Store      Store
+	Members    func(ctx context.Context, chatID int64) ([]int64, error)
+	Notifier   Notifier
+	System     SystemSender
+	Media      Media
+	Grants     *Grants
+	Push       Pusher
+	Tokens     *notifications.ActionTokens
+	Metrics    Metrics
+	Webhooks   Once
+	Moderation Moderation
+	Log        *slog.Logger
+}
+
+type Moderation interface {
+	Allow(ctx context.Context, actor int64, action moderation.Action, target int64) error
 }
 
 type Service struct {

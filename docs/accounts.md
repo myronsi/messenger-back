@@ -4,7 +4,7 @@ The profile, privacy, blocking, contact-name and user lookup endpoints (`interna
 
 ## Profile
 
-- `PATCH /me` changes only the fields it sends; `"bio": null` clears the bio. The display name is trimmed and must not be empty; unknown fields are rejected (`422`). Only the sent columns are written, so two devices editing different fields at once do not undo each other.
+- `PATCH /me` changes only the fields it sends; changing `display_name` or `username` needs an account status below `restricted` ([moderation.md](moderation.md)); `"bio": null` clears the bio. The display name is trimmed and must not be empty; unknown fields are rejected (`422`). Only the sent columns are written, so two devices editing different fields at once do not undo each other.
 - `DELETE /me` needs the current password (`403` if wrong; repeated failures are rate limited like logins, `429`). In one transaction it deletes the user's sessions, direct chats and the groups nobody else is in, hands the ownership of other groups to the next member (admins first, then moderators, then the longest-standing member) and leaves them. Afterwards the API:
   - announces the deleted chats to their other members (`removed` frames) and drops their unread counters;
   - emits `chat.deleted` (the worker deletes the messages) and `chat.member_removed` for the groups left;
@@ -43,10 +43,17 @@ The deprecated values `everyone_except` and `nobody_except` (and `shared_chats` 
 - A blocked user does not find the blocker in search, sees none of the blocker's guarded profile fields, and cannot send, edit, react or type in their direct chat.
 - `PUT`/`DELETE /users/{id}/contact-name` sets the name the viewer sees for that user.
 
+## Reports and account status
+
+- `POST`/`DELETE /users/{id}/report` reports a user (reason, optional note, block too by default) or withdraws the report. The reported user never learns who reported them.
+- Reports drive the reported account's status automatically: `good`, `warned`, `limited`, `restricted`, `suspended`. `GET /me/account-status` shows the status, what it restricts and whether an appeal is possible; `POST /me/account-status/appeal` starts a 14-day probation one level lower. The WebSocket event `account_status` reports changes to the user's own sessions.
+- A restricted action answers `403` `account_restricted` with `restriction`. `restricted` and `suspended` users are left out of `GET /users?q=`; a suspended user carries `account_label: restricted` wherever other users see them.
+- Weights, thresholds, decay, appeals and enforcement: [moderation.md](moderation.md).
+
 ## Lookup and search
 
 - `GET /users/{id}` and `GET /usernames/{username}` answer `404` for users that do not exist, and `400` for an id that is not a number.
-- `GET /users?q=` finds users whose username starts with the query or whose display name contains it (case-insensitive; `%`, `_` and `\` are matched literally), ordered by username, paged by the last username. The query needs at least 2 characters. Users with `search_visibility: nobody` and users who blocked the viewer are left out. Searches are rate limited per user.
+- `GET /users?q=` finds users whose username starts with the query or whose display name contains it (case-insensitive; `%`, `_` and `\` are matched literally), ordered by username, paged by the last username. The query needs at least 2 characters. Users with `search_visibility: nobody`, users who blocked the viewer and users whose account status is `restricted` or `suspended` are left out. Searches are rate limited per user.
 - `GET /users/{id}` and `GET /usernames/{username}` answer `404` for a user whose `search_visibility` (with its exceptions) hides them from the viewer, unless the two share a chat; the viewer's own profile is always found. Lookups are rate limited per user (120 per minute, bursts of 60). `PUT /users/{id}/contact-name` follows the same rules and shares the limit.
 - The username prefix uses the `users_username_prefix_idx` index. The display-name match uses the trigram index `users_display_name_trgm_idx` (`pg_trgm`, migration 000008), which needs 3 characters, so a 2-character query matches usernames only.
 - Full-text search across messages is Elasticsearch (B40).
