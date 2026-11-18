@@ -91,6 +91,7 @@ type Options struct {
 	ImageWorkers int
 	Log          *slog.Logger
 	Jobs         postgres.MediaJobRepository
+	Sessions     postgres.UploadSessionRepository
 }
 
 // Service stores uploads and serves them to the users allowed to see them.
@@ -550,6 +551,8 @@ type Download struct {
 	ContentType string
 	// Disposition is the Content-Disposition header: inline only for images, audio and video.
 	Disposition string
+	ETagSuffix  string
+	Legacy      bool
 }
 
 // CanSee reports whether the viewer may download the attachment: the uploader always; otherwise a member of a
@@ -583,12 +586,20 @@ func (s *Service) CanSee(ctx context.Context, viewerID int64, a postgres.Attachm
 // Open returns the attachment's content (or its thumbnail) for the viewer. Avatars are served by the avatar
 // endpoints, which apply the avatar visibility, so they are not reachable here except for their uploader.
 func (s *Service) Open(ctx context.Context, viewerID int64, id uuid.UUID, v Variant) (Download, error) {
-	a, err := s.o.Attachments.Get(ctx, id)
-	if errors.Is(err, postgres.ErrNotFound) {
-		return Download{}, ErrNoAccess
-	}
+	a, err := s.Authorize(ctx, viewerID, id)
 	if err != nil {
 		return Download{}, err
+	}
+	return s.content(ctx, a, v)
+}
+
+func (s *Service) Authorize(ctx context.Context, viewerID int64, id uuid.UUID) (postgres.Attachment, error) {
+	a, err := s.o.Attachments.Get(ctx, id)
+	if errors.Is(err, postgres.ErrNotFound) {
+		return postgres.Attachment{}, ErrNoAccess
+	}
+	if err != nil {
+		return postgres.Attachment{}, err
 	}
 	var ok bool
 	switch a.Purpose {
@@ -604,12 +615,12 @@ func (s *Service) Open(ctx context.Context, viewerID int64, id uuid.UUID, v Vari
 		ok, err = s.CanSee(ctx, viewerID, a)
 	}
 	if err != nil {
-		return Download{}, err
+		return postgres.Attachment{}, err
 	}
 	if !ok {
-		return Download{}, ErrNoAccess
+		return postgres.Attachment{}, ErrNoAccess
 	}
-	return s.content(ctx, a, v)
+	return a, nil
 }
 
 // canSeeAvatar: the uploader, and the members of groups that use it. User avatars are served by the
@@ -663,6 +674,7 @@ const (
 	VariantAvatar64
 	VariantAvatar128
 	VariantAvatar256
+	VariantAnimation
 )
 
 var variantNames = map[Variant]string{
@@ -696,16 +708,28 @@ func (s *Service) content(ctx context.Context, a postgres.Attachment, v Variant)
 	key, ctype, name := a.StorageKey, a.MimeType, a.Filename
 	if vname, ok := variantNames[v]; ok {
 		if sv, ok := a.Variants.Get(vname); ok {
-			return s.download(ctx, sv.Key, sv.ContentType, vname+extensionOf(sv.ContentType), nil)
+			d, err := s.download(ctx, sv.Key, sv.ContentType, vname+extensionOf(sv.ContentType), nil)
+			d.ETagSuffix = "-" + vname
+			return d, err
 		}
 	}
 	switch {
 	case v == VariantOriginal && HasOptimized(a):
 		sv, _ := a.Variants.Get(VariantNameOptimized)
-		return s.download(ctx, sv.Key, sv.ContentType, swapExtension(a.Filename, sv.ContentType), nil)
+		d, err := s.download(ctx, sv.Key, sv.ContentType, swapExtension(a.Filename, sv.ContentType), nil)
+		d.ETagSuffix = "-optimized"
+		return d, err
+	case v == VariantAnimation:
+		if sv, ok := a.Variants.Get(VariantNameAnimation); ok {
+			d, err := s.download(ctx, sv.Key, sv.ContentType, "animation.mp4", nil)
+			d.ETagSuffix = "-animation"
+			return d, err
+		}
 	case v == VariantThumbnail:
 		if a.ThumbnailKey == nil {
-			return s.legacyVideoThumbnail(ctx, a)
+			d, err := s.legacyVideoThumbnail(ctx, a)
+			d.Legacy = true
+			return d, err
 		}
 		ctype = thumbnailContentType(*a.ThumbnailKey)
 		key, name = *a.ThumbnailKey, "thumbnail"+extensionOf(ctype)

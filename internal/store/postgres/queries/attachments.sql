@@ -181,3 +181,12 @@ WHERE kind = ANY(@kinds::text[])
   AND id > @after
 ORDER BY id
 LIMIT @max_rows;
+
+-- name: AttachmentAudience :many
+SELECT DISTINCT u.user_id FROM (
+    SELECT a.uploader_id AS user_id FROM attachments a WHERE a.id = @attachment_id AND a.uploader_id IS NOT NULL
+    UNION ALL
+    SELECT p.user_id FROM attachment_links l JOIN participants p ON p.chat_id = l.chat_id WHERE l.attachment_id = @attachment_id
+) u
+WHERE u.user_id IS NOT NULL
+LIMIT 5000;

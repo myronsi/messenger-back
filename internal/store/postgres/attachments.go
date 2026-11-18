@@ -385,3 +385,19 @@ func (r attachmentRepo) ListForBackfill(ctx context.Context, f BackfillFilter) (
 	}
 	return out, nil
 }
+
+func (r attachmentRepo) Audience(ctx context.Context, attachmentID uuid.UUID) ([]int64, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	rows, err := r.s.q.AttachmentAudience(ctx, attachmentID)
+	if err != nil {
+		return nil, mapError(err)
+	}
+	out := make([]int64, 0, len(rows))
+	for _, id := range rows {
+		if id != nil {
+			out = append(out, *id)
+		}
+	}
+	return out, nil
+}

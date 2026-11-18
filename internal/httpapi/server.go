@@ -1,6 +1,10 @@
 package httpapi
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/google/uuid"
+)
 
 // Server serves the whole contract by delegating to the feature servers: authentication, sessions and the
 // account (AuthServer), uploads, downloads and avatars (MediaServer). Operations of features that are not
@@ -872,4 +876,52 @@ func (s *Server) GetGroupEmoji(w http.ResponseWriter, r *http.Request, chatId Ch
 		return
 	}
 	s.emoji.GetGroupEmoji(w, r, chatId, params)
+}
+
+func (s *Server) CreateAttachmentPlayback(w http.ResponseWriter, r *http.Request, id AttachmentId, params CreateAttachmentPlaybackParams) {
+	if s.media == nil {
+		s.AuthServer.CreateAttachmentPlayback(w, r, id, params)
+		return
+	}
+	s.media.CreateAttachmentPlayback(w, r, id, params)
+}
+
+func (s *Server) CreateUploadSession(w http.ResponseWriter, r *http.Request, params CreateUploadSessionParams) {
+	if s.media == nil {
+		s.AuthServer.CreateUploadSession(w, r, params)
+		return
+	}
+	s.media.CreateUploadSession(w, r, params)
+}
+
+func (s *Server) GetUploadSession(w http.ResponseWriter, r *http.Request, id uuid.UUID, params GetUploadSessionParams) {
+	if s.media == nil {
+		s.AuthServer.GetUploadSession(w, r, id, params)
+		return
+	}
+	s.media.GetUploadSession(w, r, id, params)
+}
+
+func (s *Server) DeleteUploadSession(w http.ResponseWriter, r *http.Request, id uuid.UUID, params DeleteUploadSessionParams) {
+	if s.media == nil {
+		s.AuthServer.DeleteUploadSession(w, r, id, params)
+		return
+	}
+	s.media.DeleteUploadSession(w, r, id, params)
+}
+
+func (s *Server) PutUploadChunk(w http.ResponseWriter, r *http.Request, id uuid.UUID, params PutUploadChunkParams) {
+	if s.media == nil {
+		s.AuthServer.PutUploadChunk(w, r, id, params)
+		return
+	}
+	s.media.PutUploadChunk(w, r, id, params)
+}
+
+func (s *Server) CompleteUploadSession(w http.ResponseWriter, r *http.Request, id uuid.UUID, params CompleteUploadSessionParams) {
+	if s.media == nil {
+		s.AuthServer.CompleteUploadSession(w, r, id, params)
+		return
+	}
+	s.media.CompleteUploadSession(w, r, id, params)
 }

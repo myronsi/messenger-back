@@ -167,6 +167,7 @@ func run() error {
 	mediaSvc := media.NewService(media.Options{
 		Storage: storage, Attachments: pg.Attachments(), Visibility: rt.messages, Membership: rt.messages, Profiles: rt.directory,
 		Prober: prober, SignedURLs: cfg.Media.SignedURLs, ImageWorkers: cfg.Media.ImageWorkers, Log: log,
+		Jobs: pg.MediaJobs(), Sessions: pg.UploadSessions(),
 	})
 	if !prober.Available() {
 		log.Warn("ffprobe/ffmpeg not found: voice messages keep the duration and waveform the client sends")
@@ -199,6 +200,7 @@ func run() error {
 			}),
 			httpapi.NewMediaServer(httpapi.MediaOptions{
 				Service: mediaSvc, Store: pg, Directory: rt.directory, Limiter: rt.limiter, Events: rt.events, BasePath: cfg.HTTP.BasePath, Log: log,
+				Playback: media.NewPlaybackSigner(cfg.JWTSecret.Reveal()),
 				ProfileChanged: rt.profileChanged,
 			}),
 		).WithAccount(httpapi.NewAccountServer(httpapi.AccountOptions{

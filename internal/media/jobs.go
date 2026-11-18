@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 )
 
@@ -385,4 +387,8 @@ func (s *Service) optimize(ctx context.Context, kind, src, out string) (jobOutpu
 		return jobOutput{variant: VariantNameOptimized, contentType: "audio/mp4", path: out}, nil
 	}
 	return jobOutput{}, ErrJobSkipped
+}
+
+func (s *Service) Attachment(ctx context.Context, id uuid.UUID) (postgres.Attachment, error) {
+	return s.o.Attachments.Get(ctx, id)
 }

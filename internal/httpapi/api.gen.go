@@ -284,6 +284,30 @@ func (e ConnectionProvider) Valid() bool {
 	}
 }
 
+// Defines values for CreateUploadSessionRequestKind.
+const (
+	CreateUploadSessionRequestKindAudio CreateUploadSessionRequestKind = "audio"
+	CreateUploadSessionRequestKindFile  CreateUploadSessionRequestKind = "file"
+	CreateUploadSessionRequestKindImage CreateUploadSessionRequestKind = "image"
+	CreateUploadSessionRequestKindVideo CreateUploadSessionRequestKind = "video"
+)
+
+// Valid indicates whether the value is a known member of the CreateUploadSessionRequestKind enum.
+func (e CreateUploadSessionRequestKind) Valid() bool {
+	switch e {
+	case CreateUploadSessionRequestKindAudio:
+		return true
+	case CreateUploadSessionRequestKindFile:
+		return true
+	case CreateUploadSessionRequestKindImage:
+		return true
+	case CreateUploadSessionRequestKindVideo:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for DeleteMessagesRequestScope.
 const (
 	DeleteMessagesRequestScopeEveryone DeleteMessagesRequestScope = "everyone"
@@ -563,6 +587,30 @@ func (e MediaKind) Valid() bool {
 	case MediaKindVisual:
 		return true
 	case MediaKindVoice:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MediaProcessing.
+const (
+	MediaProcessingDone    MediaProcessing = "done"
+	MediaProcessingFailed  MediaProcessing = "failed"
+	MediaProcessingQueued  MediaProcessing = "queued"
+	MediaProcessingRunning MediaProcessing = "running"
+)
+
+// Valid indicates whether the value is a known member of the MediaProcessing enum.
+func (e MediaProcessing) Valid() bool {
+	switch e {
+	case MediaProcessingDone:
+		return true
+	case MediaProcessingFailed:
+		return true
+	case MediaProcessingQueued:
+		return true
+	case MediaProcessingRunning:
 		return true
 	default:
 		return false
@@ -1015,16 +1063,58 @@ func (e Visibility) Valid() bool {
 
 // Defines values for GetAttachmentContentParamsVariant.
 const (
-	Display   GetAttachmentContentParamsVariant = "display"
-	Thumbnail GetAttachmentContentParamsVariant = "thumbnail"
+	GetAttachmentContentParamsVariantAnimation GetAttachmentContentParamsVariant = "animation"
+	GetAttachmentContentParamsVariantAvatar128 GetAttachmentContentParamsVariant = "avatar_128"
+	GetAttachmentContentParamsVariantAvatar256 GetAttachmentContentParamsVariant = "avatar_256"
+	GetAttachmentContentParamsVariantAvatar64  GetAttachmentContentParamsVariant = "avatar_64"
+	GetAttachmentContentParamsVariantDisplay   GetAttachmentContentParamsVariant = "display"
+	GetAttachmentContentParamsVariantInline    GetAttachmentContentParamsVariant = "inline"
+	GetAttachmentContentParamsVariantMessage   GetAttachmentContentParamsVariant = "message"
+	GetAttachmentContentParamsVariantPanel     GetAttachmentContentParamsVariant = "panel"
+	GetAttachmentContentParamsVariantSource    GetAttachmentContentParamsVariant = "source"
+	GetAttachmentContentParamsVariantThumbnail GetAttachmentContentParamsVariant = "thumbnail"
 )
 
 // Valid indicates whether the value is a known member of the GetAttachmentContentParamsVariant enum.
 func (e GetAttachmentContentParamsVariant) Valid() bool {
 	switch e {
-	case Display:
+	case GetAttachmentContentParamsVariantAnimation:
 		return true
-	case Thumbnail:
+	case GetAttachmentContentParamsVariantAvatar128:
+		return true
+	case GetAttachmentContentParamsVariantAvatar256:
+		return true
+	case GetAttachmentContentParamsVariantAvatar64:
+		return true
+	case GetAttachmentContentParamsVariantDisplay:
+		return true
+	case GetAttachmentContentParamsVariantInline:
+		return true
+	case GetAttachmentContentParamsVariantMessage:
+		return true
+	case GetAttachmentContentParamsVariantPanel:
+		return true
+	case GetAttachmentContentParamsVariantSource:
+		return true
+	case GetAttachmentContentParamsVariantThumbnail:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreateAttachmentPlaybackParamsVariant.
+const (
+	CreateAttachmentPlaybackParamsVariantAnimation CreateAttachmentPlaybackParamsVariant = "animation"
+	CreateAttachmentPlaybackParamsVariantSource    CreateAttachmentPlaybackParamsVariant = "source"
+)
+
+// Valid indicates whether the value is a known member of the CreateAttachmentPlaybackParamsVariant enum.
+func (e CreateAttachmentPlaybackParamsVariant) Valid() bool {
+	switch e {
+	case CreateAttachmentPlaybackParamsVariantAnimation:
+		return true
+	case CreateAttachmentPlaybackParamsVariantSource:
 		return true
 	default:
 		return false
@@ -1043,6 +1133,21 @@ func (e DeleteChatParamsScope) Valid() bool {
 	case DeleteChatParamsScopeEveryone:
 		return true
 	case DeleteChatParamsScopeMe:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetCustomEmojiImageParamsVariant.
+const (
+	GetCustomEmojiImageParamsVariantInline GetCustomEmojiImageParamsVariant = "inline"
+)
+
+// Valid indicates whether the value is a known member of the GetCustomEmojiImageParamsVariant enum.
+func (e GetCustomEmojiImageParamsVariant) Valid() bool {
+	switch e {
+	case GetCustomEmojiImageParamsVariantInline:
 		return true
 	default:
 		return false
@@ -1146,10 +1251,13 @@ type ApprovalRequestType string
 
 // Attachment defines model for Attachment.
 type Attachment struct {
+	// AnimationUrl A GIF as a muted, looping MP4, much smaller than the GIF; `null` until made or for other files.
+	AnimationUrl *string `json:"animation_url,omitempty"`
+
 	// ContentType Detected by the server
 	ContentType string `json:"content_type"`
 
-	// DisplayUrl A JPEG of at most 1600 px to show in an image viewer instead of the original; `null` for small images and GIFs, which are shown as they are.
+	// DisplayUrl At most 1600 px to show in an image viewer instead of the original; `null` for small images and GIFs, which are shown as they are.
 	DisplayUrl *string `json:"display_url,omitempty"`
 
 	// Drawing What the sender drew on this image of this message. Clients show the image with the drawing on top
@@ -1166,12 +1274,30 @@ type Attachment struct {
 	Id   AttachmentRef  `json:"id"`
 	Kind AttachmentKind `json:"kind"`
 
+	// MessageUrl Stickers only; a 320 px WebP for messages.
+	MessageUrl *string `json:"message_url,omitempty"`
+
+	// PanelUrl Stickers only; a still 128 px WebP for pickers and lists.
+	PanelUrl *string `json:"panel_url,omitempty"`
+
+	// Placeholder A ThumbHash (base64) of the image or video poster, to draw a blurred preview before the thumbnail arrives.
+	Placeholder *string `json:"placeholder,omitempty"`
+
+	// Processing Whether the server is still making an optimized copy of a video, GIF or audio file. Clients play `url`
+	// meanwhile and swap to the new copy on `attachment_updated`. `null` when there is nothing to do.
+	Processing *MediaProcessing `json:"processing,omitempty"`
+
 	// Size Bytes
 	Size int `json:"size"`
 
-	// Tags Only in the answer to a `profile_music` upload; what the file says about itself.
-	Tags         *AudioTags `json:"tags,omitempty"`
-	ThumbnailUrl *string    `json:"thumbnail_url,omitempty"`
+	// SourceUrl The file as uploaded, when `url` serves an optimized copy; `null` otherwise.
+	SourceUrl *string `json:"source_url,omitempty"`
+
+	// Tags Audio files (not voice messages) and `profile_music` uploads; what the file says about itself.
+	Tags *AudioTags `json:"tags,omitempty"`
+
+	// ThumbnailUrl A WebP of at most 480 px (older uploads a JPEG of at most 320 px); for audio the embedded cover.
+	ThumbnailUrl *string `json:"thumbnail_url,omitempty"`
 
 	// Url Same-origin path (`/api/v2/attachments/{id}/content`) set by the server.
 	Url      *string `json:"url,omitempty"`
@@ -1202,6 +1328,7 @@ type AttachmentRef = openapi_types.UUID
 
 // AudioTags defines model for AudioTags.
 type AudioTags struct {
+	Album  *string `json:"album,omitempty"`
 	Artist *string `json:"artist"`
 	Title  *string `json:"title"`
 }
@@ -1566,6 +1693,34 @@ type CreateGroupRequest struct {
 type CreateStickerPackRequest struct {
 	Title string `json:"title"`
 }
+
+// CreateUploadSessionRequest defines model for CreateUploadSessionRequest.
+type CreateUploadSessionRequest struct {
+	Filename string                          `json:"filename"`
+	Kind     *CreateUploadSessionRequestKind `json:"kind,omitempty"`
+
+	// Purpose `sticker`: a PNG, JPEG or still WebP of at most 5 MB. The server fits it into 512 x 512 px with a transparent
+	// border and stores a WebP (`413` when that is still over 512 KB). Only its uploader can load it until it is
+	// added to a pack.
+	//
+	// `profile_music`: an audio file of at most 20 MB. The server keeps at most 30 s of it (from `start_ms` to
+	// `end_ms`, or the first 30 s), stored as AAC, reads the title and artist into `tags` and the embedded cover
+	// into `thumbnail_url`. Use it with `PUT /me/music`.
+	//
+	// `profile_background`: an image (10 MB), an animated GIF (15 MB) or a video of at most 15 s (15 MB). Use it
+	// with `PUT /me/background` or `PUT /groups/{chat_id}/background`.
+	//
+	// `emoji`: a PNG, JPEG, still WebP or GIF of at most 8 MB. The server scales it into 128 x 128 px (a GIF frame
+	// by frame) and refuses it with `413` when the result is still over 256 KB. Use it with
+	// `POST /emoji/packs/{pack_id}/emoji`.
+	Purpose UploadPurpose `json:"purpose"`
+
+	// Size Bytes of the whole file; at most the upload limit of its kind.
+	Size int64 `json:"size"`
+}
+
+// CreateUploadSessionRequestKind defines model for CreateUploadSessionRequest.Kind.
+type CreateUploadSessionRequestKind string
 
 // Cursor Opaque cursor; `null` when there are no more results.
 type Cursor = string
@@ -1975,6 +2130,9 @@ type Me struct {
 // `file` other files (documents, archives), `link` messages whose text or caption contains a web link.
 type MediaKind string
 
+// MediaProcessing defines model for MediaProcessing.
+type MediaProcessing string
+
 // Message defines model for Message.
 type Message struct {
 	Attachment *Attachment `json:"attachment"`
@@ -2185,6 +2343,14 @@ type PasswordConfirmation struct {
 // PinOrderRequest defines model for PinOrderRequest.
 type PinOrderRequest struct {
 	ChatIds []Id `json:"chat_ids"`
+}
+
+// PlaybackUrl defines model for PlaybackUrl.
+type PlaybackUrl struct {
+	ExpiresAt time.Time `json:"expires_at"`
+
+	// Url Same-origin path with the playback token; set it as `src` of a media element.
+	Url string `json:"url"`
 }
 
 // PrivacyExceptions User IDs per setting. An exception wins over the setting whatever its value; `allow` always lets the user in, `deny` always keeps them out.
@@ -2942,6 +3108,20 @@ type UploadAttachmentRequest struct {
 // `POST /emoji/packs/{pack_id}/emoji`.
 type UploadPurpose string
 
+// UploadSession defines model for UploadSession.
+type UploadSession struct {
+	// ChunkSize Bytes per chunk (8 MiB).
+	ChunkSize int `json:"chunk_size"`
+
+	// ExpiresAt When the session is deleted unless more chunks arrive.
+	ExpiresAt time.Time          `json:"expires_at"`
+	Id        openapi_types.UUID `json:"id"`
+
+	// Received Bytes stored so far; the next `offset`.
+	Received int64 `json:"received"`
+	Size     int64 `json:"size"`
+}
+
 // User A user as visible to the requesting user; hidden fields are `null`.
 type User struct {
 	// AvatarUrl Path of the avatar, always same-origin (`/api/v2/users/{id}/avatar?rev={revision}`).
@@ -3073,6 +3253,9 @@ type StickerId = Id
 // Examples: 7217400317439950848
 type StickerPackId = Id
 
+// UploadId defines model for UploadId.
+type UploadId = openapi_types.UUID
+
 // UserId Decimal ID as a string (Snowflake IDs exceed 2^53).
 //
 // Examples: 7217400317439950848
@@ -3123,12 +3306,67 @@ type UploadAttachmentParams struct {
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
 }
 
+// CreateUploadSessionParams defines parameters for CreateUploadSession.
+type CreateUploadSessionParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// DeleteUploadSessionParams defines parameters for DeleteUploadSession.
+type DeleteUploadSessionParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// GetUploadSessionParams defines parameters for GetUploadSession.
+type GetUploadSessionParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// PutUploadChunkParams defines parameters for PutUploadChunk.
+type PutUploadChunkParams struct {
+	Offset int64 `form:"offset" json:"offset"`
+
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// CompleteUploadSessionParams defines parameters for CompleteUploadSession.
+type CompleteUploadSessionParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
 // GetAttachmentContentParams defines parameters for GetAttachmentContent.
 type GetAttachmentContentParams struct {
-	// Variant `thumbnail`: a JPEG of at most 320 px (images only; `thumbnail_url` of the attachment).
-	// `display`: a JPEG of at most 1600 px for viewing a large still image (`display_url` of the attachment);
-	// the original for any other attachment.
+	// Variant `thumbnail`: a WebP of at most 480 px (older uploads: a JPEG of at most 320 px); `thumbnail_url`.
+	// `display`: at most 1600 px for viewing a large still image (`display_url`); the original otherwise.
+	// `source`: the file as uploaded (`source_url`).
+	// `panel`, `message`: a sticker as a still 128 px or a 320 px WebP (`panel_url`, `message_url`).
+	// `animation`: a GIF as a muted, looping MP4 (`animation_url`).
+	// `inline`: a custom emoji at 64 px.
+	// `avatar_64`, `avatar_128`, `avatar_256`: a group avatar at that size.
+	// A variant the attachment does not have answers with the default content.
 	Variant *GetAttachmentContentParamsVariant `form:"variant,omitempty" json:"variant,omitempty"`
+
+	// Pt Playback token (`PlaybackUrl.url` carries it); only for requests without a bearer token.
+	Pt *string `form:"pt,omitempty" json:"pt,omitempty"`
 
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
@@ -3139,6 +3377,20 @@ type GetAttachmentContentParams struct {
 
 // GetAttachmentContentParamsVariant defines parameters for GetAttachmentContent.
 type GetAttachmentContentParamsVariant string
+
+// CreateAttachmentPlaybackParams defines parameters for CreateAttachmentPlayback.
+type CreateAttachmentPlaybackParams struct {
+	Variant *CreateAttachmentPlaybackParamsVariant `form:"variant,omitempty" json:"variant,omitempty"`
+
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// CreateAttachmentPlaybackParamsVariant defines parameters for CreateAttachmentPlayback.
+type CreateAttachmentPlaybackParamsVariant string
 
 // VerifyRecoveryEmailParams defines parameters for VerifyRecoveryEmail.
 type VerifyRecoveryEmailParams struct {
@@ -3724,12 +3976,18 @@ type GetCustomEmojiParams struct {
 
 // GetCustomEmojiImageParams defines parameters for GetCustomEmojiImage.
 type GetCustomEmojiImageParams struct {
+	// Variant `inline`: the emoji at 64 px for text; the 128 px image when the emoji has none.
+	Variant *GetCustomEmojiImageParamsVariant `form:"variant,omitempty" json:"variant,omitempty"`
+
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
 	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
 }
+
+// GetCustomEmojiImageParamsVariant defines parameters for GetCustomEmojiImage.
+type GetCustomEmojiImageParamsVariant string
 
 // GetEmojiPackByLinkParams defines parameters for GetEmojiPackByLink.
 type GetEmojiPackByLinkParams struct {
@@ -4637,6 +4895,10 @@ type GetUserAvatarParams struct {
 	// Rev Revision of the current avatar, as given in `avatar_url`.
 	Rev *string `form:"rev,omitempty" json:"rev,omitempty"`
 
+	// Size The size the client shows the avatar at, in device pixels. The answer is the smallest stored WebP of
+	// 64, 128 or 256 px that is at least that large, or the original when there is none.
+	Size *int `form:"size,omitempty" json:"size,omitempty"`
+
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
@@ -4712,6 +4974,9 @@ type CreateWebSocketTicketParams struct {
 
 // UploadAttachmentMultipartRequestBody defines body for UploadAttachment for multipart/form-data ContentType.
 type UploadAttachmentMultipartRequestBody = UploadAttachmentRequest
+
+// CreateUploadSessionJSONRequestBody defines body for CreateUploadSession for application/json ContentType.
+type CreateUploadSessionJSONRequestBody = CreateUploadSessionRequest
 
 // VerifyRecoveryEmailJSONRequestBody defines body for VerifyRecoveryEmail for application/json ContentType.
 type VerifyRecoveryEmailJSONRequestBody = VerifyRecoveryEmail
@@ -5235,9 +5500,27 @@ type ServerInterface interface {
 	// UploadAttachment Upload a file, image, audio or voice message
 	// (POST /attachments)
 	UploadAttachment(w http.ResponseWriter, r *http.Request, params UploadAttachmentParams)
+	// CreateUploadSession Start a resumable upload
+	// (POST /attachments/uploads)
+	CreateUploadSession(w http.ResponseWriter, r *http.Request, params CreateUploadSessionParams)
+	// DeleteUploadSession Cancel a resumable upload
+	// (DELETE /attachments/uploads/{upload_id})
+	DeleteUploadSession(w http.ResponseWriter, r *http.Request, uploadId UploadId, params DeleteUploadSessionParams)
+	// GetUploadSession How much of a resumable upload arrived
+	// (GET /attachments/uploads/{upload_id})
+	GetUploadSession(w http.ResponseWriter, r *http.Request, uploadId UploadId, params GetUploadSessionParams)
+	// PutUploadChunk Send the next chunk of a resumable upload
+	// (PUT /attachments/uploads/{upload_id}/chunks)
+	PutUploadChunk(w http.ResponseWriter, r *http.Request, uploadId UploadId, params PutUploadChunkParams)
+	// CompleteUploadSession Finish a resumable upload
+	// (POST /attachments/uploads/{upload_id}/complete)
+	CompleteUploadSession(w http.ResponseWriter, r *http.Request, uploadId UploadId, params CompleteUploadSessionParams)
 	// GetAttachmentContent Download an attachment
 	// (GET /attachments/{attachment_id}/content)
 	GetAttachmentContent(w http.ResponseWriter, r *http.Request, attachmentId AttachmentId, params GetAttachmentContentParams)
+	// CreateAttachmentPlayback A short-lived URL to stream an attachment
+	// (POST /attachments/{attachment_id}/playback)
+	CreateAttachmentPlayback(w http.ResponseWriter, r *http.Request, attachmentId AttachmentId, params CreateAttachmentPlaybackParams)
 	// VerifyRecoveryEmail Consume a one-time email verification token
 	// (POST /auth/email/verify)
 	VerifyRecoveryEmail(w http.ResponseWriter, r *http.Request, params VerifyRecoveryEmailParams)
@@ -5819,6 +6102,355 @@ func (siw *ServerInterfaceWrapper) UploadAttachment(w http.ResponseWriter, r *ht
 	handler.ServeHTTP(w, r)
 }
 
+// CreateUploadSession operation middleware
+func (siw *ServerInterfaceWrapper) CreateUploadSession(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateUploadSessionParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateUploadSession(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteUploadSession operation middleware
+func (siw *ServerInterfaceWrapper) DeleteUploadSession(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "upload_id" -------------
+	var uploadId UploadId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "upload_id", r.PathValue("upload_id"), &uploadId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "upload_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteUploadSessionParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteUploadSession(w, r, uploadId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetUploadSession operation middleware
+func (siw *ServerInterfaceWrapper) GetUploadSession(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "upload_id" -------------
+	var uploadId UploadId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "upload_id", r.PathValue("upload_id"), &uploadId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "upload_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetUploadSessionParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetUploadSession(w, r, uploadId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PutUploadChunk operation middleware
+func (siw *ServerInterfaceWrapper) PutUploadChunk(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "upload_id" -------------
+	var uploadId UploadId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "upload_id", r.PathValue("upload_id"), &uploadId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "upload_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PutUploadChunkParams
+
+	// ------------- Required query parameter "offset" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: "int64"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		}
+		return
+	}
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutUploadChunk(w, r, uploadId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CompleteUploadSession operation middleware
+func (siw *ServerInterfaceWrapper) CompleteUploadSession(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "upload_id" -------------
+	var uploadId UploadId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "upload_id", r.PathValue("upload_id"), &uploadId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "upload_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CompleteUploadSessionParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CompleteUploadSession(w, r, uploadId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetAttachmentContent operation middleware
 func (siw *ServerInterfaceWrapper) GetAttachmentContent(w http.ResponseWriter, r *http.Request) {
 
@@ -5836,6 +6468,101 @@ func (siw *ServerInterfaceWrapper) GetAttachmentContent(w http.ResponseWriter, r
 
 	// Parameter object where we will unmarshal all parameters from the context
 	var params GetAttachmentContentParams
+
+	// ------------- Optional query parameter "variant" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "variant", r.URL.Query(), &params.Variant, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "variant"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "variant", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "pt" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pt", r.URL.Query(), &params.Pt, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pt"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pt", Err: err})
+		}
+		return
+	}
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAttachmentContent(w, r, attachmentId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateAttachmentPlayback operation middleware
+func (siw *ServerInterfaceWrapper) CreateAttachmentPlayback(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "attachment_id" -------------
+	var attachmentId AttachmentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "attachment_id", r.PathValue("attachment_id"), &attachmentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "attachment_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateAttachmentPlaybackParams
 
 	// ------------- Optional query parameter "variant" -------------
 
@@ -5891,7 +6618,7 @@ func (siw *ServerInterfaceWrapper) GetAttachmentContent(w http.ResponseWriter, r
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetAttachmentContent(w, r, attachmentId, params)
+		siw.Handler.CreateAttachmentPlayback(w, r, attachmentId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -10112,6 +10839,19 @@ func (siw *ServerInterfaceWrapper) GetCustomEmojiImage(w http.ResponseWriter, r 
 
 	// Parameter object where we will unmarshal all parameters from the context
 	var params GetCustomEmojiImageParams
+
+	// ------------- Optional query parameter "variant" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "variant", r.URL.Query(), &params.Variant, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "variant"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "variant", Err: err})
+		}
+		return
+	}
 
 	headers := r.Header
 
@@ -16735,6 +17475,19 @@ func (siw *ServerInterfaceWrapper) GetUserAvatar(w http.ResponseWriter, r *http.
 		return
 	}
 
+	// ------------- Optional query parameter "size" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "size", r.URL.Query(), &params.Size, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "size"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "size", Err: err})
+		}
+		return
+	}
+
 	headers := r.Header
 
 	// ------------- Optional header parameter "X-Client-Version" -------------
@@ -17416,6 +18169,12 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/users/{user_id}/contact-name", wrapper.SetContactName)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/attachments", wrapper.UploadAttachment)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/attachments/{attachment_id}/content", wrapper.GetAttachmentContent)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/attachments/{attachment_id}/playback", wrapper.CreateAttachmentPlayback)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/attachments/uploads", wrapper.CreateUploadSession)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/attachments/uploads/{upload_id}", wrapper.DeleteUploadSession)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/attachments/uploads/{upload_id}", wrapper.GetUploadSession)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/attachments/uploads/{upload_id}/chunks", wrapper.PutUploadChunk)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/attachments/uploads/{upload_id}/complete", wrapper.CompleteUploadSession)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/chats", wrapper.ListChats)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/chats", wrapper.CreateChat)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/chats/{chat_id}", wrapper.DeleteChat)
@@ -17699,6 +18458,550 @@ func (response UploadAttachment429ApplicationProblemPlusJSONResponse) VisitUploa
 	return err
 }
 
+type CreateUploadSessionRequestObject struct {
+	Params CreateUploadSessionParams
+	Body   *CreateUploadSessionJSONRequestBody
+}
+
+type CreateUploadSessionResponseObject interface {
+	VisitCreateUploadSessionResponse(w http.ResponseWriter) error
+}
+
+type CreateUploadSession201JSONResponse UploadSession
+
+func (response CreateUploadSession201JSONResponse) VisitCreateUploadSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateUploadSession400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response CreateUploadSession400ApplicationProblemPlusJSONResponse) VisitCreateUploadSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateUploadSession401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response CreateUploadSession401ApplicationProblemPlusJSONResponse) VisitCreateUploadSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateUploadSession413ApplicationProblemPlusJSONResponse struct {
+	PayloadTooLargeApplicationProblemPlusJSONResponse
+}
+
+func (response CreateUploadSession413ApplicationProblemPlusJSONResponse) VisitCreateUploadSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(413)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateUploadSession426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response CreateUploadSession426ApplicationProblemPlusJSONResponse) VisitCreateUploadSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateUploadSession429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response CreateUploadSession429ApplicationProblemPlusJSONResponse) VisitCreateUploadSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteUploadSessionRequestObject struct {
+	UploadId UploadId `json:"upload_id"`
+	Params   DeleteUploadSessionParams
+}
+
+type DeleteUploadSessionResponseObject interface {
+	VisitDeleteUploadSessionResponse(w http.ResponseWriter) error
+}
+
+type DeleteUploadSession204Response struct {
+}
+
+func (response DeleteUploadSession204Response) VisitDeleteUploadSessionResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteUploadSession400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteUploadSession400ApplicationProblemPlusJSONResponse) VisitDeleteUploadSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteUploadSession401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteUploadSession401ApplicationProblemPlusJSONResponse) VisitDeleteUploadSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteUploadSession404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteUploadSession404ApplicationProblemPlusJSONResponse) VisitDeleteUploadSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteUploadSession426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteUploadSession426ApplicationProblemPlusJSONResponse) VisitDeleteUploadSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetUploadSessionRequestObject struct {
+	UploadId UploadId `json:"upload_id"`
+	Params   GetUploadSessionParams
+}
+
+type GetUploadSessionResponseObject interface {
+	VisitGetUploadSessionResponse(w http.ResponseWriter) error
+}
+
+type GetUploadSession200JSONResponse UploadSession
+
+func (response GetUploadSession200JSONResponse) VisitGetUploadSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetUploadSession400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response GetUploadSession400ApplicationProblemPlusJSONResponse) VisitGetUploadSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetUploadSession401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response GetUploadSession401ApplicationProblemPlusJSONResponse) VisitGetUploadSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetUploadSession404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetUploadSession404ApplicationProblemPlusJSONResponse) VisitGetUploadSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetUploadSession426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetUploadSession426ApplicationProblemPlusJSONResponse) VisitGetUploadSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutUploadChunkRequestObject struct {
+	UploadId UploadId `json:"upload_id"`
+	Params   PutUploadChunkParams
+	Body     io.Reader
+}
+
+type PutUploadChunkResponseObject interface {
+	VisitPutUploadChunkResponse(w http.ResponseWriter) error
+}
+
+type PutUploadChunk200JSONResponse UploadSession
+
+func (response PutUploadChunk200JSONResponse) VisitPutUploadChunkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutUploadChunk400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response PutUploadChunk400ApplicationProblemPlusJSONResponse) VisitPutUploadChunkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutUploadChunk401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response PutUploadChunk401ApplicationProblemPlusJSONResponse) VisitPutUploadChunkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutUploadChunk404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response PutUploadChunk404ApplicationProblemPlusJSONResponse) VisitPutUploadChunkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutUploadChunk409JSONResponse UploadSession
+
+func (response PutUploadChunk409JSONResponse) VisitPutUploadChunkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutUploadChunk413ApplicationProblemPlusJSONResponse struct {
+	PayloadTooLargeApplicationProblemPlusJSONResponse
+}
+
+func (response PutUploadChunk413ApplicationProblemPlusJSONResponse) VisitPutUploadChunkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(413)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutUploadChunk426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response PutUploadChunk426ApplicationProblemPlusJSONResponse) VisitPutUploadChunkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteUploadSessionRequestObject struct {
+	UploadId UploadId `json:"upload_id"`
+	Params   CompleteUploadSessionParams
+}
+
+type CompleteUploadSessionResponseObject interface {
+	VisitCompleteUploadSessionResponse(w http.ResponseWriter) error
+}
+
+type CompleteUploadSession201JSONResponse Attachment
+
+func (response CompleteUploadSession201JSONResponse) VisitCompleteUploadSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteUploadSession400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response CompleteUploadSession400ApplicationProblemPlusJSONResponse) VisitCompleteUploadSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteUploadSession401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response CompleteUploadSession401ApplicationProblemPlusJSONResponse) VisitCompleteUploadSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteUploadSession404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response CompleteUploadSession404ApplicationProblemPlusJSONResponse) VisitCompleteUploadSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteUploadSession409JSONResponse UploadSession
+
+func (response CompleteUploadSession409JSONResponse) VisitCompleteUploadSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteUploadSession413ApplicationProblemPlusJSONResponse struct {
+	PayloadTooLargeApplicationProblemPlusJSONResponse
+}
+
+func (response CompleteUploadSession413ApplicationProblemPlusJSONResponse) VisitCompleteUploadSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(413)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteUploadSession415ApplicationProblemPlusJSONResponse struct {
+	UnsupportedMediaTypeApplicationProblemPlusJSONResponse
+}
+
+func (response CompleteUploadSession415ApplicationProblemPlusJSONResponse) VisitCompleteUploadSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(415)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteUploadSession426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response CompleteUploadSession426ApplicationProblemPlusJSONResponse) VisitCompleteUploadSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteUploadSession429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response CompleteUploadSession429ApplicationProblemPlusJSONResponse) VisitCompleteUploadSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetAttachmentContentRequestObject struct {
 	AttachmentId AttachmentId `json:"attachment_id"`
 	Params       GetAttachmentContentParams
@@ -17841,6 +19144,93 @@ type GetAttachmentContent426ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetAttachmentContent426ApplicationProblemPlusJSONResponse) VisitGetAttachmentContentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateAttachmentPlaybackRequestObject struct {
+	AttachmentId AttachmentId `json:"attachment_id"`
+	Params       CreateAttachmentPlaybackParams
+}
+
+type CreateAttachmentPlaybackResponseObject interface {
+	VisitCreateAttachmentPlaybackResponse(w http.ResponseWriter) error
+}
+
+type CreateAttachmentPlayback200JSONResponse PlaybackUrl
+
+func (response CreateAttachmentPlayback200JSONResponse) VisitCreateAttachmentPlaybackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateAttachmentPlayback400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response CreateAttachmentPlayback400ApplicationProblemPlusJSONResponse) VisitCreateAttachmentPlaybackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateAttachmentPlayback401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response CreateAttachmentPlayback401ApplicationProblemPlusJSONResponse) VisitCreateAttachmentPlaybackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateAttachmentPlayback404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response CreateAttachmentPlayback404ApplicationProblemPlusJSONResponse) VisitCreateAttachmentPlaybackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateAttachmentPlayback426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response CreateAttachmentPlayback426ApplicationProblemPlusJSONResponse) VisitCreateAttachmentPlaybackResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -35659,9 +37049,27 @@ type StrictServerInterface interface {
 	// UploadAttachment Upload a file, image, audio or voice message
 	// (POST /attachments)
 	UploadAttachment(ctx context.Context, request UploadAttachmentRequestObject) (UploadAttachmentResponseObject, error)
+	// CreateUploadSession Start a resumable upload
+	// (POST /attachments/uploads)
+	CreateUploadSession(ctx context.Context, request CreateUploadSessionRequestObject) (CreateUploadSessionResponseObject, error)
+	// DeleteUploadSession Cancel a resumable upload
+	// (DELETE /attachments/uploads/{upload_id})
+	DeleteUploadSession(ctx context.Context, request DeleteUploadSessionRequestObject) (DeleteUploadSessionResponseObject, error)
+	// GetUploadSession How much of a resumable upload arrived
+	// (GET /attachments/uploads/{upload_id})
+	GetUploadSession(ctx context.Context, request GetUploadSessionRequestObject) (GetUploadSessionResponseObject, error)
+	// PutUploadChunk Send the next chunk of a resumable upload
+	// (PUT /attachments/uploads/{upload_id}/chunks)
+	PutUploadChunk(ctx context.Context, request PutUploadChunkRequestObject) (PutUploadChunkResponseObject, error)
+	// CompleteUploadSession Finish a resumable upload
+	// (POST /attachments/uploads/{upload_id}/complete)
+	CompleteUploadSession(ctx context.Context, request CompleteUploadSessionRequestObject) (CompleteUploadSessionResponseObject, error)
 	// GetAttachmentContent Download an attachment
 	// (GET /attachments/{attachment_id}/content)
 	GetAttachmentContent(ctx context.Context, request GetAttachmentContentRequestObject) (GetAttachmentContentResponseObject, error)
+	// CreateAttachmentPlayback A short-lived URL to stream an attachment
+	// (POST /attachments/{attachment_id}/playback)
+	CreateAttachmentPlayback(ctx context.Context, request CreateAttachmentPlaybackRequestObject) (CreateAttachmentPlaybackResponseObject, error)
 	// VerifyRecoveryEmail Consume a one-time email verification token
 	// (POST /auth/email/verify)
 	VerifyRecoveryEmail(ctx context.Context, request VerifyRecoveryEmailRequestObject) (VerifyRecoveryEmailResponseObject, error)
@@ -36246,6 +37654,149 @@ func (sh *strictHandler) UploadAttachment(w http.ResponseWriter, r *http.Request
 	}
 }
 
+// CreateUploadSession operation middleware
+func (sh *strictHandler) CreateUploadSession(w http.ResponseWriter, r *http.Request, params CreateUploadSessionParams) {
+	var request CreateUploadSessionRequestObject
+
+	request.Params = params
+
+	var body CreateUploadSessionJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateUploadSession(ctx, request.(CreateUploadSessionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateUploadSession")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateUploadSessionResponseObject); ok {
+		if err := validResponse.VisitCreateUploadSessionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteUploadSession operation middleware
+func (sh *strictHandler) DeleteUploadSession(w http.ResponseWriter, r *http.Request, uploadId UploadId, params DeleteUploadSessionParams) {
+	var request DeleteUploadSessionRequestObject
+
+	request.UploadId = uploadId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteUploadSession(ctx, request.(DeleteUploadSessionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteUploadSession")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteUploadSessionResponseObject); ok {
+		if err := validResponse.VisitDeleteUploadSessionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetUploadSession operation middleware
+func (sh *strictHandler) GetUploadSession(w http.ResponseWriter, r *http.Request, uploadId UploadId, params GetUploadSessionParams) {
+	var request GetUploadSessionRequestObject
+
+	request.UploadId = uploadId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetUploadSession(ctx, request.(GetUploadSessionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetUploadSession")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetUploadSessionResponseObject); ok {
+		if err := validResponse.VisitGetUploadSessionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PutUploadChunk operation middleware
+func (sh *strictHandler) PutUploadChunk(w http.ResponseWriter, r *http.Request, uploadId UploadId, params PutUploadChunkParams) {
+	var request PutUploadChunkRequestObject
+
+	request.UploadId = uploadId
+	request.Params = params
+
+	request.Body = r.Body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PutUploadChunk(ctx, request.(PutUploadChunkRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PutUploadChunk")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PutUploadChunkResponseObject); ok {
+		if err := validResponse.VisitPutUploadChunkResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CompleteUploadSession operation middleware
+func (sh *strictHandler) CompleteUploadSession(w http.ResponseWriter, r *http.Request, uploadId UploadId, params CompleteUploadSessionParams) {
+	var request CompleteUploadSessionRequestObject
+
+	request.UploadId = uploadId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CompleteUploadSession(ctx, request.(CompleteUploadSessionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CompleteUploadSession")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CompleteUploadSessionResponseObject); ok {
+		if err := validResponse.VisitCompleteUploadSessionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetAttachmentContent operation middleware
 func (sh *strictHandler) GetAttachmentContent(w http.ResponseWriter, r *http.Request, attachmentId AttachmentId, params GetAttachmentContentParams) {
 	var request GetAttachmentContentRequestObject
@@ -36266,6 +37817,33 @@ func (sh *strictHandler) GetAttachmentContent(w http.ResponseWriter, r *http.Req
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetAttachmentContentResponseObject); ok {
 		if err := validResponse.VisitGetAttachmentContentResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateAttachmentPlayback operation middleware
+func (sh *strictHandler) CreateAttachmentPlayback(w http.ResponseWriter, r *http.Request, attachmentId AttachmentId, params CreateAttachmentPlaybackParams) {
+	var request CreateAttachmentPlaybackRequestObject
+
+	request.AttachmentId = attachmentId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateAttachmentPlayback(ctx, request.(CreateAttachmentPlaybackRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateAttachmentPlayback")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateAttachmentPlaybackResponseObject); ok {
+		if err := validResponse.VisitCreateAttachmentPlaybackResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

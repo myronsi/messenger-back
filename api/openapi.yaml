@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.31
+  version: 2.1.0-alpha.32
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -1115,6 +1115,12 @@ paths:
           in: query
           description: Revision of the current avatar, as given in `avatar_url`.
           schema: { type: string, maxLength: 64 }
+        - name: size
+          in: query
+          description: |
+            The size the client shows the avatar at, in device pixels. The answer is the smallest stored WebP of
+            64, 128 or 256 px that is at least that large, or the original when there is none.
+          schema: { type: integer, minimum: 1, maximum: 4096 }
       responses:
         "426": { $ref: "#/components/responses/ClientOutdated" }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -1249,16 +1255,35 @@ paths:
         storage. Images, audio and video are sent `inline`; everything else as a download
         (`Content-Disposition: attachment`, `application/octet-stream`), always with
         `X-Content-Type-Options: nosniff`.
+
+        Without a bearer token the request needs `pt`, a playback token from
+        `POST /attachments/{attachment_id}/playback`, so a `<video>` or `<audio>` element can stream the file with
+        range requests.
+
+        Without `variant`, a video or audio file the server optimized (it then has a `source_url`) is answered
+        with the optimized copy (H.264/AAC MP4 or AAC M4A); `variant=source` returns the file as uploaded.
+      security:
+        - bearerAuth: []
+        - {}
       parameters:
         - name: variant
           in: query
           description: |
-            `thumbnail`: a JPEG of at most 320 px (images only; `thumbnail_url` of the attachment).
-            `display`: a JPEG of at most 1600 px for viewing a large still image (`display_url` of the attachment);
-            the original for any other attachment.
+            `thumbnail`: a WebP of at most 480 px (older uploads: a JPEG of at most 320 px); `thumbnail_url`.
+            `display`: at most 1600 px for viewing a large still image (`display_url`); the original otherwise.
+            `source`: the file as uploaded (`source_url`).
+            `panel`, `message`: a sticker as a still 128 px or a 320 px WebP (`panel_url`, `message_url`).
+            `animation`: a GIF as a muted, looping MP4 (`animation_url`).
+            `inline`: a custom emoji at 64 px.
+            `avatar_64`, `avatar_128`, `avatar_256`: a group avatar at that size.
+            A variant the attachment does not have answers with the default content.
           schema:
             type: string
-            enum: [thumbnail, display]
+            enum: [thumbnail, display, source, panel, message, animation, inline, avatar_64, avatar_128, avatar_256]
+        - name: pt
+          in: query
+          description: Playback token (`PlaybackUrl.url` carries it); only for requests without a bearer token.
+          schema: { type: string, maxLength: 256 }
       responses:
         "426": { $ref: "#/components/responses/ClientOutdated" }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -1281,6 +1306,159 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+  /attachments/{attachment_id}/playback:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/AttachmentId"
+    post:
+      tags: [attachments]
+      operationId: createAttachmentPlayback
+      summary: A short-lived URL to stream an attachment
+      description: |
+        Same access as `GET /attachments/{attachment_id}/content`. The answer is a URL that works without a bearer
+        token for five minutes and only for this attachment, so media elements can stream it with range requests.
+        Ask again when it expires (a `401` from the URL); the client keeps the playback position.
+      parameters:
+        - name: variant
+          in: query
+          schema:
+            type: string
+            enum: [source, animation]
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Playback URL
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlaybackUrl" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /attachments/uploads:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    post:
+      tags: [attachments]
+      operationId: createUploadSession
+      summary: Start a resumable upload
+      description: |
+        For large files: the client sends the file in chunks of `chunk_size` bytes with
+        `PUT /attachments/uploads/{upload_id}/chunks`, can ask how much arrived with `GET`, and finishes with
+        `POST /attachments/uploads/{upload_id}/complete`, which checks the file like `POST /attachments`. Sessions
+        without progress for 24 hours are deleted. At most 5 open sessions per user.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateUploadSessionRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "201":
+          description: Session
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UploadSession" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /attachments/uploads/{upload_id}:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/UploadId"
+    get:
+      tags: [attachments]
+      operationId: getUploadSession
+      summary: How much of a resumable upload arrived
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Session
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UploadSession" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [attachments]
+      operationId: deleteUploadSession
+      summary: Cancel a resumable upload
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204": { description: Cancelled }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /attachments/uploads/{upload_id}/chunks:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/UploadId"
+    put:
+      tags: [attachments]
+      operationId: putUploadChunk
+      summary: Send the next chunk of a resumable upload
+      description: |
+        `offset` must equal `received`; every chunk but the last is exactly `chunk_size` bytes. A chunk sent again
+        after a lost answer gets `409` with the session, whose `received` tells where to continue.
+      parameters:
+        - name: offset
+          in: query
+          required: true
+          schema: { type: integer, format: int64, minimum: 0 }
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: { type: string, format: binary }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Session after the chunk
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UploadSession" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`offset` is not where the upload stands"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UploadSession" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+  /attachments/uploads/{upload_id}/complete:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/UploadId"
+    post:
+      tags: [attachments]
+      operationId: completeUploadSession
+      summary: Finish a resumable upload
+      description: Checks and stores the file like `POST /attachments` and deletes the session.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "201":
+          description: Uploaded
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Attachment" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Not all chunks arrived yet
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UploadSession" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
 
   # --------------------------------------------------------------- chats
   /chats:
@@ -2878,8 +3056,15 @@ paths:
       operationId: getCustomEmojiImage
       summary: The image of a custom emoji
       description: |
-        Any signed-in user; a PNG of 128 x 128 px or a GIF. Cached as immutable. `404` once the emoji or its pack
-        is deleted: clients then show the token's `:shortcode:` text.
+        Any signed-in user; a WebP (still or animated) of 128 x 128 px, or for older emoji a PNG or a GIF. Cached
+        as immutable. `404` once the emoji or its pack is deleted: clients then show the token's `:shortcode:` text.
+      parameters:
+        - name: variant
+          in: query
+          description: "`inline`: the emoji at 64 px for text; the 128 px image when the emoji has none."
+          schema:
+            type: string
+            enum: [inline]
       responses:
         "426": { $ref: "#/components/responses/ClientOutdated" }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -4951,6 +5136,11 @@ components:
       in: path
       required: true
       schema: { $ref: "#/components/schemas/AttachmentRef" }
+    UploadId:
+      name: upload_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     StickerPackId:
       name: pack_id
       in: path
@@ -5898,17 +6088,49 @@ components:
           readOnly: true
         width: { type: [integer, "null"], minimum: 1 }
         height: { type: [integer, "null"], minimum: 1 }
-        thumbnail_url: { type: [string, "null"], readOnly: true }
+        thumbnail_url:
+          type: [string, "null"]
+          readOnly: true
+          description: A WebP of at most 480 px (older uploads a JPEG of at most 320 px); for audio the embedded cover.
         display_url:
           type: [string, "null"]
           readOnly: true
-          description: A JPEG of at most 1600 px to show in an image viewer instead of the original; `null` for small images and GIFs, which are shown as they are.
+          description: At most 1600 px to show in an image viewer instead of the original; `null` for small images and GIFs, which are shown as they are.
+        placeholder:
+          type: [string, "null"]
+          maxLength: 64
+          readOnly: true
+          description: A ThumbHash (base64) of the image or video poster, to draw a blurred preview before the thumbnail arrives.
+        processing:
+          readOnly: true
+          description: |
+            Whether the server is still making an optimized copy of a video, GIF or audio file. Clients play `url`
+            meanwhile and swap to the new copy on `attachment_updated`. `null` when there is nothing to do.
+          oneOf:
+            - $ref: "#/components/schemas/MediaProcessing"
+            - type: "null"
+        source_url:
+          type: [string, "null"]
+          readOnly: true
+          description: The file as uploaded, when `url` serves an optimized copy; `null` otherwise.
+        animation_url:
+          type: [string, "null"]
+          readOnly: true
+          description: A GIF as a muted, looping MP4, much smaller than the GIF; `null` until made or for other files.
+        panel_url:
+          type: [string, "null"]
+          readOnly: true
+          description: Stickers only; a still 128 px WebP for pickers and lists.
+        message_url:
+          type: [string, "null"]
+          readOnly: true
+          description: Stickers only; a 320 px WebP for messages.
         duration_ms: { type: [integer, "null"], minimum: 0 }
         waveform:
           type: [array, "null"]
           items: { type: integer, minimum: 0, maximum: 255 }
         tags:
-          description: Only in the answer to a `profile_music` upload; what the file says about itself.
+          description: Audio files (not voice messages) and `profile_music` uploads; what the file says about itself.
           $ref: "#/components/schemas/AudioTags"
         drawing:
           description: |
@@ -5922,6 +6144,45 @@ components:
       properties:
         title: { type: [string, "null"], maxLength: 100 }
         artist: { type: [string, "null"], maxLength: 100 }
+        album: { type: [string, "null"], maxLength: 100 }
+    MediaProcessing:
+      type: string
+      enum: [queued, running, done, failed]
+    PlaybackUrl:
+      type: object
+      required: [url, expires_at]
+      properties:
+        url:
+          type: string
+          description: Same-origin path with the playback token; set it as `src` of a media element.
+        expires_at: { type: string, format: date-time }
+    CreateUploadSessionRequest:
+      type: object
+      required: [purpose, filename, size]
+      additionalProperties: false
+      properties:
+        purpose: { $ref: "#/components/schemas/UploadPurpose" }
+        kind:
+          type: string
+          enum: [image, audio, video, file]
+        filename: { type: string, minLength: 1, maxLength: 255 }
+        size:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Bytes of the whole file; at most the upload limit of its kind.
+    UploadSession:
+      type: object
+      required: [id, size, chunk_size, received, expires_at]
+      properties:
+        id: { type: string, format: uuid }
+        size: { type: integer, format: int64 }
+        chunk_size: { type: integer, description: Bytes per chunk (8 MiB). }
+        received: { type: integer, format: int64, description: Bytes stored so far; the next `offset`. }
+        expires_at:
+          type: string
+          format: date-time
+          description: When the session is deleted unless more chunks arrive.
     Drawing:
       type: object
       description: |

@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ServerAttachmentUpdatedEvent",
+  "description": "The server finished (or gave up) making an optimized copy of an attachment you can see: a video or audio file now served as H.264/AAC, or a GIF with an animation_url. Replace the attachment in every message that holds it; a playing media element keeps its position.",
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "attachment_updated"
+    },
+    "event_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "chat_id": {
+      "type": "null"
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "attachment": {
+          "$ref": "../../openapi.yaml#/components/schemas/Attachment"
+        }
+      },
+      "required": [
+        "attachment"
+      ]
+    }
+  },
+  "required": [
+    "type",
+    "event_id",
+    "chat_id",
+    "data"
+  ]
+}

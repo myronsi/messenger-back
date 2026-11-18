@@ -90,6 +90,7 @@ type MediaOptions struct {
 	Directory      *users.Directory
 	Limiter        RateAllower
 	Events         EventEmitter
+	Playback       *media.PlaybackSigner
 	BasePath       string
 	Log            *slog.Logger
 	ProfileChanged func(ctx context.Context, userID, version int64)
@@ -263,7 +264,7 @@ func (m *MediaServer) UploadAttachment(w http.ResponseWriter, r *http.Request, _
 	}
 	out := PresentAttachment(a, "", m.o.BasePath)
 	if form.purpose == string(UploadPurposeProfileMusic) {
-		out.Tags = &AudioTags{Title: tags.Title, Artist: tags.Artist}
+		out.Tags = &AudioTags{Title: tags.Title, Artist: tags.Artist, Album: tags.Album}
 	}
 	writeJSONStatus(w, http.StatusCreated, out)
 }
@@ -328,21 +329,23 @@ func serveDownload(w http.ResponseWriter, r *http.Request, d media.Download, cac
 
 // GetAttachmentContent implements GET /attachments/{id}/content.
 func (m *MediaServer) GetAttachmentContent(w http.ResponseWriter, r *http.Request, id AttachmentId, params GetAttachmentContentParams) {
-	p, ok := PrincipalFrom(r.Context())
-	if !ok {
+	variant, suffix := contentVariant(params.Variant)
+	var d media.Download
+	var err error
+	cache := cacheForever
+	if p, ok := PrincipalFrom(r.Context()); ok {
+		d, err = m.o.Service.Open(r.Context(), p.UserID, id, variant)
+	} else if params.Pt != nil && m.o.Playback != nil {
+		if _, valid := m.o.Playback.Verify(*params.Pt, id); !valid {
+			writeUnauthorized(w, ErrorCodeUnauthenticated)
+			return
+		}
+		cache = "private, max-age=300"
+		d, err = m.o.Service.OpenUnchecked(r.Context(), id, variant)
+	} else {
 		writeUnauthorized(w, ErrorCodeUnauthenticated)
 		return
 	}
-	variant, suffix := media.VariantOriginal, ""
-	if params.Variant != nil {
-		switch *params.Variant {
-		case Thumbnail:
-			variant, suffix = media.VariantThumbnail, "-thumb"
-		case Display:
-			variant, suffix = media.VariantDisplay, "-display"
-		}
-	}
-	d, err := m.o.Service.Open(r.Context(), p.UserID, id, variant)
 	if errors.Is(err, media.ErrNoAccess) {
 		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
 		return
@@ -352,11 +355,10 @@ func (m *MediaServer) GetAttachmentContent(w http.ResponseWriter, r *http.Reques
 		WriteProblem(w, http.StatusInternalServerError, ErrorCodeInternalError)
 		return
 	}
-	cache := cacheForever
-	if variant == media.VariantThumbnail {
+	if variant == media.VariantThumbnail && d.Legacy {
 		cache = "private, max-age=3600"
 	}
-	m.serve(w, r, d, cache, id.String()+suffix)
+	m.serve(w, r, d, cache, id.String()+suffix+d.ETagSuffix)
 }
 
 // SetMyAvatar implements PUT /me/avatar.
@@ -481,7 +483,14 @@ func (m *MediaServer) GetUserAvatar(w http.ResponseWriter, r *http.Request, user
 		serveDefaultAvatar(w)
 		return
 	}
-	d, err := m.o.Service.OpenUnchecked(r.Context(), *attachment, media.VariantOriginal)
+	variant, suffix := media.VariantOriginal, ""
+	if params.Size != nil {
+		variant = media.AvatarSizeVariant(*params.Size)
+		if variant != media.VariantOriginal {
+			suffix = "-" + media.AvatarVariantFor(*params.Size)
+		}
+	}
+	d, err := m.o.Service.OpenUnchecked(r.Context(), *attachment, variant)
 	if errors.Is(err, media.ErrNoAccess) {
 		serveDefaultAvatar(w)
 		return
@@ -495,7 +504,7 @@ func (m *MediaServer) GetUserAvatar(w http.ResponseWriter, r *http.Request, user
 	if params.Version == nil && params.Rev != nil && *params.Rev == attachment.String() {
 		cache = cacheForever
 	}
-	m.serve(w, r, d, cache, attachment.String())
+	m.serve(w, r, d, cache, attachment.String()+suffix)
 }
 
 // ListUserAvatars implements GET /users/{id}/avatars.

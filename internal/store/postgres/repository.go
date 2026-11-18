@@ -523,6 +523,7 @@ type AttachmentRepository interface {
 	MergeVariants(ctx context.Context, id uuid.UUID, u AttachmentUpdate) (Attachment, error)
 	SetProcessing(ctx context.Context, id uuid.UUID, state *string) error
 	ListForBackfill(ctx context.Context, f BackfillFilter) ([]Attachment, error)
+	Audience(ctx context.Context, attachmentID uuid.UUID) ([]int64, error)
 }
 
 type AttachmentUpdate struct {

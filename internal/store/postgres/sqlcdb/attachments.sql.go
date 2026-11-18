@@ -26,6 +26,36 @@ func (q *Queries) AddAvatarHistory(ctx context.Context, arg AddAvatarHistoryPara
 	return err
 }
 
+const attachmentAudience = `-- name: AttachmentAudience :many
+SELECT DISTINCT u.user_id FROM (
+    SELECT a.uploader_id AS user_id FROM attachments a WHERE a.id = $1 AND a.uploader_id IS NOT NULL
+    UNION ALL
+    SELECT p.user_id FROM attachment_links l JOIN participants p ON p.chat_id = l.chat_id WHERE l.attachment_id = $1
+) u
+WHERE u.user_id IS NOT NULL
+LIMIT 5000
+`
+
+func (q *Queries) AttachmentAudience(ctx context.Context, attachmentID uuid.UUID) ([]*int64, error) {
+	rows, err := q.db.Query(ctx, attachmentAudience, attachmentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*int64{}
+	for rows.Next() {
+		var user_id *int64
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const attachmentLinksForViewer = `-- name: AttachmentLinksForViewer :many
 SELECT l.chat_id, l.message_id
 FROM attachment_links l

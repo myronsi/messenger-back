@@ -115,7 +115,8 @@ type Media struct {
 	FFprobe string `env:"FFPROBE_PATH"`
 	FFmpeg  string `env:"FFMPEG_PATH"`
 	// ImageWorkers is how many uploaded images are decoded at once; each can take a few hundred MB.
-	ImageWorkers int `env:"MEDIA_IMAGE_WORKERS" envDefault:"2"`
+	ImageWorkers     int `env:"MEDIA_IMAGE_WORKERS" envDefault:"2"`
+	TranscodeWorkers int `env:"MEDIA_TRANSCODE_WORKERS" envDefault:"1"`
 }
 
 // Realtime configures the WebSocket gateway.
