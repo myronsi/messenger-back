@@ -37,10 +37,10 @@ func actingIn(ctx context.Context, q *sqlcdb.Queries, chatID, actorID int64, all
 	return nil
 }
 
-func (r chatRepo) EntriesOfType(ctx context.Context, userID int64, t ChatType, archived *bool, after *ChatCursor, limit int) ([]ChatEntry, error) {
+func (r chatRepo) EntriesOfType(ctx context.Context, userID int64, t ChatType, archived, requests *bool, after *ChatCursor, limit int) ([]ChatEntry, error) {
 	ctx, cancel := r.s.call(ctx)
 	defer cancel()
-	p := sqlcdb.ListChatEntriesParams{UserID: userID, Archived: archived, MaxRows: clampLimit(limit)}
+	p := sqlcdb.ListChatEntriesParams{UserID: userID, Archived: archived, Requests: requests, MaxRows: clampLimit(limit)}
 	if t != "" {
 		s := string(t)
 		p.ChatType = &s

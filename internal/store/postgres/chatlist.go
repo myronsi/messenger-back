@@ -19,7 +19,7 @@ func entryFrom(r sqlcdb.ListChatEntriesRow) ChatEntry {
 			LastMessageID: r.LastMessageID, LastActivityAt: r.LastActivityAt, ClearedBeforeMessageID: r.ClearedBeforeMessageID,
 		}),
 		Role: Role(r.Role), LastReadMessageID: r.LastReadMessageID, PinnedAt: r.PinnedAt, PinPosition: r.PinPosition,
-		ArchivedAt: r.ArchivedAt, MyClearedBefore: r.MyClearedBeforeMessageID, HiddenAt: r.HiddenAt, SortAt: r.SortAt,
+		ArchivedAt: r.ArchivedAt, MyClearedBefore: r.MyClearedBeforeMessageID, HiddenAt: r.HiddenAt, IsRequest: r.IsRequest, SortAt: r.SortAt,
 	}
 }
 
@@ -41,7 +41,7 @@ func (r chatRepo) TouchActivity(ctx context.Context, chatID, messageID int64, at
 }
 
 func (r chatRepo) Entries(ctx context.Context, userID int64, after *ChatCursor, limit int) ([]ChatEntry, error) {
-	return r.EntriesOfType(ctx, userID, "", nil, after, limit)
+	return r.EntriesOfType(ctx, userID, "", nil, nil, after, limit)
 }
 
 func (r chatRepo) Entry(ctx context.Context, userID, chatID int64) (ChatEntry, error) {
@@ -66,7 +66,10 @@ func (r chatRepo) OtherMembers(ctx context.Context, userID int64, chatIDs []int6
 	}
 	out := make([]ReadMarker, len(rows))
 	for i, row := range rows {
-		out[i] = ReadMarker{ChatID: row.ChatID, UserID: row.UserID, MessageID: row.LastReadMessageID, At: row.LastReadAt}
+		out[i] = ReadMarker{ChatID: row.ChatID, UserID: row.UserID}
+		if !row.IsRequest {
+			out[i].MessageID, out[i].At = row.LastReadMessageID, row.LastReadAt
+		}
 	}
 	return out, nil
 }
@@ -91,7 +94,10 @@ func (r chatRepo) Pin(ctx context.Context, userID, chatID int64, maxPins int) er
 		if added == 1 && n >= int64(maxPins) {
 			return ErrConflict
 		}
-		_, err = q.SetChatArchived(ctx, sqlcdb.SetChatArchivedParams{Archived: false, ChatID: chatID, UserID: userID})
+		if _, err := q.SetChatArchived(ctx, sqlcdb.SetChatArchivedParams{Archived: false, ChatID: chatID, UserID: userID}); err != nil {
+			return err
+		}
+		_, err = q.AcceptChatRequest(ctx, sqlcdb.AcceptChatRequestParams{ChatID: chatID, UserID: userID})
 		return err
 	})
 }
@@ -139,11 +145,55 @@ func (r chatRepo) SetArchived(ctx context.Context, userID, chatID int64, archive
 		if n == 0 {
 			return ErrNotFound
 		}
-		if archived {
-			_, err = q.UnpinChat(ctx, sqlcdb.UnpinChatParams{UserID: userID, ChatID: chatID})
+		if !archived {
+			return nil
 		}
+		if _, err := q.UnpinChat(ctx, sqlcdb.UnpinChatParams{UserID: userID, ChatID: chatID}); err != nil {
+			return err
+		}
+		_, err = q.AcceptChatRequest(ctx, sqlcdb.AcceptChatRequestParams{ChatID: chatID, UserID: userID})
 		return err
 	})
+}
+
+func (r chatRepo) AcceptRequest(ctx context.Context, userID, chatID int64) (bool, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	n, err := r.s.q.AcceptChatRequest(ctx, sqlcdb.AcceptChatRequestParams{ChatID: chatID, UserID: userID})
+	if err != nil {
+		return false, mapError(err)
+	}
+	return n > 0, nil
+}
+
+func (r chatRepo) RequestHolders(ctx context.Context, chatID int64) ([]int64, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	ids, err := r.s.q.ListChatRequestHolders(ctx, chatID)
+	if err != nil {
+		return nil, mapError(err)
+	}
+	return ids, nil
+}
+
+func (r chatRepo) GetWithRequestHolders(ctx context.Context, chatID int64) (Chat, []int64, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	row, err := r.s.q.GetChatWithRequestHolders(ctx, chatID)
+	if err != nil {
+		return Chat{}, nil, mapError(err)
+	}
+	return chatFrom(row.Chat), row.RequestHolders, nil
+}
+
+func (r chatRepo) RequestCount(ctx context.Context, userID int64) (int64, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	n, err := r.s.q.CountChatRequests(ctx, userID)
+	if err != nil {
+		return 0, mapError(err)
+	}
+	return n, nil
 }
 
 func (r chatRepo) Unpin(ctx context.Context, userID, chatID int64) error {

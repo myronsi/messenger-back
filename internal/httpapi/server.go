@@ -925,3 +925,19 @@ func (s *Server) CompleteUploadSession(w http.ResponseWriter, r *http.Request, i
 	}
 	s.media.CompleteUploadSession(w, r, id, params)
 }
+
+func (s *Server) AcceptChatRequest(w http.ResponseWriter, r *http.Request, chatID ChatId, params AcceptChatRequestParams) {
+	if s.chats == nil {
+		s.AuthServer.AcceptChatRequest(w, r, chatID, params)
+		return
+	}
+	s.chats.AcceptChatRequest(w, r, chatID, params)
+}
+
+func (s *Server) CountChatRequests(w http.ResponseWriter, r *http.Request, params CountChatRequestsParams) {
+	if s.chats == nil {
+		s.AuthServer.CountChatRequests(w, r, params)
+		return
+	}
+	s.chats.CountChatRequests(w, r, params)
+}

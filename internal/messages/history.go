@@ -294,6 +294,7 @@ func (s *Service) ForwardMany(ctx context.Context, userID, chatID int64, message
 	type target struct {
 		chatID  int64
 		members []int64
+		holders []int64
 	}
 	var checked []target
 	for _, chatID := range chatIDs {
@@ -307,22 +308,27 @@ func (s *Service) ForwardMany(ctx context.Context, userID, chatID int64, message
 		if err != nil {
 			return nil, err
 		}
-		checked = append(checked, target{chatID, members})
+		holders, err := s.requestHolders(ctx, chatID)
+		if err != nil {
+			return nil, err
+		}
+		checked = append(checked, target{chatID, members, holders})
 	}
 	out := make([]scylla.Message, 0, len(checked)*len(sources))
 	for _, t := range checked {
 		for _, src := range sources {
-			m, err := s.forwardCopy(ctx, userID, t.chatID, t.members, src)
+			m, err := s.forwardCopy(ctx, userID, t.chatID, t.members, t.holders, src)
 			if err != nil {
 				return out, err
 			}
 			out = append(out, m)
 		}
+		s.repliedToRequest(ctx, t.chatID, userID, t.holders)
 	}
 	return out, nil
 }
 
-func (s *Service) forwardCopy(ctx context.Context, sender, chatID int64, members []int64, src forwardSource) (scylla.Message, error) {
+func (s *Service) forwardCopy(ctx context.Context, sender, chatID int64, members, holders []int64, src forwardSource) (scylla.Message, error) {
 	id, err := s.d.IDs.Next()
 	if err != nil {
 		return scylla.Message{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
@@ -338,7 +344,7 @@ func (s *Service) forwardCopy(ctx context.Context, sender, chatID int64, members
 	if err := s.linkAttachments(ctx, m, drawings); err != nil {
 		return scylla.Message{}, err
 	}
-	if err := s.queueNotification(ctx, m, members); err != nil {
+	if err := s.queueNotification(ctx, m, withoutAll(members, holders)); err != nil {
 		return scylla.Message{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
 	if err := s.d.Messages.Insert(ctx, m); err != nil {

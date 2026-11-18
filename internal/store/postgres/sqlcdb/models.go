@@ -274,6 +274,7 @@ type Participant struct {
 	ClearedBeforeMessageID *int64
 	HiddenAt               *time.Time
 	Engaged                bool
+	IsRequest              bool
 }
 
 type QrLoginRequest struct {

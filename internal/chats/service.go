@@ -214,11 +214,11 @@ func DecodeCursor(s string) (postgres.ChatCursor, error) {
 // ---------------------------------------------------------------- the chat list
 
 // List returns a page of the user's chats and the cursor of the next page ("" at the end).
-func (s *Service) List(ctx context.Context, userID int64, archived *bool, after string, limit int) ([]View, string, error) {
-	return s.list(ctx, userID, "", archived, after, limit)
+func (s *Service) List(ctx context.Context, userID int64, archived, requests *bool, after string, limit int) ([]View, string, error) {
+	return s.list(ctx, userID, "", archived, requests, after, limit)
 }
 
-func (s *Service) list(ctx context.Context, userID int64, t postgres.ChatType, archived *bool, after string, limit int) ([]View, string, error) {
+func (s *Service) list(ctx context.Context, userID int64, t postgres.ChatType, archived, requests *bool, after string, limit int) ([]View, string, error) {
 	var cur *postgres.ChatCursor
 	if after != "" {
 		c, err := DecodeCursor(after)
@@ -230,7 +230,7 @@ func (s *Service) list(ctx context.Context, userID int64, t postgres.ChatType, a
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
-	entries, err := s.d.Store.Chats().EntriesOfType(ctx, userID, t, archived, cur, limit+1)
+	entries, err := s.d.Store.Chats().EntriesOfType(ctx, userID, t, archived, requests, cur, limit+1)
 	if err != nil {
 		return nil, "", unavailable(err)
 	}
@@ -587,36 +587,37 @@ type Created struct {
 
 // permission decides whether requester may open a direct chat with recipient: allowed, approval needed or
 // denied. Blocks deny; otherwise the recipient's direct_messages setting decides.
-func (s *Service) permission(ctx context.Context, requester, recipient int64) (allowed, approval bool, err error) {
+func (s *Service) permission(ctx context.Context, requester, recipient int64) (allowed, approval, request bool, err error) {
 	social := s.d.Store.Social()
 	blocked, err := social.BlockedEither(ctx, requester, recipient)
 	if err != nil || blocked {
-		return false, false, err
+		return false, false, false, err
 	}
 	exc, err := social.ExceptionsOf(ctx, recipient, []int64{requester})
 	if err != nil {
-		return false, false, err
+		return false, false, false, err
 	}
 	switch exc[requester][postgres.SettingDirectMessages] {
 	case postgres.EffectAllow:
-		return true, false, nil
+		return true, false, false, nil
 	case postgres.EffectDeny:
-		return false, false, nil
+		return false, false, false, nil
 	}
 	settings, err := social.Privacy(ctx, []int64{recipient})
 	if err != nil {
-		return false, false, err
+		return false, false, false, err
 	}
 	switch settings[recipient].DirectMessages {
 	case postgres.VisibleEveryone:
-		return true, false, nil
+		shared, err := social.SharedChatViewers(ctx, recipient, []int64{requester})
+		return true, false, !shared[requester], err
 	case postgres.VisibleSharedChats:
 		shared, err := social.SharedChatViewers(ctx, recipient, []int64{requester})
-		return shared[requester], false, err
+		return shared[requester], false, false, err
 	case postgres.WaitApproval:
-		return false, true, nil
+		return false, true, false, nil
 	}
-	return false, false, nil
+	return false, false, false, nil
 }
 
 // CreateDirect opens a direct chat with another user, honouring their direct_messages setting. An existing
@@ -651,10 +652,10 @@ func (s *Service) CreateDirect(ctx context.Context, requester, otherID int64, in
 		}
 		return Created{Chat: &v}, nil
 	}
-	allowed, approval := true, false
+	allowed, approval, asRequest := true, false, false
 	if otherID != requester {
 		var err error
-		if allowed, approval, err = s.permission(ctx, requester, otherID); err != nil {
+		if allowed, approval, asRequest, err = s.permission(ctx, requester, otherID); err != nil {
 			return Created{}, unavailable(err)
 		}
 	}
@@ -691,7 +692,7 @@ func (s *Service) CreateDirect(ctx context.Context, requester, otherID int64, in
 	if !allowed {
 		return Created{}, ErrForbidden
 	}
-	chat, created, closed, err := s.d.Store.Chats().OpenDirect(ctx, requester, otherID)
+	chat, created, closed, err := s.d.Store.Chats().OpenDirect(ctx, requester, otherID, asRequest)
 	if err != nil {
 		return Created{}, unavailable(err)
 	}
@@ -910,6 +911,32 @@ func (s *Service) SetArchived(ctx context.Context, userID, chatID int64, archive
 	}
 	s.d.Notifier.ChatUpdated(ctx, chatID, s.viewsFor(ctx, chatID, []int64{userID}))
 	return nil
+}
+
+func (s *Service) Accept(ctx context.Context, userID, chatID int64) error {
+	if _, err := s.d.Store.Chats().Entry(ctx, userID, chatID); err != nil {
+		return notFoundOr(err)
+	}
+	accepted, err := s.d.Store.Chats().AcceptRequest(ctx, userID, chatID)
+	if err != nil {
+		return unavailable(err)
+	}
+	if accepted {
+		s.RequestAccepted(ctx, chatID, userID)
+	}
+	return nil
+}
+
+func (s *Service) RequestAccepted(ctx context.Context, chatID, userID int64) {
+	s.d.Notifier.ChatUpdated(ctx, chatID, s.viewsFor(ctx, chatID, []int64{userID}))
+}
+
+func (s *Service) RequestCount(ctx context.Context, userID int64) (int64, error) {
+	n, err := s.d.Store.Chats().RequestCount(ctx, userID)
+	if err != nil {
+		return 0, unavailable(err)
+	}
+	return n, nil
 }
 
 func (s *Service) ReorderPins(ctx context.Context, userID int64, chatIDs []int64) error {

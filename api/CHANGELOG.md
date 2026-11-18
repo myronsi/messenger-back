@@ -2,6 +2,15 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.34
+
+- Requests folder: `Chat` gains the required `is_request`, `true` when a stranger opened the direct chat and the caller
+  has not replied, accepted, pinned or archived it yet. Messages in such a chat send the caller no push.
+- `GET /chats` gains `folder` (`main`, the default, `requests` or `all`). Without it the answer holds only the main list.
+- `POST /chats/{chat_id}/accept` moves a chat out of the Requests folder; `GET /chats/requests/count` answers
+  `ChatRequestCount` (`requests_count`).
+- WebSocket: `chat_list_update` also goes out when a chat moves out of the Requests folder.
+
 ## 2.1.0-alpha.32
 
 - `Attachment` gains `placeholder` (ThumbHash), `processing` (`MediaProcessing`: `queued`, `running`, `done`,
