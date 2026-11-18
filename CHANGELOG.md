@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.23.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.22.0-alpha.1...v1.23.0-alpha.1) (2026-11-18)
+
+
+### Features
+
+* **chats:** Requests folder for direct chats from strangers ([#203](https://github.com/myronsi/messenger-back/issues/203)) ([97c6532](https://github.com/myronsi/messenger-back/commit/97c6532cdc6d73bbd1164364818eb51e55b1b589))
+
 ## [1.22.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.21.0-alpha.1...v1.22.0-alpha.1) (2026-11-18)
 
 
