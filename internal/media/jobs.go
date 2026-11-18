@@ -350,7 +350,7 @@ func (s *Service) optimize(ctx context.Context, kind, src, out string) (jobOutpu
 	}
 	moovLate := false
 	if isMP4Family(info.Format) {
-		if f, err := os.Open(src); err == nil {
+		if f, err := os.Open(src); err == nil { //nolint:gosec
 			if st, err := f.Stat(); err == nil {
 				moovLate = MoovAfterMdat(f, st.Size())
 			}

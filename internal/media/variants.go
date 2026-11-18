@@ -3,6 +3,7 @@ package media
 import (
 	"bytes"
 	"context"
+	"errors"
 	"image"
 	"strings"
 
@@ -86,7 +87,7 @@ func (s *Service) addResized(ctx context.Context, v *variantSet, name string, sr
 	}
 	img, err := s.o.Prober.Resized(ctx, src, side, quality)
 	if err != nil {
-		if err != ErrNoEncoder {
+		if !errors.Is(err, ErrNoEncoder) {
 			s.o.Log.WarnContext(ctx, "image variant", "variant", name, "error", err)
 		}
 		return

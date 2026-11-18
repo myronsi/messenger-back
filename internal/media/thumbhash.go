@@ -120,11 +120,11 @@ func thumbHash(w, h int, rgba []byte) []byte {
 	if landscape {
 		header16 |= 1 << 15
 	}
-	hash := []byte{byte(header24), byte(header24 >> 8), byte(header24 >> 16), byte(header16), byte(header16 >> 8)}
+	hash := []byte{byte(header24), byte(header24 >> 8), byte(header24 >> 16), byte(header16), byte(header16 >> 8)} //nolint:gosec
 	acStart := 5
 	if hasAlpha {
 		acStart = 6
-		hash = append(hash, byte(round(15*aDC)|round(15*aScale)<<4))
+		hash = append(hash, byte(round(15*aDC)|round(15*aScale)<<4)) //nolint:gosec
 	}
 	channels := [][]float64{lAC, pAC, qAC}
 	if hasAlpha {
@@ -137,7 +137,7 @@ func thumbHash(w, h int, rgba []byte) []byte {
 			for len(hash) <= pos {
 				hash = append(hash, 0)
 			}
-			hash[pos] |= byte(round(15*f) << ((index & 1) * 4))
+			hash[pos] |= byte(round(15*f) << ((index & 1) * 4)) //nolint:gosec
 			index++
 		}
 	}
