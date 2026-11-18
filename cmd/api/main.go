@@ -233,6 +233,7 @@ func run() error {
 				}
 			},
 			Events: rt.events, Limiter: rt.limiter, Moderation: modSvc, BasePath: cfg.HTTP.BasePath, Log: log, ProfileChanged: rt.profileChanged,
+			PeersChanged: chatSvc.PeerPrivacyChanged,
 		})).WithModeration(httpapi.NewModerationServer(httpapi.ModerationOptions{
 			Service: modSvc, Log: log,
 		})).WithChats(httpapi.NewChatServer(httpapi.ChatOptions{

@@ -50,6 +50,7 @@ type AccountOptions struct {
 	OnBlocked      func(ctx context.Context, blockerID, blockedID int64)
 	Events         EventEmitter
 	ProfileChanged func(ctx context.Context, userID, version int64)
+	PeersChanged   func(ctx context.Context, userID int64)
 	Emoji          EmojiCleaner
 	Limiter        RateAllower
 	Moderation     Moderator
@@ -261,6 +262,7 @@ var exceptionSettings = []string{
 	postgres.SettingAvatar, postgres.SettingProfile, postgres.SettingPresence, postgres.SettingLastSeen, postgres.SettingBirthday,
 	postgres.SettingGroupInvites,
 	postgres.SettingDirectMessages, postgres.SettingSearch, postgres.SettingCalls,
+	postgres.SettingVoiceVideo, postgres.SettingForwardLink,
 }
 
 func (a *AccountServer) privacy(ctx context.Context, userID int64) (PrivacySettings, error) {
@@ -286,6 +288,8 @@ func (a *AccountServer) privacy(ctx context.Context, userID int64) (PrivacySetti
 		CallsEnabled:            s.CallsFrom != postgres.VisibleNobody,
 		CallsFrom:               CallPolicy(visibilityFromDB(s.CallsFrom)),
 		TypingIndicatorsEnabled: s.TypingIndicatorsEnabled,
+		VoiceVideoMessages:      VoiceVideoPolicy(visibilityFromDB(s.VoiceVideoMessages)),
+		ForwardLink:             ForwardLinkPolicy(visibilityFromDB(s.ForwardLink)),
 		Exceptions:              PrivacyExceptions{},
 	}
 	for _, k := range exceptionSettings {
@@ -397,6 +401,20 @@ func (a *AccountServer) UpdatePrivacySettings(w http.ResponseWriter, r *http.Req
 			changed = true
 		}
 	}
+	if body.VoiceVideoMessages != nil {
+		if !body.VoiceVideoMessages.Valid() {
+			WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "voice_video_messages", Message: "unknown value"})
+			return
+		}
+		set(&s.VoiceVideoMessages, visibilityToDB(string(*body.VoiceVideoMessages)))
+	}
+	if body.ForwardLink != nil {
+		if !body.ForwardLink.Valid() {
+			WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "forward_link", Message: "unknown value"})
+			return
+		}
+		set(&s.ForwardLink, visibilityToDB(string(*body.ForwardLink)))
+	}
 	if body.TypingIndicatorsEnabled != nil {
 		s.TypingIndicatorsEnabled, changed = body.TypingIndicatorsEnabled, true
 	}
@@ -413,7 +431,16 @@ func (a *AccountServer) UpdatePrivacySettings(w http.ResponseWriter, r *http.Req
 		return
 	}
 	a.emit(r.Context(), events.Event{Type: events.UserUpdated, UserID: p.UserID, ActorID: p.UserID})
+	if s.VoiceVideoMessages != nil {
+		a.peersChanged(r.Context(), p.UserID)
+	}
 	a.GetPrivacySettings(w, r, GetPrivacySettingsParams{})
+}
+
+func (a *AccountServer) peersChanged(ctx context.Context, userID int64) {
+	if a.o.PeersChanged != nil {
+		go a.o.PeersChanged(context.WithoutCancel(ctx), userID)
+	}
 }
 
 // ReplacePrivacyExceptions implements PUT /me/privacy/exceptions/{setting_key}/{effect}.
@@ -461,6 +488,9 @@ func (a *AccountServer) ReplacePrivacyExceptions(w http.ResponseWriter, r *http.
 		return
 	}
 	a.emit(r.Context(), events.Event{Type: events.UserUpdated, UserID: p.UserID, ActorID: p.UserID})
+	if settingKey == postgres.SettingVoiceVideo {
+		a.peersChanged(r.Context(), p.UserID)
+	}
 	a.GetPrivacySettings(w, r, GetPrivacySettingsParams{})
 }
 

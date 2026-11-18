@@ -13,6 +13,18 @@ Contract changes only. The backend changelog is `CHANGELOG.md` in the repository
   `data.restriction` name the blocked action.
 - `User.account_label` (`AccountLabel`: `restricted`) marks suspended accounts.
 
+## 2.1.0-alpha.35
+
+- `PrivacySettings` gains the required `voice_video_messages` (`VoiceVideoPolicy`: `everyone`, `contacts`) and
+  `forward_link` (`ForwardLinkPolicy`: `everyone`, `contacts`, `nobody`); `UpdatePrivacySettingsRequest` accepts both.
+  `PUT /me/privacy/exceptions/{setting_key}/{effect}` accepts both keys, and `PrivacySettings.exceptions` lists them.
+- A voice message, or a file message with a video, sent, resent or forwarded into a direct chat whose peer does not
+  accept it is refused with `403` `forbidden` and the field `voice_video_messages`. The WebSocket `error` event gains
+  the optional `field`.
+- `User.can_send_voice_video`, only on `Chat.peer` of a direct chat. When the peer changes `voice_video_messages` or its
+  exceptions, a `chat_list_update` brings the new value.
+- `ForwardedFrom.sender_id` is `null` for viewers that the original sender's `forward_link` excludes.
+
 ## 2.1.0-alpha.34
 
 - Requests folder: `Chat` gains the required `is_request`, `true` when a stranger opened the direct chat and the caller

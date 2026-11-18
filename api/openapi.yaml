@@ -730,7 +730,7 @@ paths:
         required: true
         schema:
           type: string
-          enum: [avatar_visibility, profile_visibility, presence_visibility, last_seen_visibility, birthday_visibility, group_invites, direct_messages, search_visibility, calls_from]
+          enum: [avatar_visibility, profile_visibility, presence_visibility, last_seen_visibility, birthday_visibility, group_invites, direct_messages, search_visibility, calls_from, voice_video_messages, forward_link]
       - name: effect
         in: path
         required: true
@@ -1904,6 +1904,9 @@ paths:
       description: |
         Same as the WebSocket `message` event, for clients without a connection. Sending the
         same `client_temp_id` again returns the existing message instead of creating a copy.
+        A voice message, or a file message with a video, in a direct chat whose peer does not accept them from
+        the sender (`voice_video_messages`) is refused with `403` (`forbidden`, field `voice_video_messages`)
+        and kept as an unsent message.
       requestBody:
         required: true
         content:
@@ -2094,6 +2097,9 @@ paths:
       tags: [messages]
       operationId: forwardMessage
       summary: Forward a message to other chats
+      description: |
+        A voice message or a video forwarded into a direct chat whose peer does not accept them from the caller
+        is refused with `403` (`forbidden`, field `voice_video_messages`), and nothing is forwarded.
       requestBody:
         required: true
         content:
@@ -2130,7 +2136,8 @@ paths:
       description: |
         Copies up to 20 messages of the chat, oldest first, into every target chat, at most 20 copies in all. Every
         copy counts against the sender's message rate. Every message and target is checked before anything is
-        written, so a refused one forwards nothing.
+        written, so a refused one forwards nothing. Voice messages and videos follow the target peer's
+        `voice_video_messages` (`403`, field `voice_video_messages`).
       requestBody:
         required: true
         content:
@@ -5942,6 +5949,14 @@ components:
     SearchVisibility:
       type: string
       enum: [everyone, nobody]
+    VoiceVideoPolicy:
+      type: string
+      description: Who may send the user voice messages and videos in a direct chat. Groups are not affected.
+      enum: [everyone, contacts]
+    ForwardLinkPolicy:
+      type: string
+      description: Who sees the link to the user's account (`ForwardedFrom.sender_id`) on copies of their forwarded messages.
+      enum: [everyone, contacts, nobody]
     PrivacyExceptions:
       type: object
       description: User IDs per setting. An exception wins over the setting whatever its value; `allow` always lets the user in, `deny` always keeps them out.
@@ -5970,6 +5985,8 @@ components:
         - calls_enabled
         - calls_from
         - typing_indicators_enabled
+        - voice_video_messages
+        - forward_link
         - exceptions
       properties:
         avatar_visibility: { $ref: "#/components/schemas/Visibility" }
@@ -6000,6 +6017,16 @@ components:
         typing_indicators_enabled:
           type: boolean
           description: Whether other members see that this user is typing or recording a voice message. The user still sees theirs.
+        voice_video_messages:
+          description: |
+            Who may send this user voice messages, and file messages with a video, in a direct chat. Others get
+            `403` (`forbidden`, field `voice_video_messages`); their `Chat.peer.can_send_voice_video` is `false`.
+          allOf: [{ $ref: "#/components/schemas/VoiceVideoPolicy" }]
+        forward_link:
+          description: |
+            Who sees `ForwardedFrom.sender_id` when this user's messages are forwarded. Others get `null`; the name
+            stays.
+          allOf: [{ $ref: "#/components/schemas/ForwardLinkPolicy" }]
         exceptions: { $ref: "#/components/schemas/PrivacyExceptions" }
     UpdatePrivacySettingsRequest:
       type: object
@@ -6020,6 +6047,8 @@ components:
           description: "`false` sets `calls_from` to `nobody`; `true` sets it to `everyone` when it was `nobody`. Ignored when `calls_from` is sent."
         calls_from: { $ref: "#/components/schemas/CallPolicy" }
         typing_indicators_enabled: { type: boolean }
+        voice_video_messages: { $ref: "#/components/schemas/VoiceVideoPolicy" }
+        forward_link: { $ref: "#/components/schemas/ForwardLinkPolicy" }
     PrivacyExceptionsRequest:
       type: object
       required: [user_ids]
@@ -6076,6 +6105,11 @@ components:
             - $ref: "#/components/schemas/Timestamp"
             - type: "null"
         is_deleted: { type: boolean }
+        can_send_voice_video:
+          type: boolean
+          description: |
+            Only on `Chat.peer` of a direct chat: whether the requesting user may send this user voice messages and
+            videos (their `voice_video_messages` setting and exceptions). Absent everywhere else.
         account_label:
           allOf: [{ $ref: "#/components/schemas/AccountLabel" }]
           description: |
@@ -6709,6 +6743,9 @@ components:
       properties:
         message_id: { $ref: "#/components/schemas/Id" }
         sender_id:
+          description: |
+            The original sender; `null` when their account is gone or their `forward_link` setting hides it from the
+            requesting user. Clients then show `sender_name` as plain text, not as a link to a profile.
           oneOf:
             - $ref: "#/components/schemas/Id"
             - type: "null"

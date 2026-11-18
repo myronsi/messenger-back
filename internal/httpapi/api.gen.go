@@ -626,6 +626,27 @@ func (e ErrorCode) Valid() bool {
 	}
 }
 
+// Defines values for ForwardLinkPolicy.
+const (
+	ForwardLinkPolicyContacts ForwardLinkPolicy = "contacts"
+	ForwardLinkPolicyEveryone ForwardLinkPolicy = "everyone"
+	ForwardLinkPolicyNobody   ForwardLinkPolicy = "nobody"
+)
+
+// Valid indicates whether the value is a known member of the ForwardLinkPolicy enum.
+func (e ForwardLinkPolicy) Valid() bool {
+	switch e {
+	case ForwardLinkPolicyContacts:
+		return true
+	case ForwardLinkPolicyEveryone:
+		return true
+	case ForwardLinkPolicyNobody:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for GroupInvitePolicy.
 const (
 	GroupInvitePolicyContacts       GroupInvitePolicy = "contacts"
@@ -1202,6 +1223,24 @@ func (e Visibility) Valid() bool {
 	case VisibilityNobody:
 		return true
 	case VisibilityNobodyExcept:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for VoiceVideoPolicy.
+const (
+	VoiceVideoPolicyContacts VoiceVideoPolicy = "contacts"
+	VoiceVideoPolicyEveryone VoiceVideoPolicy = "everyone"
+)
+
+// Valid indicates whether the value is a known member of the VoiceVideoPolicy enum.
+func (e VoiceVideoPolicy) Valid() bool {
+	switch e {
+	case VoiceVideoPolicyContacts:
+		return true
+	case VoiceVideoPolicyEveryone:
 		return true
 	default:
 		return false
@@ -2138,6 +2177,9 @@ type EmojiShortcode = string
 // codes must be treated like `internal_error`.
 type ErrorCode string
 
+// ForwardLinkPolicy Who sees the link to the user's account (`ForwardedFrom.sender_id`) on copies of their forwarded messages.
+type ForwardLinkPolicy string
+
 // ForwardMessageRequest defines model for ForwardMessageRequest.
 type ForwardMessageRequest struct {
 	ChatIds []Id `json:"chat_ids"`
@@ -2154,7 +2196,10 @@ type ForwardedFrom struct {
 	// MessageId Decimal ID as a string (Snowflake IDs exceed 2^53).
 	//
 	// Examples: 7217400317439950848
-	MessageId  Id     `json:"message_id"`
+	MessageId Id `json:"message_id"`
+
+	// SenderId The original sender; `null` when their account is gone or their `forward_link` setting hides it from the
+	// requesting user. Clients then show `sender_name` as plain text, not as a link to a profile.
 	SenderId   *Id    `json:"sender_id"`
 	SenderName string `json:"sender_name"`
 }
@@ -2314,6 +2359,10 @@ type Me struct {
 
 	// Birthday Visible by `birthday_visibility`; `null` when not set or hidden.
 	Birthday *Birthday `json:"birthday"`
+
+	// CanSendVoiceVideo Only on `Chat.peer` of a direct chat: whether the requesting user may send this user voice messages and
+	// videos (their `voice_video_messages` setting and exceptions). Absent everywhere else.
+	CanSendVoiceVideo *bool `json:"can_send_voice_video,omitempty"`
 
 	// ContactName The requesting user's own name for this user, if set.
 	ContactName *string   `json:"contact_name,omitempty"`
@@ -2613,6 +2662,10 @@ type PrivacySettings struct {
 	// Exceptions User IDs per setting. An exception wins over the setting whatever its value; `allow` always lets the user in, `deny` always keeps them out.
 	Exceptions PrivacyExceptions `json:"exceptions"`
 
+	// ForwardLink Who sees `ForwardedFrom.sender_id` when this user's messages are forwarded. Others get `null`; the name
+	// stays.
+	ForwardLink ForwardLinkPolicy `json:"forward_link"`
+
 	// GroupInvites Who may add the user to a group. Defaults to `contacts`. Deprecated: `everyone_except` and `nobody_except`
 	// are still accepted and stored as `everyone` and `nobody`; they are never returned.
 	GroupInvites GroupInvitePolicy `json:"group_invites"`
@@ -2635,6 +2688,10 @@ type PrivacySettings struct {
 
 	// TypingIndicatorsEnabled Whether other members see that this user is typing or recording a voice message. The user still sees theirs.
 	TypingIndicatorsEnabled bool `json:"typing_indicators_enabled"`
+
+	// VoiceVideoMessages Who may send this user voice messages, and file messages with a video, in a direct chat. Others get
+	// `403` (`forbidden`, field `voice_video_messages`); their `Chat.peer.can_send_voice_video` is `false`.
+	VoiceVideoMessages VoiceVideoPolicy `json:"voice_video_messages"`
 }
 
 // Problem RFC 9457 problem details. `426 Upgrade Required` (`client_outdated`) uses the same format.
@@ -3294,6 +3351,9 @@ type UpdatePrivacySettingsRequest struct {
 	// Deprecated: `shared_chats` is the old name of `contacts`; it is still accepted and never returned.
 	DirectMessages *DirectMessagePolicy `json:"direct_messages,omitempty"`
 
+	// ForwardLink Who sees the link to the user's account (`ForwardedFrom.sender_id`) on copies of their forwarded messages.
+	ForwardLink *ForwardLinkPolicy `json:"forward_link,omitempty"`
+
 	// GroupInvites Who may add the user to a group. Defaults to `contacts`. Deprecated: `everyone_except` and `nobody_except`
 	// are still accepted and stored as `everyone` and `nobody`; they are never returned.
 	GroupInvites *GroupInvitePolicy `json:"group_invites,omitempty"`
@@ -3324,6 +3384,9 @@ type UpdatePrivacySettingsRequest struct {
 	ReadReceiptsEnabled     *bool             `json:"read_receipts_enabled,omitempty"`
 	SearchVisibility        *SearchVisibility `json:"search_visibility,omitempty"`
 	TypingIndicatorsEnabled *bool             `json:"typing_indicators_enabled,omitempty"`
+
+	// VoiceVideoMessages Who may send the user voice messages and videos in a direct chat. Groups are not affected.
+	VoiceVideoMessages *VoiceVideoPolicy `json:"voice_video_messages,omitempty"`
 }
 
 // UpdateRoleRequest defines model for UpdateRoleRequest.
@@ -3428,6 +3491,10 @@ type User struct {
 	// Birthday Visible by `birthday_visibility`; `null` when not set or hidden.
 	Birthday *Birthday `json:"birthday"`
 
+	// CanSendVoiceVideo Only on `Chat.peer` of a direct chat: whether the requesting user may send this user voice messages and
+	// videos (their `voice_video_messages` setting and exceptions). Absent everywhere else.
+	CanSendVoiceVideo *bool `json:"can_send_voice_video,omitempty"`
+
 	// ContactName The requesting user's own name for this user, if set.
 	ContactName *string `json:"contact_name,omitempty"`
 	DisplayName string  `json:"display_name"`
@@ -3475,6 +3542,9 @@ type VerifyRecoveryEmail struct {
 // Deprecated: `everyone_except` and `nobody_except` are still accepted and stored as `everyone` and `nobody`;
 // they are never returned.
 type Visibility string
+
+// VoiceVideoPolicy Who may send the user voice messages and videos in a direct chat. Groups are not affected.
+type VoiceVideoPolicy string
 
 // WebSocketTicket defines model for WebSocketTicket.
 type WebSocketTicket struct {

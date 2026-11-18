@@ -48,6 +48,7 @@ type chatEvents struct {
 
 	groupCreated map[int64][]int64
 	groupUpdates map[int64]int
+	updatedViews map[int64]chats.View
 }
 
 func (c *chatEvents) add(m map[int64][]int64, chatID int64, views map[int64]chats.View) {
@@ -64,6 +65,11 @@ func (c *chatEvents) ChatCreated(_ context.Context, chatID int64, v map[int64]ch
 
 func (c *chatEvents) ChatUpdated(_ context.Context, chatID int64, v map[int64]chats.View) {
 	c.add(c.updated, chatID, v)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for uid, view := range v {
+		c.updatedViews[uid] = view
+	}
 }
 
 func (c *chatEvents) ChatRemoved(_ context.Context, chatID int64, userIDs []int64) {
@@ -108,6 +114,7 @@ type chatEnv struct {
 	cacheDown *atomic.Bool
 	cleared   *atomic.Int32
 	modCache  *redis.ModerationCache
+	peersDone chan int64
 }
 
 type flakyMembers struct {
@@ -197,14 +204,19 @@ func newChatEnvWith(t *testing.T, withSearch bool) *chatEnv {
 	msgs := messages.New(deps)
 	dir := users.NewDirectory(store, nil, apiBase).WithLabels(modSvc)
 	ev := &chatEvents{created: map[int64][]int64{}, updated: map[int64][]int64{}, removed: map[int64][]int64{},
-		groupCreated: map[int64][]int64{}, groupUpdates: map[int64]int{}}
+		groupCreated: map[int64][]int64{}, groupUpdates: map[int64]int{}, updatedViews: map[int64]chats.View{}}
 	tokens := notifications.NewActionTokens("test-secret")
 	cacheDown, cleared := new(atomic.Bool), new(atomic.Int32)
 	svc := chats.New(chats.Deps{Store: store, Messages: repo, Unread: unread, Members: flakyMembers{members, cacheDown, cleared}, Sender: msgs, Directory: dir, Notifier: ev,
 		Moderation: modSvc})
 	msgs.SetRequestAccepted(svc.RequestAccepted)
+	peersDone := make(chan int64, 8)
+	peersChanged := func(ctx context.Context, userID int64) {
+		svc.PeerPrivacyChanged(ctx, userID)
+		peersDone <- userID
+	}
 	api := NewServer(NewAuthServer(AuthOptions{Service: authSvc, Log: log, BasePath: apiBase, CookieSecure: true}), nil).
-		WithAccount(NewAccountServer(AccountOptions{Store: store, Directory: dir, Deleter: authSvc, Moderation: modSvc, BasePath: apiBase, Log: log})).
+		WithAccount(NewAccountServer(AccountOptions{Store: store, Directory: dir, Deleter: authSvc, Moderation: modSvc, BasePath: apiBase, Log: log, PeersChanged: peersChanged})).
 		WithModeration(NewModerationServer(ModerationOptions{Service: modSvc, Log: log})).
 		WithChats(NewChatServer(ChatOptions{Service: svc, BasePath: apiBase, Log: log})).
 		WithMessages(NewMessageServer(MessageOptions{Service: msgs, Store: store, Directory: dir, BasePath: apiBase, Log: log, Searcher: searcher(index, msgs, store, repo)})).
@@ -222,7 +234,7 @@ func newChatEnvWith(t *testing.T, withSearch bool) *chatEnv {
 			API:           api,
 			Authenticator: authSvc,
 		})},
-		store: store, events: ev, index: index, tokens: tokens, cacheDown: cacheDown, cleared: cleared, modCache: modCache,
+		store: store, events: ev, index: index, tokens: tokens, cacheDown: cacheDown, cleared: cleared, modCache: modCache, peersDone: peersDone,
 	}
 }
 

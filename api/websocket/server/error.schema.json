@@ -32,6 +32,10 @@
         "restriction": {
           "description": "Present when `code` is `account_restricted`.",
           "$ref": "../../openapi.yaml#/components/schemas/AccountRestriction"
+        },
+        "field": {
+          "type": "string",
+          "description": "The setting or field that caused the error, for example `voice_video_messages` for a voice message or video the recipient does not accept."
         }
       },
       "required": [

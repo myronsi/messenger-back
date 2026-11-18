@@ -92,6 +92,10 @@ func (m *MessageServer) renderWith(ctx context.Context, viewer, chatID int64, ms
 	if err != nil {
 		return nil, err
 	}
+	links, err := m.o.Directory.ForwardLinks(ctx, viewer, uniq(ForwardedSenders(msgs...)))
+	if err != nil {
+		return nil, err
+	}
 	drawings, err := m.drawings(ctx, chatID, append(slices.Clone(msgs), origins...))
 	if err != nil {
 		return nil, err
@@ -114,6 +118,9 @@ func (m *MessageServer) renderWith(ctx context.Context, viewer, chatID int64, ms
 	out := make([]Message, len(msgs))
 	for i, msg := range msgs {
 		parts := MessageParts{Reactions: deco.Reactions[msg.ID], BasePath: m.o.BasePath, Drawings: drawings[msg.ID]}
+		if f := msg.Forwarded; f != nil && f.SenderID != nil {
+			parts.ForwardLink = links[*f.SenderID]
+		}
 		if msg.StickerID != nil {
 			if st, ok := stickers[*msg.StickerID]; ok {
 				parts.Sticker = &st

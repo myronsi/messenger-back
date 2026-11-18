@@ -2,6 +2,7 @@ package realtime
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -133,5 +134,48 @@ func TestSenderFollowsTheSharedChatsOfEachRecipient(t *testing.T) {
 	send(21)
 	if !strings.Contains(bus.sent[alice], bio) {
 		t.Fatalf("bob read in the chat: %s", bus.sent[alice])
+	}
+}
+
+func TestForwardedFromLinkFollowsTheOriginalSendersSetting(t *testing.T) {
+	pg := testenv.Postgres(t)
+	ctx := context.Background()
+	user := func(name string) int64 {
+		u, err := pg.Users().Register(ctx, name, name, "hash")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return u.ID
+	}
+	alice, bob, carol := user("alice"), user("bob"), user("carol")
+	settings, err := pg.Social().Privacy(ctx, []int64{alice})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := settings[alice]
+	p.ForwardLink = postgres.VisibleSharedChats
+	if _, err := pg.Social().UpdatePrivacy(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := pg.Chats().CreateDirect(ctx, alice, bob); err != nil {
+		t.Fatal(err)
+	}
+	group, err := pg.Chats().CreateGroup(ctx, postgres.NewGroup{OwnerID: bob, Name: "g", MemberIDs: []int64{carol}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bus := &capturedBus{sent: map[int64]string{}}
+	gen, _ := ids.NewGenerator(1)
+	f := NewFanout(FanoutDeps{Bus: bus, Directory: users.NewDirectory(pg, nil, "/api/v2"), Store: pg, IDs: gen, BasePath: "/api/v2"})
+	text := "forwarded"
+	copyOf := scylla.Message{ChatID: group.ID, ID: 30, SenderID: &bob, Type: scylla.TypeText, Content: &text,
+		Forwarded: &scylla.Forwarded{MessageID: 5, SenderID: &alice, SenderName: "alice"}}
+	f.MessageCreated(ctx, copyOf, []int64{bob, carol}, "")
+	link := `"sender_id":"` + strconv.FormatInt(alice, 10) + `"`
+	if !strings.Contains(bus.sent[bob], link) {
+		t.Fatalf("bob is alice's contact and sees the link: %s", bus.sent[bob])
+	}
+	if strings.Contains(bus.sent[carol], link) || !strings.Contains(bus.sent[carol], `"sender_name":"alice"`) {
+		t.Fatalf("carol sees the name but not the link: %s", bus.sent[carol])
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"maps"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -304,5 +305,28 @@ func TestPrivacyFixesMigration(t *testing.T) {
 	}
 	if _, err := conn.Exec(ctx, `UPDATE user_privacy_settings SET avatar_visibility = 'everyone_except' WHERE user_id = $1`, quiet.ID); err == nil {
 		t.Fatal("everyone_except is still allowed")
+	}
+}
+
+func TestMediaPrivacyMigrationRefusesAMissingKeyConstraint(t *testing.T) {
+	dbURL := newDatabase(t)
+	if err := migrate(t, dbURL, ".up.sql"); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	conn, err := pgx.Connect(ctx, dbURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close(ctx)
+	if err := applyFiles(ctx, conn, []string{filepath.Join(migrationsDir, "000043_media_and_forward_privacy.down.sql")}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Exec(ctx, `ALTER TABLE user_privacy_exceptions DROP CONSTRAINT user_privacy_exceptions_setting_key_check`); err != nil {
+		t.Fatal(err)
+	}
+	err = applyFiles(ctx, conn, []string{filepath.Join(migrationsDir, "000043_media_and_forward_privacy.up.sql")})
+	if err == nil || !strings.Contains(err.Error(), "lists no setting keys") {
+		t.Fatalf("the migration rebuilt the constraint from nothing: %v", err)
 	}
 }

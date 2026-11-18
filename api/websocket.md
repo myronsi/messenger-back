@@ -44,7 +44,7 @@ Client → server:
 Every client event except `typing` (which is not acknowledged and carries no `client_temp_id`) has a `client_temp_id` (1–64 characters, unique per client). The server answers with exactly one of:
 
 - `ack` — `client_temp_id`, and for `message` the stored `message_id` and `created_at`. Sending the same `client_temp_id` again returns the same `ack` (idempotent), which makes retries after a reconnect safe.
-- `error` — `client_temp_id` and `data.code`/`data.message`. `code` is one of the stable codes of `ErrorCode` in `openapi.yaml` (the same codes as the REST `application/problem+json` errors).
+- `error` — `client_temp_id` and `data.code`/`data.message`, and `data.field` when one setting or field caused it (for example `voice_video_messages`). `code` is one of the stable codes of `ErrorCode` in `openapi.yaml` (the same codes as the REST `application/problem+json` errors).
 
 The sender also receives the broadcast `message` event with the stored message (its `client_temp_id` is included, so the client can replace its pending copy).
 

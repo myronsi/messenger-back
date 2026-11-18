@@ -178,9 +178,16 @@ func (f *Fanout) renderMessage(ctx context.Context, m scylla.Message, recipients
 	drawings := f.drawings(ctx, m)
 	sticker := f.sticker(ctx, m)
 	replies := f.replyOrigins(ctx, m, recipients)
+	var links map[int64]bool
+	if m.Forwarded != nil && m.Forwarded.SenderID != nil {
+		var err error
+		if links, err = f.dir.ForwardLinkViewers(ctx, *m.Forwarded.SenderID, recipients); err != nil {
+			f.log.WarnContext(ctx, "render forward link", "error", err)
+		}
+	}
 	out := make(map[int64]httpapi.Message, len(recipients))
 	for _, uid := range recipients {
-		parts := httpapi.MessageParts{Attachment: att, Album: album, Reactions: reactions, BasePath: f.basePath, Reply: replies[uid], Drawings: drawings, Sticker: sticker}
+		parts := httpapi.MessageParts{Attachment: att, Album: album, Reactions: reactions, BasePath: f.basePath, Reply: replies[uid], Drawings: drawings, Sticker: sticker, ForwardLink: links[uid]}
 		if m.SenderID != nil {
 			v, ok := senders[uid]
 			if !ok {
