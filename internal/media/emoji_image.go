@@ -55,10 +55,10 @@ func EmojiImage(data []byte, contentType string) (ProcessedImage, error) {
 	if err := (&png.Encoder{CompressionLevel: png.BestCompression}).Encode(&buf, img); err != nil {
 		return ProcessedImage{}, err
 	}
-	return ProcessedImage{Data: buf.Bytes(), ContentType: "image/png", Width: EmojiSide, Height: EmojiSide}, nil
+	return ProcessedImage{Data: buf.Bytes(), ContentType: "image/png", Width: EmojiSide, Height: EmojiSide, Source: img}, nil
 }
 
-func (s *Service) processEmoji(ctx context.Context, f *os.File, size int64, contentType string) (ProcessedImage, error) {
+func (s *Service) processEmoji(ctx context.Context, f *os.File, size int64, contentType string, vs *variantSet) (ProcessedImage, error) {
 	if size > MaxEmojiSource {
 		return ProcessedImage{}, ErrTooLarge
 	}
@@ -76,10 +76,36 @@ func (s *Service) processEmoji(ctx context.Context, f *os.File, size int64, cont
 	if err != nil {
 		return ProcessedImage{}, err
 	}
+	if out.ContentType == "image/gif" {
+		s.emojiAnimation(ctx, &out, vs)
+	} else if out.Source != nil {
+		s.emojiStill(ctx, &out, vs)
+	}
 	if len(out.Data) > MaxEmojiBytes {
 		return ProcessedImage{}, fmt.Errorf("%w: the emoji is still over 256 KB after scaling; use fewer frames or colors", ErrTooLarge)
 	}
 	return out, nil
+}
+
+func (s *Service) emojiStill(ctx context.Context, out *ProcessedImage, vs *variantSet) {
+	if data, err := s.o.Prober.EncodeWebP(ctx, out.Source, WebPOptions{Lossless: true}); err == nil && len(data) < len(out.Data) {
+		out.Data, out.ContentType = data, "image/webp"
+	}
+	s.addResized(ctx, vs, VariantNameInline, out.Source, InlineEmojiSide, 85)
+}
+
+func (s *Service) emojiAnimation(ctx context.Context, out *ProcessedImage, vs *variantSet) {
+	if !s.o.Prober.HasEncoder() {
+		return
+	}
+	gifData := out.Data
+	if data, err := s.o.Prober.AnimatedWebP(ctx, gifData, EmojiSide, 80); err == nil && len(data) < len(out.Data) {
+		out.Data, out.ContentType = data, "image/webp"
+	}
+	if data, err := s.o.Prober.AnimatedWebP(ctx, gifData, InlineEmojiSide, 80); err == nil {
+		w, h := fitSize(out.Width, out.Height, InlineEmojiSide)
+		vs.add(VariantNameInline, EncodedImage{Data: data, ContentType: "image/webp", Width: w, Height: h})
+	}
 }
 
 func (s *Service) canSeeEmoji(ctx context.Context, viewerID int64, a postgres.Attachment) (bool, error) {

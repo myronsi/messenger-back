@@ -62,7 +62,7 @@ func (r uploadSessionRepo) Create(ctx context.Context, n NewUploadSession) (Uplo
 	ctx, cancel := r.s.call(ctx)
 	defer cancel()
 	row, err := r.s.q.CreateUploadSession(ctx, sqlcdb.CreateUploadSessionParams{
-		UploaderID: n.UploaderID, Purpose: n.Purpose, Kind: n.Kind, Filename: n.Filename, Size: n.Size, ChunkSize: int32(n.ChunkSize), //nolint:gosec // bounded by the caller
+		UploaderID: n.UploaderID, Purpose: n.Purpose, Kind: n.Kind, Filename: n.Filename, Size: n.Size, ChunkSize: int32(n.ChunkSize), //nolint:gosec
 	})
 	if err != nil {
 		return UploadSession{}, mapError(err)

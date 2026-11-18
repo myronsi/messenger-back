@@ -58,7 +58,7 @@ func squareImage(data []byte, contentType string, side int) (*image.NRGBA, error
 	return dst, nil
 }
 
-func (s *Service) processSticker(ctx context.Context, f *os.File, size int64, contentType string) (ProcessedImage, error) {
+func (s *Service) processSticker(ctx context.Context, f *os.File, size int64, contentType string, vs *variantSet) (ProcessedImage, error) {
 	select {
 	case s.images <- struct{}{}:
 	case <-ctx.Done():
@@ -86,6 +86,8 @@ func (s *Service) processSticker(ctx context.Context, f *os.File, size int64, co
 	if len(out.Data) > MaxStickerBytes {
 		return ProcessedImage{}, ErrTooLarge
 	}
+	s.addResized(ctx, vs, VariantNamePanel, img, PanelSide, 80)
+	s.addResized(ctx, vs, VariantNameMessage, img, MessageStickerSide, 80)
 	return out, nil
 }
 

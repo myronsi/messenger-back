@@ -38,6 +38,9 @@ type ProcessedImage struct {
 	Width       int
 	Height      int
 	Thumbnail   []byte // JPEG
+	Source      image.Image
+	Lossless    bool
+	Placeholder string
 }
 
 func NeedsDisplay(contentType string, width, height int) bool {
@@ -94,11 +97,19 @@ func ProcessImage(data []byte, contentType string) (ProcessedImage, error) {
 	} else {
 		out.ContentType = "image/png"
 		err = (&png.Encoder{CompressionLevel: png.DefaultCompression}).Encode(&buf, img)
+		if err == nil && contentType == "image/png" && opaqueImage(img) {
+			var photo bytes.Buffer
+			if jpeg.Encode(&photo, img, &jpeg.Options{Quality: 88}) == nil && photo.Len()*2 < buf.Len() {
+				buf, out.ContentType = photo, "image/jpeg"
+			}
+		}
 	}
 	if err != nil {
 		return ProcessedImage{}, err
 	}
 	out.Data = buf.Bytes()
+	out.Source = img
+	out.Lossless = contentType == "image/webp" && losslessWebP(data)
 	if out.Thumbnail, err = thumbnail(img); err != nil {
 		return ProcessedImage{}, err
 	}
@@ -114,7 +125,7 @@ func processStrippedJPEG(data []byte) (ProcessedImage, error) {
 	if err != nil {
 		return ProcessedImage{}, err
 	}
-	return ProcessedImage{Data: data, ContentType: "image/jpeg", Width: img.Bounds().Dx(), Height: img.Bounds().Dy(), Thumbnail: thumb}, nil
+	return ProcessedImage{Data: data, ContentType: "image/jpeg", Width: img.Bounds().Dx(), Height: img.Bounds().Dy(), Thumbnail: thumb, Source: img}, nil
 }
 
 func processGIF(data []byte, cfg image.Config) (ProcessedImage, error) {
@@ -139,7 +150,7 @@ func processGIF(data []byte, cfg image.Config) (ProcessedImage, error) {
 	if err != nil {
 		return ProcessedImage{}, err
 	}
-	return ProcessedImage{Data: buf.Bytes(), ContentType: "image/gif", Width: cfg.Width, Height: cfg.Height, Thumbnail: thumb}, nil
+	return ProcessedImage{Data: buf.Bytes(), ContentType: "image/gif", Width: cfg.Width, Height: cfg.Height, Thumbnail: thumb, Source: g.Image[0]}, nil
 }
 
 var errBadGIF = errors.New("media: malformed GIF")
@@ -199,6 +210,26 @@ func scanGIF(data []byte) (frames int, area int64, err error) {
 		}
 	}
 	return frames, area, nil // no trailer: the decoder accepts that too
+}
+
+func losslessWebP(data []byte) bool {
+	return len(data) > 16 && string(data[12:16]) == "VP8L"
+}
+
+func opaqueImage(img image.Image) bool {
+	if opaque(img) {
+		return true
+	}
+	n, ok := img.(*image.NRGBA)
+	if !ok {
+		return false
+	}
+	for i := 3; i < len(n.Pix); i += 4 {
+		if n.Pix[i] != 0xff {
+			return false
+		}
+	}
+	return true
 }
 
 func opaque(img image.Image) bool {

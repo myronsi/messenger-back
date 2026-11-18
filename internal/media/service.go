@@ -90,6 +90,7 @@ type Options struct {
 	// Further uploads wait for a slot, within their request's deadline.
 	ImageWorkers int
 	Log          *slog.Logger
+	Jobs         postgres.MediaJobRepository
 }
 
 // Service stores uploads and serves them to the users allowed to see them.
@@ -122,18 +123,44 @@ func NewService(o Options) *Service {
 }
 
 // processImage decodes and re-encodes an image in one of the ImageWorkers slots.
-func (s *Service) processImage(ctx context.Context, path, contentType string) (ProcessedImage, error) {
+func (s *Service) processImage(ctx context.Context, path, contentType, purpose string, vs *variantSet) (ProcessedImage, string, error) {
 	select {
 	case s.images <- struct{}{}:
 	case <-ctx.Done():
-		return ProcessedImage{}, ErrBusy
+		return ProcessedImage{}, "", ErrBusy
 	}
 	defer func() { <-s.images }()
 	data, err := os.ReadFile(path) //nolint:gosec // our temporary file
 	if err != nil {
-		return ProcessedImage{}, err
+		return ProcessedImage{}, "", err
 	}
-	return ProcessImage(data, contentType)
+	img, err := ProcessImage(data, contentType)
+	if err != nil {
+		return ProcessedImage{}, "", err
+	}
+	thumbType := "image/jpeg"
+	if img.Source == nil {
+		return img, thumbType, nil
+	}
+	if contentType == "image/webp" {
+		if webp, err := s.o.Prober.EncodeWebP(ctx, img.Source, WebPOptions{Quality: 90, Lossless: img.Lossless}); err == nil {
+			img.Data, img.ContentType = webp, "image/webp"
+		}
+	}
+	if t, err := s.o.Prober.Resized(ctx, img.Source, ThumbnailWebPSide, 75); err == nil {
+		img.Thumbnail, thumbType = t.Data, t.ContentType
+	}
+	if NeedsDisplay(img.ContentType, img.Width, img.Height) {
+		s.addResized(ctx, vs, VariantNameDisplay, img.Source, DisplaySide, 80)
+	}
+	if purpose == PurposeAvatar {
+		for _, side := range avatarSides {
+			s.addResized(ctx, vs, AvatarVariant(side), img.Source, side, 82)
+		}
+	}
+	img.Placeholder = Placeholder(img.Source)
+	img.Source = nil
+	return img, thumbType, nil
 }
 
 // Limits returns the upload limits.
@@ -279,17 +306,20 @@ func (s *Service) upload(ctx context.Context, u Upload, tags *Tags) (postgres.At
 		UploaderID: &u.UploaderID, Purpose: u.Purpose, Kind: det.Kind, Filename: cleanName(u.Filename, det.ContentType),
 		StorageKey: prefix + id.String(), MimeType: det.ContentType, Size: size,
 	}
+	vs := newVariantSet(rec.StorageKey)
+	var jobs []string
 	var thumb []byte
+	thumbType := "image/jpeg"
 	var body io.Reader
 	switch {
 	case u.Purpose == PurposeEmoji:
-		img, err := s.processEmoji(ctx, tmp, size, det.ContentType)
+		img, err := s.processEmoji(ctx, tmp, size, det.ContentType, vs)
 		if err != nil {
 			return postgres.Attachment{}, err
 		}
 		w, h := int32(img.Width), int32(img.Height) //nolint:gosec // at most EmojiSide
 		rec.Width, rec.Height, rec.MimeType, rec.Size = &w, &h, img.ContentType, int64(len(img.Data))
-		rec.Filename = "emoji" + map[string]string{"image/gif": ".gif", "image/png": ".png"}[img.ContentType]
+		rec.Filename = "emoji" + extensionOf(img.ContentType)
 		body = bytes.NewReader(img.Data)
 	case u.Purpose == PurposeProfileMusic:
 		clip, err := s.processMusic(ctx, tmp.Name(), u.StartMS, u.EndMS)
@@ -319,7 +349,7 @@ func (s *Service) upload(ctx context.Context, u Upload, tags *Tags) (postgres.At
 		}
 		body = tmp
 	case u.Purpose == PurposeSticker:
-		img, err := s.processSticker(ctx, tmp, size, det.ContentType)
+		img, err := s.processSticker(ctx, tmp, size, det.ContentType, vs)
 		if err != nil {
 			return postgres.Attachment{}, err
 		}
@@ -328,23 +358,38 @@ func (s *Service) upload(ctx context.Context, u Upload, tags *Tags) (postgres.At
 		rec.Filename = "sticker" + map[string]string{"image/webp": ".webp", "image/png": ".png"}[img.ContentType]
 		body = bytes.NewReader(img.Data)
 	case det.Kind == KindImage:
-		img, err := s.processImage(ctx, tmp.Name(), det.ContentType)
+		img, tt, err := s.processImage(ctx, tmp.Name(), det.ContentType, u.Purpose, vs)
 		if err != nil {
 			return postgres.Attachment{}, err
 		}
 		w, h := int32(img.Width), int32(img.Height) //nolint:gosec // bounded by MaxImageSide
 		rec.Width, rec.Height, rec.MimeType, rec.Size = &w, &h, img.ContentType, int64(len(img.Data))
-		body, thumb = bytes.NewReader(img.Data), img.Thumbnail
+		if rec.MimeType != det.ContentType {
+			rec.Filename = swapExtension(rec.Filename, rec.MimeType)
+		}
+		body, thumb, thumbType = bytes.NewReader(img.Data), img.Thumbnail, tt
+		if img.Placeholder != "" {
+			rec.Placeholder = &img.Placeholder
+		}
+		if img.ContentType == "image/gif" && u.Purpose == PurposeMessage {
+			jobs = append(jobs, JobGIF)
+		}
 	case det.Kind == KindVideo:
 		thumb = s.processVideoThumbnail(ctx, tmp.Name(), det.ContentType)
-		if frame, err := jpeg.DecodeConfig(bytes.NewReader(thumb)); err == nil {
-			w, h := int32(frame.Width), int32(frame.Height) //nolint:gosec // bounded by the thumbnail filter
+		if frame, err := jpeg.Decode(bytes.NewReader(thumb)); err == nil {
+			w, h := int32(frame.Bounds().Dx()), int32(frame.Bounds().Dy()) //nolint:gosec
 			rec.Width, rec.Height = &w, &h
+			if ph := Placeholder(frame); ph != "" {
+				rec.Placeholder = &ph
+			}
 		}
 		if _, err := tmp.Seek(0, io.SeekStart); err != nil {
 			return postgres.Attachment{}, err
 		}
 		body = tmp
+		if u.Purpose == PurposeMessage {
+			jobs = append(jobs, JobVideo)
+		}
 	case det.Kind == KindAudio || det.Kind == KindVoice:
 		info := ClientAudio(u.DurationMS, u.Waveform)
 		if s.o.Prober.Available() {
@@ -360,6 +405,13 @@ func (s *Service) upload(ctx context.Context, u Upload, tags *Tags) (postgres.At
 		}
 		secs := info.Duration.Seconds()
 		rec.Duration, rec.Waveform = &secs, info.Waveform
+		if det.Kind == KindAudio && u.Purpose == PurposeMessage && s.o.Prober.Available() {
+			t := s.o.Prober.tags(ctx, tmp.Name())
+			rec.AudioTitle, rec.AudioArtist, rec.AudioAlbum = t.Title, t.Artist, t.Album
+			*tags = t
+			thumb, thumbType = s.audioCover(ctx, tmp.Name())
+			jobs = append(jobs, JobAudio)
+		}
 		fallthrough
 	default:
 		if _, err := tmp.Seek(0, io.SeekStart); err != nil {
@@ -369,9 +421,15 @@ func (s *Service) upload(ctx context.Context, u Upload, tags *Tags) (postgres.At
 	}
 	puts := []put{{rec.StorageKey, body, rec.Size, rec.MimeType}}
 	if thumb != nil {
-		key := rec.StorageKey + ".thumb.jpg"
-		puts = append(puts, put{key, bytes.NewReader(thumb), int64(len(thumb)), "image/jpeg"})
+		key := rec.StorageKey + ".thumb" + extensionOf(thumbType)
+		puts = append(puts, put{key, bytes.NewReader(thumb), int64(len(thumb)), thumbType})
 		rec.ThumbnailKey = &key
+	}
+	puts = append(puts, vs.puts...)
+	rec.Variants = vs.variants
+	if len(jobs) > 0 && s.o.Jobs != nil {
+		queued := ProcessingQueued
+		rec.ProcessingState = &queued
 	}
 	if err := s.putAll(ctx, puts); err != nil {
 		return postgres.Attachment{}, err
@@ -382,7 +440,46 @@ func (s *Service) upload(ctx context.Context, u Upload, tags *Tags) (postgres.At
 		s.remove(ctx, puts)
 		return postgres.Attachment{}, err
 	}
+	if rec.ProcessingState != nil {
+		s.enqueue(ctx, &a, jobs)
+	}
 	return a, nil
+}
+
+func (s *Service) enqueue(ctx context.Context, a *postgres.Attachment, jobs []string) {
+	for _, kind := range jobs {
+		if _, err := s.o.Jobs.Enqueue(ctx, a.ID, kind); err != nil {
+			s.o.Log.WarnContext(ctx, "enqueue media job", "attachment_id", a.ID.String(), "kind", kind, "error", err)
+			if err := s.o.Attachments.SetProcessing(context.WithoutCancel(ctx), a.ID, nil); err == nil {
+				a.ProcessingState = nil
+			}
+			return
+		}
+	}
+}
+
+func swapExtension(name, contentType string) string {
+	ext := extensionOf(contentType)
+	if ext == ".bin" {
+		return name
+	}
+	if i := strings.LastIndexByte(name, '.'); i > 0 {
+		name = name[:i]
+	}
+	return name + ext
+}
+
+func (s *Service) audioCover(ctx context.Context, path string) ([]byte, string) {
+	cover := s.o.Prober.cover(ctx, path)
+	if cover == nil {
+		return nil, ""
+	}
+	if img, err := jpeg.Decode(bytes.NewReader(cover)); err == nil {
+		if t, err := s.o.Prober.Resized(ctx, img, ThumbnailWebPSide, 75); err == nil {
+			return t.Data, t.ContentType
+		}
+	}
+	return cover, "image/jpeg"
 }
 
 type put struct {
@@ -559,7 +656,37 @@ const (
 	VariantOriginal Variant = iota
 	VariantThumbnail
 	VariantDisplay
+	VariantSource
+	VariantPanel
+	VariantMessage
+	VariantInline
+	VariantAvatar64
+	VariantAvatar128
+	VariantAvatar256
 )
+
+var variantNames = map[Variant]string{
+	VariantDisplay: VariantNameDisplay, VariantPanel: VariantNamePanel, VariantMessage: VariantNameMessage,
+	VariantInline: VariantNameInline, VariantAvatar64: AvatarVariant(64), VariantAvatar128: AvatarVariant(128),
+	VariantAvatar256: AvatarVariant(256),
+}
+
+func AvatarSizeVariant(size int) Variant {
+	switch AvatarVariantFor(size) {
+	case AvatarVariant(64):
+		return VariantAvatar64
+	case AvatarVariant(128):
+		return VariantAvatar128
+	case AvatarVariant(256):
+		return VariantAvatar256
+	}
+	return VariantOriginal
+}
+
+func HasOptimized(a postgres.Attachment) bool {
+	_, ok := a.Variants.Get(VariantNameOptimized)
+	return ok
+}
 
 func HasDisplay(a postgres.Attachment) bool {
 	return a.Kind != KindVideo && a.Width != nil && a.Height != nil && NeedsDisplay(a.MimeType, int(*a.Width), int(*a.Height))
@@ -567,12 +694,21 @@ func HasDisplay(a postgres.Attachment) bool {
 
 func (s *Service) content(ctx context.Context, a postgres.Attachment, v Variant) (Download, error) {
 	key, ctype, name := a.StorageKey, a.MimeType, a.Filename
+	if vname, ok := variantNames[v]; ok {
+		if sv, ok := a.Variants.Get(vname); ok {
+			return s.download(ctx, sv.Key, sv.ContentType, vname+extensionOf(sv.ContentType), nil)
+		}
+	}
 	switch {
+	case v == VariantOriginal && HasOptimized(a):
+		sv, _ := a.Variants.Get(VariantNameOptimized)
+		return s.download(ctx, sv.Key, sv.ContentType, swapExtension(a.Filename, sv.ContentType), nil)
 	case v == VariantThumbnail:
 		if a.ThumbnailKey == nil {
 			return s.legacyVideoThumbnail(ctx, a)
 		}
-		key, ctype, name = *a.ThumbnailKey, "image/jpeg", "thumbnail.jpg"
+		ctype = thumbnailContentType(*a.ThumbnailKey)
+		key, name = *a.ThumbnailKey, "thumbnail"+extensionOf(ctype)
 	case v == VariantDisplay && HasDisplay(a):
 		obj, err := s.displayObject(ctx, a)
 		if err == nil {
