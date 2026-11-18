@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.21.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.20.0-alpha.1...v1.21.0-alpha.1) (2026-11-18)
+
+
+### Features
+
+* **media:** optimize images, video, audio, stickers and emoji; stream and resume uploads ([#199](https://github.com/myronsi/messenger-back/issues/199)) ([7e999e7](https://github.com/myronsi/messenger-back/commit/7e999e72f15a66f311d724cddf6204dbf61a1292))
+
 ## [1.20.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.19.0-alpha.1...v1.20.0-alpha.1) (2026-11-16)
 
 
