@@ -186,6 +186,7 @@ func run() error {
 		Store: pg, Messages: rt.store, Unread: rt.unread, Members: rt.members, Sender: rt.messages,
 		Directory: rt.directory, Notifier: rt.fanout, Events: rt.events, DeleteFile: storage.Delete, Calls: callHooks, Log: log,
 	})
+	rt.messages.SetRequestAccepted(chatSvc.RequestAccepted)
 	router := httpapi.NewRouter(httpapi.Options{
 		HTTP:       cfg.HTTP,
 		Production: cfg.Env == "production",

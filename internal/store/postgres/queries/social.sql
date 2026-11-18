@@ -6,11 +6,11 @@ SELECT * FROM user_privacy_settings WHERE user_id = ANY(@user_ids::BIGINT[]);
 -- name: UpdatePrivacySettings :one
 INSERT INTO user_privacy_settings (
     user_id, avatar_visibility, profile_visibility, presence_visibility, last_seen_visibility, birthday_visibility,
-    read_receipts_enabled, direct_messages, group_invites, search_visibility, calls_enabled, typing_indicators_enabled,
+    read_receipts_enabled, direct_messages, group_invites, search_visibility, calls_from, typing_indicators_enabled,
     voice_video_messages, forward_link
 ) VALUES (
     @user_id, @avatar_visibility, @profile_visibility, @presence_visibility, @last_seen_visibility, @birthday_visibility,
-    @read_receipts_enabled, @direct_messages, @group_invites, @search_visibility, @calls_enabled, @typing_indicators_enabled,
+    @read_receipts_enabled, @direct_messages, @group_invites, @search_visibility, @calls_from, @typing_indicators_enabled,
     @voice_video_messages, @forward_link
 )
 ON CONFLICT (user_id) DO UPDATE SET
@@ -23,7 +23,7 @@ ON CONFLICT (user_id) DO UPDATE SET
     direct_messages = EXCLUDED.direct_messages,
     group_invites = EXCLUDED.group_invites,
     search_visibility = EXCLUDED.search_visibility,
-    calls_enabled = EXCLUDED.calls_enabled,
+    calls_from = EXCLUDED.calls_from,
     typing_indicators_enabled = EXCLUDED.typing_indicators_enabled,
     voice_video_messages = EXCLUDED.voice_video_messages,
     forward_link = EXCLUDED.forward_link
@@ -81,18 +81,20 @@ SELECT * FROM user_contact_names WHERE owner_id = ANY(@owner_ids::BIGINT[]) AND 
 -- name: SharedChatPartners :many
 SELECT DISTINCT other.user_id
 FROM participants mine
-JOIN participants other ON other.chat_id = mine.chat_id
+JOIN participants other ON other.chat_id = mine.chat_id AND NOT other.is_request
 JOIN chats c ON c.id = mine.chat_id
 WHERE mine.user_id = @viewer_id AND other.user_id = ANY(@user_ids::BIGINT[])
-  AND (c.type = 'group' OR c.created_by = other.user_id OR other.last_read_message_id IS NOT NULL);
+  AND ((c.type = 'group' AND other.engaged)
+    OR (c.type <> 'group' AND (c.created_by = other.user_id OR other.last_read_message_id IS NOT NULL)));
 
 -- name: SharedChatViewers :many
 SELECT DISTINCT other.user_id
 FROM participants mine
-JOIN participants other ON other.chat_id = mine.chat_id
+JOIN participants other ON other.chat_id = mine.chat_id AND NOT mine.is_request
 JOIN chats c ON c.id = mine.chat_id
 WHERE mine.user_id = @user_id AND other.user_id = ANY(@viewer_ids::BIGINT[])
-  AND (c.type = 'group' OR c.created_by = mine.user_id OR mine.last_read_message_id IS NOT NULL);
+  AND ((c.type = 'group' AND mine.engaged)
+    OR (c.type <> 'group' AND (c.created_by = mine.user_id OR mine.last_read_message_id IS NOT NULL)));
 
 -- name: ListChatIDsOfUser :many
 SELECT chat_id FROM participants WHERE user_id = @user_id;
@@ -137,7 +139,7 @@ SET avatar_visibility = COALESCE(sqlc.narg(avatar_visibility), avatar_visibility
     direct_messages = COALESCE(sqlc.narg(direct_messages), direct_messages),
     group_invites = COALESCE(sqlc.narg(group_invites), group_invites),
     search_visibility = COALESCE(sqlc.narg(search_visibility), search_visibility),
-    calls_enabled = COALESCE(sqlc.narg(calls_enabled)::bool, calls_enabled),
+    calls_from = COALESCE(sqlc.narg(calls_from), calls_from),
     typing_indicators_enabled = COALESCE(sqlc.narg(typing_indicators_enabled)::bool, typing_indicators_enabled),
     voice_video_messages = COALESCE(sqlc.narg(voice_video_messages), voice_video_messages),
     forward_link = COALESCE(sqlc.narg(forward_link), forward_link)

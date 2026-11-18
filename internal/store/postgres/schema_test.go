@@ -126,9 +126,16 @@ func TestInertPrivacyExceptionsAreDropped(t *testing.T) {
 	t.Cleanup(s.Close)
 	ctx := context.Background()
 	owner, defaults, target := mustUser(t, s, "owner"), mustUser(t, s, "defaults"), mustUser(t, s, "target")
-	p := DefaultPrivacy(owner.ID)
-	p.AvatarVisibility, p.ProfileVisibility, p.PresenceVisibility = VisibleEveryoneExcept, VisibleNobodyExcept, VisibleSharedChats
-	if _, err := s.Social().UpdatePrivacy(ctx, p); err != nil {
+	conn, err := pgx.Connect(ctx, dbURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close(ctx)
+	if err := applyFiles(ctx, conn, []string{filepath.Join(migrationsDir, "000041_privacy_fixes.down.sql")}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Exec(ctx, `INSERT INTO user_privacy_settings (user_id, avatar_visibility, profile_visibility, presence_visibility)
+		VALUES ($1, 'everyone_except', 'nobody_except', 'shared_chats')`, owner.ID); err != nil {
 		t.Fatal(err)
 	}
 	set := func(owner int64, key, effect string) {
@@ -144,11 +151,6 @@ func TestInertPrivacyExceptionsAreDropped(t *testing.T) {
 	set(defaults.ID, SettingAvatar, EffectDeny)
 	set(defaults.ID, SettingProfile, EffectAllow)
 
-	conn, err := pgx.Connect(ctx, dbURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer conn.Close(ctx)
 	if err := applyFiles(ctx, conn, []string{filepath.Join(migrationsDir, "000015_drop_inert_privacy_exceptions.up.sql")}); err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +191,10 @@ func TestLastSeenStartsAsTheOldPresenceSetting(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer conn.Close(ctx)
-	if err := applyFiles(ctx, conn, []string{filepath.Join(migrationsDir, "000032_last_seen_visibility.down.sql")}); err != nil {
+	if err := applyFiles(ctx, conn, []string{
+		filepath.Join(migrationsDir, "000041_privacy_fixes.down.sql"),
+		filepath.Join(migrationsDir, "000032_last_seen_visibility.down.sql"),
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := conn.Exec(ctx, `INSERT INTO user_privacy_settings (user_id, presence_visibility) VALUES ($1, 'everyone_except')`, owner.ID); err != nil {
@@ -201,11 +206,21 @@ func TestLastSeenStartsAsTheOldPresenceSetting(t *testing.T) {
 	if err := applyFiles(ctx, conn, []string{filepath.Join(migrationsDir, "000032_last_seen_visibility.up.sql")}); err != nil {
 		t.Fatal(err)
 	}
+	var copied string
+	if err := conn.QueryRow(ctx, `SELECT last_seen_visibility FROM user_privacy_settings WHERE user_id = $1`, owner.ID).Scan(&copied); err != nil {
+		t.Fatal(err)
+	}
+	if copied != "everyone_except" {
+		t.Fatalf("last seen copied %q from presence", copied)
+	}
+	if err := applyFiles(ctx, conn, []string{filepath.Join(migrationsDir, "000041_privacy_fixes.up.sql")}); err != nil {
+		t.Fatal(err)
+	}
 	p, err := s.Social().Privacy(ctx, []int64{owner.ID, target.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p[owner.ID].LastSeenVisibility != VisibleEveryoneExcept || p[target.ID].LastSeenVisibility != VisibleEveryone {
+	if p[owner.ID].LastSeenVisibility != VisibleEveryone || p[owner.ID].PresenceVisibility != VisibleEveryone || p[target.ID].LastSeenVisibility != VisibleEveryone {
 		t.Fatalf("last seen settings: %+v %+v", p[owner.ID], p[target.ID])
 	}
 	effects, err := s.Social().ExceptionsOf(ctx, owner.ID, []int64{target.ID})
@@ -214,6 +229,82 @@ func TestLastSeenStartsAsTheOldPresenceSetting(t *testing.T) {
 	}
 	if effects[target.ID][SettingLastSeen] != EffectDeny || effects[target.ID][SettingPresence] != EffectDeny {
 		t.Fatalf("exceptions: %v", effects)
+	}
+}
+
+func TestPrivacyFixesMigration(t *testing.T) {
+	dbURL := newDatabase(t)
+	if err := migrate(t, dbURL, ".up.sql"); err != nil {
+		t.Fatal(err)
+	}
+	s, err := New(context.Background(), dbURL, Options{MaxConns: 4, QueryTimeout: 10 * time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(s.Close)
+	ctx := context.Background()
+	quiet, open, peer := mustUser(t, s, "quiet"), mustUser(t, s, "open"), mustUser(t, s, "peer")
+	direct, _, err := s.Chats().CreateDirect(ctx, quiet.ID, peer.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	group, err := s.Chats().CreateGroup(ctx, NewGroup{OwnerID: peer.ID, Name: "g", MemberIDs: []int64{quiet.ID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, err := pgx.Connect(ctx, dbURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close(ctx)
+	if err := applyFiles(ctx, conn, []string{filepath.Join(migrationsDir, "000041_privacy_fixes.down.sql")}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Exec(ctx, `INSERT INTO user_privacy_settings
+		(user_id, avatar_visibility, profile_visibility, presence_visibility, last_seen_visibility, group_invites, calls_enabled)
+		VALUES ($1, 'everyone_except', 'nobody_except', 'everyone_except', 'nobody_except', 'everyone_except', false),
+		       ($2, 'everyone', 'everyone', 'everyone', 'everyone', 'nobody_except', true)`, quiet.ID, open.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := applyFiles(ctx, conn, []string{filepath.Join(migrationsDir, "000041_privacy_fixes.up.sql")}); err != nil {
+		t.Fatal(err)
+	}
+	p, err := s.Social().Privacy(ctx, []int64{quiet.ID, open.ID, peer.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	q, o := p[quiet.ID], p[open.ID]
+	if q.AvatarVisibility != VisibleEveryone || q.ProfileVisibility != VisibleNobody || q.PresenceVisibility != VisibleEveryone ||
+		q.LastSeenVisibility != VisibleNobody || q.GroupInvites != VisibleEveryone || q.CallsFrom != VisibleNobody {
+		t.Fatalf("quiet: %+v", q)
+	}
+	if o.GroupInvites != VisibleNobody || o.CallsFrom != VisibleEveryone {
+		t.Fatalf("open: %+v", o)
+	}
+	if p[peer.ID].GroupInvites != VisibleSharedChats || p[peer.ID].CallsFrom != VisibleEveryone {
+		t.Fatalf("defaults: %+v", p[peer.ID])
+	}
+	if _, err := conn.Exec(ctx, `INSERT INTO user_privacy_settings (user_id) VALUES ($1)`, peer.ID); err != nil {
+		t.Fatal(err)
+	}
+	var invites string
+	if err := conn.QueryRow(ctx, `SELECT group_invites FROM user_privacy_settings WHERE user_id = $1`, peer.ID).Scan(&invites); err != nil || invites != VisibleSharedChats {
+		t.Fatalf("column default: %q %v", invites, err)
+	}
+	for _, c := range []struct {
+		chat, user int64
+		want       bool
+	}{{direct.ID, quiet.ID, false}, {direct.ID, peer.ID, false}, {group.ID, quiet.ID, true}, {group.ID, peer.ID, true}} {
+		got, err := s.Chats().Participant(ctx, c.chat, c.user)
+		if err != nil || got.Engaged != c.want {
+			t.Fatalf("engaged of %d in %d: %+v %v", c.user, c.chat, got, err)
+		}
+	}
+	if err := s.Social().SetException(ctx, PrivacyException{OwnerID: quiet.ID, SettingKey: SettingCalls, TargetID: peer.ID, Effect: EffectAllow}); err != nil {
+		t.Fatalf("calls_from exceptions: %v", err)
+	}
+	if _, err := conn.Exec(ctx, `UPDATE user_privacy_settings SET avatar_visibility = 'everyone_except' WHERE user_id = $1`, quiet.ID); err == nil {
+		t.Fatal("everyone_except is still allowed")
 	}
 }
 

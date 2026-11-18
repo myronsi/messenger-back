@@ -20,17 +20,20 @@ The profile, privacy, blocking, contact-name and user lookup endpoints (`interna
 
 | Setting | Values |
 |---|---|
-| `avatar_visibility`, `profile_visibility`, `presence_visibility` | `everyone`, `contacts`, `everyone_except`, `nobody_except`, `nobody` |
-| `group_invites` | the same, and `wait_approval` |
-| `direct_messages` | `everyone`, `shared_chats`, `wait_approval` |
+| `avatar_visibility`, `profile_visibility`, `presence_visibility`, `last_seen_visibility`, `birthday_visibility` | `everyone`, `contacts`, `nobody` |
+| `group_invites` | the same, and `wait_approval` (default `contacts`) |
+| `direct_messages` | `everyone`, `contacts`, `wait_approval`, `nobody` |
+| `calls_from` | `everyone`, `contacts`, `nobody` ([calls.md](calls.md)) |
 | `search_visibility` | `everyone`, `nobody` |
 | `read_receipts_enabled` | `true`, `false` |
-| `calls_enabled` | `true`, `false` |
+| `calls_enabled` | deprecated: `false` exactly when `calls_from` is `nobody`; writing `false` sets `nobody`, writing `true` sets `everyone` when it was `nobody` |
 | `typing_indicators_enabled` | `true`, `false`: with `false` the server drops the user's `typing` events ([realtime.md](realtime.md#client-events)) |
 | `voice_video_messages` | `everyone`, `contacts`: who may send the user voice messages and videos in a direct chat ([messages.md](messages.md#voice-and-video-privacy)) |
 | `forward_link` | `everyone`, `contacts`, `nobody`: who sees the link to the user's account on copies of their forwarded messages ([messages.md](messages.md#voice-and-video-privacy)) |
 
-The contract's `contacts` means "people you share a chat with" (`shared_chats` in the schema): a group, or a direct chat that you opened yourself or read a message in. A direct chat someone else opened with you, and that you never read in, does not make them your contact. `PUT /me/privacy/exceptions/{setting}/{allow|deny}` replaces one exception list; the lists apply to every value of the setting. A user can be on only one list per setting, so putting them on one removes them from the other. Unknown user IDs are rejected.
+The contract's `contacts` means "people you share a chat with" (`shared_chats` in the schema): a direct chat that you opened yourself or read a message in, or a group that you took part in. You take part in a group by creating it, by joining it through an invitation you accepted, or by reading or writing in it (`participants.engaged`, migration 000041; groups you were in before that migration count). A direct chat someone else opened with you and that you never read in, or a group someone added you to and that you never read or wrote in, does not make them your contact. So nobody can see what you show only to contacts, find you through a lookup, message you under `direct_messages: contacts` or ring you under `calls_from: contacts` just by adding you to a group.
+
+The deprecated values `everyone_except` and `nobody_except` (and `shared_chats` for `direct_messages`) are still accepted and stored as `everyone`, `nobody` (and `contacts`); responses never contain them. Migration 000041 rewrote the stored ones. `PUT /me/privacy/exceptions/{setting}/{allow|deny}` replaces one exception list; the lists apply to every value of the setting. A user can be on only one list per setting, so putting them on one removes them from the other. Unknown user IDs are rejected.
 
 `voice_video_messages` and `forward_link` (migration 000043) are checked with the same rule as the visibility settings (`users.Visible`): an exception wins, `contacts` needs a shared chat in the sense above, and a user who blocked the other one never lets them in. The other user of a direct chat gets `Chat.peer.can_send_voice_video`, so a client can turn off the microphone and video attachments before a send is refused. When the user changes `voice_video_messages` or its exceptions, the other user of each of their direct chats gets a `chat_list_update` with the new value.
 

@@ -412,8 +412,8 @@ func TestPrivacyAndBlocks(t *testing.T) {
 	ctx := context.Background()
 	alice, bob, carol := e.user("alice"), e.user("bob"), e.user("carol")
 	chat := e.direct(alice, bob)
-	off := false
-	if _, err := e.pg.Social().PatchPrivacy(ctx, bob, postgres.PrivacyPatch{CallsEnabled: &off}); err != nil {
+	off := postgres.VisibleNobody
+	if _, err := e.pg.Social().PatchPrivacy(ctx, bob, postgres.PrivacyPatch{CallsFrom: &off}); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := e.svc.Start(ctx, alice, chat, uuid.New()); !errors.Is(err, ErrNotAllowed) {
@@ -456,8 +456,8 @@ func TestGroupCallRules(t *testing.T) {
 	if err := e.pg.Chats().SetRole(ctx, chat, mod, postgres.RoleModerator); err != nil {
 		t.Fatal(err)
 	}
-	off := false
-	if _, err := e.pg.Social().PatchPrivacy(ctx, quiet, postgres.PrivacyPatch{CallsEnabled: &off}); err != nil {
+	off := postgres.VisibleNobody
+	if _, err := e.pg.Social().PatchPrivacy(ctx, quiet, postgres.PrivacyPatch{CallsFrom: &off}); err != nil {
 		t.Fatal(err)
 	}
 	c := e.start(m1, chat)

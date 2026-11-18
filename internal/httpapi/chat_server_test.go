@@ -204,6 +204,7 @@ func newChatEnvWith(t *testing.T, withSearch bool) *chatEnv {
 	tokens := notifications.NewActionTokens("test-secret")
 	cacheDown, cleared := new(atomic.Bool), new(atomic.Int32)
 	svc := chats.New(chats.Deps{Store: store, Messages: repo, Unread: unread, Members: flakyMembers{members, cacheDown, cleared}, Sender: msgs, Directory: dir, Notifier: ev})
+	msgs.SetRequestAccepted(svc.RequestAccepted)
 	peersDone := make(chan int64, 8)
 	peersChanged := func(ctx context.Context, userID int64) {
 		svc.PeerPrivacyChanged(ctx, userID)
@@ -252,6 +253,13 @@ func (e *chatEnv) create(t *testing.T, s session, other string, initial string) 
 	return e.do(t, request{method: http.MethodPost, path: "/chats", token: s.access, body: body})
 }
 
+func folderOf(chat map[string]any) string {
+	if chat["is_request"] == true {
+		return "requests"
+	}
+	return "main"
+}
+
 func items(t *testing.T, r reply) []map[string]any {
 	t.Helper()
 	if r.Code != http.StatusOK {
@@ -297,7 +305,7 @@ func TestDirectChatsListPinsAndReads(t *testing.T) {
 	if len(list) != 2 || list[0]["id"] != chatCarol || list[1]["id"] != chatBob {
 		t.Fatalf("order: %v", list)
 	}
-	bobList := items(t, e.do(t, request{method: http.MethodGet, path: "/chats", token: bob.access}))
+	bobList := items(t, e.do(t, request{method: http.MethodGet, path: "/chats?folder=requests", token: bob.access}))
 	if len(bobList) != 1 || bobList[0]["unread_count"].(float64) != 1 || bobList[0]["peer"].(map[string]any)["username"] != "alice" {
 		t.Fatalf("bob's list: %v", bobList)
 	}
@@ -326,6 +334,9 @@ func TestDirectChatsListPinsAndReads(t *testing.T) {
 	}
 
 	// Bob reads: his count drops and alice sees the receipt on her last message.
+	if r := e.do(t, request{method: http.MethodPost, path: "/chats/" + chatBob + "/accept", token: bob.access}); r.Code != http.StatusNoContent {
+		t.Fatalf("accept: %d %s", r.Code, r.Body)
+	}
 	msgID := last["id"].(string)
 	read := e.do(t, request{method: http.MethodPost, path: "/chats/" + chatBob + "/read", token: bob.access, body: map[string]any{"message_id": msgID}})
 	if read.Code != http.StatusOK || read.json()["unread_count"].(float64) != 0 {
@@ -371,7 +382,7 @@ func TestChatUnreadAnchor(t *testing.T) {
 	view := func(s session) map[string]any {
 		t.Helper()
 		got := e.do(t, request{method: http.MethodGet, path: "/chats/" + chat, token: s.access}).json()
-		list := items(t, e.do(t, request{method: http.MethodGet, path: "/chats", token: s.access}))
+		list := items(t, e.do(t, request{method: http.MethodGet, path: "/chats?folder=" + folderOf(got), token: s.access}))
 		if len(list) != 1 || list[0]["first_unread_message_id"] != got["first_unread_message_id"] || list[0]["last_read_message_id"] != got["last_read_message_id"] {
 			t.Fatalf("list and detail differ: %v %v", list, got)
 		}
@@ -650,7 +661,8 @@ func TestChatListSkipsMessagesDeletedForEveryone(t *testing.T) {
 	}
 
 	for _, s := range []session{alice, bob} {
-		list := items(t, e.do(t, request{method: http.MethodGet, path: "/chats", token: s.access}))
+		folder := folderOf(e.do(t, request{method: http.MethodGet, path: "/chats/" + chatID, token: s.access}).json())
+		list := items(t, e.do(t, request{method: http.MethodGet, path: "/chats?folder=" + folder, token: s.access}))
 		if len(list) != 1 || list[0]["last_message"].(map[string]any)["content"] != "keep me" {
 			t.Fatalf("last message in the list: %v", list)
 		}
@@ -757,6 +769,7 @@ func TestSavedMessagesArchiveAndPinOrder(t *testing.T) {
 func TestDeleteForMeAndClearHistory(t *testing.T) {
 	e := newChatEnv(t)
 	alice, bob, carol := e.register(t, "alice"), e.register(t, "bob"), e.register(t, "carol")
+	e.openInvites(t, bob, carol)
 	aliceID, _ := strconv.ParseInt(e.uid(t, alice), 10, 64)
 	chat := e.create(t, alice, e.uid(t, bob), "").json()["id"].(string)
 	chatID, _ := strconv.ParseInt(chat, 10, 64)

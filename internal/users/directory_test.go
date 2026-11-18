@@ -22,10 +22,7 @@ func TestVisible(t *testing.T) {
 		{postgres.VisibleSharedChats, "", true, true},
 		{postgres.VisibleSharedChats, postgres.EffectAllow, false, true},
 		{postgres.VisibleSharedChats, postgres.EffectDeny, true, false},
-		{postgres.VisibleEveryoneExcept, "", false, true},
-		{postgres.VisibleEveryoneExcept, postgres.EffectDeny, true, false},
-		{postgres.VisibleNobodyExcept, "", true, false},
-		{postgres.VisibleNobodyExcept, postgres.EffectAllow, false, true},
+		{postgres.VisibleNobody, "", true, false},
 		{postgres.VisibleNobody, postgres.EffectAllow, false, true},
 		{postgres.VisibleNobody, postgres.EffectDeny, true, false},
 		{"something new", "", true, false},
@@ -82,8 +79,8 @@ func TestDirectoryAppliesPrivacy(t *testing.T) {
 	p, _ := pg.Social().Privacy(ctx, []int64{alice})
 	s := p[alice]
 	s.AvatarVisibility = postgres.VisibleSharedChats
-	s.ProfileVisibility = postgres.VisibleNobodyExcept
-	s.PresenceVisibility = postgres.VisibleEveryoneExcept
+	s.ProfileVisibility = postgres.VisibleNobody
+	s.PresenceVisibility = postgres.VisibleEveryone
 	if _, err := pg.Social().UpdatePrivacy(ctx, s); err != nil {
 		t.Fatal(err)
 	}

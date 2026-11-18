@@ -726,7 +726,7 @@ paths:
         required: true
         schema:
           type: string
-          enum: [avatar_visibility, profile_visibility, presence_visibility, last_seen_visibility, birthday_visibility, group_invites, direct_messages, search_visibility, voice_video_messages, forward_link]
+          enum: [avatar_visibility, profile_visibility, presence_visibility, last_seen_visibility, birthday_visibility, group_invites, direct_messages, search_visibility, calls_from, voice_video_messages, forward_link]
       - name: effect
         in: path
         required: true
@@ -1475,6 +1475,10 @@ paths:
         message (newest first). `last_message` is the newest message the caller can see; in
         direct chats its `read_by` holds the other user once they read it (with read receipts
         on), in groups it is empty. `unread_count` stops at 999.
+
+        Direct chats that a stranger opened with the caller are in the caller's Requests folder
+        (`is_request`). Without `folder` the answer holds only the main list, so the Requests
+        folder needs `folder=requests` (or `folder=all` for both in one list).
       parameters:
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/After"
@@ -1483,6 +1487,14 @@ paths:
           required: false
           description: "`true`: only archived chats, `false`: only chats that are not archived. Without it, every chat."
           schema: { type: boolean }
+        - name: folder
+          in: query
+          required: false
+          description: "`main`: chats that are not requests (the default). `requests`: the caller's Requests folder. `all`: both."
+          schema:
+            type: string
+            enum: [main, requests, all]
+            default: main
       responses:
         "426": { $ref: "#/components/responses/ClientOutdated" }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -1502,6 +1514,10 @@ paths:
         chat (`200`) if there already is one. `user_id` may be the caller's own id: that opens
         their "Saved Messages" chat, a direct chat with the caller as its only member and as
         its `peer`.
+
+        When the other user does not count the caller as a contact (no shared chat they took
+        part in, no allow exception), the new chat lands in their Requests folder
+        (`is_request: true` for them only) and its messages send them no push notification.
       requestBody:
         required: true
         content:
@@ -1665,6 +1681,43 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "204":
           description: Not archived
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /chats/requests/count:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    get:
+      tags: [chats]
+      operationId: countChatRequests
+      summary: Number of chats in my Requests folder
+      description: Chats deleted for the caller only count again once a newer message arrives.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "200":
+          description: The number of request chats
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChatRequestCount" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /chats/{chat_id}/accept:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ChatId"
+    post:
+      tags: [chats]
+      operationId: acceptChatRequest
+      summary: Move a chat out of the Requests folder
+      description: |
+        The chat moves to the caller's main list (`is_request: false`) and the caller's devices get
+        `chat_list_update`. Sending a message in the chat, pinning it or archiving it does the same.
+        Reading it does not. Accepting a chat that is not a request changes nothing.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Accepted
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
   /chats/pins/order:
@@ -5775,15 +5828,31 @@ components:
     Visibility:
       type: string
       description: |
-        Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
-        `contacts` are the users you share a group with, or a direct chat that you opened or read in.
+        Who may see the item. The exception lists apply to every value.
+        `contacts` are the users you share a direct chat with that you opened or read in, or a group you created,
+        joined by accepting an invitation, or read or wrote in. Being added to a group alone does not make its
+        members your contacts.
+        Deprecated: `everyone_except` and `nobody_except` are still accepted and stored as `everyone` and `nobody`;
+        they are never returned.
       enum: [everyone, contacts, everyone_except, nobody_except, nobody]
     DirectMessagePolicy:
       type: string
-      enum: [everyone, shared_chats, wait_approval]
+      description: |
+        Who may open a direct chat with the user. `everyone`; `contacts` (see `Visibility`); `wait_approval`: others
+        send a request the user approves; `nobody`: no new direct chats and no requests (existing chats stay).
+        Allow exceptions still let the listed users in.
+        Deprecated: `shared_chats` is the old name of `contacts`; it is still accepted and never returned.
+      enum: [everyone, shared_chats, wait_approval, contacts, nobody]
     GroupInvitePolicy:
       type: string
+      description: |
+        Who may add the user to a group. Defaults to `contacts`. Deprecated: `everyone_except` and `nobody_except`
+        are still accepted and stored as `everyone` and `nobody`; they are never returned.
       enum: [everyone, contacts, everyone_except, nobody_except, nobody, wait_approval]
+    CallPolicy:
+      type: string
+      description: Who may ring the user (`contacts` as in `Visibility`).
+      enum: [everyone, contacts, nobody]
     SearchVisibility:
       type: string
       enum: [everyone, nobody]
@@ -5821,6 +5890,7 @@ components:
         - group_invites
         - search_visibility
         - calls_enabled
+        - calls_from
         - typing_indicators_enabled
         - voice_video_messages
         - forward_link
@@ -5843,7 +5913,14 @@ components:
         search_visibility: { $ref: "#/components/schemas/SearchVisibility" }
         calls_enabled:
           type: boolean
-          description: Whether others may ring this user. Calls are only possible from an existing direct chat or a shared group.
+          deprecated: true
+          description: "`false` exactly when `calls_from` is `nobody`. Use `calls_from`."
+        calls_from:
+          description: |
+            Who may ring this user, with the `calls_from` exceptions. Calls are only possible from an existing direct
+            chat or a shared group. A direct call to a user who does not allow the caller is refused; in a group call
+            only the members who allow the caller are rung, the others can still join.
+          allOf: [{ $ref: "#/components/schemas/CallPolicy" }]
         typing_indicators_enabled:
           type: boolean
           description: Whether other members see that this user is typing or recording a voice message. The user still sees theirs.
@@ -5871,7 +5948,11 @@ components:
         direct_messages: { $ref: "#/components/schemas/DirectMessagePolicy" }
         group_invites: { $ref: "#/components/schemas/GroupInvitePolicy" }
         search_visibility: { $ref: "#/components/schemas/SearchVisibility" }
-        calls_enabled: { type: boolean }
+        calls_enabled:
+          type: boolean
+          deprecated: true
+          description: "`false` sets `calls_from` to `nobody`; `true` sets it to `everyone` when it was `nobody`. Ignored when `calls_from` is sent."
+        calls_from: { $ref: "#/components/schemas/CallPolicy" }
         typing_indicators_enabled: { type: boolean }
         voice_video_messages: { $ref: "#/components/schemas/VoiceVideoPolicy" }
         forward_link: { $ref: "#/components/schemas/ForwardLinkPolicy" }
@@ -6891,6 +6972,7 @@ components:
         - is_pinned
         - pin_position
         - is_archived
+        - is_request
         - unread_count
         - first_unread_message_id
         - last_read_message_id
@@ -6915,6 +6997,11 @@ components:
         is_archived:
           type: boolean
           description: Whether the caller archived the chat (only for the caller).
+        is_request:
+          type: boolean
+          description: |
+            Whether the chat is in the caller's Requests folder: a stranger opened it, and the caller has not
+            replied, accepted, pinned or archived it yet (only for the caller).
         unread_count: { type: integer, minimum: 0 }
         first_unread_message_id:
           description: |
@@ -6939,6 +7026,11 @@ components:
             - $ref: "#/components/schemas/GroupRole"
             - type: "null"
         created_at: { $ref: "#/components/schemas/Timestamp" }
+    ChatRequestCount:
+      type: object
+      required: [requests_count]
+      properties:
+        requests_count: { type: integer, minimum: 0 }
     ChatPage:
       type: object
       required: [items, next_cursor]

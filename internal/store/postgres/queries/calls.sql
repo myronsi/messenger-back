@@ -186,12 +186,27 @@ SELECT user_id FROM participants WHERE chat_id = @chat_id AND user_id = @user_id
 
 -- name: ListCallCandidates :many
 SELECT p.user_id,
-       COALESCE(s.calls_enabled, true)::bool AS calls_enabled,
+       (CASE
+            WHEN e.effect = 'allow' THEN true
+            WHEN e.effect = 'deny' THEN false
+            WHEN COALESCE(s.calls_from, 'everyone') = 'everyone' THEN true
+            WHEN s.calls_from = 'shared_chats' THEN EXISTS (
+                SELECT 1
+                FROM participants mine
+                JOIN participants other ON other.chat_id = mine.chat_id
+                JOIN chats sc ON sc.id = mine.chat_id
+                WHERE mine.user_id = p.user_id AND other.user_id = @initiator_id
+                  AND ((sc.type = 'group' AND mine.engaged)
+                    OR (sc.type <> 'group' AND (sc.created_by = mine.user_id OR mine.last_read_message_id IS NOT NULL))))
+            ELSE false
+        END)::bool AS calls_allowed,
        EXISTS (SELECT 1 FROM user_blocks b
                WHERE (b.blocker_id = @initiator_id AND b.blocked_id = p.user_id)
                   OR (b.blocker_id = p.user_id AND b.blocked_id = @initiator_id))::bool AS blocked
 FROM participants p
 LEFT JOIN user_privacy_settings s ON s.user_id = p.user_id
+LEFT JOIN user_privacy_exceptions e
+       ON e.owner_id = p.user_id AND e.setting_key = 'calls_from' AND e.target_user_id = @initiator_id
 WHERE p.chat_id = @chat_id
 ORDER BY p.joined_at, p.user_id
 FOR KEY SHARE OF p;

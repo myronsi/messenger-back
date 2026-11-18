@@ -886,7 +886,7 @@ func TestPinOrderAndArchive(t *testing.T) {
 		var out []int64
 		var cur *ChatCursor
 		for {
-			page, err := s.Chats().EntriesOfType(ctx, me.ID, "", archived, cur, limit)
+			page, err := s.Chats().EntriesOfType(ctx, me.ID, "", archived, nil, cur, limit)
 			if err != nil {
 				t.Fatal(err)
 			}

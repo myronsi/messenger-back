@@ -580,3 +580,11 @@ func (Unimplemented) PutUploadChunk(w http.ResponseWriter, r *http.Request, id u
 func (Unimplemented) CompleteUploadSession(w http.ResponseWriter, r *http.Request, id uuid.UUID, params CompleteUploadSessionParams) {
 	notImplemented(w, r)
 }
+
+func (Unimplemented) AcceptChatRequest(w http.ResponseWriter, r *http.Request, chatId ChatId, params AcceptChatRequestParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) CountChatRequests(w http.ResponseWriter, r *http.Request, params CountChatRequestsParams) {
+	notImplemented(w, r)
+}

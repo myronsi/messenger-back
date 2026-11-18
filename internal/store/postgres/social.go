@@ -10,12 +10,10 @@ import (
 // Visibility values of the privacy settings. Not every setting accepts every value (see the CHECK
 // constraints of user_privacy_settings).
 const (
-	VisibleEveryone       = "everyone"
-	VisibleSharedChats    = "shared_chats"
-	VisibleEveryoneExcept = "everyone_except"
-	VisibleNobodyExcept   = "nobody_except"
-	VisibleNobody         = "nobody"
-	WaitApproval          = "wait_approval"
+	VisibleEveryone    = "everyone"
+	VisibleSharedChats = "shared_chats"
+	VisibleNobody      = "nobody"
+	WaitApproval       = "wait_approval"
 )
 
 // Setting keys that take per-user exceptions.
@@ -28,6 +26,7 @@ const (
 	SettingGroupInvites   = "group_invites"
 	SettingDirectMessages = "direct_messages"
 	SettingSearch         = "search_visibility"
+	SettingCalls          = "calls_from"
 	SettingVoiceVideo     = "voice_video_messages"
 	SettingForwardLink    = "forward_link"
 )
@@ -50,7 +49,7 @@ type PrivacySettings struct {
 	DirectMessages          string
 	GroupInvites            string
 	SearchVisibility        string
-	CallsEnabled            bool
+	CallsFrom               string
 	TypingIndicatorsEnabled bool
 	VoiceVideoMessages      string
 	ForwardLink             string
@@ -62,7 +61,7 @@ func DefaultPrivacy(userID int64) PrivacySettings {
 		UserID: userID, AvatarVisibility: VisibleEveryone, ProfileVisibility: VisibleEveryone,
 		PresenceVisibility: VisibleEveryone, LastSeenVisibility: VisibleEveryone, BirthdayVisibility: VisibleSharedChats,
 		ReadReceiptsEnabled: true, DirectMessages: VisibleEveryone,
-		GroupInvites: VisibleEveryone, SearchVisibility: VisibleEveryone, CallsEnabled: true,
+		GroupInvites: VisibleSharedChats, SearchVisibility: VisibleEveryone, CallsFrom: VisibleEveryone,
 		TypingIndicatorsEnabled: true, VoiceVideoMessages: VisibleEveryone, ForwardLink: VisibleEveryone,
 	}
 }
@@ -134,7 +133,7 @@ func privacyFrom(p sqlcdb.UserPrivacySetting) PrivacySettings {
 		UserID: p.UserID, AvatarVisibility: p.AvatarVisibility, ProfileVisibility: p.ProfileVisibility,
 		PresenceVisibility: p.PresenceVisibility, LastSeenVisibility: p.LastSeenVisibility, BirthdayVisibility: p.BirthdayVisibility,
 		ReadReceiptsEnabled: p.ReadReceiptsEnabled, DirectMessages: p.DirectMessages, GroupInvites: p.GroupInvites,
-		SearchVisibility: p.SearchVisibility, CallsEnabled: p.CallsEnabled, TypingIndicatorsEnabled: p.TypingIndicatorsEnabled,
+		SearchVisibility: p.SearchVisibility, CallsFrom: p.CallsFrom, TypingIndicatorsEnabled: p.TypingIndicatorsEnabled,
 		VoiceVideoMessages: p.VoiceVideoMessages, ForwardLink: p.ForwardLink,
 	}
 }
@@ -168,7 +167,7 @@ func (r socialRepo) UpdatePrivacy(ctx context.Context, p PrivacySettings) (Priva
 		UserID: p.UserID, AvatarVisibility: p.AvatarVisibility, ProfileVisibility: p.ProfileVisibility,
 		PresenceVisibility: p.PresenceVisibility, LastSeenVisibility: p.LastSeenVisibility, BirthdayVisibility: p.BirthdayVisibility,
 		ReadReceiptsEnabled: p.ReadReceiptsEnabled, DirectMessages: p.DirectMessages, GroupInvites: p.GroupInvites,
-		SearchVisibility: p.SearchVisibility, CallsEnabled: p.CallsEnabled, TypingIndicatorsEnabled: p.TypingIndicatorsEnabled,
+		SearchVisibility: p.SearchVisibility, CallsFrom: p.CallsFrom, TypingIndicatorsEnabled: p.TypingIndicatorsEnabled,
 		VoiceVideoMessages: p.VoiceVideoMessages, ForwardLink: p.ForwardLink,
 	})
 	if err != nil {
@@ -188,7 +187,7 @@ type PrivacyPatch struct {
 	DirectMessages          *string
 	GroupInvites            *string
 	SearchVisibility        *string
-	CallsEnabled            *bool
+	CallsFrom               *string
 	TypingIndicatorsEnabled *bool
 	VoiceVideoMessages      *string
 	ForwardLink             *string
@@ -204,7 +203,7 @@ func (r socialRepo) PatchPrivacy(ctx context.Context, userID int64, p PrivacyPat
 		UserID: userID, AvatarVisibility: p.AvatarVisibility, ProfileVisibility: p.ProfileVisibility,
 		PresenceVisibility: p.PresenceVisibility, LastSeenVisibility: p.LastSeenVisibility, BirthdayVisibility: p.BirthdayVisibility,
 		ReadReceiptsEnabled: p.ReadReceiptsEnabled, DirectMessages: p.DirectMessages, GroupInvites: p.GroupInvites,
-		SearchVisibility: p.SearchVisibility, CallsEnabled: p.CallsEnabled, TypingIndicatorsEnabled: p.TypingIndicatorsEnabled,
+		SearchVisibility: p.SearchVisibility, CallsFrom: p.CallsFrom, TypingIndicatorsEnabled: p.TypingIndicatorsEnabled,
 		VoiceVideoMessages: p.VoiceVideoMessages, ForwardLink: p.ForwardLink,
 	})
 	if err != nil {

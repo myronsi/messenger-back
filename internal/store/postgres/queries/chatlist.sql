@@ -7,7 +7,7 @@ WHERE id = @chat_id AND (last_message_id IS NULL OR last_message_id < @message_i
 -- name: ListChatEntries :many
 -- A user's chats: pinned ones first (by pin position), then by last activity, then by id. The cursor is the
 -- last entry of the previous page: (pinned, pin position, sort time, chat id).
-SELECT c.*, p.role, p.last_read_message_id, p.archived_at, p.cleared_before_message_id AS my_cleared_before_message_id, p.hidden_at,
+SELECT c.*, p.role, p.last_read_message_id, p.archived_at, p.cleared_before_message_id AS my_cleared_before_message_id, p.hidden_at, p.is_request,
        pin.pinned_at, pin.position AS pin_position,
        COALESCE(pin.pinned_at, c.last_activity_at)::timestamptz AS sort_at
 FROM participants p
@@ -16,6 +16,7 @@ LEFT JOIN user_chat_pins pin ON pin.user_id = p.user_id AND pin.chat_id = p.chat
 WHERE p.user_id = @user_id
   AND (sqlc.narg(chat_type)::text IS NULL OR c.type = sqlc.narg(chat_type)::text)
   AND (sqlc.narg(archived)::bool IS NULL OR (p.archived_at IS NOT NULL) = sqlc.narg(archived)::bool)
+  AND (sqlc.narg(requests)::bool IS NULL OR p.is_request = sqlc.narg(requests)::bool)
   AND (p.hidden_at IS NULL OR c.last_message_id > COALESCE(p.cleared_before_message_id, 0))
   AND (
     sqlc.narg(after_chat_id)::bigint IS NULL
@@ -30,7 +31,7 @@ ORDER BY (pin.pinned_at IS NULL), COALESCE(pin.position, 0), COALESCE(pin.pinned
 LIMIT @max_rows;
 
 -- name: GetChatEntry :one
-SELECT c.*, p.role, p.last_read_message_id, p.archived_at, p.cleared_before_message_id AS my_cleared_before_message_id, p.hidden_at,
+SELECT c.*, p.role, p.last_read_message_id, p.archived_at, p.cleared_before_message_id AS my_cleared_before_message_id, p.hidden_at, p.is_request,
        pin.pinned_at, pin.position AS pin_position,
        COALESCE(pin.pinned_at, c.last_activity_at)::timestamptz AS sort_at
 FROM participants p
@@ -40,7 +41,7 @@ WHERE p.user_id = @user_id AND p.chat_id = @chat_id;
 
 -- name: ListOtherParticipants :many
 -- The other members of the chats (the peers of direct chats), with their read markers.
-SELECT chat_id, user_id, last_read_message_id, last_read_at
+SELECT chat_id, user_id, last_read_message_id, last_read_at, is_request
 FROM participants
 WHERE chat_id = ANY(@chat_ids::bigint[]) AND user_id <> @user_id
 ORDER BY chat_id, user_id;
@@ -152,3 +153,24 @@ WHERE id = @chat_id;
 
 -- name: UnhideChat :exec
 UPDATE participants SET hidden_at = NULL WHERE chat_id = @chat_id AND user_id = @user_id AND hidden_at IS NOT NULL;
+
+-- name: MarkChatRequest :exec
+UPDATE participants SET is_request = true WHERE chat_id = @chat_id AND user_id = @user_id;
+
+-- name: AcceptChatRequest :execrows
+UPDATE participants SET is_request = false WHERE chat_id = @chat_id AND user_id = @user_id AND is_request;
+
+-- name: ListChatRequestHolders :many
+SELECT user_id FROM participants WHERE chat_id = @chat_id AND is_request ORDER BY user_id;
+
+-- name: CountChatRequests :one
+SELECT count(*) FROM participants p
+JOIN chats c ON c.id = p.chat_id
+WHERE p.user_id = @user_id AND p.is_request
+  AND (p.hidden_at IS NULL OR c.last_message_id > COALESCE(p.cleared_before_message_id, 0));
+
+-- name: GetChatWithRequestHolders :one
+SELECT sqlc.embed(c),
+       ARRAY(SELECT p.user_id FROM participants p WHERE p.chat_id = c.id AND p.is_request ORDER BY p.user_id)::bigint[] AS request_holders
+FROM chats c
+WHERE c.id = @id;

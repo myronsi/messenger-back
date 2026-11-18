@@ -273,6 +273,8 @@ type Participant struct {
 	ArchivedAt             *time.Time
 	ClearedBeforeMessageID *int64
 	HiddenAt               *time.Time
+	Engaged                bool
+	IsRequest              bool
 }
 
 type QrLoginRequest struct {
@@ -494,10 +496,10 @@ type UserPrivacySetting struct {
 	DirectMessages          string
 	GroupInvites            string
 	SearchVisibility        string
-	CallsEnabled            bool
 	TypingIndicatorsEnabled bool
 	LastSeenVisibility      string
 	BirthdayVisibility      string
+	CallsFrom               string
 	VoiceVideoMessages      string
 	ForwardLink             string
 }

@@ -22,7 +22,7 @@ func TestSocial(t *testing.T) {
 		t.Fatalf("update: %+v %v", got, err)
 	}
 	bad := upd
-	bad.DirectMessages = VisibleNobodyExcept // not allowed for this setting
+	bad.DirectMessages = "everyone_except"
 	if _, err := social.UpdatePrivacy(ctx, bad); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("invalid value: %v", err)
 	}
@@ -104,11 +104,57 @@ func TestSocial(t *testing.T) {
 	if shared, _ := social.SharedChatViewers(ctx, bob.ID, []int64{alice.ID, carol.ID}); !shared[alice.ID] || shared[carol.ID] {
 		t.Fatalf("viewers of bob after reading: %v", shared)
 	}
-	if _, err := s.Chats().CreateGroup(ctx, NewGroup{OwnerID: carol.ID, Name: "g", MemberIDs: []int64{alice.ID}}); err != nil {
+	group, err := s.Chats().CreateGroup(ctx, NewGroup{OwnerID: carol.ID, Name: "g", MemberIDs: []int64{alice.ID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if shared, _ := social.SharedChatViewers(ctx, alice.ID, []int64{carol.ID}); shared[carol.ID] {
+		t.Fatalf("being added to a group makes its owner a contact: %v", shared)
+	}
+	if shared, _ := social.SharedChatPartners(ctx, carol.ID, []int64{alice.ID}); shared[alice.ID] {
+		t.Fatalf("partners of carol before alice took part: %v", shared)
+	}
+	if shared, _ := social.SharedChatViewers(ctx, carol.ID, []int64{alice.ID}); !shared[alice.ID] {
+		t.Fatalf("carol created the group and counts alice as a contact: %v", shared)
+	}
+	if _, err := s.Chats().MarkRead(ctx, group.ID, alice.ID, 7); err != nil {
 		t.Fatal(err)
 	}
 	if shared, _ := social.SharedChatViewers(ctx, alice.ID, []int64{carol.ID}); !shared[carol.ID] {
-		t.Fatalf("groups count without taking part: %v", shared)
+		t.Fatalf("alice read in the group: %v", shared)
+	}
+	if p, err := s.Chats().Participant(ctx, group.ID, alice.ID); err != nil || !p.Engaged {
+		t.Fatalf("reading marks alice engaged: %+v %v", p, err)
+	}
+
+	dave := mustUser(t, s, "dave")
+	other, err := s.Chats().CreateGroup(ctx, NewGroup{OwnerID: carol.ID, Name: "h", MemberIDs: []int64{dave.ID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Chats().MarkEngaged(ctx, other.ID, dave.ID); err != nil {
+		t.Fatal(err)
+	}
+	if shared, _ := social.SharedChatViewers(ctx, dave.ID, []int64{carol.ID}); !shared[carol.ID] {
+		t.Fatalf("dave wrote in the group: %v", shared)
+	}
+
+	erin, frank := mustUser(t, s, "erin"), mustUser(t, s, "frank")
+	invite, _, err := s.Chats().InviteAs(ctx, other.ID, carol.ID, erin.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, joined, err := s.Approvals().ApproveInvite(ctx, invite.ID, erin.ID); err != nil || !joined {
+		t.Fatalf("erin accepts: %v %v", joined, err)
+	}
+	if shared, _ := social.SharedChatViewers(ctx, erin.ID, []int64{carol.ID}); !shared[carol.ID] {
+		t.Fatalf("accepting an invitation is taking part: %v", shared)
+	}
+	if err := s.Chats().AddMemberAs(ctx, other.ID, carol.ID, frank.ID); err != nil {
+		t.Fatal(err)
+	}
+	if shared, _ := social.SharedChatViewers(ctx, frank.ID, []int64{carol.ID}); shared[carol.ID] {
+		t.Fatalf("frank was only added: %v", shared)
 	}
 	if chats, _ := social.ChatIDs(ctx, bob.ID); len(chats) != 1 || chats[0] != chat.ID {
 		t.Fatalf("chat ids: %v", chats)

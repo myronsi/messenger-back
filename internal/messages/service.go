@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -108,6 +109,8 @@ type Deps struct {
 	Log      *slog.Logger
 }
 
+type RequestAcceptedHook func(ctx context.Context, chatID, userID int64)
+
 type EmojiFilter interface {
 	Clean(ctx context.Context, userID int64, text string) (string, error)
 	Allowed(ctx context.Context, userID, emojiID int64) (bool, error)
@@ -120,8 +123,13 @@ type EventLog interface {
 
 // Service implements the message use cases.
 type Service struct {
-	d   Deps
-	now func() time.Time
+	d               Deps
+	now             func() time.Time
+	requestAccepted atomic.Pointer[RequestAcceptedHook]
+}
+
+func (s *Service) SetRequestAccepted(fn RequestAcceptedHook) {
+	s.requestAccepted.Store(&fn)
 }
 
 // New returns the service.
@@ -331,7 +339,7 @@ func (s *Service) send(ctx context.Context, r SendRequest) (Sent, error) {
 		}
 		r.Content = &cleaned
 	}
-	chat, err := s.d.Store.Chats().Get(ctx, r.ChatID)
+	chat, holders, err := s.d.Store.Chats().GetWithRequestHolders(ctx, r.ChatID)
 	if errors.Is(err, postgres.ErrNotFound) {
 		return Sent{}, ErrNotFound
 	}
@@ -410,7 +418,7 @@ func (s *Service) send(ctx context.Context, r SendRequest) (Sent, error) {
 		return Sent{}, err
 	}
 	if !resumed {
-		if err := s.queueNotification(ctx, m, members); err != nil {
+		if err := s.queueNotification(ctx, m, withoutAll(members, holders)); err != nil {
 			s.abandon(ctx, r, id, false)
 			return Sent{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 		}
@@ -420,10 +428,20 @@ func (s *Service) send(ctx context.Context, r SendRequest) (Sent, error) {
 		return Sent{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
 	s.delivered(ctx, m, members, r.ClientTempID)
+	s.repliedToRequest(ctx, r.ChatID, r.SenderID, holders)
 	if sticker != nil {
 		s.usedSticker(ctx, r.SenderID, sticker.ID)
 	}
+	if chat.Type == postgres.ChatGroup {
+		s.engaged(ctx, r.ChatID, r.SenderID)
+	}
 	return Sent{Message: m}, nil
+}
+
+func (s *Service) engaged(ctx context.Context, chatID, userID int64) {
+	if err := s.d.Store.Chats().MarkEngaged(context.WithoutCancel(ctx), chatID, userID); err != nil {
+		s.d.Log.WarnContext(ctx, "mark engaged", "error", err, "chat_id", chatID)
+	}
 }
 
 const RecentStickers = 20
@@ -998,7 +1016,7 @@ func (s *Service) Read(ctx context.Context, userID, chatID, messageID int64) (in
 	}
 	recipients := []int64{userID}
 	settings, err := s.d.Store.Social().Privacy(ctx, []int64{userID})
-	if err == nil && settings[userID].ReadReceiptsEnabled {
+	if err == nil && settings[userID].ReadReceiptsEnabled && !s.holdsRequest(ctx, chatID, userID) {
 		if members, err := s.Members(ctx, chatID); err == nil {
 			recipients = s.receiptRecipients(ctx, userID, chatID, members)
 		}
