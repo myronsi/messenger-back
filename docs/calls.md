@@ -22,7 +22,7 @@ media key.
 | Platforms | Web and installed PWA only. Calls are hidden in the Capacitor shell; native push is not used for calls. |
 | Size | Up to 10 participants per call (`CALLS_MAX_PARTICIPANTS`; technically at most 65, see [Limits](#limits)). |
 | Hosting | The existing EC2 host, one LiveKit node, no other infrastructure. No regional restrictions; all media flows through the host's region. |
-| Who can call | Direct calls only inside an existing direct chat; group calls by any current member. Each user can turn calls off (`calls_enabled` in privacy settings) for direct and group calls: nobody rings them, and a group call does not list them until they join it themselves, so other members can tell that their calls are off. |
+| Who can call | Direct calls only inside an existing direct chat; group calls by any current member. Each user chooses who may ring them (`calls_from` in privacy settings: `everyone`, `contacts` or `nobody`, with exceptions). A direct call to a user who does not allow the caller is refused (`403 calls_not_allowed`). A group call rings only the members who allow the initiator; the others get no ringing and no push, and the call does not list them until they join it themselves. |
 | Blocks | Like messages: a block (either direction) stops direct calls; it does not stop either user in a shared group call. |
 | End for everyone | Initiator; both members of a direct call; group owner, admins and moderators. |
 | Timeline | One `call` system message per call, posted when the call ends. |
@@ -108,7 +108,7 @@ Call invitations do not use the message notification queue (it waits five second
 minutes). When a participant starts ringing, the API sends a web push right away, once per web destination of that
 user, with `TTL` equal to the remaining ring time, `Urgency: high` and `Topic: call-<call_id>`. When ringing stops
 (answered, declined, missed, ended) it sends a `cancel` push with the same topic. Native (FCM/APNS) destinations are
-skipped. Chat mutes do not silence calls; `calls_enabled = false` stops ringing entirely.
+skipped. Chat mutes do not silence calls; `calls_from` decides who may ring a user at all.
 
 Payload (JSON, alongside the message payload fields the worker already knows):
 
@@ -185,7 +185,7 @@ deleted, and the sweeper then ends and deletes the call), `call_participants` (o
 joined session and a snapshot of its identity key; `call_participants_one_joined` allows one joined row per user
 across all calls), `call_identities` (one public key per session, deleted with the session or by the hooks),
 `call_key_envelopes` (current and previous epoch only, deleted when the call ends), `call_start_requests`
-(idempotency of `client_request_id`, 24 h) and `user_privacy_settings.calls_enabled`. `calls.summary_message_id`,
+(idempotency of `client_request_id`, 24 h) and `user_privacy_settings.calls_from` (migration 000041; it replaced `calls_enabled`). `calls.summary_message_id`,
 `summary_claimed_at` and `summary_posted_at` track the system message ([System message](#implementation));
 `calls.room_deleted_at` records that LiveKit's room of an ended call was deleted.
 

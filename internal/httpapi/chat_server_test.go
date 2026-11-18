@@ -745,6 +745,7 @@ func TestSavedMessagesArchiveAndPinOrder(t *testing.T) {
 func TestDeleteForMeAndClearHistory(t *testing.T) {
 	e := newChatEnv(t)
 	alice, bob, carol := e.register(t, "alice"), e.register(t, "bob"), e.register(t, "carol")
+	e.openInvites(t, bob, carol)
 	aliceID, _ := strconv.ParseInt(e.uid(t, alice), 10, 64)
 	chat := e.create(t, alice, e.uid(t, bob), "").json()["id"].(string)
 	chatID, _ := strconv.ParseInt(chat, 10, 64)
