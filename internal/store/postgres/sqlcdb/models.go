@@ -24,21 +24,27 @@ type ApprovalRequest struct {
 }
 
 type Attachment struct {
-	ID           uuid.UUID
-	UploaderID   *int64
-	ChatID       *int64
-	StorageKey   string
-	MimeType     string
-	Size         int64
-	Width        *int32
-	Height       *int32
-	Duration     *float64
-	Waveform     []int16
-	CreatedAt    time.Time
-	Purpose      string
-	Kind         string
-	Filename     string
-	ThumbnailKey *string
+	ID              uuid.UUID
+	UploaderID      *int64
+	ChatID          *int64
+	StorageKey      string
+	MimeType        string
+	Size            int64
+	Width           *int32
+	Height          *int32
+	Duration        *float64
+	Waveform        []int16
+	CreatedAt       time.Time
+	Purpose         string
+	Kind            string
+	Filename        string
+	ThumbnailKey    *string
+	Variants        []byte
+	Placeholder     *string
+	ProcessingState *string
+	AudioTitle      *string
+	AudioArtist     *string
+	AudioAlbum      *string
 }
 
 type AttachmentLink struct {
@@ -198,6 +204,19 @@ type GroupRoleEvent struct {
 	CreatedAt time.Time
 }
 
+type MediaJob struct {
+	ID           int64
+	AttachmentID uuid.UUID
+	Kind         string
+	State        string
+	Attempts     int32
+	Error        *string
+	RunAfter     time.Time
+	StartedAt    *time.Time
+	FinishedAt   *time.Time
+	CreatedAt    time.Time
+}
+
 type NotificationActivity struct {
 	DeviceID    uuid.UUID
 	SessionID   uuid.UUID
@@ -353,6 +372,20 @@ type UnsentMessage struct {
 	StickerID     *int64
 	ErrorCode     string
 	CreatedAt     time.Time
+}
+
+type UploadSession struct {
+	ID         uuid.UUID
+	UploaderID int64
+	Purpose    string
+	Kind       string
+	Filename   string
+	Size       int64
+	ChunkSize  int32
+	Received   int64
+	Chunks     int32
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
 type User struct {

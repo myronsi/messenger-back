@@ -1,6 +1,8 @@
 -- name: CreateAttachment :one
-INSERT INTO attachments (uploader_id, chat_id, storage_key, thumbnail_key, mime_type, size, width, height, duration, waveform, purpose, kind, filename)
-VALUES (@uploader_id, @chat_id, @storage_key, @thumbnail_key, @mime_type, @size, @width, @height, @duration, @waveform, @purpose, @kind, @filename)
+INSERT INTO attachments (uploader_id, chat_id, storage_key, thumbnail_key, mime_type, size, width, height, duration, waveform, purpose, kind, filename,
+                         variants, placeholder, processing_state, audio_title, audio_artist, audio_album)
+VALUES (@uploader_id, @chat_id, @storage_key, @thumbnail_key, @mime_type, @size, @width, @height, @duration, @waveform, @purpose, @kind, @filename,
+        @variants, sqlc.narg(placeholder), sqlc.narg(processing_state), sqlc.narg(audio_title), sqlc.narg(audio_artist), sqlc.narg(audio_album))
 RETURNING *;
 
 -- name: GetAttachment :one
@@ -16,7 +18,7 @@ ORDER BY created_at DESC, id DESC
 LIMIT @max_rows;
 
 -- name: DeleteAttachment :one
-DELETE FROM attachments WHERE id = @id RETURNING storage_key, thumbnail_key;
+DELETE FROM attachments WHERE id = @id RETURNING storage_key, thumbnail_key, variants;
 
 -- name: ListAttachmentKeysOfChats :many
 -- The stored objects of the chats' v1 attachments: files, thumbnails and display copies of images.
@@ -26,6 +28,8 @@ SELECT k::text FROM (
     SELECT thumbnail_key FROM attachments WHERE chat_id = ANY(@chat_ids::bigint[]) AND thumbnail_key IS NOT NULL
     UNION ALL
     SELECT storage_key || '.display.jpg' FROM attachments WHERE chat_id = ANY(@chat_ids::bigint[]) AND width IS NOT NULL
+    UNION ALL
+    SELECT v.value->>'key' FROM attachments a, jsonb_each(a.variants) v WHERE a.chat_id = ANY(@chat_ids::bigint[])
 ) keys
 ORDER BY k;
 
@@ -76,6 +80,7 @@ WHERE a.created_at < @older_than
   AND NOT EXISTS (SELECT 1 FROM stickers s WHERE s.attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM custom_emoji e WHERE e.attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM unsent_messages m WHERE m.attachment_ids @> ARRAY[a.id])
+  AND NOT EXISTS (SELECT 1 FROM media_jobs j WHERE j.attachment_id = a.id AND j.state = 'running')
 ORDER BY a.created_at
 LIMIT @max_rows;
 
@@ -98,7 +103,7 @@ WHERE a.id = @id
   AND NOT EXISTS (SELECT 1 FROM stickers s WHERE s.attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM custom_emoji e WHERE e.attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM unsent_messages m WHERE m.attachment_ids @> ARRAY[a.id])
-RETURNING a.storage_key, a.thumbnail_key;
+RETURNING a.storage_key, a.thumbnail_key, a.variants;
 
 -- name: SetUserAvatar :execrows
 UPDATE users SET avatar_attachment_id = sqlc.narg(attachment_id) WHERE id = @user_id;
@@ -153,3 +158,26 @@ SELECT EXISTS (SELECT 1 FROM stickers WHERE attachment_id = @attachment_id);
 
 -- name: UnlinkMessagesUpTo :exec
 DELETE FROM attachment_links WHERE chat_id = @chat_id AND message_id <= @message_id;
+
+-- name: MergeAttachmentVariants :one
+UPDATE attachments
+SET variants = variants || @variants::jsonb,
+    placeholder = COALESCE(sqlc.narg(placeholder), placeholder),
+    processing_state = COALESCE(sqlc.narg(processing_state), processing_state),
+    audio_title = COALESCE(sqlc.narg(audio_title), audio_title),
+    audio_artist = COALESCE(sqlc.narg(audio_artist), audio_artist),
+    audio_album = COALESCE(sqlc.narg(audio_album), audio_album)
+WHERE id = @id
+RETURNING *;
+
+-- name: SetAttachmentProcessing :exec
+UPDATE attachments SET processing_state = sqlc.narg(processing_state) WHERE id = @id;
+
+-- name: ListAttachmentsForBackfill :many
+SELECT * FROM attachments
+WHERE kind = ANY(@kinds::text[])
+  AND purpose = ANY(@purposes::text[])
+  AND NOT (variants ? @missing_variant::text)
+  AND id > @after
+ORDER BY id
+LIMIT @max_rows;
