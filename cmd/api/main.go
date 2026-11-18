@@ -200,7 +200,7 @@ func run() error {
 			}),
 			httpapi.NewMediaServer(httpapi.MediaOptions{
 				Service: mediaSvc, Store: pg, Directory: rt.directory, Limiter: rt.limiter, Events: rt.events, BasePath: cfg.HTTP.BasePath, Log: log,
-				Playback: media.NewPlaybackSigner(cfg.JWTSecret.Reveal()),
+				Playback:       media.NewPlaybackSigner(cfg.JWTSecret.Reveal()),
 				ProfileChanged: rt.profileChanged,
 			}),
 		).WithAccount(httpapi.NewAccountServer(httpapi.AccountOptions{
@@ -223,6 +223,9 @@ func run() error {
 		})).WithLinkPreviews(httpapi.NewLinkPreviewServer(httpapi.LinkPreviewOptions{
 			Service: linkpreview.New(linkpreview.Options{
 				Cache: linkpreview.NewRedisCache(rd.Client()), SignKey: linkpreview.DeriveKey(cfg.JWTSecret.Reveal()),
+				Shrink: func(ctx context.Context, data []byte) ([]byte, string, error) {
+					return prober.ShrinkImage(ctx, data, 600, 75)
+				},
 			}),
 			Limiter: rt.limiter, BasePath: cfg.HTTP.BasePath, Log: log,
 		})).WithStickers(httpapi.NewStickerServer(httpapi.StickerOptions{

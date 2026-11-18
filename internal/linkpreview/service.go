@@ -68,20 +68,28 @@ type Options struct {
 	SignKey   []byte
 	AllowAddr func(netip.Addr) bool
 	AnyPort   bool
+	Shrink    func(ctx context.Context, data []byte) ([]byte, string, error)
 }
 
 type Service struct {
 	client *http.Client
 	cache  Cache
 	key    []byte
+	shrink func(ctx context.Context, data []byte) ([]byte, string, error)
 }
+
+const (
+	imageCachePrefix = "linkpreview:img:v1:"
+	imageCacheTTL    = 7 * 24 * time.Hour
+	maxCachedImage   = 512 << 10
+)
 
 func New(o Options) *Service {
 	allow := o.AllowAddr
 	if allow == nil {
 		allow = PublicAddr
 	}
-	return &Service{client: newClient(allow, o.AnyPort), cache: o.Cache, key: o.SignKey}
+	return &Service{client: newClient(allow, o.AnyPort), cache: o.Cache, key: o.SignKey, shrink: o.Shrink}
 }
 
 func Normalize(raw string) (*url.URL, error) {
@@ -182,6 +190,32 @@ func (s *Service) Image(ctx context.Context, imageURL, signature string) ([]byte
 	if err != nil {
 		return nil, "", err
 	}
+	key := imageCachePrefix + strings.TrimPrefix(cacheKey(u.String()), cachePrefix)
+	if s.cache != nil {
+		if cached, ok, err := s.cache.Get(ctx, key); err == nil && ok {
+			if ctype, b64, found := strings.Cut(cached, "|"); found {
+				if data, err := base64.StdEncoding.DecodeString(b64); err == nil && imageTypes[ctype] {
+					return data, ctype, nil
+				}
+			}
+		}
+	}
+	body, mediaType, err := s.fetchImage(ctx, u)
+	if err != nil {
+		return nil, "", err
+	}
+	if s.shrink != nil {
+		if small, ctype, err := s.shrink(ctx, body); err == nil && len(small) < len(body) && imageTypes[ctype] {
+			body, mediaType = small, ctype
+		}
+	}
+	if s.cache != nil && len(body) <= maxCachedImage {
+		_ = s.cache.Set(ctx, key, mediaType+"|"+base64.StdEncoding.EncodeToString(body), imageCacheTTL)
+	}
+	return body, mediaType, nil
+}
+
+func (s *Service) fetchImage(ctx context.Context, u *url.URL) ([]byte, string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		return nil, "", err

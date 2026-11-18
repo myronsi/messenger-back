@@ -145,3 +145,44 @@ func (p *Prober) AnimatedWebP(ctx context.Context, gifData []byte, side, quality
 	}
 	return out, nil
 }
+
+func (p *Prober) StillToPNG(ctx context.Context, path string) ([]byte, error) {
+	if !p.HasEncoder() {
+		return nil, ErrNoEncoder
+	}
+	ctx, cancel := context.WithTimeout(ctx, encodeTimeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, p.ffmpeg, "-nostdin", "-v", "error", "-protocol_whitelist", "file", "-threads", "1", //nolint:gosec
+		"-i", path, "-frames:v", "1", "-c:v", "png", "-f", "image2pipe", "pipe:1").Output()
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, ErrMeasureTimeout
+		}
+		return nil, err
+	}
+	if len(out) < 8 || string(out[1:4]) != "PNG" {
+		return nil, ErrUnsupported
+	}
+	return out, nil
+}
+
+const maxPreviewPixels = 16_000_000
+
+func (p *Prober) ShrinkImage(ctx context.Context, data []byte, side, quality int) ([]byte, string, error) {
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return nil, "", ErrUnsupported
+	}
+	if cfg.Width <= 0 || cfg.Height <= 0 || cfg.Width*cfg.Height > maxPreviewPixels {
+		return nil, "", ErrImageTooLarge
+	}
+	img, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, "", ErrUnsupported
+	}
+	out, err := p.Resized(ctx, img, side, quality)
+	if err != nil {
+		return nil, "", err
+	}
+	return out.Data, out.ContentType, nil
+}

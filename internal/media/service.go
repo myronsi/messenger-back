@@ -277,6 +277,12 @@ func (s *Service) upload(ctx context.Context, u Upload, tags *Tags) (postgres.At
 	if err != nil {
 		return postgres.Attachment{}, err
 	}
+	origSize, origType := size, det.ContentType
+	if IsHEIF(det.ContentType) {
+		var swap func()
+		tmp, size, det, swap = s.convertHEIF(ctx, tmp, size, det)
+		defer swap()
+	}
 	if det.ContentType == "video/webm" {
 		det = s.webmKind(ctx, tmp.Name(), det)
 		if u.Purpose == PurposeProfileBackground && det.Kind != KindVideo {
@@ -287,7 +293,7 @@ func (s *Service) upload(ctx context.Context, u Upload, tags *Tags) (postgres.At
 	if isProfilePurpose(u.Purpose) {
 		limitOf = profileLimit(u.Purpose, det)
 	}
-	if size > limitOf {
+	if origSize > limitOf {
 		return postgres.Attachment{}, ErrTooLarge
 	}
 
@@ -365,7 +371,7 @@ func (s *Service) upload(ctx context.Context, u Upload, tags *Tags) (postgres.At
 		}
 		w, h := int32(img.Width), int32(img.Height) //nolint:gosec // bounded by MaxImageSide
 		rec.Width, rec.Height, rec.MimeType, rec.Size = &w, &h, img.ContentType, int64(len(img.Data))
-		if rec.MimeType != det.ContentType {
+		if rec.MimeType != origType {
 			rec.Filename = swapExtension(rec.Filename, rec.MimeType)
 		}
 		body, thumb, thumbType = bytes.NewReader(img.Data), img.Thumbnail, tt
@@ -862,4 +868,26 @@ func (s *Service) Collect(ctx context.Context, batch int) (int, error) {
 		n++
 	}
 	return n, nil
+}
+
+func (s *Service) convertHEIF(ctx context.Context, tmp *os.File, size int64, det Detected) (*os.File, int64, Detected, func()) {
+	asFile := Detected{Kind: KindFile, ContentType: "application/octet-stream"}
+	png, err := s.o.Prober.StillToPNG(ctx, tmp.Name())
+	if err != nil {
+		s.o.Log.InfoContext(ctx, "heif upload kept as file", "error", err)
+		return tmp, size, asFile, func() {}
+	}
+	out, err := os.CreateTemp("", "messenger-heif-*")
+	if err != nil {
+		return tmp, size, asFile, func() {}
+	}
+	cleanup := func() {
+		_ = out.Close()
+		_ = os.Remove(out.Name())
+	}
+	if _, err := out.Write(png); err != nil {
+		cleanup()
+		return tmp, size, asFile, func() {}
+	}
+	return out, int64(len(png)), Detected{Kind: KindImage, ContentType: "image/png"}, cleanup
 }

@@ -81,6 +81,9 @@ func Detect(head []byte, purpose, kind string) (Detected, error) {
 		}
 		return Detected{Kind: kind, ContentType: at}, nil
 	case KindImage:
+		if ht := heifType(head); ht != "" {
+			return Detected{Kind: KindImage, ContentType: ht}, nil
+		}
 		if !imageTypes[sniffed] {
 			return Detected{}, ErrUnsupported
 		}
@@ -89,6 +92,8 @@ func Detect(head []byte, purpose, kind string) (Detected, error) {
 	switch {
 	case imageTypes[sniffed]:
 		return Detected{Kind: KindImage, ContentType: sniffed}, nil
+	case heifType(head) != "":
+		return Detected{Kind: KindImage, ContentType: heifType(head)}, nil
 	case sniffed == "video/mp4" || sniffed == "video/webm":
 		return Detected{Kind: KindVideo, ContentType: sniffed}, nil
 	case len(head) >= 16 && string(head[4:12]) == "ftypqt  ":
@@ -122,4 +127,30 @@ func fileType(sniffed string) string {
 // downloaded. HTML, SVG and scripts never reach this point as such: Detect stores them as octet-stream.
 func Inline(contentType string) bool {
 	return imageTypes[contentType] || strings.HasPrefix(contentType, "audio/") || strings.HasPrefix(contentType, "video/")
+}
+
+var heifBrands = map[string]string{
+	"heic": "image/heic", "heix": "image/heic", "heim": "image/heic", "heis": "image/heic", "hevc": "image/heic",
+	"mif1": "image/heic", "msf1": "image/heic", "avif": "image/avif", "avis": "image/avif",
+}
+
+func heifType(head []byte) string {
+	if len(head) < 16 || string(head[4:8]) != "ftyp" {
+		return ""
+	}
+	if t, ok := heifBrands[string(head[8:12])]; ok {
+		if t == "image/heic" && string(head[8:12]) == "mif1" {
+			for i := 16; i+4 <= len(head) && i < 64; i += 4 {
+				if string(head[i:i+4]) == "avif" {
+					return "image/avif"
+				}
+			}
+		}
+		return t
+	}
+	return ""
+}
+
+func IsHEIF(contentType string) bool {
+	return contentType == "image/heic" || contentType == "image/avif"
 }
