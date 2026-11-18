@@ -231,8 +231,13 @@ func (a *AccountServer) DeleteMe(w http.ResponseWriter, r *http.Request, _ Delet
 
 // The contract calls "contacts" what the schema calls shared_chats (people you have a chat with).
 func visibilityToDB(v string) string {
-	if v == "contacts" {
+	switch v {
+	case "contacts":
 		return postgres.VisibleSharedChats
+	case "everyone_except":
+		return postgres.VisibleEveryone
+	case "nobody_except":
+		return postgres.VisibleNobody
 	}
 	return v
 }
@@ -247,7 +252,7 @@ func visibilityFromDB(v string) string {
 var exceptionSettings = []string{
 	postgres.SettingAvatar, postgres.SettingProfile, postgres.SettingPresence, postgres.SettingLastSeen, postgres.SettingBirthday,
 	postgres.SettingGroupInvites,
-	postgres.SettingDirectMessages, postgres.SettingSearch,
+	postgres.SettingDirectMessages, postgres.SettingSearch, postgres.SettingCalls,
 }
 
 func (a *AccountServer) privacy(ctx context.Context, userID int64) (PrivacySettings, error) {
@@ -267,10 +272,11 @@ func (a *AccountServer) privacy(ctx context.Context, userID int64) (PrivacySetti
 		LastSeenVisibility:      Visibility(visibilityFromDB(s.LastSeenVisibility)),
 		BirthdayVisibility:      Visibility(visibilityFromDB(s.BirthdayVisibility)),
 		ReadReceiptsEnabled:     s.ReadReceiptsEnabled,
-		DirectMessages:          DirectMessagePolicy(s.DirectMessages),
+		DirectMessages:          DirectMessagePolicy(visibilityFromDB(s.DirectMessages)),
 		GroupInvites:            GroupInvitePolicy(visibilityFromDB(s.GroupInvites)),
 		SearchVisibility:        SearchVisibility(s.SearchVisibility),
-		CallsEnabled:            s.CallsEnabled,
+		CallsEnabled:            s.CallsFrom != postgres.VisibleNobody,
+		CallsFrom:               CallPolicy(visibilityFromDB(s.CallsFrom)),
 		TypingIndicatorsEnabled: s.TypingIndicatorsEnabled,
 		Exceptions:              PrivacyExceptions{},
 	}
@@ -346,7 +352,7 @@ func (a *AccountServer) UpdatePrivacySettings(w http.ResponseWriter, r *http.Req
 			WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "direct_messages", Message: "unknown value"})
 			return
 		}
-		set(&s.DirectMessages, string(*body.DirectMessages))
+		set(&s.DirectMessages, visibilityToDB(string(*body.DirectMessages)))
 	}
 	if body.GroupInvites != nil {
 		if !body.GroupInvites.Valid() {
@@ -362,8 +368,26 @@ func (a *AccountServer) UpdatePrivacySettings(w http.ResponseWriter, r *http.Req
 		}
 		set(&s.SearchVisibility, string(*body.SearchVisibility))
 	}
-	if body.CallsEnabled != nil {
-		s.CallsEnabled, changed = body.CallsEnabled, true
+	switch {
+	case body.CallsFrom != nil:
+		if !body.CallsFrom.Valid() {
+			WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "calls_from", Message: "unknown value"})
+			return
+		}
+		set(&s.CallsFrom, visibilityToDB(string(*body.CallsFrom)))
+	case body.CallsEnabled != nil && !*body.CallsEnabled:
+		set(&s.CallsFrom, postgres.VisibleNobody)
+	case body.CallsEnabled != nil:
+		current, err := a.o.Store.Social().Privacy(r.Context(), []int64{p.UserID})
+		if err != nil {
+			a.internal(w, r, "privacy settings", err)
+			return
+		}
+		if current[p.UserID].CallsFrom == postgres.VisibleNobody {
+			set(&s.CallsFrom, postgres.VisibleEveryone)
+		} else {
+			changed = true
+		}
 	}
 	if body.TypingIndicatorsEnabled != nil {
 		s.TypingIndicatorsEnabled, changed = body.TypingIndicatorsEnabled, true

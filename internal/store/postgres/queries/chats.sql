@@ -50,9 +50,12 @@ ORDER BY c.updated_at DESC, c.id DESC
 LIMIT @max_rows;
 
 -- name: AddParticipant :one
-INSERT INTO participants (chat_id, user_id, role)
-VALUES (@chat_id, @user_id, @role)
+INSERT INTO participants (chat_id, user_id, role, engaged)
+VALUES (@chat_id, @user_id, @role, @engaged)
 RETURNING *;
+
+-- name: MarkEngaged :exec
+UPDATE participants SET engaged = true WHERE chat_id = @chat_id AND user_id = @user_id AND NOT engaged;
 
 -- name: GetParticipant :one
 SELECT * FROM participants WHERE chat_id = @chat_id AND user_id = @user_id;
@@ -72,7 +75,7 @@ UPDATE participants SET role = @role WHERE chat_id = @chat_id AND user_id = @use
 -- name: MarkRead :execrows
 -- The read marker only moves forward: no row is updated when it is already at or past the message.
 UPDATE participants
-SET last_read_message_id = @message_id::bigint, last_read_at = now()
+SET last_read_message_id = @message_id::bigint, last_read_at = now(), engaged = true
 WHERE chat_id = @chat_id AND user_id = @user_id
   AND (last_read_message_id IS NULL OR last_read_message_id < @message_id::bigint);
 

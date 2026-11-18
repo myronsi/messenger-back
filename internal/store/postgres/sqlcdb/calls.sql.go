@@ -347,12 +347,27 @@ func (q *Queries) KeyShareChat(ctx context.Context, id int64) (int64, error) {
 
 const listCallCandidates = `-- name: ListCallCandidates :many
 SELECT p.user_id,
-       COALESCE(s.calls_enabled, true)::bool AS calls_enabled,
+       (CASE
+            WHEN e.effect = 'allow' THEN true
+            WHEN e.effect = 'deny' THEN false
+            WHEN COALESCE(s.calls_from, 'everyone') = 'everyone' THEN true
+            WHEN s.calls_from = 'shared_chats' THEN EXISTS (
+                SELECT 1
+                FROM participants mine
+                JOIN participants other ON other.chat_id = mine.chat_id
+                JOIN chats sc ON sc.id = mine.chat_id
+                WHERE mine.user_id = p.user_id AND other.user_id = $1
+                  AND ((sc.type = 'group' AND mine.engaged)
+                    OR (sc.type <> 'group' AND (sc.created_by = mine.user_id OR mine.last_read_message_id IS NOT NULL))))
+            ELSE false
+        END)::bool AS calls_allowed,
        EXISTS (SELECT 1 FROM user_blocks b
                WHERE (b.blocker_id = $1 AND b.blocked_id = p.user_id)
                   OR (b.blocker_id = p.user_id AND b.blocked_id = $1))::bool AS blocked
 FROM participants p
 LEFT JOIN user_privacy_settings s ON s.user_id = p.user_id
+LEFT JOIN user_privacy_exceptions e
+       ON e.owner_id = p.user_id AND e.setting_key = 'calls_from' AND e.target_user_id = $1
 WHERE p.chat_id = $2
 ORDER BY p.joined_at, p.user_id
 FOR KEY SHARE OF p
@@ -365,7 +380,7 @@ type ListCallCandidatesParams struct {
 
 type ListCallCandidatesRow struct {
 	UserID       int64
-	CallsEnabled bool
+	CallsAllowed bool
 	Blocked      bool
 }
 
@@ -378,7 +393,7 @@ func (q *Queries) ListCallCandidates(ctx context.Context, arg ListCallCandidates
 	items := []ListCallCandidatesRow{}
 	for rows.Next() {
 		var i ListCallCandidatesRow
-		if err := rows.Scan(&i.UserID, &i.CallsEnabled, &i.Blocked); err != nil {
+		if err := rows.Scan(&i.UserID, &i.CallsAllowed, &i.Blocked); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

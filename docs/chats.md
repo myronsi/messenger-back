@@ -30,10 +30,11 @@ order). Old clients that do not send it get only the main list. `archived` still
 1. An existing chat of the pair is returned with `200`. If one of the two blocked the other, the answer is `403 blocked_by_user` instead.
 2. Otherwise the other user's `direct_messages` setting decides:
    - `everyone` opens the chat;
-   - `shared_chats` opens it only when the two already share a (group) chat, otherwise `403`;
+   - `contacts` (`shared_chats` in the schema) opens it only when the requester is the other user's contact ([accounts.md](accounts.md#privacy)), otherwise `403`;
+   - `nobody` refuses every new chat and every request (`403`); chats that exist stay;
    - `wait_approval` makes a request (`202` with the `ApprovalRequest`, the requester as they see themselves). Asking again returns the same pending request; asking after the chat was opened meanwhile returns the chat.
 
-   A block in either direction is `403`.
+   An allow exception for the requester opens the chat whatever the setting, a deny exception refuses it. A block in either direction is `403`.
 3. A new chat is `201`. Both users get `chat_created` (before any message of the chat), and `initial_message` becomes its first message.
 4. When the other user does not count the requester as a contact, the new chat lands in their [Requests folder](#requests-folder).
 
@@ -104,11 +105,12 @@ In group messages, owners, admins and v1 moderators may also delete anyone's mes
   - an allow exception lets the caller add them;
   - otherwise `wait_approval` makes an invitation that waits in the invitee's inbox (the group lists them once they accept);
   - a deny exception refuses;
-  - then `everyone`, `shared_chats` (a shared chat), `nobody` and the `*_except` values decide;
+  - then `everyone`, `contacts` (`shared_chats` in the schema: the invitee counts the caller as a contact) and `nobody` decide; new users start with `contacts`;
   - a block refuses.
 
   A member who refuses invitations fails group creation (`403`) or the add (`403`). Adding a member twice is `409`. An outsider gets `404` for everything, before any setting of the invitee is looked at.
 - **Invitations:** accepting one adds the user only while whoever invited them may still add members (`409` otherwise). Joining, by an invitation or by being added, settles every other pending invitation of the user to that group.
+- **Taking part:** a member who was added by someone else does not count the group's members as contacts until they read or write in it; creating the group or accepting an invitation counts at once (`participants.engaged`, see [accounts.md](accounts.md#privacy)).
 - **Leaving and removing:** `POST /groups/{id}/leave` and `DELETE /groups/{id}/participants/{user_id}` remove the member and their pin of the group. The removed member gets `chat_deleted` and no further events of the group, and their unread counter for it is dropped. The owner cannot leave (`409`) or be removed (`403`) and has to transfer ownership first (`POST /groups/{id}/transfer-owner`; the old owner becomes an admin). When the membership cache cannot be cleared after a few quick retries, the removal stays done in PostgreSQL but the answer is `503`, so a client does not report a removal while the cached membership may still let the member in; retrying clears the cache. Deleting a chat or group answers the same way.
 - **Avatar:** `PUT /groups/{id}/avatar` takes an image the caller uploaded with purpose `avatar`. The group's members may download it through `/attachments/{id}/content`.
 - **Deleting:** `DELETE /groups/{id}` (the owner) deletes the group for everyone. Members get `chat_deleted`, and the worker deletes the messages.

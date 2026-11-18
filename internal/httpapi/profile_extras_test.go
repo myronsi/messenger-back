@@ -189,6 +189,7 @@ func TestProfileExtrasBumpTheVersion(t *testing.T) {
 func TestGroupBackgroundOverHTTP(t *testing.T) {
 	e := newChatEnv(t)
 	owner, bob := e.register(t, "owner"), e.register(t, "bob")
+	e.openInvites(t, bob)
 	gid := e.do(t, request{method: http.MethodPost, path: "/groups", token: owner.access, body: map[string]any{"name": "Team", "member_ids": []string{e.uid(t, bob)}}}).json()["id"].(string)
 
 	r := e.do(t, request{method: http.MethodPut, path: "/groups/" + gid + "/background", token: owner.access, body: map[string]any{"kind": "preset", "preset": "ocean"}})

@@ -429,7 +429,16 @@ func (s *Service) send(ctx context.Context, r SendRequest) (Sent, error) {
 	if sticker != nil {
 		s.usedSticker(ctx, r.SenderID, sticker.ID)
 	}
+	if chat.Type == postgres.ChatGroup {
+		s.engaged(ctx, r.ChatID, r.SenderID)
+	}
 	return Sent{Message: m}, nil
+}
+
+func (s *Service) engaged(ctx context.Context, chatID, userID int64) {
+	if err := s.d.Store.Chats().MarkEngaged(context.WithoutCancel(ctx), chatID, userID); err != nil {
+		s.d.Log.WarnContext(ctx, "mark engaged", "error", err, "chat_id", chatID)
+	}
 }
 
 const RecentStickers = 20

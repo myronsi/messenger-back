@@ -106,6 +106,7 @@ func TestGroupMembersAndCommonGroups(t *testing.T) {
 	e := newChatEnv(t)
 	alice, bob, carol, dave, eve := e.register(t, "alice"), e.register(t, "bob"), e.register(t, "carol"), e.register(t, "dave"), e.register(t, "eve")
 	bobID, carolID, daveID := e.uid(t, bob), e.uid(t, carol), e.uid(t, dave)
+	e.openInvites(t, bob, carol, dave)
 	group := func(name string, members ...string) string {
 		t.Helper()
 		r := e.do(t, request{method: http.MethodPost, path: "/groups", token: alice.access, body: map[string]any{"name": name, "member_ids": members}})

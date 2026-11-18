@@ -91,7 +91,7 @@ func (r chatRepo) AddMemberAs(ctx context.Context, chatID, actorID, userID int64
 		if err := actingIn(ctx, q, chatID, actorID, managers); err != nil {
 			return err
 		}
-		if _, err := q.AddParticipant(ctx, sqlcdb.AddParticipantParams{ChatID: chatID, UserID: userID, Role: string(RoleMember)}); err != nil {
+		if _, err := q.AddParticipant(ctx, sqlcdb.AddParticipantParams{ChatID: chatID, UserID: userID, Role: string(RoleMember), Engaged: false}); err != nil {
 			return err
 		}
 		// Invitations to the group that the user did not answer yet are settled by joining.
@@ -305,11 +305,13 @@ func (r approvalRepo) ApproveInvite(ctx context.Context, id, recipientID int64) 
 		}
 		// A failed insert would abort the transaction, so membership is checked first (the group is locked).
 		if _, err := q.GetParticipant(ctx, sqlcdb.GetParticipantParams{ChatID: *row.ChatID, UserID: recipientID}); errors.Is(err, pgx.ErrNoRows) {
-			if _, err := q.AddParticipant(ctx, sqlcdb.AddParticipantParams{ChatID: *row.ChatID, UserID: recipientID, Role: string(RoleMember)}); err != nil {
+			if _, err := q.AddParticipant(ctx, sqlcdb.AddParticipantParams{ChatID: *row.ChatID, UserID: recipientID, Role: string(RoleMember), Engaged: true}); err != nil {
 				return err
 			}
 			joined = true
 		} else if err != nil {
+			return err
+		} else if err := q.MarkEngaged(ctx, sqlcdb.MarkEngagedParams{ChatID: *row.ChatID, UserID: recipientID}); err != nil {
 			return err
 		}
 		// This one and every other pending invitation of the user to the group are settled.

@@ -259,6 +259,7 @@ type Participant struct {
 	LastReadAt        *time.Time
 	JoinedAt          time.Time
 	IsRequest         bool
+	Engaged           bool
 }
 
 // RoleEvent is a change of a group member's role. ActorID is nil when the actor's account is gone.
@@ -311,6 +312,7 @@ type ChatRepository interface {
 	// MarkRead moves the read marker of a participant forward (never back) and reports whether it moved.
 	// ErrNotFound: the user is not in the chat.
 	MarkRead(ctx context.Context, chatID, userID, messageID int64) (advanced bool, err error)
+	MarkEngaged(ctx context.Context, chatID, userID int64) error
 	// Delete removes the chat and returns the object-storage keys of its attachments.
 	Delete(ctx context.Context, chatID int64) (attachmentKeys []string, err error)
 
