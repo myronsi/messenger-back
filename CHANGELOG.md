@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.24.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.23.0-alpha.1...v1.24.0-alpha.1) (2026-11-18)
+
+
+### Features
+
+* **privacy:** who may send me voice and video, link to my account in forwards ([#205](https://github.com/myronsi/messenger-back/issues/205)) ([a2b6f69](https://github.com/myronsi/messenger-back/commit/a2b6f691e2f26c28ee1db34735bac807d8a00c6b))
+
 ## [1.23.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.22.0-alpha.1...v1.23.0-alpha.1) (2026-11-18)
 
 
