@@ -66,7 +66,7 @@ type NewCall struct {
 
 type CallCandidate struct {
 	UserID       int64
-	CallsEnabled bool
+	CallsAllowed bool
 	Blocked      bool
 }
 
@@ -306,7 +306,7 @@ func (r callRepo) ringList(ctx context.Context, q *sqlcdb.Queries, n NewCall) ([
 			member = true
 			continue
 		}
-		others = append(others, CallCandidate{UserID: row.UserID, CallsEnabled: row.CallsEnabled, Blocked: row.Blocked})
+		others = append(others, CallCandidate{UserID: row.UserID, CallsAllowed: row.CallsAllowed, Blocked: row.Blocked})
 	}
 	if !member {
 		return nil, ErrNotFound

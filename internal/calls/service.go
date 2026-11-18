@@ -290,13 +290,13 @@ func ringList(kind postgres.ChatType, others []postgres.CallCandidate) ([]int64,
 	if kind != postgres.ChatDirect {
 		var ring []int64
 		for _, o := range others {
-			if o.CallsEnabled {
+			if o.CallsAllowed {
 				ring = append(ring, o.UserID)
 			}
 		}
 		return ring, nil
 	}
-	if len(others) != 1 || others[0].Blocked || !others[0].CallsEnabled {
+	if len(others) != 1 || others[0].Blocked || !others[0].CallsAllowed {
 		return nil, ErrNotAllowed
 	}
 	return []int64{others[0].UserID}, nil

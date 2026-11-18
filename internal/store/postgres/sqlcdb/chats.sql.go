@@ -11,19 +11,25 @@ import (
 )
 
 const addParticipant = `-- name: AddParticipant :one
-INSERT INTO participants (chat_id, user_id, role)
-VALUES ($1, $2, $3)
-RETURNING chat_id, user_id, role, last_read_message_id, joined_at, last_read_at, archived_at, cleared_before_message_id, hidden_at
+INSERT INTO participants (chat_id, user_id, role, engaged)
+VALUES ($1, $2, $3, $4)
+RETURNING chat_id, user_id, role, last_read_message_id, joined_at, last_read_at, archived_at, cleared_before_message_id, hidden_at, engaged
 `
 
 type AddParticipantParams struct {
-	ChatID int64
-	UserID int64
-	Role   string
+	ChatID  int64
+	UserID  int64
+	Role    string
+	Engaged bool
 }
 
 func (q *Queries) AddParticipant(ctx context.Context, arg AddParticipantParams) (Participant, error) {
-	row := q.db.QueryRow(ctx, addParticipant, arg.ChatID, arg.UserID, arg.Role)
+	row := q.db.QueryRow(ctx, addParticipant,
+		arg.ChatID,
+		arg.UserID,
+		arg.Role,
+		arg.Engaged,
+	)
 	var i Participant
 	err := row.Scan(
 		&i.ChatID,
@@ -35,6 +41,7 @@ func (q *Queries) AddParticipant(ctx context.Context, arg AddParticipantParams) 
 		&i.ArchivedAt,
 		&i.ClearedBeforeMessageID,
 		&i.HiddenAt,
+		&i.Engaged,
 	)
 	return i, err
 }
@@ -121,7 +128,7 @@ func (q *Queries) GetDirectChat(ctx context.Context, directKey *string) (Chat, e
 }
 
 const getParticipant = `-- name: GetParticipant :one
-SELECT chat_id, user_id, role, last_read_message_id, joined_at, last_read_at, archived_at, cleared_before_message_id, hidden_at FROM participants WHERE chat_id = $1 AND user_id = $2
+SELECT chat_id, user_id, role, last_read_message_id, joined_at, last_read_at, archived_at, cleared_before_message_id, hidden_at, engaged FROM participants WHERE chat_id = $1 AND user_id = $2
 `
 
 type GetParticipantParams struct {
@@ -142,6 +149,7 @@ func (q *Queries) GetParticipant(ctx context.Context, arg GetParticipantParams) 
 		&i.ArchivedAt,
 		&i.ClearedBeforeMessageID,
 		&i.HiddenAt,
+		&i.Engaged,
 	)
 	return i, err
 }
@@ -310,7 +318,7 @@ func (q *Queries) ListParticipantIDs(ctx context.Context, chatID int64) ([]int64
 }
 
 const listParticipants = `-- name: ListParticipants :many
-SELECT chat_id, user_id, role, last_read_message_id, joined_at, last_read_at, archived_at, cleared_before_message_id, hidden_at FROM participants WHERE chat_id = $1 ORDER BY joined_at, user_id
+SELECT chat_id, user_id, role, last_read_message_id, joined_at, last_read_at, archived_at, cleared_before_message_id, hidden_at, engaged FROM participants WHERE chat_id = $1 ORDER BY joined_at, user_id
 `
 
 func (q *Queries) ListParticipants(ctx context.Context, chatID int64) ([]Participant, error) {
@@ -332,6 +340,7 @@ func (q *Queries) ListParticipants(ctx context.Context, chatID int64) ([]Partici
 			&i.ArchivedAt,
 			&i.ClearedBeforeMessageID,
 			&i.HiddenAt,
+			&i.Engaged,
 		); err != nil {
 			return nil, err
 		}
@@ -505,7 +514,7 @@ func (q *Queries) LockChatsOfUser(ctx context.Context, userID int64) ([]int64, e
 }
 
 const lockParticipant = `-- name: LockParticipant :one
-SELECT chat_id, user_id, role, last_read_message_id, joined_at, last_read_at, archived_at, cleared_before_message_id, hidden_at FROM participants WHERE chat_id = $1 AND user_id = $2 FOR UPDATE
+SELECT chat_id, user_id, role, last_read_message_id, joined_at, last_read_at, archived_at, cleared_before_message_id, hidden_at, engaged FROM participants WHERE chat_id = $1 AND user_id = $2 FOR UPDATE
 `
 
 type LockParticipantParams struct {
@@ -526,6 +535,7 @@ func (q *Queries) LockParticipant(ctx context.Context, arg LockParticipantParams
 		&i.ArchivedAt,
 		&i.ClearedBeforeMessageID,
 		&i.HiddenAt,
+		&i.Engaged,
 	)
 	return i, err
 }
@@ -556,9 +566,23 @@ func (q *Queries) MarkChatDeletionEmitted(ctx context.Context, chatID int64) err
 	return err
 }
 
+const markEngaged = `-- name: MarkEngaged :exec
+UPDATE participants SET engaged = true WHERE chat_id = $1 AND user_id = $2 AND NOT engaged
+`
+
+type MarkEngagedParams struct {
+	ChatID int64
+	UserID int64
+}
+
+func (q *Queries) MarkEngaged(ctx context.Context, arg MarkEngagedParams) error {
+	_, err := q.db.Exec(ctx, markEngaged, arg.ChatID, arg.UserID)
+	return err
+}
+
 const markRead = `-- name: MarkRead :execrows
 UPDATE participants
-SET last_read_message_id = $1::bigint, last_read_at = now()
+SET last_read_message_id = $1::bigint, last_read_at = now(), engaged = true
 WHERE chat_id = $2 AND user_id = $3
   AND (last_read_message_id IS NULL OR last_read_message_id < $1::bigint)
 `

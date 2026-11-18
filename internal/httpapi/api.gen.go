@@ -158,6 +158,27 @@ func (e CallParticipantState) Valid() bool {
 	}
 }
 
+// Defines values for CallPolicy.
+const (
+	CallPolicyContacts CallPolicy = "contacts"
+	CallPolicyEveryone CallPolicy = "everyone"
+	CallPolicyNobody   CallPolicy = "nobody"
+)
+
+// Valid indicates whether the value is a known member of the CallPolicy enum.
+func (e CallPolicy) Valid() bool {
+	switch e {
+	case CallPolicyContacts:
+		return true
+	case CallPolicyEveryone:
+		return true
+	case CallPolicyNobody:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CallState.
 const (
 	CallStateActive  CallState = "active"
@@ -373,7 +394,9 @@ func (e DeviceRecoveryStatusStatus) Valid() bool {
 
 // Defines values for DirectMessagePolicy.
 const (
+	DirectMessagePolicyContacts     DirectMessagePolicy = "contacts"
 	DirectMessagePolicyEveryone     DirectMessagePolicy = "everyone"
+	DirectMessagePolicyNobody       DirectMessagePolicy = "nobody"
 	DirectMessagePolicySharedChats  DirectMessagePolicy = "shared_chats"
 	DirectMessagePolicyWaitApproval DirectMessagePolicy = "wait_approval"
 )
@@ -381,7 +404,11 @@ const (
 // Valid indicates whether the value is a known member of the DirectMessagePolicy enum.
 func (e DirectMessagePolicy) Valid() bool {
 	switch e {
+	case DirectMessagePolicyContacts:
+		return true
 	case DirectMessagePolicyEveryone:
+		return true
+	case DirectMessagePolicyNobody:
 		return true
 	case DirectMessagePolicySharedChats:
 		return true
@@ -1503,6 +1530,9 @@ type CallParticipant struct {
 // CallParticipantState `left` and `declined` can become `joined` again in a group call.
 type CallParticipantState string
 
+// CallPolicy Who may ring the user (`contacts` as in `Visibility`).
+type CallPolicy string
+
 // CallState `ringing` until someone answers, `active` while people are in it, `ended` afterwards.
 type CallState string
 
@@ -1808,7 +1838,10 @@ type DeviceRecoveryStatus struct {
 // DeviceRecoveryStatusStatus defines model for DeviceRecoveryStatus.Status.
 type DeviceRecoveryStatusStatus string
 
-// DirectMessagePolicy defines model for DirectMessagePolicy.
+// DirectMessagePolicy Who may open a direct chat with the user. `everyone`; `contacts` (see `Visibility`); `wait_approval`: others
+// send a request the user approves; `nobody`: no new direct chats and no requests (existing chats stay).
+// Allow exceptions still let the listed users in.
+// Deprecated: `shared_chats` is the old name of `contacts`; it is still accepted and never returned.
 type DirectMessagePolicy string
 
 // DisableTwoFactorRequest defines model for DisableTwoFactorRequest.
@@ -1971,7 +2004,8 @@ type Group struct {
 	OwnerId Id `json:"owner_id"`
 }
 
-// GroupInvitePolicy defines model for GroupInvitePolicy.
+// GroupInvitePolicy Who may add the user to a group. Defaults to `contacts`. Deprecated: `everyone_except` and `nobody_except`
+// are still accepted and stored as `everyone` and `nobody`; they are never returned.
 type GroupInvitePolicy string
 
 // GroupMember defines model for GroupMember.
@@ -2366,19 +2400,37 @@ type PrivacyExceptionsRequest struct {
 
 // PrivacySettings defines model for PrivacySettings.
 type PrivacySettings struct {
-	// AvatarVisibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
-	// `contacts` are the users you share a group with, or a direct chat that you opened or read in.
+	// AvatarVisibility Who may see the item. The exception lists apply to every value.
+	// `contacts` are the users you share a direct chat with that you opened or read in, or a group you created,
+	// joined by accepting an invitation, or read or wrote in. Being added to a group alone does not make its
+	// members your contacts.
+	// Deprecated: `everyone_except` and `nobody_except` are still accepted and stored as `everyone` and `nobody`;
+	// they are never returned.
 	AvatarVisibility Visibility `json:"avatar_visibility"`
 
 	// BirthdayVisibility Who sees the birthday (`User.birthday`) and gets a reminder on the day. Defaults to `contacts`.
 	BirthdayVisibility Visibility `json:"birthday_visibility"`
 
-	// CallsEnabled Whether others may ring this user. Calls are only possible from an existing direct chat or a shared group.
-	CallsEnabled   bool                `json:"calls_enabled"`
+	// CallsEnabled `false` exactly when `calls_from` is `nobody`. Use `calls_from`.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	CallsEnabled bool `json:"calls_enabled"`
+
+	// CallsFrom Who may ring this user, with the `calls_from` exceptions. Calls are only possible from an existing direct
+	// chat or a shared group. A direct call to a user who does not allow the caller is refused; in a group call
+	// only the members who allow the caller are rung, the others can still join.
+	CallsFrom CallPolicy `json:"calls_from"`
+
+	// DirectMessages Who may open a direct chat with the user. `everyone`; `contacts` (see `Visibility`); `wait_approval`: others
+	// send a request the user approves; `nobody`: no new direct chats and no requests (existing chats stay).
+	// Allow exceptions still let the listed users in.
+	// Deprecated: `shared_chats` is the old name of `contacts`; it is still accepted and never returned.
 	DirectMessages DirectMessagePolicy `json:"direct_messages"`
 
 	// Exceptions User IDs per setting. An exception wins over the setting whatever its value; `allow` always lets the user in, `deny` always keeps them out.
-	Exceptions   PrivacyExceptions `json:"exceptions"`
+	Exceptions PrivacyExceptions `json:"exceptions"`
+
+	// GroupInvites Who may add the user to a group. Defaults to `contacts`. Deprecated: `everyone_except` and `nobody_except`
+	// are still accepted and stored as `everyone` and `nobody`; they are never returned.
 	GroupInvites GroupInvitePolicy `json:"group_invites"`
 
 	// LastSeenVisibility Who sees when the user was last online (`User.last_seen`, `presence` events).
@@ -2387,8 +2439,12 @@ type PrivacySettings struct {
 	// PresenceVisibility Who sees that the user is online now (`User.is_online`, `presence` events).
 	PresenceVisibility Visibility `json:"presence_visibility"`
 
-	// ProfileVisibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
-	// `contacts` are the users you share a group with, or a direct chat that you opened or read in.
+	// ProfileVisibility Who may see the item. The exception lists apply to every value.
+	// `contacts` are the users you share a direct chat with that you opened or read in, or a group you created,
+	// joined by accepting an invitation, or read or wrote in. Being added to a group alone does not make its
+	// members your contacts.
+	// Deprecated: `everyone_except` and `nobody_except` are still accepted and stored as `everyone` and `nobody`;
+	// they are never returned.
 	ProfileVisibility   Visibility       `json:"profile_visibility"`
 	ReadReceiptsEnabled bool             `json:"read_receipts_enabled"`
 	SearchVisibility    SearchVisibility `json:"search_visibility"`
@@ -3009,27 +3065,61 @@ type UpdateMeRequest struct {
 
 // UpdatePrivacySettingsRequest defines model for UpdatePrivacySettingsRequest.
 type UpdatePrivacySettingsRequest struct {
-	// AvatarVisibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
-	// `contacts` are the users you share a group with, or a direct chat that you opened or read in.
+	// AvatarVisibility Who may see the item. The exception lists apply to every value.
+	// `contacts` are the users you share a direct chat with that you opened or read in, or a group you created,
+	// joined by accepting an invitation, or read or wrote in. Being added to a group alone does not make its
+	// members your contacts.
+	// Deprecated: `everyone_except` and `nobody_except` are still accepted and stored as `everyone` and `nobody`;
+	// they are never returned.
 	AvatarVisibility *Visibility `json:"avatar_visibility,omitempty"`
 
-	// BirthdayVisibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
-	// `contacts` are the users you share a group with, or a direct chat that you opened or read in.
-	BirthdayVisibility *Visibility          `json:"birthday_visibility,omitempty"`
-	CallsEnabled       *bool                `json:"calls_enabled,omitempty"`
-	DirectMessages     *DirectMessagePolicy `json:"direct_messages,omitempty"`
-	GroupInvites       *GroupInvitePolicy   `json:"group_invites,omitempty"`
+	// BirthdayVisibility Who may see the item. The exception lists apply to every value.
+	// `contacts` are the users you share a direct chat with that you opened or read in, or a group you created,
+	// joined by accepting an invitation, or read or wrote in. Being added to a group alone does not make its
+	// members your contacts.
+	// Deprecated: `everyone_except` and `nobody_except` are still accepted and stored as `everyone` and `nobody`;
+	// they are never returned.
+	BirthdayVisibility *Visibility `json:"birthday_visibility,omitempty"`
 
-	// LastSeenVisibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
-	// `contacts` are the users you share a group with, or a direct chat that you opened or read in.
+	// CallsEnabled `false` sets `calls_from` to `nobody`; `true` sets it to `everyone` when it was `nobody`. Ignored when `calls_from` is sent.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	CallsEnabled *bool `json:"calls_enabled,omitempty"`
+
+	// CallsFrom Who may ring the user (`contacts` as in `Visibility`).
+	CallsFrom *CallPolicy `json:"calls_from,omitempty"`
+
+	// DirectMessages Who may open a direct chat with the user. `everyone`; `contacts` (see `Visibility`); `wait_approval`: others
+	// send a request the user approves; `nobody`: no new direct chats and no requests (existing chats stay).
+	// Allow exceptions still let the listed users in.
+	// Deprecated: `shared_chats` is the old name of `contacts`; it is still accepted and never returned.
+	DirectMessages *DirectMessagePolicy `json:"direct_messages,omitempty"`
+
+	// GroupInvites Who may add the user to a group. Defaults to `contacts`. Deprecated: `everyone_except` and `nobody_except`
+	// are still accepted and stored as `everyone` and `nobody`; they are never returned.
+	GroupInvites *GroupInvitePolicy `json:"group_invites,omitempty"`
+
+	// LastSeenVisibility Who may see the item. The exception lists apply to every value.
+	// `contacts` are the users you share a direct chat with that you opened or read in, or a group you created,
+	// joined by accepting an invitation, or read or wrote in. Being added to a group alone does not make its
+	// members your contacts.
+	// Deprecated: `everyone_except` and `nobody_except` are still accepted and stored as `everyone` and `nobody`;
+	// they are never returned.
 	LastSeenVisibility *Visibility `json:"last_seen_visibility,omitempty"`
 
-	// PresenceVisibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
-	// `contacts` are the users you share a group with, or a direct chat that you opened or read in.
+	// PresenceVisibility Who may see the item. The exception lists apply to every value.
+	// `contacts` are the users you share a direct chat with that you opened or read in, or a group you created,
+	// joined by accepting an invitation, or read or wrote in. Being added to a group alone does not make its
+	// members your contacts.
+	// Deprecated: `everyone_except` and `nobody_except` are still accepted and stored as `everyone` and `nobody`;
+	// they are never returned.
 	PresenceVisibility *Visibility `json:"presence_visibility,omitempty"`
 
-	// ProfileVisibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
-	// `contacts` are the users you share a group with, or a direct chat that you opened or read in.
+	// ProfileVisibility Who may see the item. The exception lists apply to every value.
+	// `contacts` are the users you share a direct chat with that you opened or read in, or a group you created,
+	// joined by accepting an invitation, or read or wrote in. Being added to a group alone does not make its
+	// members your contacts.
+	// Deprecated: `everyone_except` and `nobody_except` are still accepted and stored as `everyone` and `nobody`;
+	// they are never returned.
 	ProfileVisibility       *Visibility       `json:"profile_visibility,omitempty"`
 	ReadReceiptsEnabled     *bool             `json:"read_receipts_enabled,omitempty"`
 	SearchVisibility        *SearchVisibility `json:"search_visibility,omitempty"`
@@ -3174,8 +3264,12 @@ type VerifyRecoveryEmail struct {
 	Token string `json:"token"`
 }
 
-// Visibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
-// `contacts` are the users you share a group with, or a direct chat that you opened or read in.
+// Visibility Who may see the item. The exception lists apply to every value.
+// `contacts` are the users you share a direct chat with that you opened or read in, or a group you created,
+// joined by accepting an invitation, or read or wrote in. Being added to a group alone does not make its
+// members your contacts.
+// Deprecated: `everyone_except` and `nobody_except` are still accepted and stored as `everyone` and `nobody`;
+// they are never returned.
 type Visibility string
 
 // WebSocketTicket defines model for WebSocketTicket.

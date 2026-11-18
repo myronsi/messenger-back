@@ -223,8 +223,8 @@ func TestCallsOverHTTP(t *testing.T) {
 		t.Fatalf("leave an ended call: %d", r.Code)
 	}
 
-	off := false
-	if _, err := e.store.Social().PatchPrivacy(context.Background(), bobID, postgres.PrivacyPatch{CallsEnabled: &off}); err != nil {
+	off := postgres.VisibleNobody
+	if _, err := e.store.Social().PatchPrivacy(context.Background(), bobID, postgres.PrivacyPatch{CallsFrom: &off}); err != nil {
 		t.Fatal(err)
 	}
 	if r := e.do(t, request{method: http.MethodPost, path: chatPath, token: alice.access, body: map[string]any{"client_request_id": uuid.NewString()}}); r.Code != http.StatusForbidden || r.code() != "calls_not_allowed" {
