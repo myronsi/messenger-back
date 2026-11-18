@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.22.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.21.0-alpha.1...v1.22.0-alpha.1) (2026-11-18)
+
+
+### Features
+
+* **privacy:** group adds no longer make contacts, who can call me, direct messages from nobody ([#201](https://github.com/myronsi/messenger-back/issues/201)) ([297830a](https://github.com/myronsi/messenger-back/commit/297830ae8fa86ed1bd18f8ce0dc3b46aaf99733e))
+
 ## [1.21.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.20.0-alpha.1...v1.21.0-alpha.1) (2026-11-18)
 
 

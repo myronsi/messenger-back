@@ -7,11 +7,20 @@ Contract changes only. The backend changelog is `CHANGELOG.md` in the repository
 - User reports: `POST /users/{user_id}/report` (`ReportUserRequest`: `ReportReason`, optional `note`, `block`
   default `true`) and `DELETE /users/{user_id}/report`.
 - Automatic account status: `GET /me/account-status` and `POST /me/account-status/appeal` return `AccountStatus`
-  (`AccountStatusLevel`, `AccountRestriction` including `manage_group` for group changes of a suspended account); the WebSocket event `account_status` carries it to the user's own
-  sessions.
+  (`AccountStatusLevel`, `AccountRestriction`, including `manage_group` for group changes of a suspended
+  account); the WebSocket event `account_status` carries it to the user's own sessions.
 - `ErrorCode` gains `account_restricted` (`403`); `Problem.restriction` and the WebSocket `error` event's
   `data.restriction` name the blocked action.
 - `User.account_label` (`AccountLabel`: `restricted`) marks suspended accounts.
+
+## 2.1.0-alpha.34
+
+- Requests folder: `Chat` gains the required `is_request`, `true` when a stranger opened the direct chat and the caller
+  has not replied, accepted, pinned or archived it yet. Messages in such a chat send the caller no push.
+- `GET /chats` gains `folder` (`main`, the default, `requests` or `all`). Without it the answer holds only the main list.
+- `POST /chats/{chat_id}/accept` moves a chat out of the Requests folder; `GET /chats/requests/count` answers
+  `ChatRequestCount` (`requests_count`).
+- WebSocket: `chat_list_update` also goes out when a chat moves out of the Requests folder.
 
 ## 2.1.0-alpha.32
 

@@ -187,6 +187,7 @@ type ChatEntry struct {
 	ArchivedAt        *time.Time
 	MyClearedBefore   *int64
 	HiddenAt          *time.Time
+	IsRequest         bool
 	// SortAt is the pin time of a pinned chat and the last activity of any other.
 	SortAt time.Time
 }
@@ -257,6 +258,8 @@ type Participant struct {
 	LastReadMessageID *int64
 	LastReadAt        *time.Time
 	JoinedAt          time.Time
+	IsRequest         bool
+	Engaged           bool
 }
 
 // RoleEvent is a change of a group member's role. ActorID is nil when the actor's account is gone.
@@ -309,11 +312,12 @@ type ChatRepository interface {
 	// MarkRead moves the read marker of a participant forward (never back) and reports whether it moved.
 	// ErrNotFound: the user is not in the chat.
 	MarkRead(ctx context.Context, chatID, userID, messageID int64) (advanced bool, err error)
+	MarkEngaged(ctx context.Context, chatID, userID int64) error
 	// Delete removes the chat and returns the object-storage keys of its attachments.
 	Delete(ctx context.Context, chatID int64) (attachmentKeys []string, err error)
 
 	// OpenDirect is CreateDirect that also closes the pair's pending direct-message requests and returns them.
-	OpenDirect(ctx context.Context, creatorID, otherID int64) (chat Chat, created bool, closed []ApprovalRequest, err error)
+	OpenDirect(ctx context.Context, creatorID, otherID int64, otherAsRequest bool) (chat Chat, created bool, closed []ApprovalRequest, err error)
 	// DirectBetween returns the direct chat of two users (ErrNotFound when they have none).
 	DirectBetween(ctx context.Context, a, b int64) (Chat, error)
 	// TouchActivity records a new message: the chat moves up in its members' lists.
@@ -331,6 +335,10 @@ type ChatRepository interface {
 	Unpin(ctx context.Context, userID, chatID int64) error
 	ReorderPins(ctx context.Context, userID int64, chatIDs []int64) error
 	SetArchived(ctx context.Context, userID, chatID int64, archived bool) error
+	AcceptRequest(ctx context.Context, userID, chatID int64) (bool, error)
+	RequestHolders(ctx context.Context, chatID int64) ([]int64, error)
+	GetWithRequestHolders(ctx context.Context, chatID int64) (Chat, []int64, error)
+	RequestCount(ctx context.Context, userID int64) (int64, error)
 	ClearedBound(ctx context.Context, chatID, userID int64) (int64, error)
 	ClearedBounds(ctx context.Context, userID int64, chatIDs []int64) (map[int64]int64, error)
 	ClearForUser(ctx context.Context, chatID, userID, bound int64, hide bool) error
@@ -340,7 +348,7 @@ type ChatRepository interface {
 	// IDsAfter walks every chat in id order (with since: only chats with activity since then).
 	IDsAfter(ctx context.Context, afterID int64, since *time.Time, limit int) ([]int64, error)
 	// EntriesOfType is Entries of one chat type ("" for all).
-	EntriesOfType(ctx context.Context, userID int64, t ChatType, archived *bool, after *ChatCursor, limit int) ([]ChatEntry, error)
+	EntriesOfType(ctx context.Context, userID int64, t ChatType, archived, requests *bool, after *ChatCursor, limit int) ([]ChatEntry, error)
 
 	// Group operations of an actor: the actor's role is checked under the group's lock, in the transaction
 	// of the change. ErrNotFound: no such group or the actor is not in it; ErrForbidden: the actor's role does

@@ -55,9 +55,19 @@ func roles(g map[string]any) map[string]string {
 	return out
 }
 
+func (e *chatEnv) openInvites(t *testing.T, sessions ...session) {
+	t.Helper()
+	for _, s := range sessions {
+		if r := e.do(t, request{method: http.MethodPatch, path: "/me/privacy", token: s.access, body: map[string]any{"group_invites": "everyone"}}); r.Code != http.StatusOK {
+			t.Fatalf("open group invites: %d %s", r.Code, r.Body)
+		}
+	}
+}
+
 func TestRemovalFailsWhileTheMembersCacheIsStale(t *testing.T) {
 	e := newChatEnv(t)
 	owner, bob, carol := e.register(t, "owner"), e.register(t, "bob"), e.register(t, "carol")
+	e.openInvites(t, bob, carol)
 	bobID, carolID := e.uid(t, bob), e.uid(t, carol)
 	r := e.do(t, request{method: http.MethodPost, path: "/groups", token: owner.access, body: map[string]any{"name": "Team", "member_ids": []string{bobID, carolID}}})
 	if r.Code != http.StatusCreated {
@@ -108,6 +118,7 @@ func TestGroupsOverHTTP(t *testing.T) {
 	e := newChatEnv(t)
 	owner, bob, carol, dave, erin := e.register(t, "owner"), e.register(t, "bob"), e.register(t, "carol"), e.register(t, "dave"), e.register(t, "erin")
 	bobID, carolID, daveID, erinID := e.uid(t, bob), e.uid(t, carol), e.uid(t, dave), e.uid(t, erin)
+	e.openInvites(t, bob, erin)
 	e.do(t, request{method: http.MethodPatch, path: "/me/privacy", token: carol.access, body: map[string]any{"group_invites": "wait_approval"}})
 	e.do(t, request{method: http.MethodPatch, path: "/me/privacy", token: dave.access, body: map[string]any{"group_invites": "nobody"}})
 
@@ -253,6 +264,7 @@ func TestGroupMemberLogs(t *testing.T) {
 	e := newChatEnv(t)
 	owner, bob, carol, erin, outsider := e.register(t, "owner"), e.register(t, "bob"), e.register(t, "carol"), e.register(t, "erin"), e.register(t, "outsider")
 	bobID, carolID, erinID := e.uid(t, bob), e.uid(t, carol), e.uid(t, erin)
+	e.openInvites(t, bob, erin)
 	e.do(t, request{method: http.MethodPatch, path: "/me/privacy", token: carol.access, body: map[string]any{"group_invites": "wait_approval"}})
 
 	gid := e.do(t, request{method: http.MethodPost, path: "/groups", token: owner.access, body: map[string]any{"name": "Team", "member_ids": []string{bobID, carolID}}}).json()["id"].(string)

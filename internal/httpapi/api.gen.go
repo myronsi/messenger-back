@@ -245,6 +245,27 @@ func (e CallParticipantState) Valid() bool {
 	}
 }
 
+// Defines values for CallPolicy.
+const (
+	CallPolicyContacts CallPolicy = "contacts"
+	CallPolicyEveryone CallPolicy = "everyone"
+	CallPolicyNobody   CallPolicy = "nobody"
+)
+
+// Valid indicates whether the value is a known member of the CallPolicy enum.
+func (e CallPolicy) Valid() bool {
+	switch e {
+	case CallPolicyContacts:
+		return true
+	case CallPolicyEveryone:
+		return true
+	case CallPolicyNobody:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CallState.
 const (
 	CallStateActive  CallState = "active"
@@ -460,7 +481,9 @@ func (e DeviceRecoveryStatusStatus) Valid() bool {
 
 // Defines values for DirectMessagePolicy.
 const (
+	DirectMessagePolicyContacts     DirectMessagePolicy = "contacts"
 	DirectMessagePolicyEveryone     DirectMessagePolicy = "everyone"
+	DirectMessagePolicyNobody       DirectMessagePolicy = "nobody"
 	DirectMessagePolicySharedChats  DirectMessagePolicy = "shared_chats"
 	DirectMessagePolicyWaitApproval DirectMessagePolicy = "wait_approval"
 )
@@ -468,7 +491,11 @@ const (
 // Valid indicates whether the value is a known member of the DirectMessagePolicy enum.
 func (e DirectMessagePolicy) Valid() bool {
 	switch e {
+	case DirectMessagePolicyContacts:
+		return true
 	case DirectMessagePolicyEveryone:
+		return true
+	case DirectMessagePolicyNobody:
 		return true
 	case DirectMessagePolicySharedChats:
 		return true
@@ -1241,6 +1268,27 @@ func (e CreateAttachmentPlaybackParamsVariant) Valid() bool {
 	}
 }
 
+// Defines values for ListChatsParamsFolder.
+const (
+	All      ListChatsParamsFolder = "all"
+	Main     ListChatsParamsFolder = "main"
+	Requests ListChatsParamsFolder = "requests"
+)
+
+// Valid indicates whether the value is a known member of the ListChatsParamsFolder enum.
+func (e ListChatsParamsFolder) Valid() bool {
+	switch e {
+	case All:
+		return true
+	case Main:
+		return true
+	case Requests:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for DeleteChatParamsScope.
 const (
 	DeleteChatParamsScopeEveryone DeleteChatParamsScope = "everyone"
@@ -1653,6 +1701,9 @@ type CallParticipant struct {
 // CallParticipantState `left` and `declined` can become `joined` again in a group call.
 type CallParticipantState string
 
+// CallPolicy Who may ring the user (`contacts` as in `Visibility`).
+type CallPolicy string
+
 // CallState `ringing` until someone answers, `active` while people are in it, `ended` afterwards.
 type CallState string
 
@@ -1698,8 +1749,12 @@ type Chat struct {
 	Id Id `json:"id"`
 
 	// IsArchived Whether the caller archived the chat (only for the caller).
-	IsArchived  bool     `json:"is_archived"`
-	IsPinned    bool     `json:"is_pinned"`
+	IsArchived bool `json:"is_archived"`
+	IsPinned   bool `json:"is_pinned"`
+
+	// IsRequest Whether the chat is in the caller's Requests folder: a stranger opened it, and the caller has not
+	// replied, accepted, pinned or archived it yet (only for the caller).
+	IsRequest   bool     `json:"is_request"`
 	LastMessage *Message `json:"last_message"`
 
 	// LastReadMessageId The caller's read marker (`POST /chats/{chat_id}/read`); `null` before their first read.
@@ -1726,6 +1781,11 @@ type ChatPage struct {
 
 	// NextCursor Opaque cursor; `null` when there are no more results.
 	NextCursor *Cursor `json:"next_cursor"`
+}
+
+// ChatRequestCount defines model for ChatRequestCount.
+type ChatRequestCount struct {
+	RequestsCount int `json:"requests_count"`
 }
 
 // ChatType defines model for ChatType.
@@ -1958,7 +2018,10 @@ type DeviceRecoveryStatus struct {
 // DeviceRecoveryStatusStatus defines model for DeviceRecoveryStatus.Status.
 type DeviceRecoveryStatusStatus string
 
-// DirectMessagePolicy defines model for DirectMessagePolicy.
+// DirectMessagePolicy Who may open a direct chat with the user. `everyone`; `contacts` (see `Visibility`); `wait_approval`: others
+// send a request the user approves; `nobody`: no new direct chats and no requests (existing chats stay).
+// Allow exceptions still let the listed users in.
+// Deprecated: `shared_chats` is the old name of `contacts`; it is still accepted and never returned.
 type DirectMessagePolicy string
 
 // DisableTwoFactorRequest defines model for DisableTwoFactorRequest.
@@ -2121,7 +2184,8 @@ type Group struct {
 	OwnerId Id `json:"owner_id"`
 }
 
-// GroupInvitePolicy defines model for GroupInvitePolicy.
+// GroupInvitePolicy Who may add the user to a group. Defaults to `contacts`. Deprecated: `everyone_except` and `nobody_except`
+// are still accepted and stored as `everyone` and `nobody`; they are never returned.
 type GroupInvitePolicy string
 
 // GroupMember defines model for GroupMember.
@@ -2520,19 +2584,37 @@ type PrivacyExceptionsRequest struct {
 
 // PrivacySettings defines model for PrivacySettings.
 type PrivacySettings struct {
-	// AvatarVisibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
-	// `contacts` are the users you share a group with, or a direct chat that you opened or read in.
+	// AvatarVisibility Who may see the item. The exception lists apply to every value.
+	// `contacts` are the users you share a direct chat with that you opened or read in, or a group you created,
+	// joined by accepting an invitation, or read or wrote in. Being added to a group alone does not make its
+	// members your contacts.
+	// Deprecated: `everyone_except` and `nobody_except` are still accepted and stored as `everyone` and `nobody`;
+	// they are never returned.
 	AvatarVisibility Visibility `json:"avatar_visibility"`
 
 	// BirthdayVisibility Who sees the birthday (`User.birthday`) and gets a reminder on the day. Defaults to `contacts`.
 	BirthdayVisibility Visibility `json:"birthday_visibility"`
 
-	// CallsEnabled Whether others may ring this user. Calls are only possible from an existing direct chat or a shared group.
-	CallsEnabled   bool                `json:"calls_enabled"`
+	// CallsEnabled `false` exactly when `calls_from` is `nobody`. Use `calls_from`.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	CallsEnabled bool `json:"calls_enabled"`
+
+	// CallsFrom Who may ring this user, with the `calls_from` exceptions. Calls are only possible from an existing direct
+	// chat or a shared group. A direct call to a user who does not allow the caller is refused; in a group call
+	// only the members who allow the caller are rung, the others can still join.
+	CallsFrom CallPolicy `json:"calls_from"`
+
+	// DirectMessages Who may open a direct chat with the user. `everyone`; `contacts` (see `Visibility`); `wait_approval`: others
+	// send a request the user approves; `nobody`: no new direct chats and no requests (existing chats stay).
+	// Allow exceptions still let the listed users in.
+	// Deprecated: `shared_chats` is the old name of `contacts`; it is still accepted and never returned.
 	DirectMessages DirectMessagePolicy `json:"direct_messages"`
 
 	// Exceptions User IDs per setting. An exception wins over the setting whatever its value; `allow` always lets the user in, `deny` always keeps them out.
-	Exceptions   PrivacyExceptions `json:"exceptions"`
+	Exceptions PrivacyExceptions `json:"exceptions"`
+
+	// GroupInvites Who may add the user to a group. Defaults to `contacts`. Deprecated: `everyone_except` and `nobody_except`
+	// are still accepted and stored as `everyone` and `nobody`; they are never returned.
 	GroupInvites GroupInvitePolicy `json:"group_invites"`
 
 	// LastSeenVisibility Who sees when the user was last online (`User.last_seen`, `presence` events).
@@ -2541,8 +2623,12 @@ type PrivacySettings struct {
 	// PresenceVisibility Who sees that the user is online now (`User.is_online`, `presence` events).
 	PresenceVisibility Visibility `json:"presence_visibility"`
 
-	// ProfileVisibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
-	// `contacts` are the users you share a group with, or a direct chat that you opened or read in.
+	// ProfileVisibility Who may see the item. The exception lists apply to every value.
+	// `contacts` are the users you share a direct chat with that you opened or read in, or a group you created,
+	// joined by accepting an invitation, or read or wrote in. Being added to a group alone does not make its
+	// members your contacts.
+	// Deprecated: `everyone_except` and `nobody_except` are still accepted and stored as `everyone` and `nobody`;
+	// they are never returned.
 	ProfileVisibility   Visibility       `json:"profile_visibility"`
 	ReadReceiptsEnabled bool             `json:"read_receipts_enabled"`
 	SearchVisibility    SearchVisibility `json:"search_visibility"`
@@ -3179,27 +3265,61 @@ type UpdateMeRequest struct {
 
 // UpdatePrivacySettingsRequest defines model for UpdatePrivacySettingsRequest.
 type UpdatePrivacySettingsRequest struct {
-	// AvatarVisibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
-	// `contacts` are the users you share a group with, or a direct chat that you opened or read in.
+	// AvatarVisibility Who may see the item. The exception lists apply to every value.
+	// `contacts` are the users you share a direct chat with that you opened or read in, or a group you created,
+	// joined by accepting an invitation, or read or wrote in. Being added to a group alone does not make its
+	// members your contacts.
+	// Deprecated: `everyone_except` and `nobody_except` are still accepted and stored as `everyone` and `nobody`;
+	// they are never returned.
 	AvatarVisibility *Visibility `json:"avatar_visibility,omitempty"`
 
-	// BirthdayVisibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
-	// `contacts` are the users you share a group with, or a direct chat that you opened or read in.
-	BirthdayVisibility *Visibility          `json:"birthday_visibility,omitempty"`
-	CallsEnabled       *bool                `json:"calls_enabled,omitempty"`
-	DirectMessages     *DirectMessagePolicy `json:"direct_messages,omitempty"`
-	GroupInvites       *GroupInvitePolicy   `json:"group_invites,omitempty"`
+	// BirthdayVisibility Who may see the item. The exception lists apply to every value.
+	// `contacts` are the users you share a direct chat with that you opened or read in, or a group you created,
+	// joined by accepting an invitation, or read or wrote in. Being added to a group alone does not make its
+	// members your contacts.
+	// Deprecated: `everyone_except` and `nobody_except` are still accepted and stored as `everyone` and `nobody`;
+	// they are never returned.
+	BirthdayVisibility *Visibility `json:"birthday_visibility,omitempty"`
 
-	// LastSeenVisibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
-	// `contacts` are the users you share a group with, or a direct chat that you opened or read in.
+	// CallsEnabled `false` sets `calls_from` to `nobody`; `true` sets it to `everyone` when it was `nobody`. Ignored when `calls_from` is sent.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	CallsEnabled *bool `json:"calls_enabled,omitempty"`
+
+	// CallsFrom Who may ring the user (`contacts` as in `Visibility`).
+	CallsFrom *CallPolicy `json:"calls_from,omitempty"`
+
+	// DirectMessages Who may open a direct chat with the user. `everyone`; `contacts` (see `Visibility`); `wait_approval`: others
+	// send a request the user approves; `nobody`: no new direct chats and no requests (existing chats stay).
+	// Allow exceptions still let the listed users in.
+	// Deprecated: `shared_chats` is the old name of `contacts`; it is still accepted and never returned.
+	DirectMessages *DirectMessagePolicy `json:"direct_messages,omitempty"`
+
+	// GroupInvites Who may add the user to a group. Defaults to `contacts`. Deprecated: `everyone_except` and `nobody_except`
+	// are still accepted and stored as `everyone` and `nobody`; they are never returned.
+	GroupInvites *GroupInvitePolicy `json:"group_invites,omitempty"`
+
+	// LastSeenVisibility Who may see the item. The exception lists apply to every value.
+	// `contacts` are the users you share a direct chat with that you opened or read in, or a group you created,
+	// joined by accepting an invitation, or read or wrote in. Being added to a group alone does not make its
+	// members your contacts.
+	// Deprecated: `everyone_except` and `nobody_except` are still accepted and stored as `everyone` and `nobody`;
+	// they are never returned.
 	LastSeenVisibility *Visibility `json:"last_seen_visibility,omitempty"`
 
-	// PresenceVisibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
-	// `contacts` are the users you share a group with, or a direct chat that you opened or read in.
+	// PresenceVisibility Who may see the item. The exception lists apply to every value.
+	// `contacts` are the users you share a direct chat with that you opened or read in, or a group you created,
+	// joined by accepting an invitation, or read or wrote in. Being added to a group alone does not make its
+	// members your contacts.
+	// Deprecated: `everyone_except` and `nobody_except` are still accepted and stored as `everyone` and `nobody`;
+	// they are never returned.
 	PresenceVisibility *Visibility `json:"presence_visibility,omitempty"`
 
-	// ProfileVisibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
-	// `contacts` are the users you share a group with, or a direct chat that you opened or read in.
+	// ProfileVisibility Who may see the item. The exception lists apply to every value.
+	// `contacts` are the users you share a direct chat with that you opened or read in, or a group you created,
+	// joined by accepting an invitation, or read or wrote in. Being added to a group alone does not make its
+	// members your contacts.
+	// Deprecated: `everyone_except` and `nobody_except` are still accepted and stored as `everyone` and `nobody`;
+	// they are never returned.
 	ProfileVisibility       *Visibility       `json:"profile_visibility,omitempty"`
 	ReadReceiptsEnabled     *bool             `json:"read_receipts_enabled,omitempty"`
 	SearchVisibility        *SearchVisibility `json:"search_visibility,omitempty"`
@@ -3348,8 +3468,12 @@ type VerifyRecoveryEmail struct {
 	Token string `json:"token"`
 }
 
-// Visibility Who may see the item. The exception lists apply to every value; `*_except` behave like `everyone` and `nobody`.
-// `contacts` are the users you share a group with, or a direct chat that you opened or read in.
+// Visibility Who may see the item. The exception lists apply to every value.
+// `contacts` are the users you share a direct chat with that you opened or read in, or a group you created,
+// joined by accepting an invitation, or read or wrote in. Being added to a group alone does not make its
+// members your contacts.
+// Deprecated: `everyone_except` and `nobody_except` are still accepted and stored as `everyone` and `nobody`;
+// they are never returned.
 type Visibility string
 
 // WebSocketTicket defines model for WebSocketTicket.
@@ -3872,12 +3996,18 @@ type ListChatsParams struct {
 	// Archived `true`: only archived chats, `false`: only chats that are not archived. Without it, every chat.
 	Archived *bool `form:"archived,omitempty" json:"archived,omitempty"`
 
+	// Folder `main`: chats that are not requests (the default). `requests`: the caller's Requests folder. `all`: both.
+	Folder *ListChatsParamsFolder `form:"folder,omitempty" json:"folder,omitempty"`
+
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
 	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
 }
+
+// ListChatsParamsFolder defines parameters for ListChats.
+type ListChatsParamsFolder string
 
 // CreateChatParams defines parameters for CreateChat.
 type CreateChatParams struct {
@@ -3890,6 +4020,15 @@ type CreateChatParams struct {
 
 // ReorderPinnedChatsParams defines parameters for ReorderPinnedChats.
 type ReorderPinnedChatsParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// CountChatRequestsParams defines parameters for CountChatRequests.
+type CountChatRequestsParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
@@ -3913,6 +4052,15 @@ type DeleteChatParamsScope string
 
 // GetChatParams defines parameters for GetChat.
 type GetChatParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// AcceptChatRequestParams defines parameters for AcceptChatRequest.
+type AcceptChatRequestParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
@@ -5857,6 +6005,9 @@ type ServerInterface interface {
 	// ReorderPinnedChats Order the pinned chats
 	// (PUT /chats/pins/order)
 	ReorderPinnedChats(w http.ResponseWriter, r *http.Request, params ReorderPinnedChatsParams)
+	// CountChatRequests Number of chats in my Requests folder
+	// (GET /chats/requests/count)
+	CountChatRequests(w http.ResponseWriter, r *http.Request, params CountChatRequestsParams)
 	// SetNotificationMute Mute or unmute a chat
 	// (PUT /chats/{chatId}/notification-mute)
 	SetNotificationMute(w http.ResponseWriter, r *http.Request, chatId Id)
@@ -5866,6 +6017,9 @@ type ServerInterface interface {
 	// GetChat One chat
 	// (GET /chats/{chat_id})
 	GetChat(w http.ResponseWriter, r *http.Request, chatId ChatId, params GetChatParams)
+	// AcceptChatRequest Move a chat out of the Requests folder
+	// (POST /chats/{chat_id}/accept)
+	AcceptChatRequest(w http.ResponseWriter, r *http.Request, chatId ChatId, params AcceptChatRequestParams)
 	// UnarchiveChat Move a chat out of the archive
 	// (DELETE /chats/{chat_id}/archive)
 	UnarchiveChat(w http.ResponseWriter, r *http.Request, chatId ChatId, params UnarchiveChatParams)
@@ -9027,6 +9181,19 @@ func (siw *ServerInterfaceWrapper) ListChats(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// ------------- Optional query parameter "folder" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "folder", r.URL.Query(), &params.Folder, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "folder"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "folder", Err: err})
+		}
+		return
+	}
+
 	headers := r.Header
 
 	// ------------- Optional header parameter "X-Client-Version" -------------
@@ -9189,6 +9356,66 @@ func (siw *ServerInterfaceWrapper) ReorderPinnedChats(w http.ResponseWriter, r *
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ReorderPinnedChats(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CountChatRequests operation middleware
+func (siw *ServerInterfaceWrapper) CountChatRequests(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CountChatRequestsParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CountChatRequests(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -9366,6 +9593,75 @@ func (siw *ServerInterfaceWrapper) GetChat(w http.ResponseWriter, r *http.Reques
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetChat(w, r, chatId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AcceptChatRequest operation middleware
+func (siw *ServerInterfaceWrapper) AcceptChatRequest(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params AcceptChatRequestParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AcceptChatRequest(w, r, chatId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -18686,6 +18982,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/chats/{chat_id}/clear", wrapper.ClearChatHistory)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/chats/{chat_id}/archive", wrapper.UnarchiveChat)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/chats/{chat_id}/archive", wrapper.ArchiveChat)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/chats/requests/count", wrapper.CountChatRequests)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/chats/{chat_id}/accept", wrapper.AcceptChatRequest)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/chats/pins/order", wrapper.ReorderPinnedChats)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/chats/{chat_id}/read", wrapper.MarkChatRead)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/chats/{chat_id}/messages", wrapper.ListMessages)
@@ -24200,6 +24498,60 @@ func (response ReorderPinnedChats426ApplicationProblemPlusJSONResponse) VisitReo
 	return err
 }
 
+type CountChatRequestsRequestObject struct {
+	Params CountChatRequestsParams
+}
+
+type CountChatRequestsResponseObject interface {
+	VisitCountChatRequestsResponse(w http.ResponseWriter) error
+}
+
+type CountChatRequests200JSONResponse ChatRequestCount
+
+func (response CountChatRequests200JSONResponse) VisitCountChatRequestsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CountChatRequests401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response CountChatRequests401ApplicationProblemPlusJSONResponse) VisitCountChatRequestsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CountChatRequests426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response CountChatRequests426ApplicationProblemPlusJSONResponse) VisitCountChatRequestsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type SetNotificationMuteRequestObject struct {
 	ChatId Id `json:"chatId"`
 	Body   *SetNotificationMuteJSONRequestBody
@@ -24454,6 +24806,87 @@ type GetChat426ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetChat426ApplicationProblemPlusJSONResponse) VisitGetChatResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AcceptChatRequestRequestObject struct {
+	ChatId ChatId `json:"chat_id"`
+	Params AcceptChatRequestParams
+}
+
+type AcceptChatRequestResponseObject interface {
+	VisitAcceptChatRequestResponse(w http.ResponseWriter) error
+}
+
+type AcceptChatRequest204Response struct {
+}
+
+func (response AcceptChatRequest204Response) VisitAcceptChatRequestResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type AcceptChatRequest400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response AcceptChatRequest400ApplicationProblemPlusJSONResponse) VisitAcceptChatRequestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AcceptChatRequest401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response AcceptChatRequest401ApplicationProblemPlusJSONResponse) VisitAcceptChatRequestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AcceptChatRequest404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response AcceptChatRequest404ApplicationProblemPlusJSONResponse) VisitAcceptChatRequestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AcceptChatRequest426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response AcceptChatRequest426ApplicationProblemPlusJSONResponse) VisitAcceptChatRequestResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -38146,6 +38579,9 @@ type StrictServerInterface interface {
 	// ReorderPinnedChats Order the pinned chats
 	// (PUT /chats/pins/order)
 	ReorderPinnedChats(ctx context.Context, request ReorderPinnedChatsRequestObject) (ReorderPinnedChatsResponseObject, error)
+	// CountChatRequests Number of chats in my Requests folder
+	// (GET /chats/requests/count)
+	CountChatRequests(ctx context.Context, request CountChatRequestsRequestObject) (CountChatRequestsResponseObject, error)
 	// SetNotificationMute Mute or unmute a chat
 	// (PUT /chats/{chatId}/notification-mute)
 	SetNotificationMute(ctx context.Context, request SetNotificationMuteRequestObject) (SetNotificationMuteResponseObject, error)
@@ -38155,6 +38591,9 @@ type StrictServerInterface interface {
 	// GetChat One chat
 	// (GET /chats/{chat_id})
 	GetChat(ctx context.Context, request GetChatRequestObject) (GetChatResponseObject, error)
+	// AcceptChatRequest Move a chat out of the Requests folder
+	// (POST /chats/{chat_id}/accept)
+	AcceptChatRequest(ctx context.Context, request AcceptChatRequestRequestObject) (AcceptChatRequestResponseObject, error)
 	// UnarchiveChat Move a chat out of the archive
 	// (DELETE /chats/{chat_id}/archive)
 	UnarchiveChat(ctx context.Context, request UnarchiveChatRequestObject) (UnarchiveChatResponseObject, error)
@@ -39934,6 +40373,32 @@ func (sh *strictHandler) ReorderPinnedChats(w http.ResponseWriter, r *http.Reque
 	}
 }
 
+// CountChatRequests operation middleware
+func (sh *strictHandler) CountChatRequests(w http.ResponseWriter, r *http.Request, params CountChatRequestsParams) {
+	var request CountChatRequestsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CountChatRequests(ctx, request.(CountChatRequestsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CountChatRequests")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CountChatRequestsResponseObject); ok {
+		if err := validResponse.VisitCountChatRequestsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // SetNotificationMute operation middleware
 func (sh *strictHandler) SetNotificationMute(w http.ResponseWriter, r *http.Request, chatId Id) {
 	var request SetNotificationMuteRequestObject
@@ -40014,6 +40479,33 @@ func (sh *strictHandler) GetChat(w http.ResponseWriter, r *http.Request, chatId 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetChatResponseObject); ok {
 		if err := validResponse.VisitGetChatResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AcceptChatRequest operation middleware
+func (sh *strictHandler) AcceptChatRequest(w http.ResponseWriter, r *http.Request, chatId ChatId, params AcceptChatRequestParams) {
+	var request AcceptChatRequestRequestObject
+
+	request.ChatId = chatId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AcceptChatRequest(ctx, request.(AcceptChatRequestRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AcceptChatRequest")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AcceptChatRequestResponseObject); ok {
+		if err := validResponse.VisitAcceptChatRequestResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

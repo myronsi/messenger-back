@@ -100,7 +100,7 @@ func (e *env) user(t *testing.T) int64 {
 
 func (e *env) direct(t *testing.T, creator, other int64) {
 	t.Helper()
-	if _, _, _, err := e.pg.Chats().OpenDirect(context.Background(), creator, other); err != nil {
+	if _, _, _, err := e.pg.Chats().OpenDirect(context.Background(), creator, other, false); err != nil {
 		t.Fatal(err)
 	}
 }

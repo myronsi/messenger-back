@@ -14,7 +14,9 @@ collapse identifiers replace a conversation's existing notification. Push-provid
 that the operating system displayed an alert.
 
 Only new messages are notification events. Edits, typing, reactions and read receipts do not alert. Own messages,
-system messages and messages from before a member joined are excluded. Previews and sound default off. The React
+system messages and messages from before a member joined are excluded. Members whose chat is still in their Requests
+folder ([chats.md](chats.md#requests-folder)) are left out of the intent, and a message with no recipient left queues
+no intent. Previews and sound default off. The React
 client suppresses alerts in the focused conversation and elects one visible browser tab for live alerts. A visible,
 focused client with a healthy socket reports activity every ten seconds; its push is suppressed for 25 seconds.
 Closing a browser abruptly can therefore leave a short suppression window. Different devices remain independent.

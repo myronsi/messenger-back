@@ -93,6 +93,7 @@ func TestMessagesOverHTTP(t *testing.T) {
 
 	// Read receipts show on the sender's messages up to bob's marker.
 	all, _ := e.history(t, alice, chat, "")
+	e.do(t, request{method: http.MethodPost, path: "/chats/" + chat + "/accept", token: bob.access})
 	e.do(t, request{method: http.MethodPost, path: "/chats/" + chat + "/read", token: bob.access, body: map[string]any{"message_id": all[2]["id"]}})
 	all, _ = e.history(t, alice, chat, "")
 	if len(all[2]["read_by"].([]any)) != 1 || len(all[3]["read_by"].([]any)) != 0 {

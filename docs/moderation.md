@@ -75,7 +75,7 @@ Every change invalidates the cached status, counts `messenger_moderation_status_
 
 The status is cached in Redis (`moderation:{user_id}`, 1 minute) and read from PostgreSQL on a miss. When neither answers, `Allow` fails closed (`503` with `Retry-After`, `internal_error` on the WebSocket), like the membership cache. `account_label` comes from the same cache (`Service.Labels`, one `MGET` per rendering; misses are read from PostgreSQL in one query and cached, `good` included), and is left out when neither answers.
 
-`chats.Service.MustBeRequest(requester, recipient)` tells whether a new direct chat must land in the recipient's Requests folder: true for `limited` and worse, and when the status cannot be read. `CreateDirect` hands such chats to `chats.Deps.Requests` (`MarkRequest`); that dependency is wired once the Requests folder (`participants.is_request`) exists.
+`chats.Service.MustBeRequest(requester, recipient)` tells whether a new direct chat must land in the recipient's Requests folder: true for `limited` and worse, and when the status cannot be read. `CreateDirect` then opens the chat with `is_request` set for the recipient even when the requester is their contact ([chats.md](chats.md#requests-folder)).
 
 ## Worker
 

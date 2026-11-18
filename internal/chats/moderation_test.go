@@ -23,15 +23,7 @@ func (f fakeModeration) RoutesToRequests(context.Context, int64) (bool, error) {
 	return f.routes, f.err
 }
 
-type folder struct{ marked [][2]int64 }
-
-func (f *folder) MarkRequest(_ context.Context, chatID, recipientID int64) error {
-	f.marked = append(f.marked, [2]int64{chatID, recipientID})
-	return nil
-}
-
 func TestLimitedAccountsChatsLandInRequests(t *testing.T) {
-	ctx := context.Background()
 	cases := []struct {
 		name      string
 		mod       Moderation
@@ -45,17 +37,10 @@ func TestLimitedAccountsChatsLandInRequests(t *testing.T) {
 		{"no moderation", nil, 1, false},
 	}
 	for _, c := range cases {
-		f := &folder{}
-		s := New(Deps{Moderation: c.mod, Requests: f})
-		if got := s.MustBeRequest(ctx, c.requester, 2); got != c.want {
+		if got := New(Deps{Moderation: c.mod}).MustBeRequest(context.Background(), c.requester, 2); got != c.want {
 			t.Errorf("%s: must be a request %v, want %v", c.name, got, c.want)
 		}
-		s.routeRequest(ctx, 10, c.requester, 2)
-		if moved := len(f.marked) == 1 && f.marked[0] == [2]int64{10, 2}; moved != c.want {
-			t.Errorf("%s: moved to the recipient's requests %v (%v)", c.name, moved, f.marked)
-		}
 	}
-	New(Deps{Moderation: fakeModeration{routes: true}}).routeRequest(ctx, 10, 1, 2)
 }
 
 func TestModerationOutageIsUnavailable(t *testing.T) {

@@ -44,15 +44,17 @@ func participantFrom(p sqlcdb.Participant) Participant {
 		LastReadMessageID: p.LastReadMessageID,
 		LastReadAt:        p.LastReadAt,
 		JoinedAt:          p.JoinedAt,
+		IsRequest:         p.IsRequest,
+		Engaged:           p.Engaged,
 	}
 }
 
 func (r chatRepo) CreateDirect(ctx context.Context, creatorID, otherID int64) (Chat, bool, error) {
-	chat, created, _, err := r.OpenDirect(ctx, creatorID, otherID)
+	chat, created, _, err := r.OpenDirect(ctx, creatorID, otherID, false)
 	return chat, created, err
 }
 
-func (r chatRepo) OpenDirect(ctx context.Context, creatorID, otherID int64) (Chat, bool, []ApprovalRequest, error) {
+func (r chatRepo) OpenDirect(ctx context.Context, creatorID, otherID int64, otherAsRequest bool) (Chat, bool, []ApprovalRequest, error) {
 	var (
 		chat    Chat
 		created bool
@@ -61,7 +63,15 @@ func (r chatRepo) OpenDirect(ctx context.Context, creatorID, otherID int64) (Cha
 	err := r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
 		var err error
 		chat, created, closed, err = createDirect(ctx, q, creatorID, otherID)
-		return err
+		if err != nil || !created || !otherAsRequest || creatorID == otherID {
+			return err
+		}
+		for _, req := range closed {
+			if req.RequesterID == otherID {
+				return nil
+			}
+		}
+		return q.MarkChatRequest(ctx, sqlcdb.MarkChatRequestParams{ChatID: chat.ID, UserID: otherID})
 	})
 	if err != nil {
 		return Chat{}, false, nil, err
@@ -94,7 +104,7 @@ func createDirect(ctx context.Context, q *sqlcdb.Queries, creatorID, otherID int
 			members = members[:1]
 		}
 		for _, uid := range members {
-			if _, err := q.AddParticipant(ctx, sqlcdb.AddParticipantParams{ChatID: row.ID, UserID: uid, Role: string(RoleMember)}); err != nil {
+			if _, err := q.AddParticipant(ctx, sqlcdb.AddParticipantParams{ChatID: row.ID, UserID: uid, Role: string(RoleMember), Engaged: false}); err != nil {
 				return Chat{}, false, nil, err
 			}
 		}
@@ -121,7 +131,7 @@ func (r chatRepo) CreateGroup(ctx context.Context, g NewGroup) (Chat, error) {
 		if err != nil {
 			return err
 		}
-		if _, err := q.AddParticipant(ctx, sqlcdb.AddParticipantParams{ChatID: row.ID, UserID: g.OwnerID, Role: string(RoleOwner)}); err != nil {
+		if _, err := q.AddParticipant(ctx, sqlcdb.AddParticipantParams{ChatID: row.ID, UserID: g.OwnerID, Role: string(RoleOwner), Engaged: true}); err != nil {
 			return err
 		}
 		members := slices.Clone(g.MemberIDs)
@@ -130,7 +140,7 @@ func (r chatRepo) CreateGroup(ctx context.Context, g NewGroup) (Chat, error) {
 			if uid == g.OwnerID || (i > 0 && members[i-1] == uid) {
 				continue
 			}
-			if _, err := q.AddParticipant(ctx, sqlcdb.AddParticipantParams{ChatID: row.ID, UserID: uid, Role: string(RoleMember)}); err != nil {
+			if _, err := q.AddParticipant(ctx, sqlcdb.AddParticipantParams{ChatID: row.ID, UserID: uid, Role: string(RoleMember), Engaged: false}); err != nil {
 				return err
 			}
 		}
@@ -212,7 +222,7 @@ func (r chatRepo) AddMember(ctx context.Context, chatID, userID int64) error {
 		if err := lockGroup(ctx, q, chatID); err != nil {
 			return err
 		}
-		_, err := q.AddParticipant(ctx, sqlcdb.AddParticipantParams{ChatID: chatID, UserID: userID, Role: string(RoleMember)})
+		_, err := q.AddParticipant(ctx, sqlcdb.AddParticipantParams{ChatID: chatID, UserID: userID, Role: string(RoleMember), Engaged: false})
 		return err
 	})
 }
@@ -285,6 +295,12 @@ func (r chatRepo) TransferOwnership(ctx context.Context, chatID, fromID, toID in
 		}
 		return addRoleEvent(ctx, q, chatID, fromID, toID, RoleOwner)
 	})
+}
+
+func (r chatRepo) MarkEngaged(ctx context.Context, chatID, userID int64) error {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	return mapError(r.s.q.MarkEngaged(ctx, sqlcdb.MarkEngagedParams{ChatID: chatID, UserID: userID}))
 }
 
 func (r chatRepo) MarkRead(ctx context.Context, chatID, userID, messageID int64) (bool, error) {

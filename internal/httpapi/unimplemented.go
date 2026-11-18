@@ -596,3 +596,11 @@ func (Unimplemented) GetAccountStatus(w http.ResponseWriter, r *http.Request, _ 
 func (Unimplemented) AppealAccountStatus(w http.ResponseWriter, r *http.Request, _ AppealAccountStatusParams) {
 	notImplemented(w, r)
 }
+
+func (Unimplemented) AcceptChatRequest(w http.ResponseWriter, r *http.Request, chatId ChatId, params AcceptChatRequestParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) CountChatRequests(w http.ResponseWriter, r *http.Request, params CountChatRequestsParams) {
+	notImplemented(w, r)
+}

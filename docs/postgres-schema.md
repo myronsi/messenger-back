@@ -25,6 +25,7 @@ users, chats and their participants, attachment metadata and the security log.
 | `000028_typing_indicators` | `user_privacy_settings.typing_indicators_enabled` ([realtime.md](realtime.md#client-events)) |
 | `000029_stickers` | `sticker_packs`, `stickers`, `user_sticker_packs`, `user_recent_stickers`; `attachments.purpose` allows `sticker` ([media.md](media.md#stickers)) |
 | `000030_user_sticker_packs` | `sticker_packs.slug` and `hidden_at`, `sticker_pack_reports` ([media.md](media.md#stickers)) |
+| `000042_chat_requests` | `participants.is_request` and the partial index `participants_requests_idx (user_id) WHERE is_request` ([chats.md](chats.md#requests-folder)) |
 | `000044_user_moderation` | `user_reports`, `user_moderation`, `user_moderation_events` ([moderation.md](moderation.md#tables)) |
 
 Changes compared to v1:

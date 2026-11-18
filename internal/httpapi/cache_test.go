@@ -26,6 +26,7 @@ func TestCachedReadsAnswerNotModified(t *testing.T) {
 	e := newChatEnv(t)
 	seedPartyPack(t, e)
 	alice, bob := e.register(t, "alice"), e.register(t, "bob")
+	e.openInvites(t, bob)
 	bobID := e.uid(t, bob)
 	group := e.do(t, request{method: http.MethodPost, path: "/groups", token: alice.access, body: map[string]any{"name": "Team", "member_ids": []string{bobID}}})
 	if group.Code != http.StatusCreated {

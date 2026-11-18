@@ -55,7 +55,7 @@ func PresentChat(v chats.View, basePath string) Chat {
 	c := v.Entry.Chat
 	out := Chat{
 		Id: FormatID(c.ID), Type: ChatType(c.Type), IsPinned: v.Entry.PinnedAt != nil,
-		IsArchived: v.Entry.ArchivedAt != nil, UnreadCount: int(v.Unread), CreatedAt: utc(c.CreatedAt),
+		IsArchived: v.Entry.ArchivedAt != nil, IsRequest: v.Entry.IsRequest, UnreadCount: int(v.Unread), CreatedAt: utc(c.CreatedAt),
 	}
 	if v.Entry.PinnedAt != nil && v.Entry.PinPosition != nil {
 		position := int(*v.Entry.PinPosition)
@@ -172,7 +172,20 @@ func (c *ChatServer) ListChats(w http.ResponseWriter, r *http.Request, params Li
 	if !ok {
 		return
 	}
-	views, next, err := c.o.Service.List(r.Context(), p.UserID, params.Archived, cursorParam(params.After), pageLimit(params.Limit))
+	requests := new(bool)
+	if params.Folder != nil {
+		if !params.Folder.Valid() {
+			WriteProblem(w, http.StatusBadRequest, ErrorCodeInvalidRequest, ProblemError{Field: "folder", Message: "must be main, requests or all"})
+			return
+		}
+		switch *params.Folder {
+		case Requests:
+			*requests = true
+		case All:
+			requests = nil
+		}
+	}
+	views, next, err := c.o.Service.List(r.Context(), p.UserID, params.Archived, requests, cursorParam(params.After), pageLimit(params.Limit))
 	if err != nil {
 		serviceError(w, r, c.o.Log, "list chats", err)
 		return
@@ -461,4 +474,34 @@ func (c *ChatServer) RejectRequest(w http.ResponseWriter, r *http.Request, reque
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (c *ChatServer) AcceptChatRequest(w http.ResponseWriter, r *http.Request, chatID ChatId, _ AcceptChatRequestParams) {
+	p, ok := principalOr401(w, r)
+	if !ok {
+		return
+	}
+	id, ok := parseID(w, "chat_id", chatID)
+	if !ok {
+		return
+	}
+	if err := c.o.Service.Accept(r.Context(), p.UserID, id); err != nil {
+		serviceError(w, r, c.o.Log, "accept chat request", err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (c *ChatServer) CountChatRequests(w http.ResponseWriter, r *http.Request, _ CountChatRequestsParams) {
+	p, ok := principalOr401(w, r)
+	if !ok {
+		return
+	}
+	n, err := c.o.Service.RequestCount(r.Context(), p.UserID)
+	if err != nil {
+		serviceError(w, r, c.o.Log, "count chat requests", err)
+		return
+	}
+	noStore(w)
+	writeJSONStatus(w, http.StatusOK, ChatRequestCount{RequestsCount: int(n)})
 }

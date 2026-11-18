@@ -126,8 +126,6 @@ func Visible(setting, exception string, sharesChat bool) bool {
 		return true
 	case postgres.VisibleSharedChats:
 		return sharesChat
-	case postgres.VisibleEveryoneExcept:
-		return true
 	}
 	return false // nobody, and anything unknown
 }

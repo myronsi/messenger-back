@@ -198,8 +198,8 @@ func TestSecondStartReturnsTheRunningCall(t *testing.T) {
 	ctx := context.Background()
 	alice, bob := e.user("alice"), e.user("bob")
 	chat := e.direct(alice, bob)
-	off := false
-	if _, err := e.pg.Social().PatchPrivacy(ctx, bob, postgres.PrivacyPatch{CallsEnabled: &off}); err != nil {
+	off := postgres.VisibleNobody
+	if _, err := e.pg.Social().PatchPrivacy(ctx, bob, postgres.PrivacyPatch{CallsFrom: &off}); err != nil {
 		t.Fatal(err)
 	}
 	first, created, err := e.svc.Start(ctx, bob, chat, uuid.New())

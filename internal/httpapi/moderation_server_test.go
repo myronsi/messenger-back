@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -167,5 +168,40 @@ func TestRestrictedActions(t *testing.T) {
 	chats := items(t, e.do(t, request{method: http.MethodGet, path: "/chats", token: bob.access}))
 	if len(chats) == 0 || chats[0]["peer"].(map[string]any)["account_label"] != "restricted" {
 		t.Fatalf("chat entry without the label: %v", chats)
+	}
+}
+
+func TestLimitedChatsLandInRequests(t *testing.T) {
+	e := newChatEnv(t)
+	alice, dave, carol := e.register(t, "alice"), e.register(t, "dave"), e.register(t, "carol")
+	aliceID, daveID, carolID := e.uid(t, alice), e.uid(t, dave), e.uid(t, carol)
+	if _, err := e.store.Chats().CreateGroup(context.Background(), postgres.NewGroup{OwnerID: mustID(t, carolID), Name: "Club", MemberIDs: []int64{mustID(t, aliceID), mustID(t, daveID)}}); err != nil {
+		t.Fatal(err)
+	}
+	folder := func(s session, query string) []string {
+		t.Helper()
+		out := []string{}
+		for _, c := range items(t, e.do(t, request{method: http.MethodGet, path: "/chats" + query, token: s.access})) {
+			out = append(out, c["id"].(string))
+		}
+		return out
+	}
+	e.setStatus(t, aliceID, moderation.Limited)
+	limited := e.create(t, alice, carolID, "hello")
+	if limited.Code != http.StatusCreated || limited.json()["is_request"] != false {
+		t.Fatalf("limited opens a chat with a contact: %d %s", limited.Code, limited.Body)
+	}
+	limitedChat := limited.json()["id"].(string)
+	good := e.create(t, dave, carolID, "hello")
+	if good.Code != http.StatusCreated {
+		t.Fatalf("good opens a chat with a contact: %d %s", good.Code, good.Body)
+	}
+	goodChat := good.json()["id"].(string)
+	requests, main := folder(carol, "?folder=requests"), folder(carol, "")
+	if !slices.Contains(requests, limitedChat) || slices.Contains(main, limitedChat) {
+		t.Fatalf("the limited account's chat is not in the requests folder: requests %v, main %v", requests, main)
+	}
+	if slices.Contains(requests, goodChat) || !slices.Contains(main, goodChat) {
+		t.Fatalf("a contact's chat landed in requests: requests %v, main %v", requests, main)
 	}
 }
