@@ -44,15 +44,16 @@ func participantFrom(p sqlcdb.Participant) Participant {
 		LastReadMessageID: p.LastReadMessageID,
 		LastReadAt:        p.LastReadAt,
 		JoinedAt:          p.JoinedAt,
+		IsRequest:         p.IsRequest,
 	}
 }
 
 func (r chatRepo) CreateDirect(ctx context.Context, creatorID, otherID int64) (Chat, bool, error) {
-	chat, created, _, err := r.OpenDirect(ctx, creatorID, otherID)
+	chat, created, _, err := r.OpenDirect(ctx, creatorID, otherID, false)
 	return chat, created, err
 }
 
-func (r chatRepo) OpenDirect(ctx context.Context, creatorID, otherID int64) (Chat, bool, []ApprovalRequest, error) {
+func (r chatRepo) OpenDirect(ctx context.Context, creatorID, otherID int64, otherAsRequest bool) (Chat, bool, []ApprovalRequest, error) {
 	var (
 		chat    Chat
 		created bool
@@ -61,7 +62,15 @@ func (r chatRepo) OpenDirect(ctx context.Context, creatorID, otherID int64) (Cha
 	err := r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
 		var err error
 		chat, created, closed, err = createDirect(ctx, q, creatorID, otherID)
-		return err
+		if err != nil || !created || !otherAsRequest || creatorID == otherID {
+			return err
+		}
+		for _, req := range closed {
+			if req.RequesterID == otherID {
+				return nil
+			}
+		}
+		return q.MarkChatRequest(ctx, sqlcdb.MarkChatRequestParams{ChatID: chat.ID, UserID: otherID})
 	})
 	if err != nil {
 		return Chat{}, false, nil, err

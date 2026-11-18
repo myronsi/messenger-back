@@ -26,6 +26,7 @@
       "is_pinned": false,
       "pin_position": null,
       "is_archived": false,
+      "is_request": false,
       "unread_count": 1,
       "first_unread_message_id": "7217400317439950001",
       "last_read_message_id": null,

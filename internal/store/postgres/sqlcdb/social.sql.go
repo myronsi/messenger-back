@@ -690,7 +690,7 @@ func (q *Queries) SetPrivacyException(ctx context.Context, arg SetPrivacyExcepti
 const sharedChatPartners = `-- name: SharedChatPartners :many
 SELECT DISTINCT other.user_id
 FROM participants mine
-JOIN participants other ON other.chat_id = mine.chat_id
+JOIN participants other ON other.chat_id = mine.chat_id AND NOT other.is_request
 JOIN chats c ON c.id = mine.chat_id
 WHERE mine.user_id = $1 AND other.user_id = ANY($2::BIGINT[])
   AND (c.type = 'group' OR c.created_by = other.user_id OR other.last_read_message_id IS NOT NULL)
@@ -724,7 +724,7 @@ func (q *Queries) SharedChatPartners(ctx context.Context, arg SharedChatPartners
 const sharedChatViewers = `-- name: SharedChatViewers :many
 SELECT DISTINCT other.user_id
 FROM participants mine
-JOIN participants other ON other.chat_id = mine.chat_id
+JOIN participants other ON other.chat_id = mine.chat_id AND NOT mine.is_request
 JOIN chats c ON c.id = mine.chat_id
 WHERE mine.user_id = $1 AND other.user_id = ANY($2::BIGINT[])
   AND (c.type = 'group' OR c.created_by = mine.user_id OR mine.last_read_message_id IS NOT NULL)

@@ -273,6 +273,7 @@ type Participant struct {
 	ArchivedAt             *time.Time
 	ClearedBeforeMessageID *int64
 	HiddenAt               *time.Time
+	IsRequest              bool
 }
 
 type QrLoginRequest struct {

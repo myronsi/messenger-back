@@ -77,7 +77,7 @@ SELECT * FROM user_contact_names WHERE owner_id = ANY(@owner_ids::BIGINT[]) AND 
 -- name: SharedChatPartners :many
 SELECT DISTINCT other.user_id
 FROM participants mine
-JOIN participants other ON other.chat_id = mine.chat_id
+JOIN participants other ON other.chat_id = mine.chat_id AND NOT other.is_request
 JOIN chats c ON c.id = mine.chat_id
 WHERE mine.user_id = @viewer_id AND other.user_id = ANY(@user_ids::BIGINT[])
   AND (c.type = 'group' OR c.created_by = other.user_id OR other.last_read_message_id IS NOT NULL);
@@ -85,7 +85,7 @@ WHERE mine.user_id = @viewer_id AND other.user_id = ANY(@user_ids::BIGINT[])
 -- name: SharedChatViewers :many
 SELECT DISTINCT other.user_id
 FROM participants mine
-JOIN participants other ON other.chat_id = mine.chat_id
+JOIN participants other ON other.chat_id = mine.chat_id AND NOT mine.is_request
 JOIN chats c ON c.id = mine.chat_id
 WHERE mine.user_id = @user_id AND other.user_id = ANY(@viewer_ids::BIGINT[])
   AND (c.type = 'group' OR c.created_by = mine.user_id OR mine.last_read_message_id IS NOT NULL);

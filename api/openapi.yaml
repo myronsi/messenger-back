@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.32
+  version: 2.1.0-alpha.34
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -1475,6 +1475,10 @@ paths:
         message (newest first). `last_message` is the newest message the caller can see; in
         direct chats its `read_by` holds the other user once they read it (with read receipts
         on), in groups it is empty. `unread_count` stops at 999.
+
+        Direct chats that a stranger opened with the caller are in the caller's Requests folder
+        (`is_request`). Without `folder` the answer holds only the main list, so the Requests
+        folder needs `folder=requests` (or `folder=all` for both in one list).
       parameters:
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/After"
@@ -1483,6 +1487,14 @@ paths:
           required: false
           description: "`true`: only archived chats, `false`: only chats that are not archived. Without it, every chat."
           schema: { type: boolean }
+        - name: folder
+          in: query
+          required: false
+          description: "`main`: chats that are not requests (the default). `requests`: the caller's Requests folder. `all`: both."
+          schema:
+            type: string
+            enum: [main, requests, all]
+            default: main
       responses:
         "426": { $ref: "#/components/responses/ClientOutdated" }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -1502,6 +1514,10 @@ paths:
         chat (`200`) if there already is one. `user_id` may be the caller's own id: that opens
         their "Saved Messages" chat, a direct chat with the caller as its only member and as
         its `peer`.
+
+        When the other user does not count the caller as a contact (no shared chat they took
+        part in, no allow exception), the new chat lands in their Requests folder
+        (`is_request: true` for them only) and its messages send them no push notification.
       requestBody:
         required: true
         content:
@@ -1665,6 +1681,43 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "204":
           description: Not archived
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /chats/requests/count:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    get:
+      tags: [chats]
+      operationId: countChatRequests
+      summary: Number of chats in my Requests folder
+      description: Chats deleted for the caller only count again once a newer message arrives.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "200":
+          description: The number of request chats
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChatRequestCount" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /chats/{chat_id}/accept:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ChatId"
+    post:
+      tags: [chats]
+      operationId: acceptChatRequest
+      summary: Move a chat out of the Requests folder
+      description: |
+        The chat moves to the caller's main list (`is_request: false`) and the caller's devices get
+        `chat_list_update`. Sending a message in the chat, pinning it or archiving it does the same.
+        Reading it does not. Accepting a chat that is not a request changes nothing.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Accepted
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
   /chats/pins/order:
@@ -6854,6 +6907,7 @@ components:
         - is_pinned
         - pin_position
         - is_archived
+        - is_request
         - unread_count
         - first_unread_message_id
         - last_read_message_id
@@ -6878,6 +6932,11 @@ components:
         is_archived:
           type: boolean
           description: Whether the caller archived the chat (only for the caller).
+        is_request:
+          type: boolean
+          description: |
+            Whether the chat is in the caller's Requests folder: a stranger opened it, and the caller has not
+            replied, accepted, pinned or archived it yet (only for the caller).
         unread_count: { type: integer, minimum: 0 }
         first_unread_message_id:
           description: |
@@ -6902,6 +6961,11 @@ components:
             - $ref: "#/components/schemas/GroupRole"
             - type: "null"
         created_at: { $ref: "#/components/schemas/Timestamp" }
+    ChatRequestCount:
+      type: object
+      required: [requests_count]
+      properties:
+        requests_count: { type: integer, minimum: 0 }
     ChatPage:
       type: object
       required: [items, next_cursor]

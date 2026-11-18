@@ -12,6 +12,23 @@ import (
 	"github.com/google/uuid"
 )
 
+const acceptChatRequest = `-- name: AcceptChatRequest :execrows
+UPDATE participants SET is_request = false WHERE chat_id = $1 AND user_id = $2 AND is_request
+`
+
+type AcceptChatRequestParams struct {
+	ChatID int64
+	UserID int64
+}
+
+func (q *Queries) AcceptChatRequest(ctx context.Context, arg AcceptChatRequestParams) (int64, error) {
+	result, err := q.db.Exec(ctx, acceptChatRequest, arg.ChatID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const clearForEveryone = `-- name: ClearForEveryone :exec
 UPDATE chats
 SET cleared_before_message_id = GREATEST(COALESCE(cleared_before_message_id, 0), $1::bigint)
@@ -155,6 +172,20 @@ func (q *Queries) CloseDirectRequests(ctx context.Context, arg CloseDirectReques
 	return items, nil
 }
 
+const countChatRequests = `-- name: CountChatRequests :one
+SELECT count(*) FROM participants p
+JOIN chats c ON c.id = p.chat_id
+WHERE p.user_id = $1 AND p.is_request
+  AND (p.hidden_at IS NULL OR c.last_message_id > COALESCE(p.cleared_before_message_id, 0))
+`
+
+func (q *Queries) CountChatRequests(ctx context.Context, userID int64) (int64, error) {
+	row := q.db.QueryRow(ctx, countChatRequests, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countPins = `-- name: CountPins :one
 SELECT count(*) FROM user_chat_pins pin
 JOIN participants p ON p.chat_id = pin.chat_id AND p.user_id = pin.user_id
@@ -237,7 +268,7 @@ func (q *Queries) GetApprovalRequest(ctx context.Context, id int64) (ApprovalReq
 }
 
 const getChatEntry = `-- name: GetChatEntry :one
-SELECT c.id, c.type, c.name, c.description, c.avatar_url, c.direct_key, c.created_by, c.created_at, c.updated_at, c.avatar_attachment_id, c.last_message_id, c.last_activity_at, c.cleared_before_message_id, c.background_kind, c.background_attachment_id, c.background_preset, c.background_colors, p.role, p.last_read_message_id, p.archived_at, p.cleared_before_message_id AS my_cleared_before_message_id, p.hidden_at,
+SELECT c.id, c.type, c.name, c.description, c.avatar_url, c.direct_key, c.created_by, c.created_at, c.updated_at, c.avatar_attachment_id, c.last_message_id, c.last_activity_at, c.cleared_before_message_id, c.background_kind, c.background_attachment_id, c.background_preset, c.background_colors, p.role, p.last_read_message_id, p.archived_at, p.cleared_before_message_id AS my_cleared_before_message_id, p.hidden_at, p.is_request,
        pin.pinned_at, pin.position AS pin_position,
        COALESCE(pin.pinned_at, c.last_activity_at)::timestamptz AS sort_at
 FROM participants p
@@ -274,6 +305,7 @@ type GetChatEntryRow struct {
 	ArchivedAt               *time.Time
 	MyClearedBeforeMessageID *int64
 	HiddenAt                 *time.Time
+	IsRequest                bool
 	PinnedAt                 *time.Time
 	PinPosition              *int32
 	SortAt                   time.Time
@@ -305,6 +337,7 @@ func (q *Queries) GetChatEntry(ctx context.Context, arg GetChatEntryParams) (Get
 		&i.ArchivedAt,
 		&i.MyClearedBeforeMessageID,
 		&i.HiddenAt,
+		&i.IsRequest,
 		&i.PinnedAt,
 		&i.PinPosition,
 		&i.SortAt,
@@ -312,8 +345,46 @@ func (q *Queries) GetChatEntry(ctx context.Context, arg GetChatEntryParams) (Get
 	return i, err
 }
 
+const getChatWithRequestHolders = `-- name: GetChatWithRequestHolders :one
+SELECT c.id, c.type, c.name, c.description, c.avatar_url, c.direct_key, c.created_by, c.created_at, c.updated_at, c.avatar_attachment_id, c.last_message_id, c.last_activity_at, c.cleared_before_message_id, c.background_kind, c.background_attachment_id, c.background_preset, c.background_colors,
+       ARRAY(SELECT p.user_id FROM participants p WHERE p.chat_id = c.id AND p.is_request ORDER BY p.user_id)::bigint[] AS request_holders
+FROM chats c
+WHERE c.id = $1
+`
+
+type GetChatWithRequestHoldersRow struct {
+	Chat           Chat
+	RequestHolders []int64
+}
+
+func (q *Queries) GetChatWithRequestHolders(ctx context.Context, id int64) (GetChatWithRequestHoldersRow, error) {
+	row := q.db.QueryRow(ctx, getChatWithRequestHolders, id)
+	var i GetChatWithRequestHoldersRow
+	err := row.Scan(
+		&i.Chat.ID,
+		&i.Chat.Type,
+		&i.Chat.Name,
+		&i.Chat.Description,
+		&i.Chat.AvatarUrl,
+		&i.Chat.DirectKey,
+		&i.Chat.CreatedBy,
+		&i.Chat.CreatedAt,
+		&i.Chat.UpdatedAt,
+		&i.Chat.AvatarAttachmentID,
+		&i.Chat.LastMessageID,
+		&i.Chat.LastActivityAt,
+		&i.Chat.ClearedBeforeMessageID,
+		&i.Chat.BackgroundKind,
+		&i.Chat.BackgroundAttachmentID,
+		&i.Chat.BackgroundPreset,
+		&i.Chat.BackgroundColors,
+		&i.RequestHolders,
+	)
+	return i, err
+}
+
 const listChatEntries = `-- name: ListChatEntries :many
-SELECT c.id, c.type, c.name, c.description, c.avatar_url, c.direct_key, c.created_by, c.created_at, c.updated_at, c.avatar_attachment_id, c.last_message_id, c.last_activity_at, c.cleared_before_message_id, c.background_kind, c.background_attachment_id, c.background_preset, c.background_colors, p.role, p.last_read_message_id, p.archived_at, p.cleared_before_message_id AS my_cleared_before_message_id, p.hidden_at,
+SELECT c.id, c.type, c.name, c.description, c.avatar_url, c.direct_key, c.created_by, c.created_at, c.updated_at, c.avatar_attachment_id, c.last_message_id, c.last_activity_at, c.cleared_before_message_id, c.background_kind, c.background_attachment_id, c.background_preset, c.background_colors, p.role, p.last_read_message_id, p.archived_at, p.cleared_before_message_id AS my_cleared_before_message_id, p.hidden_at, p.is_request,
        pin.pinned_at, pin.position AS pin_position,
        COALESCE(pin.pinned_at, c.last_activity_at)::timestamptz AS sort_at
 FROM participants p
@@ -322,24 +393,26 @@ LEFT JOIN user_chat_pins pin ON pin.user_id = p.user_id AND pin.chat_id = p.chat
 WHERE p.user_id = $1
   AND ($2::text IS NULL OR c.type = $2::text)
   AND ($3::bool IS NULL OR (p.archived_at IS NOT NULL) = $3::bool)
+  AND ($4::bool IS NULL OR p.is_request = $4::bool)
   AND (p.hidden_at IS NULL OR c.last_message_id > COALESCE(p.cleared_before_message_id, 0))
   AND (
-    $4::bigint IS NULL
-    OR (pin.pinned_at IS NULL)::int > $5::int
-    OR ((pin.pinned_at IS NULL)::int = $5::int AND (
-          COALESCE(pin.position, 0) > $6::int
-          OR (COALESCE(pin.position, 0) = $6::int AND (
-                COALESCE(pin.pinned_at, c.last_activity_at) < $7::timestamptz
-                OR (COALESCE(pin.pinned_at, c.last_activity_at) = $7::timestamptz AND c.id < $4::bigint)))))
+    $5::bigint IS NULL
+    OR (pin.pinned_at IS NULL)::int > $6::int
+    OR ((pin.pinned_at IS NULL)::int = $6::int AND (
+          COALESCE(pin.position, 0) > $7::int
+          OR (COALESCE(pin.position, 0) = $7::int AND (
+                COALESCE(pin.pinned_at, c.last_activity_at) < $8::timestamptz
+                OR (COALESCE(pin.pinned_at, c.last_activity_at) = $8::timestamptz AND c.id < $5::bigint)))))
   )
 ORDER BY (pin.pinned_at IS NULL), COALESCE(pin.position, 0), COALESCE(pin.pinned_at, c.last_activity_at) DESC, c.id DESC
-LIMIT $8
+LIMIT $9
 `
 
 type ListChatEntriesParams struct {
 	UserID        int64
 	ChatType      *string
 	Archived      *bool
+	Requests      *bool
 	AfterChatID   *int64
 	AfterUnpinned *int32
 	AfterPosition *int32
@@ -370,6 +443,7 @@ type ListChatEntriesRow struct {
 	ArchivedAt               *time.Time
 	MyClearedBeforeMessageID *int64
 	HiddenAt                 *time.Time
+	IsRequest                bool
 	PinnedAt                 *time.Time
 	PinPosition              *int32
 	SortAt                   time.Time
@@ -382,6 +456,7 @@ func (q *Queries) ListChatEntries(ctx context.Context, arg ListChatEntriesParams
 		arg.UserID,
 		arg.ChatType,
 		arg.Archived,
+		arg.Requests,
 		arg.AfterChatID,
 		arg.AfterUnpinned,
 		arg.AfterPosition,
@@ -418,6 +493,7 @@ func (q *Queries) ListChatEntries(ctx context.Context, arg ListChatEntriesParams
 			&i.ArchivedAt,
 			&i.MyClearedBeforeMessageID,
 			&i.HiddenAt,
+			&i.IsRequest,
 			&i.PinnedAt,
 			&i.PinPosition,
 			&i.SortAt,
@@ -493,8 +569,32 @@ func (q *Queries) ListChatIDsAfter(ctx context.Context, arg ListChatIDsAfterPara
 	return items, nil
 }
 
+const listChatRequestHolders = `-- name: ListChatRequestHolders :many
+SELECT user_id FROM participants WHERE chat_id = $1 AND is_request ORDER BY user_id
+`
+
+func (q *Queries) ListChatRequestHolders(ctx context.Context, chatID int64) ([]int64, error) {
+	rows, err := q.db.Query(ctx, listChatRequestHolders, chatID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int64{}
+	for rows.Next() {
+		var user_id int64
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOtherParticipants = `-- name: ListOtherParticipants :many
-SELECT chat_id, user_id, last_read_message_id, last_read_at
+SELECT chat_id, user_id, last_read_message_id, last_read_at, is_request
 FROM participants
 WHERE chat_id = ANY($1::bigint[]) AND user_id <> $2
 ORDER BY chat_id, user_id
@@ -510,6 +610,7 @@ type ListOtherParticipantsRow struct {
 	UserID            int64
 	LastReadMessageID *int64
 	LastReadAt        *time.Time
+	IsRequest         bool
 }
 
 // The other members of the chats (the peers of direct chats), with their read markers.
@@ -527,6 +628,7 @@ func (q *Queries) ListOtherParticipants(ctx context.Context, arg ListOtherPartic
 			&i.UserID,
 			&i.LastReadMessageID,
 			&i.LastReadAt,
+			&i.IsRequest,
 		); err != nil {
 			return nil, err
 		}
@@ -639,6 +741,20 @@ SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))
 // request cannot be made while the chat is being opened.
 func (q *Queries) LockDirectPair(ctx context.Context, directKey string) error {
 	_, err := q.db.Exec(ctx, lockDirectPair, directKey)
+	return err
+}
+
+const markChatRequest = `-- name: MarkChatRequest :exec
+UPDATE participants SET is_request = true WHERE chat_id = $1 AND user_id = $2
+`
+
+type MarkChatRequestParams struct {
+	ChatID int64
+	UserID int64
+}
+
+func (q *Queries) MarkChatRequest(ctx context.Context, arg MarkChatRequestParams) error {
+	_, err := q.db.Exec(ctx, markChatRequest, arg.ChatID, arg.UserID)
 	return err
 }
 
