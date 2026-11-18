@@ -46,6 +46,14 @@ FROM participants
 WHERE chat_id = ANY(@chat_ids::bigint[]) AND user_id <> @user_id
 ORDER BY chat_id, user_id;
 
+-- name: ListDirectPeers :many
+SELECT other.chat_id, other.user_id
+FROM participants mine
+JOIN chats c ON c.id = mine.chat_id AND c.type = 'direct'
+JOIN participants other ON other.chat_id = mine.chat_id AND other.user_id <> mine.user_id
+WHERE mine.user_id = @user_id
+ORDER BY other.chat_id;
+
 -- name: CountPins :one
 -- Pins of chats the user is still in (pins of chats they left do not use up the limit).
 SELECT count(*) FROM user_chat_pins pin

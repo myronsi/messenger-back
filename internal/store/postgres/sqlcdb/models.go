@@ -500,6 +500,8 @@ type UserPrivacySetting struct {
 	LastSeenVisibility      string
 	BirthdayVisibility      string
 	CallsFrom               string
+	VoiceVideoMessages      string
+	ForwardLink             string
 }
 
 type UserRecentSticker struct {

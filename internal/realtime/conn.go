@@ -333,7 +333,13 @@ func (c *conn) handle(ev clientEvent) {
 		if code == "internal_error" {
 			c.gw.o.Log.WarnContext(ctx, "client event failed", "type", ev.Type, "error", err)
 		}
-		c.reply(c.errorEvent(ev.ClientTempID, ev.ChatID, code, msg))
+		errData := map[string]any{"code": code, "message": msg}
+		var field *messages.FieldForbiddenError
+		if errors.As(err, &field) {
+			errData["message"], errData["field"] = field.Message, field.Field
+		}
+		raw, _ := c.gw.o.Fanout.encode("error", ev.ChatID, errData, ev.ClientTempID)
+		c.reply(raw)
 		return
 	}
 	c.reply(c.ack(ev, data))

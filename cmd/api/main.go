@@ -216,6 +216,7 @@ func run() error {
 				}
 			},
 			Events: rt.events, Limiter: rt.limiter, BasePath: cfg.HTTP.BasePath, Log: log, ProfileChanged: rt.profileChanged,
+			PeersChanged: chatSvc.PeerPrivacyChanged,
 		})).WithChats(httpapi.NewChatServer(httpapi.ChatOptions{
 			Service: chatSvc,
 			Limiter: rt.limiter, BasePath: cfg.HTTP.BasePath, Log: log,

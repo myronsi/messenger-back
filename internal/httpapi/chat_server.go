@@ -72,6 +72,8 @@ func PresentChat(v chats.View, basePath string) Chat {
 	if c.Type == postgres.ChatDirect {
 		if v.Peer != nil {
 			p := PresentUser(*v.Peer)
+			accepts := v.PeerVoice
+			p.CanSendVoiceVideo = &accepts
 			out.Peer = &p
 			out.Name = v.Peer.DisplayName
 			if v.Peer.ContactName != nil {
@@ -91,7 +93,7 @@ func PresentChat(v chats.View, basePath string) Chat {
 		out.MyRole = &role
 	}
 	if l := v.Last; l != nil {
-		parts := MessageParts{Sender: l.Sender, Attachment: l.Attachment, Sticker: l.Sticker, BasePath: basePath}
+		parts := MessageParts{Sender: l.Sender, Attachment: l.Attachment, Sticker: l.Sticker, BasePath: basePath, ForwardLink: l.ForwardLink}
 		for _, m := range l.ReadBy {
 			parts.ReadBy = append(parts.ReadBy, ReadReceipt{UserId: FormatID(m.UserID), ReadAt: utc(*m.At)})
 		}
@@ -131,6 +133,11 @@ func serviceError(w http.ResponseWriter, r *http.Request, log *slog.Logger, what
 	case errors.Is(err, messages.ErrBlocked):
 		WriteProblem(w, http.StatusForbidden, ErrorCodeBlockedByUser)
 	case errors.Is(err, messages.ErrForbidden):
+		var field *messages.FieldForbiddenError
+		if errors.As(err, &field) {
+			WriteProblem(w, http.StatusForbidden, ErrorCodeForbidden, ProblemError{Field: field.Field, Message: field.Message})
+			return
+		}
 		WriteProblem(w, http.StatusForbidden, ErrorCodeForbidden)
 	case errors.Is(err, chats.ErrConflict):
 		WriteProblem(w, http.StatusConflict, ErrorCodeConflict, details()...)

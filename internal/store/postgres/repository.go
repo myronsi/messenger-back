@@ -328,6 +328,7 @@ type ChatRepository interface {
 	Entry(ctx context.Context, userID, chatID int64) (ChatEntry, error)
 	// OtherMembers returns the read markers of the other members of the chats.
 	OtherMembers(ctx context.Context, userID int64, chatIDs []int64) ([]ReadMarker, error)
+	DirectPeers(ctx context.Context, userID int64) (map[int64]int64, error)
 	// Pin pins a chat of the user; ErrConflict when maxPins chats are pinned already, ErrNotFound when the
 	// user is not in the chat. Pinning a pinned chat changes nothing.
 	Pin(ctx context.Context, userID, chatID int64, maxPins int) error

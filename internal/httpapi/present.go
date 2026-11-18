@@ -174,6 +174,7 @@ type MessageParts struct {
 	Reply        *ReplyOrigin
 	Drawings     map[uuid.UUID][]byte
 	Sticker      *postgres.Sticker
+	ForwardLink  bool
 }
 
 func PresentSticker(s postgres.Sticker, basePath string) Sticker {
@@ -181,6 +182,16 @@ func PresentSticker(s postgres.Sticker, basePath string) Sticker {
 		Id: FormatID(s.ID), PackId: FormatID(s.PackID), PackSlug: s.PackSlug, Emoji: s.Emoji, IsAnimated: s.Animated,
 		Image: PresentAttachment(s.Image, scylla.TypeSticker, basePath),
 	}
+}
+
+func ForwardedSenders(msgs ...scylla.Message) []int64 {
+	var out []int64
+	for _, m := range msgs {
+		if m.Forwarded != nil && m.Forwarded.SenderID != nil {
+			out = append(out, *m.Forwarded.SenderID)
+		}
+	}
+	return out
 }
 
 func StickerIDs(msgs ...scylla.Message) []int64 {
@@ -290,7 +301,10 @@ func PresentMessage(m scylla.Message, p MessageParts) Message {
 		out.ReplyPreview = &r
 	}
 	if f := m.Forwarded; f != nil {
-		out.ForwardedFrom = &ForwardedFrom{MessageId: FormatID(f.MessageID), SenderId: formatIDPtr(f.SenderID), SenderName: f.SenderName}
+		out.ForwardedFrom = &ForwardedFrom{MessageId: FormatID(f.MessageID), SenderName: f.SenderName}
+		if p.ForwardLink {
+			out.ForwardedFrom.SenderId = formatIDPtr(f.SenderID)
+		}
 	}
 	for _, r := range p.Reactions {
 		out.Reactions = append(out.Reactions, PresentReaction(r))
