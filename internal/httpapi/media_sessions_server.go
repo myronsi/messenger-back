@@ -186,3 +186,5 @@ func (m *MediaServer) CompleteUploadSession(w http.ResponseWriter, r *http.Reque
 	}
 	writeJSONStatus(w, http.StatusCreated, out)
 }
+
+const chunkBodyLimit = media.ChunkSize + 64<<10

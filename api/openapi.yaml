@@ -1335,7 +1335,7 @@ paths:
               schema: { $ref: "#/components/schemas/PlaybackUrl" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
-  /attachments/uploads:
+  /upload-sessions:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
       - $ref: "#/components/parameters/ClientApiVersion"
@@ -1345,8 +1345,8 @@ paths:
       summary: Start a resumable upload
       description: |
         For large files: the client sends the file in chunks of `chunk_size` bytes with
-        `PUT /attachments/uploads/{upload_id}/chunks`, can ask how much arrived with `GET`, and finishes with
-        `POST /attachments/uploads/{upload_id}/complete`, which checks the file like `POST /attachments`. Sessions
+        `PUT /upload-sessions/{upload_id}/chunks`, can ask how much arrived with `GET`, and finishes with
+        `POST /upload-sessions/{upload_id}/complete`, which checks the file like `POST /attachments`. Sessions
         without progress for 24 hours are deleted. At most 5 open sessions per user.
       requestBody:
         required: true
@@ -1364,7 +1364,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
-  /attachments/uploads/{upload_id}:
+  /upload-sessions/{upload_id}:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
       - $ref: "#/components/parameters/ClientApiVersion"
@@ -1393,7 +1393,7 @@ paths:
         "204": { description: Cancelled }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
-  /attachments/uploads/{upload_id}/chunks:
+  /upload-sessions/{upload_id}/chunks:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
       - $ref: "#/components/parameters/ClientApiVersion"
@@ -1431,7 +1431,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/UploadSession" }
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
-  /attachments/uploads/{upload_id}/complete:
+  /upload-sessions/{upload_id}/complete:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
       - $ref: "#/components/parameters/ClientApiVersion"

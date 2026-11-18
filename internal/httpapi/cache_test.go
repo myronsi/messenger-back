@@ -84,7 +84,7 @@ func TestAttachmentContentIsImmutable(t *testing.T) {
 		t.Fatalf("original: %d %q", original.Code, original.Header().Get("Cache-Control"))
 	}
 	thumb := e.do(t, request{method: http.MethodGet, path: "/attachments/" + id + "/content?variant=thumbnail", token: alice.access})
-	if thumb.Code == http.StatusOK && thumb.Header().Get("Cache-Control") != "private, max-age=3600" {
+	if thumb.Code != http.StatusOK || thumb.Header().Get("Cache-Control") != cacheForever {
 		t.Fatalf("thumbnail: %q", thumb.Header().Get("Cache-Control"))
 	}
 }

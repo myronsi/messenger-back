@@ -38,6 +38,8 @@ var imageTypes = map[string]bool{"image/jpeg": true, "image/png": true, "image/g
 // audioType recognizes the audio containers browsers record and play.
 func audioType(head []byte, sniffed string) string {
 	switch {
+	case bytes.HasPrefix(head, []byte("fLaC")):
+		return "audio/flac"
 	case bytes.HasPrefix(head, []byte("OggS")):
 		return "audio/ogg"
 	case bytes.HasPrefix(head, []byte{0x1A, 0x45, 0xDF, 0xA3}): // EBML: WebM or Matroska

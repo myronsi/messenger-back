@@ -112,6 +112,18 @@ func NewMediaServer(o MediaOptions) *MediaServer {
 // UploadPath is the route of uploads, which gets the upload size limit instead of HTTP_MAX_BODY_BYTES.
 func UploadPath(basePath string) string { return basePath + "/attachments" }
 
+func sessionsPath(uploadPath string) string {
+	return strings.TrimSuffix(uploadPath, "/attachments") + "/upload-sessions/"
+}
+
+func isChunkPath(p, uploadPath string) bool {
+	return strings.HasPrefix(p, sessionsPath(uploadPath)) && strings.HasSuffix(p, "/chunks")
+}
+
+func isCompletePath(p, uploadPath string) bool {
+	return strings.HasPrefix(p, sessionsPath(uploadPath)) && strings.HasSuffix(p, "/complete")
+}
+
 // uploadForm is the multipart request: the file part is spooled to a temporary file.
 type uploadForm struct {
 	file       *os.File
