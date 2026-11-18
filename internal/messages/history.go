@@ -303,9 +303,14 @@ func (s *Service) ForwardMany(ctx context.Context, userID, chatID int64, message
 		if err := s.requireNotBlocked(ctx, userID, chatID); err != nil {
 			return nil, err
 		}
-		members, err := s.Members(ctx, chatID)
+		chat, members, err := s.chatAndMembers(ctx, chatID)
 		if err != nil {
 			return nil, err
+		}
+		for _, src := range sources {
+			if err := s.checkVoiceVideo(ctx, userID, chat, members, src.msg.Type, src.msg.AttachmentIDs()); err != nil {
+				return nil, err
+			}
 		}
 		checked = append(checked, target{chatID, members})
 	}

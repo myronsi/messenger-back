@@ -71,6 +71,20 @@ func (r chatRepo) OtherMembers(ctx context.Context, userID int64, chatIDs []int6
 	return out, nil
 }
 
+func (r chatRepo) DirectPeers(ctx context.Context, userID int64) (map[int64]int64, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	rows, err := r.s.q.ListDirectPeers(ctx, userID)
+	if err != nil {
+		return nil, mapError(err)
+	}
+	out := make(map[int64]int64, len(rows))
+	for _, row := range rows {
+		out[row.ChatID] = row.UserID
+	}
+	return out, nil
+}
+
 func (r chatRepo) Pin(ctx context.Context, userID, chatID int64, maxPins int) error {
 	return r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
 		// The user's row serializes concurrent pins, so the limit holds.

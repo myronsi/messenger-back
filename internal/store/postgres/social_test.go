@@ -114,3 +114,25 @@ func TestSocial(t *testing.T) {
 		t.Fatalf("chat ids: %v", chats)
 	}
 }
+
+func TestExceptionKeysKeepTheirPredecessors(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	owner, target := mustUser(t, s, "owner"), mustUser(t, s, "target")
+	keys := []string{
+		SettingAvatar, SettingProfile, SettingPresence, SettingLastSeen, SettingBirthday, SettingGroupInvites,
+		SettingDirectMessages, SettingSearch, SettingVoiceVideo, SettingForwardLink,
+	}
+	for _, key := range keys {
+		if err := s.Social().SetException(ctx, PrivacyException{OwnerID: owner.ID, SettingKey: key, TargetID: target.ID, Effect: EffectDeny}); err != nil {
+			t.Fatalf("%s: %v", key, err)
+		}
+	}
+	if err := s.Social().SetException(ctx, PrivacyException{OwnerID: owner.ID, SettingKey: "unknown_setting", TargetID: target.ID, Effect: EffectDeny}); err == nil {
+		t.Fatal("an unknown setting key was accepted")
+	}
+	got, err := s.Social().ExceptionsOf(ctx, owner.ID, []int64{target.ID})
+	if err != nil || len(got[target.ID]) != len(keys) {
+		t.Fatalf("exceptions: %v %v", got, err)
+	}
+}

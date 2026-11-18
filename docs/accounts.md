@@ -27,8 +27,12 @@ The profile, privacy, blocking, contact-name and user lookup endpoints (`interna
 | `read_receipts_enabled` | `true`, `false` |
 | `calls_enabled` | `true`, `false` |
 | `typing_indicators_enabled` | `true`, `false`: with `false` the server drops the user's `typing` events ([realtime.md](realtime.md#client-events)) |
+| `voice_video_messages` | `everyone`, `contacts`: who may send the user voice messages and videos in a direct chat ([messages.md](messages.md#voice-and-video-privacy)) |
+| `forward_link` | `everyone`, `contacts`, `nobody`: who sees the link to the user's account on copies of their forwarded messages ([messages.md](messages.md#voice-and-video-privacy)) |
 
 The contract's `contacts` means "people you share a chat with" (`shared_chats` in the schema): a group, or a direct chat that you opened yourself or read a message in. A direct chat someone else opened with you, and that you never read in, does not make them your contact. `PUT /me/privacy/exceptions/{setting}/{allow|deny}` replaces one exception list; the lists apply to every value of the setting. A user can be on only one list per setting, so putting them on one removes them from the other. Unknown user IDs are rejected.
+
+`voice_video_messages` and `forward_link` (migration 000043) are checked with the same rule as the visibility settings (`users.Visible`): an exception wins, `contacts` needs a shared chat in the sense above, and a user who blocked the other one never lets them in. The other user of a direct chat gets `Chat.peer.can_send_voice_video`, so a client can turn off the microphone and video attachments before a send is refused. When the user changes `voice_video_messages` or its exceptions, the other user of each of their direct chats gets a `chat_list_update` with the new value.
 
 ## Blocking and contact names
 

@@ -28,6 +28,8 @@ const (
 	SettingGroupInvites   = "group_invites"
 	SettingDirectMessages = "direct_messages"
 	SettingSearch         = "search_visibility"
+	SettingVoiceVideo     = "voice_video_messages"
+	SettingForwardLink    = "forward_link"
 )
 
 // Exception effects.
@@ -50,6 +52,8 @@ type PrivacySettings struct {
 	SearchVisibility        string
 	CallsEnabled            bool
 	TypingIndicatorsEnabled bool
+	VoiceVideoMessages      string
+	ForwardLink             string
 }
 
 // DefaultPrivacy is what a user without a settings row gets (the column defaults).
@@ -59,7 +63,7 @@ func DefaultPrivacy(userID int64) PrivacySettings {
 		PresenceVisibility: VisibleEveryone, LastSeenVisibility: VisibleEveryone, BirthdayVisibility: VisibleSharedChats,
 		ReadReceiptsEnabled: true, DirectMessages: VisibleEveryone,
 		GroupInvites: VisibleEveryone, SearchVisibility: VisibleEveryone, CallsEnabled: true,
-		TypingIndicatorsEnabled: true,
+		TypingIndicatorsEnabled: true, VoiceVideoMessages: VisibleEveryone, ForwardLink: VisibleEveryone,
 	}
 }
 
@@ -131,6 +135,7 @@ func privacyFrom(p sqlcdb.UserPrivacySetting) PrivacySettings {
 		PresenceVisibility: p.PresenceVisibility, LastSeenVisibility: p.LastSeenVisibility, BirthdayVisibility: p.BirthdayVisibility,
 		ReadReceiptsEnabled: p.ReadReceiptsEnabled, DirectMessages: p.DirectMessages, GroupInvites: p.GroupInvites,
 		SearchVisibility: p.SearchVisibility, CallsEnabled: p.CallsEnabled, TypingIndicatorsEnabled: p.TypingIndicatorsEnabled,
+		VoiceVideoMessages: p.VoiceVideoMessages, ForwardLink: p.ForwardLink,
 	}
 }
 
@@ -164,6 +169,7 @@ func (r socialRepo) UpdatePrivacy(ctx context.Context, p PrivacySettings) (Priva
 		PresenceVisibility: p.PresenceVisibility, LastSeenVisibility: p.LastSeenVisibility, BirthdayVisibility: p.BirthdayVisibility,
 		ReadReceiptsEnabled: p.ReadReceiptsEnabled, DirectMessages: p.DirectMessages, GroupInvites: p.GroupInvites,
 		SearchVisibility: p.SearchVisibility, CallsEnabled: p.CallsEnabled, TypingIndicatorsEnabled: p.TypingIndicatorsEnabled,
+		VoiceVideoMessages: p.VoiceVideoMessages, ForwardLink: p.ForwardLink,
 	})
 	if err != nil {
 		return PrivacySettings{}, mapError(err)
@@ -184,6 +190,8 @@ type PrivacyPatch struct {
 	SearchVisibility        *string
 	CallsEnabled            *bool
 	TypingIndicatorsEnabled *bool
+	VoiceVideoMessages      *string
+	ForwardLink             *string
 }
 
 func (r socialRepo) PatchPrivacy(ctx context.Context, userID int64, p PrivacyPatch) (PrivacySettings, error) {
@@ -197,6 +205,7 @@ func (r socialRepo) PatchPrivacy(ctx context.Context, userID int64, p PrivacyPat
 		PresenceVisibility: p.PresenceVisibility, LastSeenVisibility: p.LastSeenVisibility, BirthdayVisibility: p.BirthdayVisibility,
 		ReadReceiptsEnabled: p.ReadReceiptsEnabled, DirectMessages: p.DirectMessages, GroupInvites: p.GroupInvites,
 		SearchVisibility: p.SearchVisibility, CallsEnabled: p.CallsEnabled, TypingIndicatorsEnabled: p.TypingIndicatorsEnabled,
+		VoiceVideoMessages: p.VoiceVideoMessages, ForwardLink: p.ForwardLink,
 	})
 	if err != nil {
 		return PrivacySettings{}, mapError(err)

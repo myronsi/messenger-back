@@ -937,3 +937,28 @@ func TestProfileChangeReachesChatPartnersAndOwnDevices(t *testing.T) {
 	}
 	cs.quiet("user_updated")
 }
+
+func TestRefusedVoiceNamesTheSetting(t *testing.T) {
+	e := newEnv(t)
+	a := e.instance("a")
+	ctx := context.Background()
+	stranger, bob := e.user("stranger"), e.user("bob")
+	chat, _, _ := e.pg.Chats().CreateDirect(ctx, stranger, bob)
+	p, _ := e.pg.Social().Privacy(ctx, []int64{bob})
+	settings := p[bob]
+	settings.VoiceVideoMessages = postgres.VisibleSharedChats
+	if _, err := e.pg.Social().UpdatePrivacy(ctx, settings); err != nil {
+		t.Fatal(err)
+	}
+	upload, err := e.pg.Attachments().Create(ctx, postgres.NewAttachment{UploaderID: &stranger, ChatID: &chat.ID, Kind: "voice", StorageKey: "attachments/" + uuid.NewString(), MimeType: "audio/ogg", Size: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := e.online(a, stranger)
+	c.send(map[string]any{"type": "message", "client_temp_id": "v-1", "chat_id": fmt.Sprint(chat.ID),
+		"data": map[string]any{"type": "voice", "attachment_id": upload.ID.String()}})
+	ev := c.next("error")
+	if d := data(ev); d["code"] != "forbidden" || d["field"] != "voice_video_messages" || ev["client_temp_id"] != "v-1" {
+		t.Fatalf("refused voice: %v", ev)
+	}
+}

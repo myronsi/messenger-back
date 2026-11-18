@@ -147,6 +147,18 @@ WebSocket, with the same rules as the WebSocket events:
 - `GET /chats/{id}/unsent` and `DELETE /chats/{id}/unsent/{client_temp_id}`: the caller's rejected sends of a chat
   (see below).
 
+## Voice and video privacy
+
+- In a direct chat, a `voice` message, or a `file` message with a video among its attachments, needs the recipient's
+  `voice_video_messages` to let the sender in ([accounts.md](accounts.md#privacy)). Otherwise the send, a resend
+  or a forward into that chat is refused with `403` `forbidden` and the field `voice_video_messages` (the WebSocket
+  `error` event carries the same `field`). A refused send is kept as an unsent message like other `forbidden` sends;
+  a forward stops before anything is written. Groups and Saved Messages are not affected.
+- A forwarded copy keeps storing the original `sender_id`. When it is rendered (history, chat list, `message`
+  events), `forwarded_from.sender_id` is `null` for every viewer whom the original sender's `forward_link` does not
+  let in; `sender_name` stays, so clients show the name as plain text. The original sender always sees their own
+  link.
+
 ## Rejected sends
 
 A send that fails for a reason that may pass later is kept for the sender, so it survives a sign-out and shows on

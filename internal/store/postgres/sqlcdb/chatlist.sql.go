@@ -493,6 +493,40 @@ func (q *Queries) ListChatIDsAfter(ctx context.Context, arg ListChatIDsAfterPara
 	return items, nil
 }
 
+const listDirectPeers = `-- name: ListDirectPeers :many
+SELECT other.chat_id, other.user_id
+FROM participants mine
+JOIN chats c ON c.id = mine.chat_id AND c.type = 'direct'
+JOIN participants other ON other.chat_id = mine.chat_id AND other.user_id <> mine.user_id
+WHERE mine.user_id = $1
+ORDER BY other.chat_id
+`
+
+type ListDirectPeersRow struct {
+	ChatID int64
+	UserID int64
+}
+
+func (q *Queries) ListDirectPeers(ctx context.Context, userID int64) ([]ListDirectPeersRow, error) {
+	rows, err := q.db.Query(ctx, listDirectPeers, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListDirectPeersRow{}
+	for rows.Next() {
+		var i ListDirectPeersRow
+		if err := rows.Scan(&i.ChatID, &i.UserID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOtherParticipants = `-- name: ListOtherParticipants :many
 SELECT chat_id, user_id, last_read_message_id, last_read_at
 FROM participants

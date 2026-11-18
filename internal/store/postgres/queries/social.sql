@@ -6,10 +6,12 @@ SELECT * FROM user_privacy_settings WHERE user_id = ANY(@user_ids::BIGINT[]);
 -- name: UpdatePrivacySettings :one
 INSERT INTO user_privacy_settings (
     user_id, avatar_visibility, profile_visibility, presence_visibility, last_seen_visibility, birthday_visibility,
-    read_receipts_enabled, direct_messages, group_invites, search_visibility, calls_enabled, typing_indicators_enabled
+    read_receipts_enabled, direct_messages, group_invites, search_visibility, calls_enabled, typing_indicators_enabled,
+    voice_video_messages, forward_link
 ) VALUES (
     @user_id, @avatar_visibility, @profile_visibility, @presence_visibility, @last_seen_visibility, @birthday_visibility,
-    @read_receipts_enabled, @direct_messages, @group_invites, @search_visibility, @calls_enabled, @typing_indicators_enabled
+    @read_receipts_enabled, @direct_messages, @group_invites, @search_visibility, @calls_enabled, @typing_indicators_enabled,
+    @voice_video_messages, @forward_link
 )
 ON CONFLICT (user_id) DO UPDATE SET
     avatar_visibility = EXCLUDED.avatar_visibility,
@@ -22,7 +24,9 @@ ON CONFLICT (user_id) DO UPDATE SET
     group_invites = EXCLUDED.group_invites,
     search_visibility = EXCLUDED.search_visibility,
     calls_enabled = EXCLUDED.calls_enabled,
-    typing_indicators_enabled = EXCLUDED.typing_indicators_enabled
+    typing_indicators_enabled = EXCLUDED.typing_indicators_enabled,
+    voice_video_messages = EXCLUDED.voice_video_messages,
+    forward_link = EXCLUDED.forward_link
 RETURNING *;
 
 -- name: ListPrivacyExceptions :many
@@ -134,7 +138,9 @@ SET avatar_visibility = COALESCE(sqlc.narg(avatar_visibility), avatar_visibility
     group_invites = COALESCE(sqlc.narg(group_invites), group_invites),
     search_visibility = COALESCE(sqlc.narg(search_visibility), search_visibility),
     calls_enabled = COALESCE(sqlc.narg(calls_enabled)::bool, calls_enabled),
-    typing_indicators_enabled = COALESCE(sqlc.narg(typing_indicators_enabled)::bool, typing_indicators_enabled)
+    typing_indicators_enabled = COALESCE(sqlc.narg(typing_indicators_enabled)::bool, typing_indicators_enabled),
+    voice_video_messages = COALESCE(sqlc.narg(voice_video_messages), voice_video_messages),
+    forward_link = COALESCE(sqlc.narg(forward_link), forward_link)
 WHERE user_id = @user_id
 RETURNING *;
 

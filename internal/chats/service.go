@@ -148,7 +148,8 @@ type LastMessage struct {
 	Attachment *postgres.Attachment
 	Sticker    *postgres.Sticker
 	// ReadBy are the other members who read it (direct chats, with read receipts on).
-	ReadBy []postgres.ReadMarker
+	ReadBy      []postgres.ReadMarker
+	ForwardLink bool
 }
 
 // View is a chat as one user sees it in their list.
@@ -156,6 +157,7 @@ type View struct {
 	Entry postgres.ChatEntry
 	// Peer is the other user of a direct chat.
 	Peer        *users.View
+	PeerVoice   bool
 	Unread      int64
 	FirstUnread *int64
 	Last        *LastMessage
@@ -259,6 +261,20 @@ func (s *Service) Get(ctx context.Context, userID, chatID int64) (View, error) {
 	return views[0], nil
 }
 
+func (s *Service) PeerPrivacyChanged(ctx context.Context, userID int64) {
+	if s.d.Notifier == nil {
+		return
+	}
+	peers, err := s.d.Store.Chats().DirectPeers(ctx, userID)
+	if err != nil {
+		s.d.Log.WarnContext(ctx, "direct peers", "error", err, "user_id", userID)
+		return
+	}
+	for chatID, peer := range peers {
+		s.d.Notifier.ChatUpdated(ctx, chatID, s.viewsFor(ctx, chatID, []int64{peer}))
+	}
+}
+
 // viewsFor renders one chat for each of the users (for chat_created and chat_list_update events).
 func (s *Service) viewsFor(ctx context.Context, chatID int64, userIDs []int64) map[int64]View {
 	out := make(map[int64]View, len(userIDs))
@@ -341,6 +357,24 @@ func (s *Service) render(ctx context.Context, viewer int64, entries []postgres.C
 	if err != nil {
 		return nil, unavailable(err)
 	}
+	var forwarded []int64
+	for _, m := range lasts {
+		if m != nil && m.Forwarded != nil && m.Forwarded.SenderID != nil {
+			forwarded = append(forwarded, *m.Forwarded.SenderID)
+		}
+	}
+	links, err := s.d.Directory.ForwardLinks(ctx, viewer, dedupe(forwarded))
+	if err != nil {
+		return nil, unavailable(err)
+	}
+	peers := make([]int64, 0, len(peerOf))
+	for _, m := range peerOf {
+		peers = append(peers, m.UserID)
+	}
+	voice, err := s.d.Directory.VoiceVideoAllowed(ctx, viewer, dedupe(peers))
+	if err != nil {
+		return nil, unavailable(err)
+	}
 
 	receipts := s.receiptsFor(ctx, viewer, entries, lasts, peerOf)
 	var stickerIDs []int64
@@ -361,10 +395,10 @@ func (s *Service) render(ctx context.Context, viewer int64, entries []postgres.C
 		e := views[i].Entry
 		if m, ok := peerOf[e.Chat.ID]; ok {
 			p := people[m.UserID]
-			views[i].Peer = &p
+			views[i].Peer, views[i].PeerVoice = &p, voice[m.UserID]
 		} else if e.Chat.Type == postgres.ChatDirect {
 			p := people[viewer]
-			views[i].Peer = &p
+			views[i].Peer, views[i].PeerVoice = &p, true
 		}
 		// The counters only count up between reads; the contract stops at 999.
 		views[i].Unread = min(counts[e.Chat.ID], unreadCap)
@@ -376,6 +410,9 @@ func (s *Service) render(ctx context.Context, viewer int64, entries []postgres.C
 			continue
 		}
 		last := &LastMessage{Message: *m}
+		if m.Forwarded != nil && m.Forwarded.SenderID != nil {
+			last.ForwardLink = links[*m.Forwarded.SenderID]
+		}
 		if m.SenderID != nil {
 			v := people[*m.SenderID]
 			last.Sender = &v

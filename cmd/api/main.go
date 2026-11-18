@@ -182,6 +182,10 @@ func run() error {
 	if storagePing != nil {
 		checks = append(checks, httpapi.Check{Name: "object_storage", Ping: storagePing})
 	}
+	chatSvc := chats.New(chats.Deps{
+		Store: pg, Messages: rt.store, Unread: rt.unread, Members: rt.members, Sender: rt.messages,
+		Directory: rt.directory, Notifier: rt.fanout, Events: rt.events, DeleteFile: storage.Delete, Calls: callHooks, Log: log,
+	})
 	router := httpapi.NewRouter(httpapi.Options{
 		HTTP:       cfg.HTTP,
 		Production: cfg.Env == "production",
@@ -211,11 +215,9 @@ func run() error {
 				}
 			},
 			Events: rt.events, Limiter: rt.limiter, BasePath: cfg.HTTP.BasePath, Log: log, ProfileChanged: rt.profileChanged,
+			PeersChanged: chatSvc.PeerPrivacyChanged,
 		})).WithChats(httpapi.NewChatServer(httpapi.ChatOptions{
-			Service: chats.New(chats.Deps{
-				Store: pg, Messages: rt.store, Unread: rt.unread, Members: rt.members, Sender: rt.messages,
-				Directory: rt.directory, Notifier: rt.fanout, Events: rt.events, DeleteFile: storage.Delete, Calls: callHooks, Log: log,
-			}),
+			Service: chatSvc,
 			Limiter: rt.limiter, BasePath: cfg.HTTP.BasePath, Log: log,
 		})).WithMessages(httpapi.NewMessageServer(httpapi.MessageOptions{
 			Service: rt.messages, Store: pg, Directory: rt.directory, Limiter: rt.limiter, BasePath: cfg.HTTP.BasePath, Log: log,

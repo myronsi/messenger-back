@@ -358,6 +358,9 @@ func (s *Service) send(ctx context.Context, r SendRequest) (Sent, error) {
 	if err != nil {
 		return Sent{}, err
 	}
+	if err := s.checkVoiceVideo(ctx, r.SenderID, chat, members, r.Type, attachments); err != nil {
+		return Sent{}, err
+	}
 
 	id, err := s.d.IDs.Next()
 	if err != nil {
@@ -1045,15 +1048,18 @@ func (s *Service) Resend(ctx context.Context, userID, chatID, messageID int64) e
 	if err := s.requireNotBlocked(ctx, userID, chatID); err != nil {
 		return err
 	}
+	chat, members, err := s.chatAndMembers(ctx, chatID)
+	if err != nil {
+		return err
+	}
+	if err := s.checkVoiceVideo(ctx, userID, chat, members, m.Type, m.AttachmentIDs()); err != nil {
+		return err
+	}
 	// Delivered again to the sender's devices and to the members it was not delivered to; members who deleted
 	// it for themselves keep it deleted.
 	unhidden, err := s.d.Messages.UnhideAll(ctx, chatID, messageID)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrUnavailable, err)
-	}
-	members, err := s.Members(ctx, chatID)
-	if err != nil {
-		return err
 	}
 	recipients := []int64{userID}
 	for _, uid := range unhidden {

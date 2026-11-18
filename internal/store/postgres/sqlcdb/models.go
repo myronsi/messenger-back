@@ -498,6 +498,8 @@ type UserPrivacySetting struct {
 	TypingIndicatorsEnabled bool
 	LastSeenVisibility      string
 	BirthdayVisibility      string
+	VoiceVideoMessages      string
+	ForwardLink             string
 }
 
 type UserRecentSticker struct {
