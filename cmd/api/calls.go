@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+
 	"github.com/myronsi/messenger-back/internal/app"
 	"github.com/myronsi/messenger-back/internal/calls"
 	"github.com/myronsi/messenger-back/internal/config"
@@ -16,7 +18,13 @@ func callLimits(c config.Calls) calls.Config {
 	}
 }
 
-func startCalls(p *app.Process, pg *postgres.Store, rd *redis.Store, rt *realtimeStack) (*calls.Service, error) {
+type userNotifier func(ctx context.Context, uid int64, kind string, data any)
+
+func (f userNotifier) NotifyUser(ctx context.Context, uid int64, kind string, data any) {
+	f(ctx, uid, kind, data)
+}
+
+func startCalls(p *app.Process, pg *postgres.Store, rd *redis.Store, rt *realtimeStack, mod calls.Moderation) (*calls.Service, error) {
 	cfg := p.Cfg
 	if !cfg.Calls.Enabled {
 		closer := calls.New(callLimits(cfg.Calls), calls.Deps{
@@ -29,7 +37,7 @@ func startCalls(p *app.Process, pg *postgres.Store, rd *redis.Store, rt *realtim
 	deps := calls.Deps{
 		Store: pg, Members: rt.messages.Members, Notifier: rt.fanout, System: rt.messages,
 		Media: calls.NewRoomClient(cfg.Calls.APIURL, grants), Grants: grants, Metrics: p.Metrics,
-		Webhooks: redis.NewOnce(rd.Client(), "", "calls_webhook"), Log: p.Log,
+		Webhooks: redis.NewOnce(rd.Client(), "", "calls_webhook"), Moderation: mod, Log: p.Log,
 	}
 	if cfg.Notifications.WebEnabled() {
 		sender, err := notifications.NewSender(cfg.Notifications)

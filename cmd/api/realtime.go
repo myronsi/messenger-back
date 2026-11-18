@@ -17,6 +17,7 @@ import (
 	"github.com/myronsi/messenger-back/internal/ids"
 	"github.com/myronsi/messenger-back/internal/media"
 	"github.com/myronsi/messenger-back/internal/messages"
+	"github.com/myronsi/messenger-back/internal/moderation"
 	"github.com/myronsi/messenger-back/internal/realtime"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/redis"
@@ -138,7 +139,7 @@ func startIDs(p *app.Process, rdb redis.Client, instance string, st *realtimeSta
 	return l
 }
 
-func startRealtime(p *app.Process, pg *postgres.Store, rd *redis.Store, sc *scylla.Store, ticketAuth realtime.TicketRedeemer) (*realtimeStack, error) {
+func startRealtime(p *app.Process, pg *postgres.Store, rd *redis.Store, sc *scylla.Store, ticketAuth realtime.TicketRedeemer, mod *moderation.Service) (*realtimeStack, error) {
 	cfg, log := p.Cfg, p.Log
 	st := &realtimeStack{hub: realtime.NewHub(log, p.Metrics)}
 	st.ctx, st.cancel = context.WithCancel(context.Background())
@@ -167,7 +168,7 @@ func startRealtime(p *app.Process, pg *postgres.Store, rd *redis.Store, sc *scyl
 	if err != nil {
 		return nil, err
 	}
-	dir := users.NewDirectory(pg, presence, cfg.HTTP.BasePath)
+	dir := users.NewDirectory(pg, presence, cfg.HTTP.BasePath).WithLabels(mod)
 
 	var svc *messages.Service
 	fan := realtime.NewFanout(realtime.FanoutDeps{
@@ -179,7 +180,7 @@ func startRealtime(p *app.Process, pg *postgres.Store, rd *redis.Store, sc *scyl
 	svc = messages.New(messages.Deps{
 		Messages: repo, Store: pg, Members: members, Unread: redis.NewUnread(rdb, ""),
 		Dedup: redis.NewDedup(rdb, "", 0), IDs: idsrc, Notifier: fan, Accepted: p.Metrics.MessageAccepted, Log: log,
-		Events: st.events, QueueNotification: pg.Notifications().Enqueue, Emoji: emoji.New(pg),
+		Events: st.events, QueueNotification: pg.Notifications().Enqueue, Emoji: emoji.New(pg), Moderation: mod,
 	})
 	gw, err = realtime.New(realtime.Options{
 		Auth: ticketAuth, Messages: svc, Fanout: fan, Bus: bus, Presence: presence,

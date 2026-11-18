@@ -33,6 +33,8 @@ type Metrics struct {
 	mediaJobs      *prometheus.CounterVec
 	mediaJobTime   *prometheus.HistogramVec
 	mediaSaved     *prometheus.CounterVec
+	statusChanges  *prometheus.CounterVec
+	userReports    *prometheus.CounterVec
 }
 
 // NewMetrics registers the collectors together with the Go runtime and process collectors.
@@ -106,6 +108,14 @@ func NewMetrics() *Metrics {
 			Name: "messenger_media_bytes_saved_total",
 			Help: "Bytes an optimized copy saves over the uploaded file, by kind.",
 		}, []string{"kind"}),
+		statusChanges: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "messenger_moderation_status_changes_total",
+			Help: "Automatic account status changes by the new status. Alert when the hourly rate jumps far above its 7-day average.",
+		}, []string{"status"}),
+		userReports: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "messenger_user_reports_total",
+			Help: "New user reports by reason and weight bucket (zero, low, medium, full).",
+		}, []string{"reason", "weight_bucket"}),
 		storeCheckTime: prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Name:    "messenger_store_check_duration_seconds",
 			Help:    "Duration of the readiness check per data store.",
@@ -117,6 +127,7 @@ func NewMetrics() *Metrics {
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 		m.requests, m.duration, m.inFlight, m.webSockets, m.messages, m.storeErrors, m.storeCheckTime, m.events, m.clientAPI, m.notifications,
 		m.callsStarted, m.callsEnded, m.callJoined, m.callJoinFailed, m.callWebhooks, m.mediaJobs, m.mediaJobTime, m.mediaSaved,
+		m.statusChanges, m.userReports,
 	)
 	return m
 }
@@ -132,6 +143,14 @@ func (m *Metrics) MediaJob(kind, outcome string, d time.Duration, saved int64) {
 }
 
 func (m *Metrics) CallStarted() { m.callsStarted.Inc() }
+
+func (m *Metrics) ModerationStatusChange(status string) {
+	m.statusChanges.WithLabelValues(status).Inc()
+}
+
+func (m *Metrics) UserReport(reason, weightBucket string) {
+	m.userReports.WithLabelValues(reason, weightBucket).Inc()
+}
 
 func (m *Metrics) CallEnded(reason string) { m.callsEnded.WithLabelValues(reason).Inc() }
 

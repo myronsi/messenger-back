@@ -151,7 +151,8 @@ WebSocket, with the same rules as the WebSocket events:
 
 A send that fails for a reason that may pass later is kept for the sender, so it survives a sign-out and shows on
 all of their devices with its error and a retry: `forbidden` (privacy, a role), `blocked_by_user`, `rate_limited`
-(WebSocket and HTTP sends) and `internal_error`. Invalid sends and chats that are gone are not kept. The row
+(WebSocket and HTTP sends) and `internal_error`. A send refused by the account status (`account_restricted`,
+[moderation.md](moderation.md)) is not kept: it passes only after the status changes. Invalid sends and chats that are gone are not kept. The row
 (`unsent_messages`, migration 000031) holds the request: type, text, reply, sticker, drawings and the ids of the
 sender's own uploads, which the upload cleanup then leaves alone. Sending again with the same `client_temp_id`
 deletes the row when it succeeds; the sender can also discard it. A user keeps at most 500, the oldest go first.

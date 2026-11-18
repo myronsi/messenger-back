@@ -30,7 +30,7 @@ Each entry carries:
    - `shared_chats` opens it only when the two already share a (group) chat, otherwise `403`;
    - `wait_approval` makes a request (`202` with the `ApprovalRequest`, the requester as they see themselves). Asking again returns the same pending request; asking after the chat was opened meanwhile returns the chat.
 
-   A block in either direction is `403`.
+   A block in either direction is `403`. Before the setting is asked, the requester's account status must allow a new chat with that user: `limited` and worse only with contacts and at most 5 new chats in 24 hours, `suspended` none (`403 account_restricted`, [moderation.md](moderation.md)). A new chat of a `limited` or worse requester goes to the recipient's Requests folder once that folder exists (`chats.Deps.Requests`).
 3. A new chat is `201`. Both users get `chat_created` (before any message of the chat), and `initial_message` becomes its first message.
 
 Everything that opens a direct chat or asks for one takes a lock on the pair (`pg_advisory_xact_lock` on the direct key), and opening a chat closes every pending request of the pair in either direction and sends their messages. So two users who ask each other end up with one chat that holds both messages, and an approval racing a new request leaves no stale request behind.

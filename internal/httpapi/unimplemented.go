@@ -580,3 +580,19 @@ func (Unimplemented) PutUploadChunk(w http.ResponseWriter, r *http.Request, id u
 func (Unimplemented) CompleteUploadSession(w http.ResponseWriter, r *http.Request, id uuid.UUID, params CompleteUploadSessionParams) {
 	notImplemented(w, r)
 }
+
+func (Unimplemented) ReportUser(w http.ResponseWriter, r *http.Request, _ UserId, _ ReportUserParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) UnreportUser(w http.ResponseWriter, r *http.Request, _ UserId, _ UnreportUserParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) GetAccountStatus(w http.ResponseWriter, r *http.Request, _ GetAccountStatusParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) AppealAccountStatus(w http.ResponseWriter, r *http.Request, _ AppealAccountStatusParams) {
+	notImplemented(w, r)
+}

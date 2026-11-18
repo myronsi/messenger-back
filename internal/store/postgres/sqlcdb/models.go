@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type ApprovalRequest struct {
@@ -468,6 +469,26 @@ type UserEmojiPack struct {
 	ChangedAt time.Time
 }
 
+type UserModeration struct {
+	UserID             int64
+	Status             string
+	Score              pgtype.Numeric
+	StatusSince        time.Time
+	ProbationUntil     *time.Time
+	AppealBlockedUntil *time.Time
+	LastAppealAt       *time.Time
+}
+
+type UserModerationEvent struct {
+	ID         int64
+	UserID     int64
+	FromStatus string
+	ToStatus   string
+	Score      pgtype.Numeric
+	Cause      string
+	CreatedAt  time.Time
+}
+
 type UserPasskey struct {
 	CredentialID []byte
 	UserID       int64
@@ -510,6 +531,19 @@ type UserRecoveryKey struct {
 	UserID    int64
 	KeyHash   string
 	CreatedAt time.Time
+}
+
+type UserReport struct {
+	ReporterID  int64
+	TargetID    int64
+	Reason      string
+	Note        *string
+	Context     string
+	Weight      pgtype.Numeric
+	Snapshot    []byte
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	WithdrawnAt *time.Time
 }
 
 type UserSecurityEvent struct {

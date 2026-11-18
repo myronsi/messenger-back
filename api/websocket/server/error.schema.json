@@ -28,6 +28,10 @@
         },
         "message": {
           "type": "string"
+        },
+        "restriction": {
+          "description": "Present when `code` is `account_restricted`.",
+          "$ref": "../../openapi.yaml#/components/schemas/AccountRestriction"
         }
       },
       "required": [

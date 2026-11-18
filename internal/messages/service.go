@@ -22,6 +22,7 @@ import (
 	"github.com/myronsi/messenger-back/internal/events"
 	"github.com/myronsi/messenger-back/internal/ids"
 	"github.com/myronsi/messenger-back/internal/linkpreview"
+	"github.com/myronsi/messenger-back/internal/moderation"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/scylla"
 )
@@ -103,9 +104,25 @@ type Deps struct {
 	// QueueNotification commits intent before the message write; nil disables background delivery.
 	QueueNotification func(context.Context, int64, int64, []int64) error
 	// Accepted is called for every new message (the messages-per-second metric). Optional.
-	Accepted func()
-	Emoji    EmojiFilter
-	Log      *slog.Logger
+	Accepted   func()
+	Emoji      EmojiFilter
+	Moderation Moderation
+	Log        *slog.Logger
+}
+
+type Moderation interface {
+	Allow(ctx context.Context, actor int64, action moderation.Action, target int64) error
+}
+
+func (s *Service) allow(ctx context.Context, actor int64, action moderation.Action) error {
+	if s.d.Moderation == nil {
+		return nil
+	}
+	err := s.d.Moderation.Allow(ctx, actor, action, 0)
+	if errors.Is(err, moderation.ErrUnavailable) {
+		return fmt.Errorf("%w: %w", ErrUnavailable, err)
+	}
+	return err
 }
 
 type EmojiFilter interface {
@@ -322,6 +339,9 @@ func (s *Service) send(ctx context.Context, r SendRequest) (Sent, error) {
 		return Sent{}, err
 	}
 	if err := s.requireMember(ctx, r.ChatID, r.SenderID); err != nil {
+		return Sent{}, err
+	}
+	if err := s.allow(ctx, r.SenderID, moderation.Send); err != nil {
 		return Sent{}, err
 	}
 	if r.Content != nil {
@@ -660,6 +680,9 @@ func (s *Service) Edit(ctx context.Context, userID, chatID, messageID int64, con
 	if err := s.requireMember(ctx, chatID, userID); err != nil {
 		return scylla.Message{}, err
 	}
+	if err := s.allow(ctx, userID, moderation.Send); err != nil {
+		return scylla.Message{}, err
+	}
 	content, err := s.cleanEmoji(ctx, userID, content)
 	if err != nil {
 		return scylla.Message{}, err
@@ -911,6 +934,9 @@ func (s *Service) React(ctx context.Context, userID, chatID, messageID int64, em
 	if err := s.requireMember(ctx, chatID, userID); err != nil {
 		return err
 	}
+	if err := s.allow(ctx, userID, moderation.Send); err != nil {
+		return err
+	}
 	if add {
 		if err := s.checkCustomReaction(ctx, userID, emoji); err != nil {
 			return err
@@ -1045,6 +1071,9 @@ func (s *Service) Resend(ctx context.Context, userID, chatID, messageID int64) e
 	if err := s.requireNotBlocked(ctx, userID, chatID); err != nil {
 		return err
 	}
+	if err := s.allow(ctx, userID, moderation.Send); err != nil {
+		return err
+	}
 	// Delivered again to the sender's devices and to the members it was not delivered to; members who deleted
 	// it for themselves keep it deleted.
 	unhidden, err := s.d.Messages.UnhideAll(ctx, chatID, messageID)
@@ -1075,6 +1104,9 @@ func (s *Service) Typing(ctx context.Context, userID, chatID int64, typing bool,
 	}
 	if err := s.requireNotBlocked(ctx, userID, chatID); err != nil {
 		return nil // dropped silently, like every typing indicator that cannot be delivered
+	}
+	if s.allow(ctx, userID, moderation.Send) != nil {
+		return nil
 	}
 	settings, err := s.d.Store.Social().Privacy(ctx, []int64{userID})
 	if err != nil || !settings[userID].TypingIndicatorsEnabled {

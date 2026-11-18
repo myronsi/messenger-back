@@ -107,6 +107,9 @@ func (c *CallServer) fail(w http.ResponseWriter, r *http.Request, what string, e
 		}
 		return []ProblemError{{Message: msg}}
 	}
+	if writeIfRestricted(w, err) {
+		return
+	}
 	switch {
 	case errors.Is(err, calls.ErrDisabled):
 		WriteProblem(w, http.StatusServiceUnavailable, ErrorCodeCallsUnavailable)

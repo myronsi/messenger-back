@@ -29,6 +29,7 @@ const (
 	HistoryCleared    = "chat.history_cleared"
 	UserUpdated       = "user.updated"
 	UserDeleted       = "user.deleted"
+	UserReported      = "user.reported"
 )
 
 // Event is one domain event. Zero ids are absent.
@@ -51,7 +52,7 @@ func Stream(eventType string) (string, error) {
 		return redis.StreamMessages, nil
 	case ChatMemberAdded, ChatMemberRemoved, ChatDeleted, HistoryCleared:
 		return redis.StreamChats, nil
-	case UserUpdated, UserDeleted:
+	case UserUpdated, UserDeleted, UserReported:
 		return redis.StreamUsers, nil
 	}
 	return "", fmt.Errorf("events: unknown type %q", eventType)

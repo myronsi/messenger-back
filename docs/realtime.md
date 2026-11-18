@@ -44,6 +44,9 @@ so pongs are still read while an event is slow; a connection with more than 64 e
 Limits per user, across connections and instances (Redis GCRA): 30 messages (and resends) per 10 s with bursts of
 20, 60 other actions per 10 s, one typing indicator per second (excess ones are dropped silently).
 
+A `message`, `edit`, `resend` or reaction of a `suspended` account is refused with an `error` event whose `code` is
+`account_restricted` and `restriction` is `send` ([moderation.md](moderation.md)).
+
 Authorization is checked for every action, against the members cache (`members:{chat_id}`, invalidated on every
 membership change; the check fails closed when Redis or PostgreSQL cannot answer):
 

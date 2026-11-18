@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.32
+  version: 2.1.0-alpha.36
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -360,6 +360,7 @@ paths:
               schema: { $ref: "#/components/schemas/Me" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
     delete:
       tags: [me]
@@ -401,6 +402,7 @@ paths:
               schema: { $ref: "#/components/schemas/Me" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
   /me/avatars/{avatar_id}:
     parameters:
@@ -452,6 +454,7 @@ paths:
               schema: { $ref: "#/components/schemas/Me" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
     delete:
       tags: [me]
@@ -487,6 +490,7 @@ paths:
               schema: { $ref: "#/components/schemas/Me" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
     delete:
       tags: [me]
@@ -1092,6 +1096,87 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
+  /users/{user_id}/report:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/UserId"
+    post:
+      tags: [users]
+      operationId: reportUser
+      summary: Report a user
+      description: |
+        One active report per reporter and user; reporting again changes the reason and the note. The reported user
+        never learns who reported them. `block` (default `true`) also blocks the user, like
+        `PUT /me/blocked-users/{user_id}`. Reporting yourself is `422`. At most 20 reports a day (`429`).
+        Reports drive the reported user's account status automatically (`GET /me/account-status`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReportUserRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Reported
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+    delete:
+      tags: [users]
+      operationId: unreportUser
+      summary: Withdraw a report
+      description: Withdraws the current user's report on the user. Withdrawing a report that does not exist is fine.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Withdrawn
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /me/account-status:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    get:
+      tags: [me]
+      operationId: getAccountStatus
+      summary: The current user's account status
+      description: |
+        The status follows the reports on the account automatically (`docs/moderation.md`). `restrictions` lists
+        what the status blocks. The WebSocket event `account_status` carries the same object when it changes.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: The account status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AccountStatus" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /me/account-status/appeal:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    post:
+      tags: [me]
+      operationId: appealAccountStatus
+      summary: Appeal the account status
+      description: |
+        Automatic appeal (probation): the status drops one level for 14 days. Without a new weighted report in that
+        time the lower level stays; a new one restores the status and blocks appeals for 90 days. Allowed once per
+        30 days and only when `can_appeal` is `true`, otherwise `409`.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: The new account status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AccountStatus" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409": { $ref: "#/components/responses/Conflict" }
   /users/{user_id}/avatar:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
@@ -1237,6 +1322,7 @@ paths:
               schema: { $ref: "#/components/schemas/Attachment" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
         "415": { $ref: "#/components/responses/UnsupportedMediaType" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
@@ -1362,6 +1448,7 @@ paths:
               schema: { $ref: "#/components/schemas/UploadSession" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
   /upload-sessions/{upload_id}:
@@ -2539,6 +2626,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/StickerPack" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
   /stickers/packs/{pack_id}:
@@ -2826,6 +2914,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/EmojiPack" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
   /emoji/packs/{pack_id}:
     parameters:
@@ -5218,7 +5307,7 @@ components:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
     Forbidden:
-      description: Authenticated but not allowed
+      description: Authenticated but not allowed. `account_restricted` (with `restriction`) when the account status blocks the action.
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
@@ -5435,6 +5524,7 @@ components:
         - already_in_call
         - stale_epoch
         - limit_reached
+        - account_restricted
         - internal_error
     Problem:
       type: object
@@ -5467,6 +5557,9 @@ components:
         api_version:
           type: string
           description: Present when `code` is `client_outdated`.
+        restriction:
+          allOf: [{ $ref: "#/components/schemas/AccountRestriction" }]
+          description: Present when `code` is `account_restricted` (`403`); names what the account status blocks.
       additionalProperties: true
     Meta:
       type: object
@@ -5902,6 +5995,62 @@ components:
             - $ref: "#/components/schemas/Timestamp"
             - type: "null"
         is_deleted: { type: boolean }
+        account_label:
+          allOf: [{ $ref: "#/components/schemas/AccountLabel" }]
+          description: |
+            `restricted` when the account is suspended by its automatic account status; clients show "Restricted
+            account". Absent otherwise.
+    AccountLabel:
+      type: string
+      enum: [restricted]
+    ReportReason:
+      type: string
+      enum: [spam, scam, harassment, impersonation, inappropriate_profile, other]
+    ReportUserRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { $ref: "#/components/schemas/ReportReason" }
+        note:
+          type: [string, "null"]
+          maxLength: 500
+          description: Optional details for the report. Never shown to the reported user.
+        block:
+          type: boolean
+          default: true
+          description: Also block the user.
+      additionalProperties: false
+    AccountStatusLevel:
+      type: string
+      description: |
+        `good` no restrictions, `warned` no restrictions yet, `limited` no new contact with non-contacts and at most 5
+        new direct chats a day, `restricted` also no groups, uploads, forwarded files, profile changes or sticker
+        and emoji packs and hidden from search, `suspended` read-only (no sending, joining calls or managing groups).
+        Unknown values must be treated like `restricted`.
+      enum: [good, warned, limited, restricted, suspended]
+    AccountRestriction:
+      type: string
+      description: An action the account status blocks. Unknown values must be shown as a generic restriction.
+      enum: [start_direct, invite_to_group, call, create_group, upload, forward, edit_profile, publish_pack, search, send, manage_group]
+    AccountStatus:
+      type: object
+      required: [status, since, restrictions, can_appeal, probation_until]
+      properties:
+        status: { $ref: "#/components/schemas/AccountStatusLevel" }
+        since:
+          description: When the account reached this status; `null` when it never changed.
+          oneOf:
+            - $ref: "#/components/schemas/Timestamp"
+            - type: "null"
+        restrictions:
+          type: array
+          items: { $ref: "#/components/schemas/AccountRestriction" }
+        can_appeal: { type: boolean }
+        probation_until:
+          description: End of the running probation after an appeal; `null` when none runs.
+          oneOf:
+            - $ref: "#/components/schemas/Timestamp"
+            - type: "null"
     Me:
       allOf:
         - $ref: "#/components/schemas/User"

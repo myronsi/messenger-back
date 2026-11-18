@@ -3,6 +3,8 @@ package httpapi
 import (
 	"net/http"
 
+	"github.com/myronsi/messenger-back/internal/moderation"
+
 	"github.com/google/uuid"
 )
 
@@ -22,6 +24,7 @@ type Server struct {
 	stickers      *StickerServer
 	emoji         *EmojiServer
 	connections   *ConnectionServer
+	moderation    *ModerationServer
 }
 
 // WithMessages adds history, sending, editing, deleting and forwarding over HTTP, and the media lists.
@@ -74,6 +77,9 @@ func (s *Server) GetStickerPackByLink(w http.ResponseWriter, r *http.Request, sl
 }
 
 func (s *Server) CreateStickerPack(w http.ResponseWriter, r *http.Request, params CreateStickerPackParams) {
+	if !s.allowed(w, r, moderation.PublishPack) {
+		return
+	}
 	if s.stickers == nil {
 		s.AuthServer.CreateStickerPack(w, r, params)
 		return
@@ -98,6 +104,9 @@ func (s *Server) DeleteStickerPack(w http.ResponseWriter, r *http.Request, packI
 }
 
 func (s *Server) AddSticker(w http.ResponseWriter, r *http.Request, packID StickerPackId, params AddStickerParams) {
+	if !s.allowed(w, r, moderation.PublishPack) {
+		return
+	}
 	if s.stickers == nil {
 		s.AuthServer.AddSticker(w, r, packID, params)
 		return
@@ -188,6 +197,9 @@ func NewServer(a *AuthServer, media *MediaServer) *Server {
 
 // UploadAttachment implements POST /attachments.
 func (s *Server) UploadAttachment(w http.ResponseWriter, r *http.Request, params UploadAttachmentParams) {
+	if !s.allowed(w, r, moderation.Upload) {
+		return
+	}
 	if s.media == nil {
 		s.AuthServer.UploadAttachment(w, r, params)
 		return
@@ -206,6 +218,9 @@ func (s *Server) GetAttachmentContent(w http.ResponseWriter, r *http.Request, id
 
 // SetMyAvatar implements PUT /me/avatar.
 func (s *Server) SetMyAvatar(w http.ResponseWriter, r *http.Request, params SetMyAvatarParams) {
+	if !s.allowed(w, r, moderation.EditProfile) {
+		return
+	}
 	if s.media == nil {
 		s.AuthServer.SetMyAvatar(w, r, params)
 		return
@@ -241,6 +256,9 @@ func (s *Server) ListUserAvatars(w http.ResponseWriter, r *http.Request, userID 
 
 // UpdateMe delegates to the account endpoints.
 func (s *Server) SetMyMusic(w http.ResponseWriter, r *http.Request, params SetMyMusicParams) {
+	if !s.allowed(w, r, moderation.EditProfile) {
+		return
+	}
 	if s.account == nil {
 		s.AuthServer.SetMyMusic(w, r, params)
 		return
@@ -257,6 +275,9 @@ func (s *Server) DeleteMyMusic(w http.ResponseWriter, r *http.Request, params De
 }
 
 func (s *Server) SetMyBackground(w http.ResponseWriter, r *http.Request, params SetMyBackgroundParams) {
+	if !s.allowed(w, r, moderation.EditProfile) {
+		return
+	}
 	if s.account == nil {
 		s.AuthServer.SetMyBackground(w, r, params)
 		return
@@ -767,6 +788,9 @@ func (s *Server) ListEmojiPacks(w http.ResponseWriter, r *http.Request, params L
 }
 
 func (s *Server) CreateEmojiPack(w http.ResponseWriter, r *http.Request, params CreateEmojiPackParams) {
+	if !s.allowed(w, r, moderation.PublishPack) {
+		return
+	}
 	if s.emoji == nil {
 		s.AuthServer.CreateEmojiPack(w, r, params)
 		return
@@ -815,6 +839,9 @@ func (s *Server) RemoveEmojiPack(w http.ResponseWriter, r *http.Request, packId 
 }
 
 func (s *Server) AddCustomEmoji(w http.ResponseWriter, r *http.Request, packId EmojiPackId, params AddCustomEmojiParams) {
+	if !s.allowed(w, r, moderation.PublishPack) {
+		return
+	}
 	if s.emoji == nil {
 		s.AuthServer.AddCustomEmoji(w, r, packId, params)
 		return
@@ -887,6 +914,9 @@ func (s *Server) CreateAttachmentPlayback(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) CreateUploadSession(w http.ResponseWriter, r *http.Request, params CreateUploadSessionParams) {
+	if !s.allowed(w, r, moderation.Upload) {
+		return
+	}
 	if s.media == nil {
 		s.AuthServer.CreateUploadSession(w, r, params)
 		return

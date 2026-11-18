@@ -123,6 +123,9 @@ func serviceError(w http.ResponseWriter, r *http.Request, log *slog.Logger, what
 		}
 		return []ProblemError{{Message: msg}}
 	}
+	if writeIfRestricted(w, err) {
+		return
+	}
 	switch {
 	case errors.Is(err, chats.ErrBadCursor):
 		WriteProblem(w, http.StatusBadRequest, ErrorCodeInvalidRequest, ProblemError{Field: "after", Message: "unknown cursor"})

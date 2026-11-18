@@ -16,6 +16,7 @@ import (
 	"github.com/myronsi/messenger-back/internal/events"
 	"github.com/myronsi/messenger-back/internal/jobs"
 	"github.com/myronsi/messenger-back/internal/media"
+	"github.com/myronsi/messenger-back/internal/moderation"
 	"github.com/myronsi/messenger-back/internal/notifications"
 	"github.com/myronsi/messenger-back/internal/realtime"
 	"github.com/myronsi/messenger-back/internal/search"
@@ -119,6 +120,11 @@ func run() error {
 		return err
 	}
 	notifier := realtime.NewAttachmentNotifier(attachmentBus, pg.Attachments(), cfg.HTTP.BasePath, log)
+	modSvc := moderation.New(moderation.Deps{
+		Store: pg, Cache: redis.NewModerationCache(rd.Client(), "", 0), Notifier: realtime.NewUserNotifier(attachmentBus, log),
+		Metrics: p.Metrics, Log: log,
+	})
+	wg.Go(func() { modSvc.RunDaily(bg, log, moderationEvery, redis.NewOnce(rd.Client(), "", "moderation_daily")) })
 	if !prober.Available() {
 		log.Warn("ffprobe/ffmpeg not found: media jobs only mark attachments as done")
 	}
@@ -148,6 +154,9 @@ func run() error {
 	}
 	evlog := events.NewLog(redis.NewStreams(rd.Client(), "", 0))
 	wg.Go(func() { resendChatDeletions(bg, log, pg.Chats(), evlog, deletionSweepEvery, deletionLostAfter) })
+	if err := start(redis.ConsumerOptions{Stream: redis.StreamUsers, Group: moderation.Group, Handler: modSvc.Handle}); err != nil {
+		return err
+	}
 	if err := start(redis.ConsumerOptions{
 		Stream: redis.StreamChats, Group: jobs.GroupChatCleanup,
 		Handler: jobs.ChatCleanup(msgs, redis.NewUnread(rd.Client(), ""), pg.Chats(), pg.Attachments(), scylla.DeleteGracePeriod, log),

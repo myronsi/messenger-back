@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/myronsi/messenger-back/internal/auth"
 	"github.com/myronsi/messenger-back/internal/emoji"
 	"github.com/myronsi/messenger-back/internal/events"
+	"github.com/myronsi/messenger-back/internal/moderation"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/users"
 )
@@ -50,6 +52,7 @@ type AccountOptions struct {
 	ProfileChanged func(ctx context.Context, userID, version int64)
 	Emoji          EmojiCleaner
 	Limiter        RateAllower
+	Moderation     Moderator
 	BasePath       string
 	Log            *slog.Logger
 }
@@ -112,6 +115,11 @@ func (a *AccountServer) UpdateMe(w http.ResponseWriter, r *http.Request, _ Updat
 	}
 	if len(raw) == 0 {
 		WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "body", Message: "send at least one field"})
+		return
+	}
+	_, name := raw["display_name"]
+	_, username := raw["username"]
+	if (name || username) && !guard(w, r, a.o.Moderation, a.o.Log, moderation.EditProfile) {
 		return
 	}
 	var prof postgres.ProfilePatch
@@ -694,9 +702,17 @@ func (a *AccountServer) SearchUsers(w http.ResponseWriter, r *http.Request, para
 		c := found[limit-1].Username
 		next, found = &c, found[:limit]
 	}
-	ids := make([]int64, len(found))
-	for i, u := range found {
-		ids[i] = u.ID
+	ids := make([]int64, 0, len(found))
+	for _, u := range found {
+		ids = append(ids, u.ID)
+	}
+	if a.o.Moderation != nil {
+		hidden, err := a.o.Moderation.Hidden(r.Context(), ids)
+		if err != nil {
+			a.internal(w, r, "search users", err)
+			return
+		}
+		ids = slices.DeleteFunc(ids, func(id int64) bool { return hidden[id] && id != p.UserID })
 	}
 	views, err := a.o.Directory.ForViewer(r.Context(), p.UserID, ids)
 	if err != nil {

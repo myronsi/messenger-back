@@ -26,3 +26,22 @@ func TestUnknownHTTPMethodsShareOneSeries(t *testing.T) {
 		t.Fatal("expected GET and OTHER method labels")
 	}
 }
+
+func TestModerationMetrics(t *testing.T) {
+	m := NewMetrics()
+	m.ModerationStatusChange("limited")
+	m.ModerationStatusChange("limited")
+	m.UserReport("spam", "full")
+
+	rec := httptest.NewRecorder()
+	m.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", http.NoBody))
+	body := rec.Body.String()
+	for _, want := range []string{
+		`messenger_moderation_status_changes_total{status="limited"} 2`,
+		`messenger_user_reports_total{reason="spam",weight_bucket="full"} 1`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("metrics lack %s", want)
+		}
+	}
+}

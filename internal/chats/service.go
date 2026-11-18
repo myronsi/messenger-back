@@ -17,6 +17,7 @@ import (
 
 	"github.com/myronsi/messenger-back/internal/events"
 	"github.com/myronsi/messenger-back/internal/messages"
+	"github.com/myronsi/messenger-back/internal/moderation"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/scylla"
 	"github.com/myronsi/messenger-back/internal/users"
@@ -115,7 +116,50 @@ type Deps struct {
 	// Storage deletes the files of deleted chats (keys from the chat repository). Optional.
 	DeleteFile func(ctx context.Context, key string) error
 	Calls      CallHooks
+	Moderation Moderation
+	Requests   RequestFolder
 	Log        *slog.Logger
+}
+
+type Moderation interface {
+	Allow(ctx context.Context, actor int64, action moderation.Action, target int64) error
+	RoutesToRequests(ctx context.Context, actor int64) (bool, error)
+}
+
+type RequestFolder interface {
+	MarkRequest(ctx context.Context, chatID, recipientID int64) error
+}
+
+func (s *Service) allow(ctx context.Context, actor int64, action moderation.Action, target int64) error {
+	if s.d.Moderation == nil {
+		return nil
+	}
+	err := s.d.Moderation.Allow(ctx, actor, action, target)
+	if errors.Is(err, moderation.ErrUnavailable) {
+		return unavailable(err)
+	}
+	return err
+}
+
+func (s *Service) MustBeRequest(ctx context.Context, requester, recipient int64) bool {
+	if s.d.Moderation == nil || requester == recipient {
+		return false
+	}
+	must, err := s.d.Moderation.RoutesToRequests(ctx, requester)
+	if err != nil {
+		s.d.Log.WarnContext(ctx, "moderation status for a new chat", "error", err)
+		return true
+	}
+	return must
+}
+
+func (s *Service) routeRequest(ctx context.Context, chatID, requester, recipient int64) {
+	if s.d.Requests == nil || !s.MustBeRequest(ctx, requester, recipient) {
+		return
+	}
+	if err := s.d.Requests.MarkRequest(ctx, chatID, recipient); err != nil {
+		s.d.Log.WarnContext(ctx, "move a new chat to the requests folder", "error", err, "chat_id", chatID)
+	}
 }
 
 type CallHooks interface {
@@ -653,6 +697,9 @@ func (s *Service) CreateDirect(ctx context.Context, requester, otherID int64, in
 	}
 	allowed, approval := true, false
 	if otherID != requester {
+		if err := s.allow(ctx, requester, moderation.StartDirect, otherID); err != nil {
+			return Created{}, err
+		}
 		var err error
 		if allowed, approval, err = s.permission(ctx, requester, otherID); err != nil {
 			return Created{}, unavailable(err)
@@ -694,6 +741,9 @@ func (s *Service) CreateDirect(ctx context.Context, requester, otherID int64, in
 	chat, created, closed, err := s.d.Store.Chats().OpenDirect(ctx, requester, otherID)
 	if err != nil {
 		return Created{}, unavailable(err)
+	}
+	if created {
+		s.routeRequest(ctx, chat.ID, requester, otherID)
 	}
 	first := []firstMessage{}
 	if initial != nil {

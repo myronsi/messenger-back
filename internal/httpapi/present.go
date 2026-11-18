@@ -45,6 +45,10 @@ func PresentUser(v users.View) User {
 		t := utc(*v.LastSeen)
 		u.LastSeen = &t
 	}
+	if v.Restricted {
+		label := AccountLabelRestricted
+		u.AccountLabel = &label
+	}
 	return u
 }
 

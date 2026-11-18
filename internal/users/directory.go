@@ -36,6 +36,7 @@ type View struct {
 	Music          *Music
 	Background     *Background
 	BasePath       string
+	Restricted     bool
 }
 
 type Music struct {
@@ -153,11 +154,32 @@ type Store interface {
 	Attachments() postgres.AttachmentRepository
 }
 
+type Labels interface {
+	Labels(ctx context.Context, userIDs []int64) (map[int64]bool, error)
+}
+
 // Directory renders users as seen by other users.
 type Directory struct {
 	store    Store
 	online   Online
 	basePath string
+	labels   Labels
+}
+
+func (d *Directory) WithLabels(l Labels) *Directory {
+	d.labels = l
+	return d
+}
+
+func (d *Directory) restricted(ctx context.Context, ids []int64) map[int64]bool {
+	if d.labels == nil {
+		return nil
+	}
+	out, err := d.labels.Labels(ctx, ids)
+	if err != nil {
+		return nil
+	}
+	return out
 }
 
 // NewDirectory returns a directory; basePath is the API base path for avatar URLs (/api/v2).
@@ -190,11 +212,13 @@ type facts struct {
 	contact    *string
 	online     bool
 	// blocked: the subject blocked the viewer, who then sees nothing that privacy settings guard.
-	blocked bool
+	blocked    bool
+	restricted bool
 }
 
 func (d *Directory) render(u postgres.User, viewer int64, f facts, media Media) View {
-	v := View{ID: u.ID, Username: u.Username, DisplayName: u.DisplayName, ContactName: f.contact, ProfileVersion: u.ProfileVersion, BasePath: d.basePath}
+	v := View{ID: u.ID, Username: u.Username, DisplayName: u.DisplayName, ContactName: f.contact, ProfileVersion: u.ProfileVersion, BasePath: d.basePath,
+		Restricted: f.restricted}
 	self := u.ID == viewer
 	v.Findable = self || f.shares || Findable(f.settings.SearchVisibility, f.exceptions[postgres.SettingSearch])
 	allowed := func(setting, key string) bool {
@@ -256,6 +280,7 @@ func (d *Directory) ForViewer(ctx context.Context, viewer int64, ids []int64) (m
 	if err != nil {
 		return nil, err
 	}
+	labels := d.restricted(ctx, ids)
 	online := d.onlineOf(ctx, ids)
 	list := make([]postgres.User, 0, len(users))
 	for _, u := range users {
@@ -271,7 +296,8 @@ func (d *Directory) ForViewer(ctx context.Context, viewer int64, ids []int64) (m
 			out[id] = d.deleted(id)
 			continue
 		}
-		f := facts{settings: settings[id], exceptions: exceptions[id], shares: shared[id], online: online[id], blocked: blocks[[2]int64{id, viewer}]}
+		f := facts{settings: settings[id], exceptions: exceptions[id], shares: shared[id], online: online[id], blocked: blocks[[2]int64{id, viewer}],
+			restricted: labels[id]}
 		if n, ok := names[id]; ok {
 			f.contact = &n
 		}
@@ -322,13 +348,15 @@ func (d *Directory) ToViewers(ctx context.Context, subject int64, viewers []int6
 	if err != nil {
 		return nil, err
 	}
+	labels := d.restricted(ctx, []int64{subject})
 	online := d.onlineOf(ctx, []int64{subject})[subject]
 	media, err := d.MediaOf(ctx, u)
 	if err != nil {
 		return nil, err
 	}
 	for _, v := range viewers {
-		f := facts{settings: settings[subject], exceptions: exceptions[v], shares: sharesChat || shared[v], online: online, blocked: blocks[[2]int64{subject, v}]}
+		f := facts{settings: settings[subject], exceptions: exceptions[v], shares: sharesChat || shared[v], online: online, blocked: blocks[[2]int64{subject, v}],
+			restricted: labels[subject]}
 		if n, ok := names[v]; ok {
 			f.contact = &n
 		}

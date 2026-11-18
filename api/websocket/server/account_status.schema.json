@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ServerAccountStatusEvent",
+  "description": "The current user's account status changed (sent only to the user's own sessions).",
+  "type": "object",
+  "required": [
+    "type",
+    "event_id",
+    "chat_id",
+    "data"
+  ],
+  "properties": {
+    "type": {
+      "const": "account_status"
+    },
+    "event_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "chat_id": {
+      "type": "null"
+    },
+    "data": {
+      "$ref": "../../openapi.yaml#/components/schemas/AccountStatus"
+    }
+  }
+}
