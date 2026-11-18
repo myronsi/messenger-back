@@ -103,6 +103,11 @@ func (m *memAttachments) Create(_ context.Context, n postgres.NewAttachment) (po
 		ID: uuid.New(), UploaderID: n.UploaderID, ChatID: n.ChatID, Purpose: n.Purpose, Kind: n.Kind, Filename: n.Filename,
 		StorageKey: n.StorageKey, ThumbnailKey: n.ThumbnailKey, MimeType: n.MimeType, Size: n.Size, Width: n.Width,
 		Height: n.Height, Duration: n.Duration, Waveform: n.Waveform, CreatedAt: time.Now(),
+		Variants: n.Variants, Placeholder: n.Placeholder, ProcessingState: n.ProcessingState,
+		AudioTitle: n.AudioTitle, AudioArtist: n.AudioArtist, AudioAlbum: n.AudioAlbum,
+	}
+	if a.Variants == nil {
+		a.Variants = postgres.Variants{}
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -153,4 +158,134 @@ func withExif(raw []byte, orientation int) []byte {
 	app1 = binary.BigEndian.AppendUint16(app1, uint16(len(payload)+2))
 	app1 = append(app1, payload...)
 	return append(append(append([]byte{}, raw[:2]...), app1...), raw[2:]...)
+}
+
+func (m *memAttachments) MergeVariants(_ context.Context, id uuid.UUID, u postgres.AttachmentUpdate) (postgres.Attachment, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	a, ok := m.rows[id]
+	if !ok {
+		return postgres.Attachment{}, postgres.ErrNotFound
+	}
+	merged := postgres.Variants{}
+	for k, v := range a.Variants {
+		merged[k] = v
+	}
+	for k, v := range u.Variants {
+		merged[k] = v
+	}
+	a.Variants = merged
+	if u.Placeholder != nil {
+		a.Placeholder = u.Placeholder
+	}
+	if u.ProcessingState != nil {
+		a.ProcessingState = u.ProcessingState
+	}
+	if u.AudioTitle != nil {
+		a.AudioTitle = u.AudioTitle
+	}
+	if u.AudioArtist != nil {
+		a.AudioArtist = u.AudioArtist
+	}
+	if u.AudioAlbum != nil {
+		a.AudioAlbum = u.AudioAlbum
+	}
+	m.rows[id] = a
+	return a, nil
+}
+
+func (m *memAttachments) SetProcessing(_ context.Context, id uuid.UUID, state *string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	a, ok := m.rows[id]
+	if !ok {
+		return postgres.ErrNotFound
+	}
+	a.ProcessingState = state
+	m.rows[id] = a
+	return nil
+}
+
+type memJobs struct {
+	postgres.MediaJobRepository
+	mu   sync.Mutex
+	jobs []postgres.MediaJob
+}
+
+func (m *memJobs) Enqueue(_ context.Context, id uuid.UUID, kind string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, j := range m.jobs {
+		if j.AttachmentID == id && j.Kind == kind {
+			return false, nil
+		}
+	}
+	m.jobs = append(m.jobs, postgres.MediaJob{ID: int64(len(m.jobs) + 1), AttachmentID: id, Kind: kind, Attempts: 1})
+	return true, nil
+}
+
+type memSessions struct {
+	mu   sync.Mutex
+	rows map[uuid.UUID]postgres.UploadSession
+}
+
+func newMemSessions() *memSessions { return &memSessions{rows: map[uuid.UUID]postgres.UploadSession{}} }
+
+func (m *memSessions) Create(_ context.Context, n postgres.NewUploadSession) (postgres.UploadSession, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	s := postgres.UploadSession{ID: uuid.New(), UploaderID: n.UploaderID, Purpose: n.Purpose, Kind: n.Kind, Filename: n.Filename,
+		Size: n.Size, ChunkSize: n.ChunkSize, CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	m.rows[s.ID] = s
+	return s, nil
+}
+
+func (m *memSessions) Get(_ context.Context, id uuid.UUID, uploaderID int64) (postgres.UploadSession, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	s, ok := m.rows[id]
+	if !ok || s.UploaderID != uploaderID {
+		return postgres.UploadSession{}, postgres.ErrNotFound
+	}
+	return s, nil
+}
+
+func (m *memSessions) Advance(_ context.Context, id uuid.UUID, uploaderID, offset, length int64) (postgres.UploadSession, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	s, ok := m.rows[id]
+	if !ok || s.UploaderID != uploaderID || s.Received != offset || s.Received+length > s.Size {
+		return postgres.UploadSession{}, postgres.ErrUploadOffset
+	}
+	s.Received += length
+	s.Chunks++
+	m.rows[id] = s
+	return s, nil
+}
+
+func (m *memSessions) Delete(_ context.Context, id uuid.UUID) (postgres.UploadSession, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	s, ok := m.rows[id]
+	if !ok {
+		return postgres.UploadSession{}, postgres.ErrNotFound
+	}
+	delete(m.rows, id)
+	return s, nil
+}
+
+func (m *memSessions) Count(_ context.Context, uploaderID int64) (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var n int64
+	for _, s := range m.rows {
+		if s.UploaderID == uploaderID {
+			n++
+		}
+	}
+	return n, nil
+}
+
+func (m *memSessions) Stale(context.Context, time.Time, int) ([]postgres.UploadSession, error) {
+	return nil, nil
 }

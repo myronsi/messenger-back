@@ -79,7 +79,7 @@ func (l *LinkPreviewServer) GetLinkPreviewImage(w http.ResponseWriter, r *http.R
 	}
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
-	w.Header().Set("Cache-Control", "private, max-age=86400")
+	w.Header().Set("Cache-Control", "private, max-age=604800")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
 	w.WriteHeader(http.StatusOK)

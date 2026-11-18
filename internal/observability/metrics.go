@@ -30,6 +30,9 @@ type Metrics struct {
 	callJoined     prometheus.Gauge
 	callJoinFailed *prometheus.CounterVec
 	callWebhooks   *prometheus.CounterVec
+	mediaJobs      *prometheus.CounterVec
+	mediaJobTime   *prometheus.HistogramVec
+	mediaSaved     *prometheus.CounterVec
 }
 
 // NewMetrics registers the collectors together with the Go runtime and process collectors.
@@ -90,6 +93,19 @@ func NewMetrics() *Metrics {
 			Name: "messenger_call_webhook_events_total",
 			Help: "Media server webhook events by event and outcome (handled, duplicate, ignored, rejected, failed).",
 		}, []string{"event", "outcome"}),
+		mediaJobs: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "messenger_media_jobs_total",
+			Help: "Media optimization jobs by kind (video, gif, audio) and outcome (done, skipped, retry, failed).",
+		}, []string{"kind", "outcome"}),
+		mediaJobTime: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "messenger_media_job_duration_seconds",
+			Help:    "Duration of media optimization jobs by kind.",
+			Buckets: []float64{.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 600},
+		}, []string{"kind"}),
+		mediaSaved: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "messenger_media_bytes_saved_total",
+			Help: "Bytes an optimized copy saves over the uploaded file, by kind.",
+		}, []string{"kind"}),
 		storeCheckTime: prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Name:    "messenger_store_check_duration_seconds",
 			Help:    "Duration of the readiness check per data store.",
@@ -100,12 +116,20 @@ func NewMetrics() *Metrics {
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 		m.requests, m.duration, m.inFlight, m.webSockets, m.messages, m.storeErrors, m.storeCheckTime, m.events, m.clientAPI, m.notifications,
-		m.callsStarted, m.callsEnded, m.callJoined, m.callJoinFailed, m.callWebhooks,
+		m.callsStarted, m.callsEnded, m.callJoined, m.callJoinFailed, m.callWebhooks, m.mediaJobs, m.mediaJobTime, m.mediaSaved,
 	)
 	return m
 }
 
 func (m *Metrics) Notification(outcome string) { m.notifications.WithLabelValues(outcome).Inc() }
+
+func (m *Metrics) MediaJob(kind, outcome string, d time.Duration, saved int64) {
+	m.mediaJobs.WithLabelValues(kind, outcome).Inc()
+	m.mediaJobTime.WithLabelValues(kind).Observe(d.Seconds())
+	if saved > 0 {
+		m.mediaSaved.WithLabelValues(kind).Add(float64(saved))
+	}
+}
 
 func (m *Metrics) CallStarted() { m.callsStarted.Inc() }
 

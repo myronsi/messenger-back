@@ -95,7 +95,8 @@ func newMediaEnv(t *testing.T) *mediaEnv {
 	}
 	rules := memberRules{store}
 	msvc := media.NewService(media.Options{Storage: disk, Attachments: store.Attachments(), Visibility: rules, Membership: rules,
-		Profiles: users.NewDirectory(store, nil, apiBase), Prober: media.NewProber("/none", "/none"), Limits: media.Limits{Image: 1 << 20, Audio: 1 << 20, Video: 1 << 20, File: 1 << 20, Avatar: 1 << 20, Sticker: 1 << 20}})
+		Profiles: users.NewDirectory(store, nil, apiBase), Prober: media.NewProber("/none", "/none"), Limits: media.Limits{Image: 1 << 20, Audio: 1 << 20, Video: 1 << 20, File: 1 << 20, Avatar: 1 << 20, Sticker: 1 << 20},
+		Sessions: store.UploadSessions(), Jobs: store.MediaJobs()})
 	tokens := notifications.NewActionTokens("test-secret")
 	emitted := &mediaEvents{}
 	r := NewRouter(Options{
@@ -104,7 +105,8 @@ func newMediaEnv(t *testing.T) *mediaEnv {
 		Metrics: observability.NewMetrics(),
 		API: NewServer(NewAuthServer(AuthOptions{Service: svc, Log: log, BasePath: apiBase, CookieSecure: true}),
 			NewMediaServer(MediaOptions{Service: msvc, Store: store, Directory: users.NewDirectory(store, nil, apiBase),
-				Limiter: redis.NewRateLimiter(rdb, "t"+uuid.NewString()+":"), Events: emitted, BasePath: apiBase, Log: log})).
+				Limiter: redis.NewRateLimiter(rdb, "t"+uuid.NewString()+":"), Events: emitted, BasePath: apiBase, Log: log,
+				Playback: media.NewPlaybackSigner("playback-test")})).
 			WithNotifications(NotificationOptions{Store: store.Notifications(), Tokens: tokens}),
 		Authenticator:  svc,
 		UploadMaxBytes: msvc.Limits().Max(),
@@ -302,19 +304,23 @@ func TestTokenRoutesStayOutOfTraces(t *testing.T) {
 func TestTransferRoutes(t *testing.T) {
 	long := transferRoute(apiBase)
 	for path, want := range map[string]bool{
-		"POST " + apiBase + "/attachments":              true,
-		"GET " + apiBase + "/attachments/x/content":     true,
-		"HEAD " + apiBase + "/attachments/x/content":    true,
-		"GET " + apiBase + "/users/1/avatar":            true,
-		"GET " + apiBase + "/chats/1/avatar":            true,
-		"GET " + apiBase + "/notifications/avatar/a.1":  true,
-		"HEAD " + apiBase + "/notifications/avatar/a.1": true,
-		"POST " + apiBase + "/notifications/read/r.1":   false,
-		"GET " + apiBase + "/users/1/avatars":           false,
-		"GET " + apiBase + "/attachments":               false,
-		"POST " + apiBase + "/attachments/x/content":    false,
-		"GET " + apiBase + "/me":                        false,
-		"GET /elsewhere" + apiBase + "/users/1/avatar":  false,
+		"POST " + apiBase + "/attachments":                true,
+		"GET " + apiBase + "/attachments/x/content":       true,
+		"HEAD " + apiBase + "/attachments/x/content":      true,
+		"GET " + apiBase + "/users/1/avatar":              true,
+		"GET " + apiBase + "/chats/1/avatar":              true,
+		"GET " + apiBase + "/notifications/avatar/a.1":    true,
+		"HEAD " + apiBase + "/notifications/avatar/a.1":   true,
+		"POST " + apiBase + "/notifications/read/r.1":     false,
+		"GET " + apiBase + "/users/1/avatars":             false,
+		"GET " + apiBase + "/attachments":                 false,
+		"POST " + apiBase + "/attachments/x/content":      false,
+		"PUT " + apiBase + "/upload-sessions/x/chunks":    true,
+		"POST " + apiBase + "/upload-sessions/x/complete": true,
+		"POST " + apiBase + "/upload-sessions":            false,
+		"GET " + apiBase + "/upload-sessions/x":           false,
+		"GET " + apiBase + "/me":                          false,
+		"GET /elsewhere" + apiBase + "/users/1/avatar":    false,
 	} {
 		method, p, _ := strings.Cut(path, " ")
 		if got := long(httptest.NewRequest(method, p, nil)); got != want {
@@ -583,5 +589,82 @@ func TestStickerUploadOverHTTP(t *testing.T) {
 	}
 	if r := e.upload(t, alice.access, map[string]string{"purpose": "sticker"}, "notes.txt", []byte("not an image at all")); r.Code != http.StatusUnsupportedMediaType {
 		t.Fatalf("text as a sticker: %d %s", r.Code, r.Body)
+	}
+}
+
+func TestPlaybackURLStreamsWithoutBearer(t *testing.T) {
+	e := newMediaEnv(t)
+	alice, eve := e.register(t, "alice"), e.register(t, "eve")
+	id := e.upload(t, alice.access, map[string]string{"purpose": "message"}, "x.png", smallPNG(t)).json()["id"].(string)
+	if r := e.do(t, request{method: http.MethodPost, path: "/attachments/" + id + "/playback", token: eve.access}); r.Code != http.StatusNotFound {
+		t.Fatalf("outsider got a playback url: %d", r.Code)
+	}
+	r := e.do(t, request{method: http.MethodPost, path: "/attachments/" + id + "/playback", token: alice.access})
+	if r.Code != http.StatusOK {
+		t.Fatalf("playback: %d %s", r.Code, r.Body)
+	}
+	url := r.json()["url"].(string)
+	if !strings.HasPrefix(url, apiBase+"/attachments/"+id+"/content?pt=") {
+		t.Fatalf("url %q", url)
+	}
+	path := strings.TrimPrefix(url, apiBase)
+	part := e.do(t, request{method: http.MethodGet, path: path, header: map[string]string{"Range": "bytes=0-3"}})
+	if part.Code != http.StatusPartialContent || part.Body.Len() != 4 {
+		t.Fatalf("stream without bearer: %d %v", part.Code, part.Header())
+	}
+	other := e.upload(t, alice.access, map[string]string{"purpose": "message"}, "y.png", smallPNG(t)).json()["id"].(string)
+	token := strings.TrimPrefix(url, apiBase+"/attachments/"+id+"/content?pt=")
+	if r := e.do(t, request{method: http.MethodGet, path: "/attachments/" + other + "/content?pt=" + token}); r.Code != http.StatusUnauthorized {
+		t.Fatalf("token reused for another attachment: %d", r.Code)
+	}
+	if r := e.do(t, request{method: http.MethodGet, path: "/attachments/" + id + "/content?pt=1.2.forged"}); r.Code != http.StatusUnauthorized {
+		t.Fatalf("forged token: %d", r.Code)
+	}
+}
+
+func TestUploadSessionsOverHTTP(t *testing.T) {
+	e := newMediaEnv(t)
+	alice, bob := e.register(t, "alice"), e.register(t, "bob")
+	content := smallPNG(t)
+	created := e.do(t, request{method: http.MethodPost, path: "/upload-sessions", token: alice.access,
+		body: map[string]any{"purpose": "message", "filename": "x.png", "size": len(content)}})
+	if created.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", created.Code, created.Body)
+	}
+	sid := created.json()["id"].(string)
+	if r := e.do(t, request{method: http.MethodGet, path: "/upload-sessions/" + sid, token: bob.access}); r.Code != http.StatusNotFound {
+		t.Fatalf("bob sees alice's session: %d", r.Code)
+	}
+	if r := e.do(t, request{method: http.MethodPost, path: "/upload-sessions/" + sid + "/complete", token: alice.access}); r.Code != http.StatusConflict {
+		t.Fatalf("complete before the chunks: %d %s", r.Code, r.Body)
+	}
+	put := func(offset int, body []byte) reply {
+		req := httptest.NewRequest(http.MethodPut, apiBase+"/upload-sessions/"+sid+"/chunks?offset="+strconv.Itoa(offset), bytes.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+alice.access)
+		req.Header.Set("Content-Type", "application/octet-stream")
+		rec := httptest.NewRecorder()
+		e.router.ServeHTTP(rec, req)
+		return reply{rec}
+	}
+	if r := put(3, content); r.Code != http.StatusConflict || r.json()["received"].(float64) != 0 {
+		t.Fatalf("wrong offset: %d %s", r.Code, r.Body)
+	}
+	if r := put(0, content); r.Code != http.StatusOK || r.json()["received"].(float64) != float64(len(content)) {
+		t.Fatalf("chunk: %d %s", r.Code, r.Body)
+	}
+	done := e.do(t, request{method: http.MethodPost, path: "/upload-sessions/" + sid + "/complete", token: alice.access})
+	if done.Code != http.StatusCreated || done.json()["kind"] != "image" {
+		t.Fatalf("complete: %d %s", done.Code, done.Body)
+	}
+	if r := e.do(t, request{method: http.MethodGet, path: "/upload-sessions/" + sid, token: alice.access}); r.Code != http.StatusNotFound {
+		t.Fatalf("session kept: %d", r.Code)
+	}
+	gone := e.do(t, request{method: http.MethodPost, path: "/upload-sessions", token: alice.access, body: map[string]any{"purpose": "message", "filename": "y", "size": 10}})
+	gid := gone.json()["id"].(string)
+	if r := e.do(t, request{method: http.MethodDelete, path: "/upload-sessions/" + gid, token: alice.access}); r.Code != http.StatusNoContent {
+		t.Fatalf("cancel: %d", r.Code)
+	}
+	if r := e.do(t, request{method: http.MethodPost, path: "/upload-sessions", token: alice.access, body: map[string]any{"purpose": "message", "filename": "z", "size": 1 << 30}}); r.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("too large: %d", r.Code)
 	}
 }

@@ -277,6 +277,9 @@ func bodyLimit(defaultLimit int64, uploadPath string, uploadLimit int64) middlew
 			if uploadLimit > 0 && r.Method == http.MethodPost && r.URL.Path == uploadPath {
 				limit = uploadLimit + 64<<10
 			}
+			if r.Method == http.MethodPut && isChunkPath(r.URL.Path, uploadPath) {
+				limit = chunkBodyLimit
+			}
 			if r.ContentLength > limit {
 				WriteProblem(w, http.StatusRequestEntityTooLarge, ErrorCodePayloadTooLarge)
 				return

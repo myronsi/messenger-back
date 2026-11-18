@@ -17,32 +17,38 @@ var _ AttachmentRepository = attachmentRepo{}
 
 func attachmentFrom(a sqlcdb.Attachment) Attachment {
 	return Attachment{
-		ID:           a.ID,
-		UploaderID:   a.UploaderID,
-		ChatID:       a.ChatID,
-		Purpose:      a.Purpose,
-		Kind:         a.Kind,
-		Filename:     a.Filename,
-		StorageKey:   a.StorageKey,
-		ThumbnailKey: a.ThumbnailKey,
-		MimeType:     a.MimeType,
-		Size:         a.Size,
-		Width:        a.Width,
-		Height:       a.Height,
-		Duration:     a.Duration,
-		Waveform:     a.Waveform,
-		CreatedAt:    a.CreatedAt,
+		ID:              a.ID,
+		UploaderID:      a.UploaderID,
+		ChatID:          a.ChatID,
+		Purpose:         a.Purpose,
+		Kind:            a.Kind,
+		Filename:        a.Filename,
+		StorageKey:      a.StorageKey,
+		ThumbnailKey:    a.ThumbnailKey,
+		MimeType:        a.MimeType,
+		Size:            a.Size,
+		Width:           a.Width,
+		Height:          a.Height,
+		Duration:        a.Duration,
+		Waveform:        a.Waveform,
+		CreatedAt:       a.CreatedAt,
+		Variants:        decodeVariants(a.Variants),
+		Placeholder:     a.Placeholder,
+		ProcessingState: a.ProcessingState,
+		AudioTitle:      a.AudioTitle,
+		AudioArtist:     a.AudioArtist,
+		AudioAlbum:      a.AudioAlbum,
 	}
 }
 
 func DisplayKey(storageKey string) string { return storageKey + ".display.jpg" }
 
-func keysOf(file string, thumb *string) []string {
+func keysOf(file string, thumb *string, variants []byte) []string {
 	keys := []string{file, DisplayKey(file)}
 	if thumb != nil {
 		keys = append(keys, *thumb)
 	}
-	return keys
+	return append(keys, decodeVariants(variants).Keys()...)
 }
 
 func (r attachmentRepo) Create(ctx context.Context, a NewAttachment) (Attachment, error) {
@@ -67,6 +73,8 @@ func (r attachmentRepo) Create(ctx context.Context, a NewAttachment) (Attachment
 			UploaderID: a.UploaderID, ChatID: a.ChatID, StorageKey: a.StorageKey, ThumbnailKey: a.ThumbnailKey,
 			MimeType: a.MimeType, Size: a.Size, Width: a.Width, Height: a.Height, Duration: a.Duration,
 			Waveform: a.Waveform, Purpose: a.Purpose, Kind: a.Kind, Filename: a.Filename,
+			Variants: a.Variants.encode(), Placeholder: a.Placeholder, ProcessingState: a.ProcessingState,
+			AudioTitle: a.AudioTitle, AudioArtist: a.AudioArtist, AudioAlbum: a.AudioAlbum,
 		})
 		out = attachmentFrom(row)
 		return err
@@ -125,7 +133,7 @@ func (r attachmentRepo) Delete(ctx context.Context, id uuid.UUID) ([]string, err
 	if err != nil {
 		return nil, mapError(err)
 	}
-	return keysOf(row.StorageKey, row.ThumbnailKey), nil
+	return keysOf(row.StorageKey, row.ThumbnailKey, row.Variants), nil
 }
 
 func (r attachmentRepo) Link(ctx context.Context, attachmentID uuid.UUID, chatID, messageID int64, drawing []byte) error {
@@ -192,6 +200,8 @@ func (r attachmentRepo) ListLinked(ctx context.Context, chatID int64, kinds []st
 				ID: row.ID, UploaderID: row.UploaderID, ChatID: row.ChatID, StorageKey: row.StorageKey, MimeType: row.MimeType,
 				Size: row.Size, Width: row.Width, Height: row.Height, Duration: row.Duration, Waveform: row.Waveform,
 				CreatedAt: row.CreatedAt, Purpose: row.Purpose, Kind: row.Kind, Filename: row.Filename, ThumbnailKey: row.ThumbnailKey,
+				Variants: row.Variants, Placeholder: row.Placeholder, ProcessingState: row.ProcessingState,
+				AudioTitle: row.AudioTitle, AudioArtist: row.AudioArtist, AudioAlbum: row.AudioAlbum,
 			}),
 			MessageID: row.MessageID,
 			LinkedAt:  row.LinkedAt,
@@ -227,7 +237,7 @@ func (r attachmentRepo) DeleteIfUnreferenced(ctx context.Context, id uuid.UUID) 
 		if err != nil {
 			return err
 		}
-		keys = keysOf(row.StorageKey, row.ThumbnailKey)
+		keys = keysOf(row.StorageKey, row.ThumbnailKey, row.Variants)
 		return nil
 	})
 	if err != nil {
@@ -339,4 +349,55 @@ func (r attachmentRepo) UnlinkMessagesUpTo(ctx context.Context, chatID, messageI
 		return mapError(err)
 	}
 	return mapError(r.s.q.DeleteURLsUpTo(ctx, sqlcdb.DeleteURLsUpToParams{ChatID: chatID, MessageID: messageID}))
+}
+
+func (r attachmentRepo) MergeVariants(ctx context.Context, id uuid.UUID, u AttachmentUpdate) (Attachment, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	row, err := r.s.q.MergeAttachmentVariants(ctx, sqlcdb.MergeAttachmentVariantsParams{
+		ID: id, Variants: u.Variants.encode(), Placeholder: u.Placeholder, ProcessingState: u.ProcessingState,
+		AudioTitle: u.AudioTitle, AudioArtist: u.AudioArtist, AudioAlbum: u.AudioAlbum,
+	})
+	if err != nil {
+		return Attachment{}, mapError(err)
+	}
+	return attachmentFrom(row), nil
+}
+
+func (r attachmentRepo) SetProcessing(ctx context.Context, id uuid.UUID, state *string) error {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	return mapError(r.s.q.SetAttachmentProcessing(ctx, sqlcdb.SetAttachmentProcessingParams{ID: id, ProcessingState: state}))
+}
+
+func (r attachmentRepo) ListForBackfill(ctx context.Context, f BackfillFilter) ([]Attachment, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	rows, err := r.s.q.ListAttachmentsForBackfill(ctx, sqlcdb.ListAttachmentsForBackfillParams{
+		Kinds: f.Kinds, Purposes: f.Purposes, MissingVariant: f.MissingVariant, After: f.After, MaxRows: clampLimit(f.Limit),
+	})
+	if err != nil {
+		return nil, mapError(err)
+	}
+	out := make([]Attachment, len(rows))
+	for i, row := range rows {
+		out[i] = attachmentFrom(row)
+	}
+	return out, nil
+}
+
+func (r attachmentRepo) Audience(ctx context.Context, attachmentID uuid.UUID) ([]int64, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	rows, err := r.s.q.AttachmentAudience(ctx, attachmentID)
+	if err != nil {
+		return nil, mapError(err)
+	}
+	out := make([]int64, 0, len(rows))
+	for _, id := range rows {
+		if id != nil {
+			out = append(out, *id)
+		}
+	}
+	return out, nil
 }

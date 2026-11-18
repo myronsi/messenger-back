@@ -1,6 +1,10 @@
 package httpapi
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/google/uuid"
+)
 
 // Unimplemented answers 501 for every operation of the contract. The server embeds it and
 // overrides the methods a feature implements, so the router serves the whole contract from day one
@@ -550,5 +554,29 @@ func (Unimplemented) GetCustomEmojiImage(w http.ResponseWriter, r *http.Request,
 }
 
 func (Unimplemented) GetGroupEmoji(w http.ResponseWriter, r *http.Request, chatId ChatId, params GetGroupEmojiParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) CreateAttachmentPlayback(w http.ResponseWriter, r *http.Request, id AttachmentId, params CreateAttachmentPlaybackParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) CreateUploadSession(w http.ResponseWriter, r *http.Request, params CreateUploadSessionParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) GetUploadSession(w http.ResponseWriter, r *http.Request, id uuid.UUID, params GetUploadSessionParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) DeleteUploadSession(w http.ResponseWriter, r *http.Request, id uuid.UUID, params DeleteUploadSessionParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) PutUploadChunk(w http.ResponseWriter, r *http.Request, id uuid.UUID, params PutUploadChunkParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) CompleteUploadSession(w http.ResponseWriter, r *http.Request, id uuid.UUID, params CompleteUploadSessionParams) {
 	notImplemented(w, r)
 }

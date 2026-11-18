@@ -2,6 +2,20 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.32
+
+- `Attachment` gains `placeholder` (ThumbHash), `processing` (`MediaProcessing`: `queued`, `running`, `done`,
+  `failed`), `source_url`, `animation_url`, `panel_url` and `message_url`. `thumbnail_url` is a 480 px WebP for new
+  uploads and the cover of an audio file; `tags` (with the new `album`) is set for audio files, not only profile music.
+- `GET /attachments/{attachment_id}/content` gains the variants `source`, `panel`, `message`, `animation`, `inline`,
+  `avatar_64`, `avatar_128` and `avatar_256`, and `pt`: it works without a bearer token when `pt` is a playback token.
+  Without `variant`, an optimized video or audio file answers with the optimized copy.
+- `POST /attachments/{attachment_id}/playback` returns `PlaybackUrl`, a five-minute URL for media elements.
+- Resumable uploads: `POST /upload-sessions`, `GET`/`DELETE /upload-sessions/{upload_id}`,
+  `PUT /upload-sessions/{upload_id}/chunks` and `POST /upload-sessions/{upload_id}/complete`.
+- `GET /users/{user_id}/avatar` gains `size`; `GET /emoji/items/{emoji_id}/image` gains `variant=inline`.
+- WebSocket: `attachment_updated` carries an attachment whose optimized copy is ready or failed.
+
 ## 2.1.0-alpha.31
 
 - Custom emoji: `CustomEmoji`, `EmojiPack` and the `emoji` tag with `GET`/`POST /emoji/packs`, `GET`/`PATCH`/`DELETE

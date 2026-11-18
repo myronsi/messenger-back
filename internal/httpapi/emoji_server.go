@@ -302,15 +302,19 @@ func (s *EmojiServer) GetCustomEmoji(w http.ResponseWriter, r *http.Request, emo
 	writeJSONCached(w, r, s.presentEmoji(e.CustomEmoji, e.PackSlug))
 }
 
-func (s *EmojiServer) GetCustomEmojiImage(w http.ResponseWriter, r *http.Request, emojiID EmojiId, _ GetCustomEmojiImageParams) {
+func (s *EmojiServer) GetCustomEmojiImage(w http.ResponseWriter, r *http.Request, emojiID EmojiId, params GetCustomEmojiImageParams) {
 	e, ok := s.liveEmoji(w, r, emojiID)
 	if !ok {
 		return
 	}
-	d, err := s.o.Images.OpenUnchecked(r.Context(), e.AttachmentID, media.VariantOriginal)
+	variant, suffix := media.VariantOriginal, ""
+	if params.Variant != nil && *params.Variant == GetCustomEmojiImageParamsVariantInline {
+		variant, suffix = media.VariantInline, "-inline"
+	}
+	d, err := s.o.Images.OpenUnchecked(r.Context(), e.AttachmentID, variant)
 	if err != nil {
 		s.fail(w, r, "open emoji image", err)
 		return
 	}
-	serveDownload(w, r, d, cacheForever, "emoji-"+strconv.FormatInt(e.ID, 10))
+	serveDownload(w, r, d, cacheForever, "emoji-"+strconv.FormatInt(e.ID, 10)+suffix)
 }

@@ -400,7 +400,7 @@ func (q *Queries) ListOwnedStickerPacks(ctx context.Context, arg ListOwnedSticke
 }
 
 const listPackStickers = `-- name: ListPackStickers :many
-SELECT s.id, s.pack_id, s.attachment_id, s.builtin_key, s.emoji, s.position, s.is_animated, s.deleted_at, s.created_at, p.slug AS pack_slug, p.owner_id AS pack_owner_id, a.id, a.uploader_id, a.chat_id, a.storage_key, a.mime_type, a.size, a.width, a.height, a.duration, a.waveform, a.created_at, a.purpose, a.kind, a.filename, a.thumbnail_key
+SELECT s.id, s.pack_id, s.attachment_id, s.builtin_key, s.emoji, s.position, s.is_animated, s.deleted_at, s.created_at, p.slug AS pack_slug, p.owner_id AS pack_owner_id, a.id, a.uploader_id, a.chat_id, a.storage_key, a.mime_type, a.size, a.width, a.height, a.duration, a.waveform, a.created_at, a.purpose, a.kind, a.filename, a.thumbnail_key, a.variants, a.placeholder, a.processing_state, a.audio_title, a.audio_artist, a.audio_album
 FROM stickers s
 JOIN sticker_packs p ON p.id = s.pack_id
 JOIN attachments a ON a.id = s.attachment_id
@@ -451,6 +451,12 @@ func (q *Queries) ListPackStickers(ctx context.Context, packIds []int64) ([]List
 			&i.Attachment.Kind,
 			&i.Attachment.Filename,
 			&i.Attachment.ThumbnailKey,
+			&i.Attachment.Variants,
+			&i.Attachment.Placeholder,
+			&i.Attachment.ProcessingState,
+			&i.Attachment.AudioTitle,
+			&i.Attachment.AudioArtist,
+			&i.Attachment.AudioAlbum,
 		); err != nil {
 			return nil, err
 		}
@@ -463,7 +469,7 @@ func (q *Queries) ListPackStickers(ctx context.Context, packIds []int64) ([]List
 }
 
 const listRecentStickers = `-- name: ListRecentStickers :many
-SELECT s.id, s.pack_id, s.attachment_id, s.builtin_key, s.emoji, s.position, s.is_animated, s.deleted_at, s.created_at, p.slug AS pack_slug, p.owner_id AS pack_owner_id, a.id, a.uploader_id, a.chat_id, a.storage_key, a.mime_type, a.size, a.width, a.height, a.duration, a.waveform, a.created_at, a.purpose, a.kind, a.filename, a.thumbnail_key
+SELECT s.id, s.pack_id, s.attachment_id, s.builtin_key, s.emoji, s.position, s.is_animated, s.deleted_at, s.created_at, p.slug AS pack_slug, p.owner_id AS pack_owner_id, a.id, a.uploader_id, a.chat_id, a.storage_key, a.mime_type, a.size, a.width, a.height, a.duration, a.waveform, a.created_at, a.purpose, a.kind, a.filename, a.thumbnail_key, a.variants, a.placeholder, a.processing_state, a.audio_title, a.audio_artist, a.audio_album
 FROM user_recent_stickers r
 JOIN stickers s ON s.id = r.sticker_id
 JOIN sticker_packs p ON p.id = s.pack_id
@@ -521,6 +527,12 @@ func (q *Queries) ListRecentStickers(ctx context.Context, arg ListRecentStickers
 			&i.Attachment.Kind,
 			&i.Attachment.Filename,
 			&i.Attachment.ThumbnailKey,
+			&i.Attachment.Variants,
+			&i.Attachment.Placeholder,
+			&i.Attachment.ProcessingState,
+			&i.Attachment.AudioTitle,
+			&i.Attachment.AudioArtist,
+			&i.Attachment.AudioAlbum,
 		); err != nil {
 			return nil, err
 		}
@@ -534,7 +546,7 @@ func (q *Queries) ListRecentStickers(ctx context.Context, arg ListRecentStickers
 
 const listStickersByID = `-- name: ListStickersByID :many
 SELECT s.id, s.pack_id, s.attachment_id, s.builtin_key, s.emoji, s.position, s.is_animated, s.deleted_at, s.created_at, p.deleted_at AS pack_deleted_at, p.hidden_at AS pack_hidden_at,
-       p.slug AS pack_slug, p.owner_id AS pack_owner_id, a.id, a.uploader_id, a.chat_id, a.storage_key, a.mime_type, a.size, a.width, a.height, a.duration, a.waveform, a.created_at, a.purpose, a.kind, a.filename, a.thumbnail_key
+       p.slug AS pack_slug, p.owner_id AS pack_owner_id, a.id, a.uploader_id, a.chat_id, a.storage_key, a.mime_type, a.size, a.width, a.height, a.duration, a.waveform, a.created_at, a.purpose, a.kind, a.filename, a.thumbnail_key, a.variants, a.placeholder, a.processing_state, a.audio_title, a.audio_artist, a.audio_album
 FROM stickers s
 JOIN sticker_packs p ON p.id = s.pack_id
 JOIN attachments a ON a.id = s.attachment_id
@@ -588,6 +600,12 @@ func (q *Queries) ListStickersByID(ctx context.Context, ids []int64) ([]ListStic
 			&i.Attachment.Kind,
 			&i.Attachment.Filename,
 			&i.Attachment.ThumbnailKey,
+			&i.Attachment.Variants,
+			&i.Attachment.Placeholder,
+			&i.Attachment.ProcessingState,
+			&i.Attachment.AudioTitle,
+			&i.Attachment.AudioArtist,
+			&i.Attachment.AudioAlbum,
 		); err != nil {
 			return nil, err
 		}

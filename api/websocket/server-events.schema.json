@@ -46,6 +46,9 @@
       "$ref": "server/user_updated.schema.json"
     },
     {
+      "$ref": "server/attachment_updated.schema.json"
+    },
+    {
       "$ref": "server/group_created.schema.json"
     },
     {

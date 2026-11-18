@@ -31,6 +31,7 @@ const (
 type Tags struct {
 	Title  *string
 	Artist *string
+	Album  *string
 }
 
 type musicClip struct {
@@ -156,6 +157,10 @@ func parseTags(out string) Tags {
 			if t.Artist == nil {
 				t.Artist = cleanTag(v)
 			}
+		case "album":
+			if t.Album == nil {
+				t.Album = cleanTag(v)
+			}
 		}
 	}
 	return t
@@ -165,7 +170,7 @@ func (p *Prober) tags(ctx context.Context, path string) Tags {
 	tctx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
 	out, err := exec.CommandContext(tctx, p.ffprobe, "-v", "error", "-protocol_whitelist", "file", //nolint:gosec // see Probe
-		"-show_entries", "format_tags=title,artist:stream_tags=title,artist", "-of", "default=noprint_wrappers=1", path).Output()
+		"-show_entries", "format_tags=title,artist,album:stream_tags=title,artist,album", "-of", "default=noprint_wrappers=1", path).Output()
 	if err != nil {
 		return Tags{}
 	}

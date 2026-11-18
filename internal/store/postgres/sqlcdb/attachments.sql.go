@@ -26,6 +26,36 @@ func (q *Queries) AddAvatarHistory(ctx context.Context, arg AddAvatarHistoryPara
 	return err
 }
 
+const attachmentAudience = `-- name: AttachmentAudience :many
+SELECT DISTINCT u.user_id FROM (
+    SELECT a.uploader_id AS user_id FROM attachments a WHERE a.id = $1 AND a.uploader_id IS NOT NULL
+    UNION ALL
+    SELECT p.user_id FROM attachment_links l JOIN participants p ON p.chat_id = l.chat_id WHERE l.attachment_id = $1
+) u
+WHERE u.user_id IS NOT NULL
+LIMIT 5000
+`
+
+func (q *Queries) AttachmentAudience(ctx context.Context, attachmentID uuid.UUID) ([]*int64, error) {
+	rows, err := q.db.Query(ctx, attachmentAudience, attachmentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*int64{}
+	for rows.Next() {
+		var user_id *int64
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const attachmentLinksForViewer = `-- name: AttachmentLinksForViewer :many
 SELECT l.chat_id, l.message_id
 FROM attachment_links l
@@ -124,25 +154,33 @@ func (q *Queries) ClearCurrentAvatar(ctx context.Context, userID int64) error {
 }
 
 const createAttachment = `-- name: CreateAttachment :one
-INSERT INTO attachments (uploader_id, chat_id, storage_key, thumbnail_key, mime_type, size, width, height, duration, waveform, purpose, kind, filename)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-RETURNING id, uploader_id, chat_id, storage_key, mime_type, size, width, height, duration, waveform, created_at, purpose, kind, filename, thumbnail_key
+INSERT INTO attachments (uploader_id, chat_id, storage_key, thumbnail_key, mime_type, size, width, height, duration, waveform, purpose, kind, filename,
+                         variants, placeholder, processing_state, audio_title, audio_artist, audio_album)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+        $14, $15, $16, $17, $18, $19)
+RETURNING id, uploader_id, chat_id, storage_key, mime_type, size, width, height, duration, waveform, created_at, purpose, kind, filename, thumbnail_key, variants, placeholder, processing_state, audio_title, audio_artist, audio_album
 `
 
 type CreateAttachmentParams struct {
-	UploaderID   *int64
-	ChatID       *int64
-	StorageKey   string
-	ThumbnailKey *string
-	MimeType     string
-	Size         int64
-	Width        *int32
-	Height       *int32
-	Duration     *float64
-	Waveform     []int16
-	Purpose      string
-	Kind         string
-	Filename     string
+	UploaderID      *int64
+	ChatID          *int64
+	StorageKey      string
+	ThumbnailKey    *string
+	MimeType        string
+	Size            int64
+	Width           *int32
+	Height          *int32
+	Duration        *float64
+	Waveform        []int16
+	Purpose         string
+	Kind            string
+	Filename        string
+	Variants        []byte
+	Placeholder     *string
+	ProcessingState *string
+	AudioTitle      *string
+	AudioArtist     *string
+	AudioAlbum      *string
 }
 
 func (q *Queries) CreateAttachment(ctx context.Context, arg CreateAttachmentParams) (Attachment, error) {
@@ -160,6 +198,12 @@ func (q *Queries) CreateAttachment(ctx context.Context, arg CreateAttachmentPara
 		arg.Purpose,
 		arg.Kind,
 		arg.Filename,
+		arg.Variants,
+		arg.Placeholder,
+		arg.ProcessingState,
+		arg.AudioTitle,
+		arg.AudioArtist,
+		arg.AudioAlbum,
 	)
 	var i Attachment
 	err := row.Scan(
@@ -178,23 +222,30 @@ func (q *Queries) CreateAttachment(ctx context.Context, arg CreateAttachmentPara
 		&i.Kind,
 		&i.Filename,
 		&i.ThumbnailKey,
+		&i.Variants,
+		&i.Placeholder,
+		&i.ProcessingState,
+		&i.AudioTitle,
+		&i.AudioArtist,
+		&i.AudioAlbum,
 	)
 	return i, err
 }
 
 const deleteAttachment = `-- name: DeleteAttachment :one
-DELETE FROM attachments WHERE id = $1 RETURNING storage_key, thumbnail_key
+DELETE FROM attachments WHERE id = $1 RETURNING storage_key, thumbnail_key, variants
 `
 
 type DeleteAttachmentRow struct {
 	StorageKey   string
 	ThumbnailKey *string
+	Variants     []byte
 }
 
 func (q *Queries) DeleteAttachment(ctx context.Context, id uuid.UUID) (DeleteAttachmentRow, error) {
 	row := q.db.QueryRow(ctx, deleteAttachment, id)
 	var i DeleteAttachmentRow
-	err := row.Scan(&i.StorageKey, &i.ThumbnailKey)
+	err := row.Scan(&i.StorageKey, &i.ThumbnailKey, &i.Variants)
 	return i, err
 }
 
@@ -210,12 +261,13 @@ WHERE a.id = $1
   AND NOT EXISTS (SELECT 1 FROM stickers s WHERE s.attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM custom_emoji e WHERE e.attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM unsent_messages m WHERE m.attachment_ids @> ARRAY[a.id])
-RETURNING a.storage_key, a.thumbnail_key
+RETURNING a.storage_key, a.thumbnail_key, a.variants
 `
 
 type DeleteAttachmentIfUnreferencedRow struct {
 	StorageKey   string
 	ThumbnailKey *string
+	Variants     []byte
 }
 
 // Deletes the row only if it is still unreferenced (a send may have linked it since it was listed). Run it
@@ -223,7 +275,7 @@ type DeleteAttachmentIfUnreferencedRow struct {
 func (q *Queries) DeleteAttachmentIfUnreferenced(ctx context.Context, id uuid.UUID) (DeleteAttachmentIfUnreferencedRow, error) {
 	row := q.db.QueryRow(ctx, deleteAttachmentIfUnreferenced, id)
 	var i DeleteAttachmentIfUnreferencedRow
-	err := row.Scan(&i.StorageKey, &i.ThumbnailKey)
+	err := row.Scan(&i.StorageKey, &i.ThumbnailKey, &i.Variants)
 	return i, err
 }
 
@@ -244,7 +296,7 @@ func (q *Queries) DeleteAvatarHistoryEntry(ctx context.Context, arg DeleteAvatar
 }
 
 const getAttachment = `-- name: GetAttachment :one
-SELECT id, uploader_id, chat_id, storage_key, mime_type, size, width, height, duration, waveform, created_at, purpose, kind, filename, thumbnail_key FROM attachments WHERE id = $1
+SELECT id, uploader_id, chat_id, storage_key, mime_type, size, width, height, duration, waveform, created_at, purpose, kind, filename, thumbnail_key, variants, placeholder, processing_state, audio_title, audio_artist, audio_album FROM attachments WHERE id = $1
 `
 
 func (q *Queries) GetAttachment(ctx context.Context, id uuid.UUID) (Attachment, error) {
@@ -266,6 +318,12 @@ func (q *Queries) GetAttachment(ctx context.Context, id uuid.UUID) (Attachment, 
 		&i.Kind,
 		&i.Filename,
 		&i.ThumbnailKey,
+		&i.Variants,
+		&i.Placeholder,
+		&i.ProcessingState,
+		&i.AudioTitle,
+		&i.AudioArtist,
+		&i.AudioAlbum,
 	)
 	return i, err
 }
@@ -338,6 +396,8 @@ SELECT k::text FROM (
     SELECT thumbnail_key FROM attachments WHERE chat_id = ANY($1::bigint[]) AND thumbnail_key IS NOT NULL
     UNION ALL
     SELECT storage_key || '.display.jpg' FROM attachments WHERE chat_id = ANY($1::bigint[]) AND width IS NOT NULL
+    UNION ALL
+    SELECT v.value->>'key' FROM attachments a, jsonb_each(a.variants) v WHERE a.chat_id = ANY($1::bigint[])
 ) keys
 ORDER BY k
 `
@@ -364,7 +424,7 @@ func (q *Queries) ListAttachmentKeysOfChats(ctx context.Context, chatIds []int64
 }
 
 const listAttachmentsByIDs = `-- name: ListAttachmentsByIDs :many
-SELECT id, uploader_id, chat_id, storage_key, mime_type, size, width, height, duration, waveform, created_at, purpose, kind, filename, thumbnail_key FROM attachments WHERE id = ANY($1::uuid[])
+SELECT id, uploader_id, chat_id, storage_key, mime_type, size, width, height, duration, waveform, created_at, purpose, kind, filename, thumbnail_key, variants, placeholder, processing_state, audio_title, audio_artist, audio_album FROM attachments WHERE id = ANY($1::uuid[])
 `
 
 func (q *Queries) ListAttachmentsByIDs(ctx context.Context, ids []uuid.UUID) ([]Attachment, error) {
@@ -392,6 +452,78 @@ func (q *Queries) ListAttachmentsByIDs(ctx context.Context, ids []uuid.UUID) ([]
 			&i.Kind,
 			&i.Filename,
 			&i.ThumbnailKey,
+			&i.Variants,
+			&i.Placeholder,
+			&i.ProcessingState,
+			&i.AudioTitle,
+			&i.AudioArtist,
+			&i.AudioAlbum,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAttachmentsForBackfill = `-- name: ListAttachmentsForBackfill :many
+SELECT id, uploader_id, chat_id, storage_key, mime_type, size, width, height, duration, waveform, created_at, purpose, kind, filename, thumbnail_key, variants, placeholder, processing_state, audio_title, audio_artist, audio_album FROM attachments
+WHERE kind = ANY($1::text[])
+  AND purpose = ANY($2::text[])
+  AND NOT (variants ? $3::text)
+  AND id > $4
+ORDER BY id
+LIMIT $5
+`
+
+type ListAttachmentsForBackfillParams struct {
+	Kinds          []string
+	Purposes       []string
+	MissingVariant string
+	After          uuid.UUID
+	MaxRows        int32
+}
+
+func (q *Queries) ListAttachmentsForBackfill(ctx context.Context, arg ListAttachmentsForBackfillParams) ([]Attachment, error) {
+	rows, err := q.db.Query(ctx, listAttachmentsForBackfill,
+		arg.Kinds,
+		arg.Purposes,
+		arg.MissingVariant,
+		arg.After,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Attachment{}
+	for rows.Next() {
+		var i Attachment
+		if err := rows.Scan(
+			&i.ID,
+			&i.UploaderID,
+			&i.ChatID,
+			&i.StorageKey,
+			&i.MimeType,
+			&i.Size,
+			&i.Width,
+			&i.Height,
+			&i.Duration,
+			&i.Waveform,
+			&i.CreatedAt,
+			&i.Purpose,
+			&i.Kind,
+			&i.Filename,
+			&i.ThumbnailKey,
+			&i.Variants,
+			&i.Placeholder,
+			&i.ProcessingState,
+			&i.AudioTitle,
+			&i.AudioArtist,
+			&i.AudioAlbum,
 		); err != nil {
 			return nil, err
 		}
@@ -451,7 +583,7 @@ func (q *Queries) ListAvatarHistory(ctx context.Context, arg ListAvatarHistoryPa
 }
 
 const listChatAttachments = `-- name: ListChatAttachments :many
-SELECT id, uploader_id, chat_id, storage_key, mime_type, size, width, height, duration, waveform, created_at, purpose, kind, filename, thumbnail_key FROM attachments
+SELECT id, uploader_id, chat_id, storage_key, mime_type, size, width, height, duration, waveform, created_at, purpose, kind, filename, thumbnail_key, variants, placeholder, processing_state, audio_title, audio_artist, audio_album FROM attachments
 WHERE chat_id = $1
 ORDER BY created_at DESC, id DESC
 LIMIT $2
@@ -487,6 +619,12 @@ func (q *Queries) ListChatAttachments(ctx context.Context, arg ListChatAttachmen
 			&i.Kind,
 			&i.Filename,
 			&i.ThumbnailKey,
+			&i.Variants,
+			&i.Placeholder,
+			&i.ProcessingState,
+			&i.AudioTitle,
+			&i.AudioArtist,
+			&i.AudioAlbum,
 		); err != nil {
 			return nil, err
 		}
@@ -499,7 +637,7 @@ func (q *Queries) ListChatAttachments(ctx context.Context, arg ListChatAttachmen
 }
 
 const listLinkedAttachments = `-- name: ListLinkedAttachments :many
-SELECT a.id, a.uploader_id, a.chat_id, a.storage_key, a.mime_type, a.size, a.width, a.height, a.duration, a.waveform, a.created_at, a.purpose, a.kind, a.filename, a.thumbnail_key, l.message_id, l.created_at AS linked_at
+SELECT a.id, a.uploader_id, a.chat_id, a.storage_key, a.mime_type, a.size, a.width, a.height, a.duration, a.waveform, a.created_at, a.purpose, a.kind, a.filename, a.thumbnail_key, a.variants, a.placeholder, a.processing_state, a.audio_title, a.audio_artist, a.audio_album, l.message_id, l.created_at AS linked_at
 FROM attachment_links l
 JOIN attachments a ON a.id = l.attachment_id
 WHERE l.chat_id = $1 AND a.kind = ANY($2::text[])
@@ -516,23 +654,29 @@ type ListLinkedAttachmentsParams struct {
 }
 
 type ListLinkedAttachmentsRow struct {
-	ID           uuid.UUID
-	UploaderID   *int64
-	ChatID       *int64
-	StorageKey   string
-	MimeType     string
-	Size         int64
-	Width        *int32
-	Height       *int32
-	Duration     *float64
-	Waveform     []int16
-	CreatedAt    time.Time
-	Purpose      string
-	Kind         string
-	Filename     string
-	ThumbnailKey *string
-	MessageID    int64
-	LinkedAt     time.Time
+	ID              uuid.UUID
+	UploaderID      *int64
+	ChatID          *int64
+	StorageKey      string
+	MimeType        string
+	Size            int64
+	Width           *int32
+	Height          *int32
+	Duration        *float64
+	Waveform        []int16
+	CreatedAt       time.Time
+	Purpose         string
+	Kind            string
+	Filename        string
+	ThumbnailKey    *string
+	Variants        []byte
+	Placeholder     *string
+	ProcessingState *string
+	AudioTitle      *string
+	AudioArtist     *string
+	AudioAlbum      *string
+	MessageID       int64
+	LinkedAt        time.Time
 }
 
 // Attachments of a chat by kind, newest message first, for the media lists (photos, audio); the cursor is
@@ -567,6 +711,12 @@ func (q *Queries) ListLinkedAttachments(ctx context.Context, arg ListLinkedAttac
 			&i.Kind,
 			&i.Filename,
 			&i.ThumbnailKey,
+			&i.Variants,
+			&i.Placeholder,
+			&i.ProcessingState,
+			&i.AudioTitle,
+			&i.AudioArtist,
+			&i.AudioAlbum,
 			&i.MessageID,
 			&i.LinkedAt,
 		); err != nil {
@@ -631,6 +781,7 @@ WHERE a.created_at < $1
   AND NOT EXISTS (SELECT 1 FROM stickers s WHERE s.attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM custom_emoji e WHERE e.attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM unsent_messages m WHERE m.attachment_ids @> ARRAY[a.id])
+  AND NOT EXISTS (SELECT 1 FROM media_jobs j WHERE j.attachment_id = a.id AND j.state = 'running')
 ORDER BY a.created_at
 LIMIT $2
 `
@@ -680,6 +831,65 @@ func (q *Queries) LockAttachment(ctx context.Context, id uuid.UUID) (uuid.UUID, 
 	return id_2, err
 }
 
+const mergeAttachmentVariants = `-- name: MergeAttachmentVariants :one
+UPDATE attachments
+SET variants = variants || $1::jsonb,
+    placeholder = COALESCE($2, placeholder),
+    processing_state = COALESCE($3, processing_state),
+    audio_title = COALESCE($4, audio_title),
+    audio_artist = COALESCE($5, audio_artist),
+    audio_album = COALESCE($6, audio_album)
+WHERE id = $7
+RETURNING id, uploader_id, chat_id, storage_key, mime_type, size, width, height, duration, waveform, created_at, purpose, kind, filename, thumbnail_key, variants, placeholder, processing_state, audio_title, audio_artist, audio_album
+`
+
+type MergeAttachmentVariantsParams struct {
+	Variants        []byte
+	Placeholder     *string
+	ProcessingState *string
+	AudioTitle      *string
+	AudioArtist     *string
+	AudioAlbum      *string
+	ID              uuid.UUID
+}
+
+func (q *Queries) MergeAttachmentVariants(ctx context.Context, arg MergeAttachmentVariantsParams) (Attachment, error) {
+	row := q.db.QueryRow(ctx, mergeAttachmentVariants,
+		arg.Variants,
+		arg.Placeholder,
+		arg.ProcessingState,
+		arg.AudioTitle,
+		arg.AudioArtist,
+		arg.AudioAlbum,
+		arg.ID,
+	)
+	var i Attachment
+	err := row.Scan(
+		&i.ID,
+		&i.UploaderID,
+		&i.ChatID,
+		&i.StorageKey,
+		&i.MimeType,
+		&i.Size,
+		&i.Width,
+		&i.Height,
+		&i.Duration,
+		&i.Waveform,
+		&i.CreatedAt,
+		&i.Purpose,
+		&i.Kind,
+		&i.Filename,
+		&i.ThumbnailKey,
+		&i.Variants,
+		&i.Placeholder,
+		&i.ProcessingState,
+		&i.AudioTitle,
+		&i.AudioArtist,
+		&i.AudioAlbum,
+	)
+	return i, err
+}
+
 const promoteLatestAvatar = `-- name: PromoteLatestAvatar :one
 UPDATE user_avatar_history SET is_current = TRUE
 WHERE id = (
@@ -693,6 +903,20 @@ func (q *Queries) PromoteLatestAvatar(ctx context.Context, userID int64) (*uuid.
 	var attachment_id *uuid.UUID
 	err := row.Scan(&attachment_id)
 	return attachment_id, err
+}
+
+const setAttachmentProcessing = `-- name: SetAttachmentProcessing :exec
+UPDATE attachments SET processing_state = $1 WHERE id = $2
+`
+
+type SetAttachmentProcessingParams struct {
+	ProcessingState *string
+	ID              uuid.UUID
+}
+
+func (q *Queries) SetAttachmentProcessing(ctx context.Context, arg SetAttachmentProcessingParams) error {
+	_, err := q.db.Exec(ctx, setAttachmentProcessing, arg.ProcessingState, arg.ID)
+	return err
 }
 
 const setChatAvatar = `-- name: SetChatAvatar :execrows

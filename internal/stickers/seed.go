@@ -167,8 +167,12 @@ func seedPack(ctx context.Context, d SeedDeps, fsys fs.FS, m manifest) error {
 		s := postgres.BuiltinSticker{Key: version, Emoji: item.Emoji, Position: position, Animated: img.Animated}
 		position++
 		keep = append(keep, version)
+		panel, _ := fs.ReadFile(fsys, path.Join(m.Key, panelDir, name))
 		if id, ok := existing[version]; ok {
 			if err := d.Stickers.UpdateBuiltinSticker(ctx, id, s); err != nil {
+				return err
+			}
+			if err := addPanel(ctx, d, id, panel); err != nil {
 				return err
 			}
 			continue
@@ -177,10 +181,14 @@ func seedPack(ctx context.Context, d SeedDeps, fsys fs.FS, m manifest) error {
 		if err := d.Put(ctx, key, data, contentTypeWebP); err != nil {
 			return err
 		}
+		variants, err := putPanel(ctx, d, key, panel)
+		if err != nil {
+			return err
+		}
 		w, h := img.Width, img.Height
 		a, err := d.Attachments.Create(ctx, postgres.NewAttachment{
 			Purpose: postgres.PurposeSticker, Kind: "image", Filename: name, StorageKey: key,
-			MimeType: contentTypeWebP, Size: int64(len(data)), Width: &w, Height: &h,
+			MimeType: contentTypeWebP, Size: int64(len(data)), Width: &w, Height: &h, Variants: variants,
 		})
 		if err != nil {
 			return err
@@ -192,3 +200,45 @@ func seedPack(ctx context.Context, d SeedDeps, fsys fs.FS, m manifest) error {
 	}
 	return d.Stickers.RetireBuiltinStickers(ctx, packID, keep)
 }
+
+const panelDir = "panel"
+
+func putPanel(ctx context.Context, d SeedDeps, key string, panel []byte) (postgres.Variants, error) {
+	if len(panel) == 0 {
+		return nil, nil
+	}
+	img, err := ProbeWebP(panel)
+	if err != nil || img.Animated {
+		return nil, fmt.Errorf("panel frame of %s: %w", key, ErrBadPanel)
+	}
+	panelKey := key + ".panel.webp"
+	if err := d.Put(ctx, panelKey, panel, contentTypeWebP); err != nil {
+		return nil, err
+	}
+	return postgres.Variants{"panel": {Key: panelKey, ContentType: contentTypeWebP, Size: int64(len(panel)), Width: int(img.Width), Height: int(img.Height)}}, nil
+}
+
+func addPanel(ctx context.Context, d SeedDeps, stickerID int64, panel []byte) error {
+	if len(panel) == 0 {
+		return nil
+	}
+	found, err := d.Stickers.Stickers(ctx, []int64{stickerID})
+	if err != nil {
+		return err
+	}
+	st, ok := found[stickerID]
+	if !ok {
+		return nil
+	}
+	if _, has := st.Image.Variants.Get("panel"); has {
+		return nil
+	}
+	variants, err := putPanel(ctx, d, st.Image.StorageKey, panel)
+	if err != nil {
+		return err
+	}
+	_, err = d.Attachments.MergeVariants(ctx, st.Image.ID, postgres.AttachmentUpdate{Variants: variants})
+	return err
+}
+
+var ErrBadPanel = errors.New("stickers: a panel frame must be a still WebP")

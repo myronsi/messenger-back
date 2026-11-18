@@ -123,7 +123,36 @@ func PresentAttachment(a postgres.Attachment, messageType, basePath string) Atta
 		}
 		out.Waveform = &wf
 	}
+	presentVariants(&out, a, url)
 	return out
+}
+
+func presentVariants(out *Attachment, a postgres.Attachment, url string) {
+	out.Placeholder = a.Placeholder
+	if a.ProcessingState != nil {
+		state := MediaProcessing(*a.ProcessingState)
+		out.Processing = &state
+	}
+	if sv, ok := a.Variants.Get(media.VariantNameOptimized); ok {
+		source := url + "?variant=source"
+		out.SourceUrl = &source
+		out.ContentType, out.Size = sv.ContentType, int(sv.Size)
+	}
+	if _, ok := a.Variants.Get(media.VariantNameAnimation); ok {
+		animation := url + "?variant=animation"
+		out.AnimationUrl = &animation
+	}
+	if _, ok := a.Variants.Get(media.VariantNamePanel); ok {
+		panel := url + "?variant=panel"
+		out.PanelUrl = &panel
+	}
+	if _, ok := a.Variants.Get(media.VariantNameMessage); ok {
+		message := url + "?variant=message"
+		out.MessageUrl = &message
+	}
+	if a.AudioTitle != nil || a.AudioArtist != nil || a.AudioAlbum != nil {
+		out.Tags = &AudioTags{Title: a.AudioTitle, Artist: a.AudioArtist, Album: a.AudioAlbum}
+	}
 }
 
 // PresentReaction renders one reaction.

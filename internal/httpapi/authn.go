@@ -60,6 +60,7 @@ var routeAccess = map[string]access{
 	"GET /notifications/avatar/{token}":                 accessPublic,
 	"POST /notifications/read/{token}":                  accessPublic,
 	"GET /connections/callback/{provider}":              accessPublic,
+	"GET /attachments/{attachment_id}/content":          accessOptional,
 }
 
 func accessFor(pattern, basePath string) access {

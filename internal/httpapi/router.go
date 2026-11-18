@@ -129,8 +129,11 @@ func transferRoute(basePath string) func(*http.Request) bool {
 	upload := UploadPath(basePath)
 	return func(r *http.Request) bool {
 		p := r.URL.Path
+		if r.Method == http.MethodPut && isChunkPath(p, upload) {
+			return true
+		}
 		if r.Method == http.MethodPost {
-			return p == upload
+			return p == upload || isCompletePath(p, upload)
 		}
 		if r.Method != http.MethodGet && r.Method != http.MethodHead || !strings.HasPrefix(p, basePath+"/") {
 			return false

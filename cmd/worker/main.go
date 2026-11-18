@@ -17,6 +17,7 @@ import (
 	"github.com/myronsi/messenger-back/internal/jobs"
 	"github.com/myronsi/messenger-back/internal/media"
 	"github.com/myronsi/messenger-back/internal/notifications"
+	"github.com/myronsi/messenger-back/internal/realtime"
 	"github.com/myronsi/messenger-back/internal/search"
 	"github.com/myronsi/messenger-back/internal/store/elastic"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
@@ -105,8 +106,24 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	mediaSvc := media.NewService(media.Options{Storage: storage, Attachments: pg.Attachments(), Log: log})
+	prober := media.NewProber(cfg.Media.FFprobe, cfg.Media.FFmpeg)
+	mediaSvc := media.NewService(media.Options{
+		Storage: storage, Attachments: pg.Attachments(), Prober: prober, Jobs: pg.MediaJobs(), Sessions: pg.UploadSessions(), Log: log,
+	})
+	if len(os.Args) > 1 && os.Args[1] == "media-backfill" {
+		return mediaBackfill(p.Ctx, log, mediaSvc, os.Args[2:])
+	}
 	wg.Go(func() { collectUploads(bg, log, mediaSvc, maintenanceEvery) })
+	attachmentBus, err := redis.NewBus(rd.Client(), redis.BusOptions{Handler: func(int64, []byte) {}})
+	if err != nil {
+		return err
+	}
+	notifier := realtime.NewAttachmentNotifier(attachmentBus, pg.Attachments(), cfg.HTTP.BasePath, log)
+	if !prober.Available() {
+		log.Warn("ffprobe/ffmpeg not found: media jobs only mark attachments as done")
+	}
+	runner := &mediaJobRunner{svc: mediaSvc, jobs: pg.MediaJobs(), notify: notifier.AttachmentUpdated, metrics: p.Metrics.MediaJob, log: log}
+	wg.Go(func() { runner.run(bg, cfg.Media.TranscodeWorkers) })
 	wg.Go(func() { seedStickers(bg, log, pg, storage) })
 	// Elasticsearch being away must not stop the other consumers: the template and first index are set up as
 	// soon as it answers, and index writes fail (and are retried) until then.

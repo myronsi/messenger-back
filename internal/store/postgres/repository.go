@@ -413,26 +413,38 @@ type Attachment struct {
 	Width        *int32
 	Height       *int32
 	// Duration is in seconds (audio and video).
-	Duration  *float64
-	Waveform  []int16
-	CreatedAt time.Time
+	Duration        *float64
+	Waveform        []int16
+	CreatedAt       time.Time
+	Variants        Variants
+	Placeholder     *string
+	ProcessingState *string
+	AudioTitle      *string
+	AudioArtist     *string
+	AudioAlbum      *string
 }
 
 // NewAttachment describes a file that was stored under StorageKey.
 type NewAttachment struct {
-	UploaderID   *int64
-	ChatID       *int64
-	Purpose      string
-	Kind         string
-	Filename     string
-	StorageKey   string
-	ThumbnailKey *string
-	MimeType     string
-	Size         int64
-	Width        *int32
-	Height       *int32
-	Duration     *float64
-	Waveform     []int16
+	UploaderID      *int64
+	ChatID          *int64
+	Purpose         string
+	Kind            string
+	Filename        string
+	StorageKey      string
+	ThumbnailKey    *string
+	MimeType        string
+	Size            int64
+	Width           *int32
+	Height          *int32
+	Duration        *float64
+	Waveform        []int16
+	Variants        Variants
+	Placeholder     *string
+	ProcessingState *string
+	AudioTitle      *string
+	AudioArtist     *string
+	AudioAlbum      *string
 }
 
 // AttachmentLink is a message that uses an attachment.
@@ -508,6 +520,27 @@ type AttachmentRepository interface {
 	ChatsWithBackground(ctx context.Context, attachmentID uuid.UUID) ([]int64, error)
 	IsStickerImage(ctx context.Context, attachmentID uuid.UUID) (bool, error)
 	IsEmojiImage(ctx context.Context, attachmentID uuid.UUID) (bool, error)
+	MergeVariants(ctx context.Context, id uuid.UUID, u AttachmentUpdate) (Attachment, error)
+	SetProcessing(ctx context.Context, id uuid.UUID, state *string) error
+	ListForBackfill(ctx context.Context, f BackfillFilter) ([]Attachment, error)
+	Audience(ctx context.Context, attachmentID uuid.UUID) ([]int64, error)
+}
+
+type AttachmentUpdate struct {
+	Variants        Variants
+	Placeholder     *string
+	ProcessingState *string
+	AudioTitle      *string
+	AudioArtist     *string
+	AudioAlbum      *string
+}
+
+type BackfillFilter struct {
+	Kinds          []string
+	Purposes       []string
+	MissingVariant string
+	After          uuid.UUID
+	Limit          int
 }
 
 // SecurityEvent is one entry of the security log of an account.
