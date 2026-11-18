@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.25.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.24.0-alpha.1...v1.25.0-alpha.1) (2026-11-18)
+
+
+### Features
+
+* **moderation:** user reports and automatic account status ([#206](https://github.com/myronsi/messenger-back/issues/206)) ([7a339e1](https://github.com/myronsi/messenger-back/commit/7a339e1b90762a9846fade45511dbece35bca08c))
+
 ## [1.24.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.23.0-alpha.1...v1.24.0-alpha.1) (2026-11-18)
 
 
