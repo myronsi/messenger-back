@@ -105,6 +105,9 @@ func TestRequestsFolder(t *testing.T) {
 		t.Fatal("after the reply the requester is a contact")
 	}
 
+	if r := e.do(t, request{method: http.MethodPatch, path: "/me/privacy", token: carol.access, body: map[string]any{"group_invites": "everyone"}}); r.Code != http.StatusOK {
+		t.Fatalf("privacy: %d %s", r.Code, r.Body)
+	}
 	group := e.do(t, request{method: http.MethodPost, path: "/groups", token: bob.access, body: map[string]any{"name": "Team", "member_ids": []string{carolID}}})
 	if group.Code != http.StatusCreated {
 		t.Fatalf("group: %d %s", group.Code, group.Body)
