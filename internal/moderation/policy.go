@@ -32,6 +32,15 @@ func atLevel(n int) Status {
 	return levels[max(0, min(n, len(levels)-1))]
 }
 
+func ValidStatus(s string) bool {
+	for _, l := range levels {
+		if string(l) == s {
+			return true
+		}
+	}
+	return false
+}
+
 func ParseStatus(s string) Status {
 	if st := Status(s); st.Level() > 0 || st == Good {
 		return st
@@ -198,9 +207,14 @@ const (
 	CauseAppeal          = "appeal"
 	CauseProbationPassed = "probation_passed"
 	CauseProbationFailed = "probation_failed"
+	CauseManual          = postgres.CauseManual
+	CauseDismissed       = "dismissed"
 )
 
 func Next(cur postgres.ModerationState, reports []postgres.ReportFact, now time.Time) postgres.ModerationState {
+	if cur.DecidedBy == postgres.DecidedStaff && cur.DecidedAt != nil {
+		return nextAfterDecision(cur, reports, now)
+	}
 	next := cur
 	next.Score = Score(reports, now)
 	current := ParseStatus(cur.Status)
@@ -243,8 +257,54 @@ func Next(cur postgres.ModerationState, reports []postgres.ReportFact, now time.
 	return next
 }
 
+func nextAfterDecision(cur postgres.ModerationState, reports []postgres.ReportFact, now time.Time) postgres.ModerationState {
+	next := cur
+	next.Score = Score(reports, now)
+	newer := make([]postgres.ReportFact, 0, len(reports))
+	for _, r := range reports {
+		if r.CreatedAt.After(*cur.DecidedAt) {
+			newer = append(newer, r)
+		}
+	}
+	target := StatusFor(newer, now)
+	if target.Level() <= ParseStatus(cur.Status).Level() {
+		return next
+	}
+	next.Status = string(target)
+	next.Since = now
+	next.Cause = CauseReports
+	next.DecidedBy = postgres.DecidedAutomatic
+	next.DecidedAt = nil
+	next.ReasonCode = nil
+	next.ReasonText = nil
+	return next
+}
+
+func Decide(cur postgres.ModerationState, reports []postgres.ReportFact, d Decision, now time.Time) postgres.ModerationState {
+	next := cur
+	next.Score = Score(reports, now)
+	next.Status = string(d.Status)
+	if d.Status != ParseStatus(cur.Status) || cur.Since.IsZero() {
+		next.Since = now
+	}
+	at := now
+	code, text := d.ReasonCode, d.ReasonText
+	next.DecidedBy = postgres.DecidedStaff
+	next.DecidedAt = &at
+	next.ReasonCode = &code
+	next.ReasonText = &text
+	next.ProbationUntil = nil
+	next.Cause = CauseManual
+	next.StaffRef = nil
+	if d.StaffRef != "" {
+		ref := d.StaffRef
+		next.StaffRef = &ref
+	}
+	return next
+}
+
 func CanAppeal(st postgres.ModerationState, now time.Time) bool {
-	if ParseStatus(st.Status) == Good || st.ProbationUntil != nil {
+	if ParseStatus(st.Status) == Good || st.ProbationUntil != nil || st.DecidedBy == postgres.DecidedStaff {
 		return false
 	}
 	if st.AppealBlockedUntil != nil && now.Before(*st.AppealBlockedUntil) {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	"github.com/myronsi/messenger-back/internal/moderation"
 )
@@ -21,6 +22,8 @@ type ModerationService interface {
 	Unreport(ctx context.Context, reporter, target int64) error
 	AccountStatus(ctx context.Context, userID int64) (moderation.View, error)
 	Appeal(ctx context.Context, userID int64) (moderation.View, error)
+	ReportOutcomes(ctx context.Context, reporterID int64) ([]moderation.Outcome, error)
+	MarkOutcomeRead(ctx context.Context, reporterID, id int64) error
 }
 
 type ModerationOptions struct {
@@ -122,7 +125,24 @@ func PresentAccountStatus(v moderation.View) AccountStatus {
 		t := utc(*v.ProbationUntil)
 		out.ProbationUntil = &t
 	}
+	decided := Automatic
+	if v.DecidedBy == string(Staff) {
+		decided = Staff
+		out.ReasonText = v.ReasonText
+		if v.ReasonCode != nil {
+			code := ModerationReason(*v.ReasonCode)
+			out.ReasonCode = &code
+		}
+	}
+	out.DecidedBy = &decided
 	return out
+}
+
+func PresentReportOutcome(o moderation.Outcome) ReportOutcome {
+	return ReportOutcome{
+		Id: strconv.FormatInt(o.ID, 10), SubjectType: ReportSubjectType(o.SubjectType), SubjectId: strconv.FormatInt(o.SubjectID, 10),
+		Outcome: ReportOutcomeKind(o.Outcome), CreatedAt: utc(o.CreatedAt), Read: o.Read,
+	}
 }
 
 func (s *ModerationServer) ReportUser(w http.ResponseWriter, r *http.Request, userID UserId, _ ReportUserParams) {
@@ -186,4 +206,37 @@ func (s *ModerationServer) AppealAccountStatus(w http.ResponseWriter, r *http.Re
 		return
 	}
 	writeJSONStatus(w, http.StatusOK, PresentAccountStatus(v))
+}
+
+func (s *ModerationServer) ListReportOutcomes(w http.ResponseWriter, r *http.Request, _ ListReportOutcomesParams) {
+	p, ok := principalOr401(w, r)
+	if !ok {
+		return
+	}
+	list, err := s.o.Service.ReportOutcomes(r.Context(), p.UserID)
+	if err != nil {
+		s.fail(w, r, "report outcomes", err)
+		return
+	}
+	out := ReportOutcomeList{Items: make([]ReportOutcome, len(list))}
+	for i, o := range list {
+		out.Items[i] = PresentReportOutcome(o)
+	}
+	writeJSONStatus(w, http.StatusOK, out)
+}
+
+func (s *ModerationServer) MarkReportOutcomeRead(w http.ResponseWriter, r *http.Request, outcomeID ReportOutcomeId, _ MarkReportOutcomeReadParams) {
+	p, ok := principalOr401(w, r)
+	if !ok {
+		return
+	}
+	id, ok := parseID(w, "outcome_id", outcomeID)
+	if !ok {
+		return
+	}
+	if err := s.o.Service.MarkOutcomeRead(r.Context(), p.UserID, id); err != nil {
+		s.fail(w, r, "mark report outcome read", err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

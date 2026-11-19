@@ -1,19 +1,27 @@
 package internalapi
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strings"
+
+	"github.com/myronsi/messenger-back/internal/store/postgres"
 )
 
 const BasePath = "/internal/v1"
 
 type Options struct {
-	Token   string
-	Version string
-	Log     *slog.Logger
+	Token         string
+	Version       string
+	Log           *slog.Logger
+	Moderation    Moderation
+	Accounts      AccountDeleter
+	AfterDeletion func(ctx context.Context, userID int64, deleted postgres.DeletedAccount)
+	Events        EventLog
+	PackImages    PackImages
 }
 
 func Handler(opts Options) http.Handler {
@@ -21,6 +29,11 @@ func Handler(opts Options) http.Handler {
 	mux.HandleFunc("GET "+BasePath+"/ping", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"service": "messenger-api", "version": opts.Version})
 	})
+	log := opts.Log
+	if log == nil {
+		log = slog.New(slog.DiscardHandler)
+	}
+	actions{moderation: opts.Moderation, accounts: opts.Accounts, afterDeletion: opts.AfterDeletion, events: opts.Events, images: opts.PackImages, log: log}.register(mux)
 	return requireToken(opts.Token, opts.Log, mux)
 }
 

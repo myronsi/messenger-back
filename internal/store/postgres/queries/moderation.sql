@@ -26,7 +26,7 @@ WHERE target_id = @target_id AND context = 'none' AND created_at >= @since AND w
 
 -- name: ListReportFacts :many
 SELECT reporter_id, weight::float8 AS weight, created_at FROM user_reports
-WHERE target_id = @target_id AND created_at >= @since AND withdrawn_at IS NULL
+WHERE target_id = @target_id AND created_at >= @since AND withdrawn_at IS NULL AND dismissed_at IS NULL
 ORDER BY created_at;
 
 -- name: DeleteUserReportsBefore :execrows
@@ -61,25 +61,28 @@ SELECT count(*) FROM chats WHERE type = 'direct' AND created_by = @user_id AND c
 INSERT INTO user_moderation (user_id, status_since) VALUES (@user_id, 'epoch') ON CONFLICT (user_id) DO NOTHING;
 
 -- name: LockUserModeration :one
-SELECT user_id, status, score::float8 AS score, status_since, probation_until, appeal_blocked_until, last_appeal_at
+SELECT user_id, status, score::float8 AS score, status_since, probation_until, appeal_blocked_until, last_appeal_at,
+       decided_by, decided_at, reason_code, reason_text
 FROM user_moderation WHERE user_id = @user_id FOR UPDATE;
 
 -- name: GetUserModeration :one
-SELECT user_id, status, score::float8 AS score, status_since, probation_until, appeal_blocked_until, last_appeal_at
+SELECT user_id, status, score::float8 AS score, status_since, probation_until, appeal_blocked_until, last_appeal_at,
+       decided_by, decided_at, reason_code, reason_text
 FROM user_moderation WHERE user_id = @user_id;
 
 -- name: UpdateUserModeration :exec
 UPDATE user_moderation
 SET status = @status, score = @score::float8, status_since = @status_since, probation_until = sqlc.narg(probation_until),
-    appeal_blocked_until = sqlc.narg(appeal_blocked_until), last_appeal_at = sqlc.narg(last_appeal_at)
+    appeal_blocked_until = sqlc.narg(appeal_blocked_until), last_appeal_at = sqlc.narg(last_appeal_at),
+    decided_by = @decided_by, decided_at = sqlc.narg(decided_at), reason_code = sqlc.narg(reason_code), reason_text = sqlc.narg(reason_text)
 WHERE user_id = @user_id;
 
 -- name: InsertUserModerationEvent :exec
-INSERT INTO user_moderation_events (user_id, from_status, to_status, score, cause, created_at)
-VALUES (@user_id, @from_status, @to_status, @score::float8, @cause, @now);
+INSERT INTO user_moderation_events (user_id, from_status, to_status, score, cause, reason_code, reason_text, staff_ref, created_at)
+VALUES (@user_id, @from_status, @to_status, @score::float8, @cause, sqlc.narg(reason_code), sqlc.narg(reason_text), sqlc.narg(staff_ref), @now);
 
 -- name: ListUserModerationEvents :many
-SELECT id, user_id, from_status, to_status, score::float8 AS score, cause, created_at
+SELECT id, user_id, from_status, to_status, score::float8 AS score, cause, reason_code, reason_text, staff_ref, created_at
 FROM user_moderation_events WHERE user_id = @user_id ORDER BY id;
 
 -- name: ListModerationStatuses :many
@@ -90,3 +93,9 @@ SELECT user_id FROM user_moderation
 WHERE (status <> 'good' OR probation_until IS NOT NULL) AND user_id > @after
 ORDER BY user_id
 LIMIT @max_rows;
+
+-- name: DismissUserReports :many
+UPDATE user_reports SET dismissed_at = @now::timestamptz
+WHERE target_id = @target_id AND withdrawn_at IS NULL AND dismissed_at IS NULL
+  AND (sqlc.narg(reporter_ids)::BIGINT[] IS NULL OR reporter_id = ANY(sqlc.narg(reporter_ids)::BIGINT[]))
+RETURNING reporter_id;

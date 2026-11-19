@@ -25,6 +25,7 @@ import (
 	"github.com/myronsi/messenger-back/internal/events"
 	"github.com/myronsi/messenger-back/internal/geoip"
 	"github.com/myronsi/messenger-back/internal/httpapi"
+	"github.com/myronsi/messenger-back/internal/internalapi"
 	"github.com/myronsi/messenger-back/internal/linkpreview"
 	"github.com/myronsi/messenger-back/internal/media"
 	"github.com/myronsi/messenger-back/internal/moderation"
@@ -272,7 +273,9 @@ func run() error {
 	srv := app.NewServer(cfg.HTTP.Addr, router, cfg.HTTP)
 	srv.ErrorLog = slog.NewLogLogger(log.Handler(), slog.LevelWarn)
 
-	internalSrv := startInternal(log, cfg)
+	internalSrv := startInternal(log, cfg, internalapi.Options{
+		Moderation: modSvc, Accounts: authSvc, AfterDeletion: rt.accountDeleted(storage, callsSvc, log), Events: rt.events, PackImages: mediaSvc,
+	})
 
 	log.Info("api listening", "addr", cfg.HTTP.Addr, "env", cfg.Env)
 	if err := p.Serve(srv); err != nil {

@@ -21,6 +21,7 @@ type recorder struct {
 	mu       sync.Mutex
 	events   []events.Event
 	notices  map[int64][]moderation.StatusEvent
+	outcomes map[int64][]moderation.OutcomeEvent
 	statuses []string
 	reports  []string
 }
@@ -35,8 +36,11 @@ func (r *recorder) Emit(_ context.Context, e events.Event) error {
 func (r *recorder) NotifyUser(_ context.Context, uid int64, kind string, data any) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if kind == "account_status" {
+	switch kind {
+	case "account_status":
 		r.notices[uid] = append(r.notices[uid], data.(moderation.StatusEvent))
+	case "report_outcome":
+		r.outcomes[uid] = append(r.outcomes[uid], data.(moderation.OutcomeEvent))
 	}
 }
 
@@ -82,7 +86,7 @@ func newEnv(t *testing.T) *env {
 	t.Helper()
 	pg := testenv.Postgres(t)
 	rd, prefix := testenv.Redis(t)
-	e := &env{pg: pg, cache: redis.NewModerationCache(rd.Client(), prefix, time.Minute), rec: &recorder{notices: map[int64][]moderation.StatusEvent{}},
+	e := &env{pg: pg, cache: redis.NewModerationCache(rd.Client(), prefix, time.Minute), rec: &recorder{notices: map[int64][]moderation.StatusEvent{}, outcomes: map[int64][]moderation.OutcomeEvent{}},
 		clock: &clock{now: time.Now().Add(48 * time.Hour)}}
 	e.svc = moderation.New(moderation.Deps{Store: pg, Cache: e.cache, Events: e.rec, Notifier: e.rec, Metrics: e.rec, Now: e.clock.Now})
 	return e

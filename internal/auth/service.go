@@ -966,6 +966,14 @@ func (s *Service) DeleteAccount(ctx context.Context, p Principal, password strin
 	return deleted, s.revokeInCache(ctx, deleted.Sessions...)
 }
 
+func (s *Service) DeleteAccountByStaff(ctx context.Context, userID int64) (postgres.DeletedAccount, error) {
+	deleted, err := s.store.Users().DeleteAccount(ctx, userID)
+	if err != nil {
+		return postgres.DeletedAccount{}, err
+	}
+	return deleted, s.revokeInCache(ctx, deleted.Sessions...)
+}
+
 // ChangePassword sets a new password and revokes every other session.
 func (s *Service) ChangePassword(ctx context.Context, c Client, p Principal, current, next string) error {
 	if err := validatePassword(next); err != nil {

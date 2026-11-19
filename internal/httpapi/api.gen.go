@@ -80,6 +80,24 @@ func (e AccountRestriction) Valid() bool {
 	}
 }
 
+// Defines values for AccountStatusDecidedBy.
+const (
+	Automatic AccountStatusDecidedBy = "automatic"
+	Staff     AccountStatusDecidedBy = "staff"
+)
+
+// Valid indicates whether the value is a known member of the AccountStatusDecidedBy enum.
+func (e AccountStatusDecidedBy) Valid() bool {
+	switch e {
+	case Automatic:
+		return true
+	case Staff:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AccountStatusLevel.
 const (
 	AccountStatusLevelGood       AccountStatusLevel = "good"
@@ -782,6 +800,39 @@ func (e MessageType) Valid() bool {
 	}
 }
 
+// Defines values for ModerationReason.
+const (
+	ModerationReasonHarassment           ModerationReason = "harassment"
+	ModerationReasonIllegal              ModerationReason = "illegal"
+	ModerationReasonImpersonation        ModerationReason = "impersonation"
+	ModerationReasonInappropriateProfile ModerationReason = "inappropriate_profile"
+	ModerationReasonOther                ModerationReason = "other"
+	ModerationReasonScam                 ModerationReason = "scam"
+	ModerationReasonSpam                 ModerationReason = "spam"
+)
+
+// Valid indicates whether the value is a known member of the ModerationReason enum.
+func (e ModerationReason) Valid() bool {
+	switch e {
+	case ModerationReasonHarassment:
+		return true
+	case ModerationReasonIllegal:
+		return true
+	case ModerationReasonImpersonation:
+		return true
+	case ModerationReasonInappropriateProfile:
+		return true
+	case ModerationReasonOther:
+		return true
+	case ModerationReasonScam:
+		return true
+	case ModerationReasonSpam:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for NotificationDeviceRequestPlatform.
 const (
 	Android NotificationDeviceRequestPlatform = "android"
@@ -965,6 +1016,24 @@ func (e RegisterResponseTokenType) Valid() bool {
 	}
 }
 
+// Defines values for ReportOutcomeKind.
+const (
+	ActionTaken ReportOutcomeKind = "action_taken"
+	NoViolation ReportOutcomeKind = "no_violation"
+)
+
+// Valid indicates whether the value is a known member of the ReportOutcomeKind enum.
+func (e ReportOutcomeKind) Valid() bool {
+	switch e {
+	case ActionTaken:
+		return true
+	case NoViolation:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ReportReason.
 const (
 	ReportReasonHarassment           ReportReason = "harassment"
@@ -989,6 +1058,27 @@ func (e ReportReason) Valid() bool {
 	case ReportReasonScam:
 		return true
 	case ReportReasonSpam:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ReportSubjectType.
+const (
+	ReportSubjectTypeEmojiPack   ReportSubjectType = "emoji_pack"
+	ReportSubjectTypeStickerPack ReportSubjectType = "sticker_pack"
+	ReportSubjectTypeUser        ReportSubjectType = "user"
+)
+
+// Valid indicates whether the value is a known member of the ReportSubjectType enum.
+func (e ReportSubjectType) Valid() bool {
+	switch e {
+	case ReportSubjectTypeEmojiPack:
+		return true
+	case ReportSubjectTypeStickerPack:
+		return true
+	case ReportSubjectTypeUser:
 		return true
 	default:
 		return false
@@ -1413,9 +1503,20 @@ type AccountRestriction string
 type AccountStatus struct {
 	CanAppeal bool `json:"can_appeal"`
 
+	// DecidedBy Who set the current status: `automatic` (reports, decay, appeal) or `staff` (reviewed by a person on the
+	// moderation team). Missing means `automatic`. Unknown values must be treated like `automatic`.
+	DecidedBy *AccountStatusDecidedBy `json:"decided_by,omitempty"`
+
 	// ProbationUntil End of the running probation after an appeal; `null` when none runs.
-	ProbationUntil *Timestamp           `json:"probation_until"`
-	Restrictions   []AccountRestriction `json:"restrictions"`
+	ProbationUntil *Timestamp `json:"probation_until"`
+
+	// ReasonCode The guideline rule a person on the moderation team named; `null` for automatic statuses.
+	ReasonCode *ModerationReason `json:"reason_code,omitempty"`
+
+	// ReasonText The explanation written for the user by the moderation team; `null` for automatic statuses. Show it as
+	// written by "Messenger moderation", never by a person's name.
+	ReasonText   *string              `json:"reason_text,omitempty"`
+	Restrictions []AccountRestriction `json:"restrictions"`
 
 	// Since When the account reached this status; `null` when it never changed.
 	Since *Timestamp `json:"since"`
@@ -1426,6 +1527,10 @@ type AccountStatus struct {
 	// Unknown values must be treated like `restricted`.
 	Status AccountStatusLevel `json:"status"`
 }
+
+// AccountStatusDecidedBy Who set the current status: `automatic` (reports, decay, appeal) or `staff` (reviewed by a person on the
+// moderation team). Missing means `automatic`. Unknown values must be treated like `automatic`.
+type AccountStatusDecidedBy string
 
 // AccountStatusLevel `good` no restrictions, `warned` no restrictions yet, `limited` no new contact with non-contacts and at most 5
 // new direct chats a day, `restricted` also no groups, uploads, forwarded files, profile changes or sticker
@@ -2492,6 +2597,9 @@ type Meta struct {
 	MinClientApiVersion string `json:"min_client_api_version"`
 }
 
+// ModerationReason The guideline rule behind a moderation decision. Unknown values must be shown as `other`.
+type ModerationReason string
+
 // NotificationActivity defines model for NotificationActivity.
 type NotificationActivity struct {
 	Active   bool               `json:"active"`
@@ -2947,6 +3055,36 @@ type ReplyPreview struct {
 	Type      MessageType `json:"type"`
 }
 
+// ReportOutcome defines model for ReportOutcome.
+type ReportOutcome struct {
+	CreatedAt Timestamp `json:"created_at"`
+
+	// Id Decimal ID as a string (Snowflake IDs exceed 2^53).
+	//
+	// Examples: 7217400317439950848
+	Id Id `json:"id"`
+
+	// Outcome `action_taken` the moderation team acted on the report, `no_violation` it found no violation. Unknown values
+	// must be shown as a generic "your report was reviewed".
+	Outcome ReportOutcomeKind `json:"outcome"`
+	Read    bool              `json:"read"`
+
+	// SubjectId The reported user, sticker pack or emoji pack.
+	SubjectId Id `json:"subject_id"`
+
+	// SubjectType What was reported. Unknown values must be shown without the subject.
+	SubjectType ReportSubjectType `json:"subject_type"`
+}
+
+// ReportOutcomeKind `action_taken` the moderation team acted on the report, `no_violation` it found no violation. Unknown values
+// must be shown as a generic "your report was reviewed".
+type ReportOutcomeKind string
+
+// ReportOutcomeList defines model for ReportOutcomeList.
+type ReportOutcomeList struct {
+	Items []ReportOutcome `json:"items"`
+}
+
 // ReportReason defines model for ReportReason.
 type ReportReason string
 
@@ -2954,6 +3092,9 @@ type ReportReason string
 type ReportStickerPackRequest struct {
 	Reason StickerPackReportReason `json:"reason"`
 }
+
+// ReportSubjectType What was reported. Unknown values must be shown without the subject.
+type ReportSubjectType string
 
 // ReportUserRequest defines model for ReportUserRequest.
 type ReportUserRequest struct {
@@ -3602,6 +3743,11 @@ type MessageId = Id
 
 // QrLoginRequestId defines model for QrLoginRequestId.
 type QrLoginRequestId = string
+
+// ReportOutcomeId Decimal ID as a string (Snowflake IDs exceed 2^53).
+//
+// Examples: 7217400317439950848
+type ReportOutcomeId = Id
 
 // RequestId Decimal ID as a string (Snowflake IDs exceed 2^53).
 //
@@ -4928,6 +5074,24 @@ type ReplaceRecoveryKeyParams struct {
 
 // GetRecoveryOverviewParams defines parameters for GetRecoveryOverview.
 type GetRecoveryOverviewParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// ListReportOutcomesParams defines parameters for ListReportOutcomes.
+type ListReportOutcomesParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// MarkReportOutcomeReadParams defines parameters for MarkReportOutcomeRead.
+type MarkReportOutcomeReadParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
@@ -6354,6 +6518,12 @@ type ServerInterface interface {
 	// GetRecoveryOverview List recovery methods and their current setup status
 	// (GET /me/recovery-status)
 	GetRecoveryOverview(w http.ResponseWriter, r *http.Request, params GetRecoveryOverviewParams)
+	// ListReportOutcomes Outcomes of the current user's reports
+	// (GET /me/report-outcomes)
+	ListReportOutcomes(w http.ResponseWriter, r *http.Request, params ListReportOutcomesParams)
+	// MarkReportOutcomeRead Mark a report outcome as read
+	// (POST /me/report-outcomes/{outcome_id}/read)
+	MarkReportOutcomeRead(w http.ResponseWriter, r *http.Request, outcomeId ReportOutcomeId, params MarkReportOutcomeReadParams)
 	// GetSecuritySettings Security settings
 	// (GET /me/security)
 	GetSecuritySettings(w http.ResponseWriter, r *http.Request, params GetSecuritySettingsParams)
@@ -15558,6 +15728,135 @@ func (siw *ServerInterfaceWrapper) GetRecoveryOverview(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
+// ListReportOutcomes operation middleware
+func (siw *ServerInterfaceWrapper) ListReportOutcomes(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListReportOutcomesParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListReportOutcomes(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// MarkReportOutcomeRead operation middleware
+func (siw *ServerInterfaceWrapper) MarkReportOutcomeRead(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "outcome_id" -------------
+	var outcomeId ReportOutcomeId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "outcome_id", r.PathValue("outcome_id"), &outcomeId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "outcome_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params MarkReportOutcomeReadParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.MarkReportOutcomeRead(w, r, outcomeId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetSecuritySettings operation middleware
 func (siw *ServerInterfaceWrapper) GetSecuritySettings(w http.ResponseWriter, r *http.Request) {
 
@@ -19031,6 +19330,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/users/{user_id}/report", wrapper.ReportUser)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/account-status", wrapper.GetAccountStatus)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/me/account-status/appeal", wrapper.AppealAccountStatus)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/report-outcomes", wrapper.ListReportOutcomes)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/me/report-outcomes/{outcome_id}/read", wrapper.MarkReportOutcomeRead)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/users/{user_id}/avatar", wrapper.GetUserAvatar)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/users/{user_id}/avatars", wrapper.ListUserAvatars)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/users/{user_id}/contact-name", wrapper.RemoveContactName)
@@ -33854,6 +34155,157 @@ func (response GetRecoveryOverview503ApplicationProblemPlusJSONResponse) VisitGe
 	return err
 }
 
+type ListReportOutcomesRequestObject struct {
+	Params ListReportOutcomesParams
+}
+
+type ListReportOutcomesResponseObject interface {
+	VisitListReportOutcomesResponse(w http.ResponseWriter) error
+}
+
+type ListReportOutcomes200JSONResponse ReportOutcomeList
+
+func (response ListReportOutcomes200JSONResponse) VisitListReportOutcomesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListReportOutcomes400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response ListReportOutcomes400ApplicationProblemPlusJSONResponse) VisitListReportOutcomesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListReportOutcomes401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ListReportOutcomes401ApplicationProblemPlusJSONResponse) VisitListReportOutcomesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListReportOutcomes426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response ListReportOutcomes426ApplicationProblemPlusJSONResponse) VisitListReportOutcomesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MarkReportOutcomeReadRequestObject struct {
+	OutcomeId ReportOutcomeId `json:"outcome_id"`
+	Params    MarkReportOutcomeReadParams
+}
+
+type MarkReportOutcomeReadResponseObject interface {
+	VisitMarkReportOutcomeReadResponse(w http.ResponseWriter) error
+}
+
+type MarkReportOutcomeRead204Response struct {
+}
+
+func (response MarkReportOutcomeRead204Response) VisitMarkReportOutcomeReadResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type MarkReportOutcomeRead400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response MarkReportOutcomeRead400ApplicationProblemPlusJSONResponse) VisitMarkReportOutcomeReadResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MarkReportOutcomeRead401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response MarkReportOutcomeRead401ApplicationProblemPlusJSONResponse) VisitMarkReportOutcomeReadResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MarkReportOutcomeRead404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response MarkReportOutcomeRead404ApplicationProblemPlusJSONResponse) VisitMarkReportOutcomeReadResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MarkReportOutcomeRead426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response MarkReportOutcomeRead426ApplicationProblemPlusJSONResponse) VisitMarkReportOutcomeReadResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetSecuritySettingsRequestObject struct {
 	Params GetSecuritySettingsParams
 }
@@ -38928,6 +39380,12 @@ type StrictServerInterface interface {
 	// GetRecoveryOverview List recovery methods and their current setup status
 	// (GET /me/recovery-status)
 	GetRecoveryOverview(ctx context.Context, request GetRecoveryOverviewRequestObject) (GetRecoveryOverviewResponseObject, error)
+	// ListReportOutcomes Outcomes of the current user's reports
+	// (GET /me/report-outcomes)
+	ListReportOutcomes(ctx context.Context, request ListReportOutcomesRequestObject) (ListReportOutcomesResponseObject, error)
+	// MarkReportOutcomeRead Mark a report outcome as read
+	// (POST /me/report-outcomes/{outcome_id}/read)
+	MarkReportOutcomeRead(ctx context.Context, request MarkReportOutcomeReadRequestObject) (MarkReportOutcomeReadResponseObject, error)
 	// GetSecuritySettings Security settings
 	// (GET /me/security)
 	GetSecuritySettings(ctx context.Context, request GetSecuritySettingsRequestObject) (GetSecuritySettingsResponseObject, error)
@@ -43180,6 +43638,59 @@ func (sh *strictHandler) GetRecoveryOverview(w http.ResponseWriter, r *http.Requ
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetRecoveryOverviewResponseObject); ok {
 		if err := validResponse.VisitGetRecoveryOverviewResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListReportOutcomes operation middleware
+func (sh *strictHandler) ListReportOutcomes(w http.ResponseWriter, r *http.Request, params ListReportOutcomesParams) {
+	var request ListReportOutcomesRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListReportOutcomes(ctx, request.(ListReportOutcomesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListReportOutcomes")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListReportOutcomesResponseObject); ok {
+		if err := validResponse.VisitListReportOutcomesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// MarkReportOutcomeRead operation middleware
+func (sh *strictHandler) MarkReportOutcomeRead(w http.ResponseWriter, r *http.Request, outcomeId ReportOutcomeId, params MarkReportOutcomeReadParams) {
+	var request MarkReportOutcomeReadRequestObject
+
+	request.OutcomeId = outcomeId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.MarkReportOutcomeRead(ctx, request.(MarkReportOutcomeReadRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "MarkReportOutcomeRead")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(MarkReportOutcomeReadResponseObject); ok {
+		if err := validResponse.VisitMarkReportOutcomeReadResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

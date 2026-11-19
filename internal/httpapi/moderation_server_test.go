@@ -205,3 +205,61 @@ func TestLimitedChatsLandInRequests(t *testing.T) {
 		t.Fatalf("a contact's chat landed in requests: requests %v, main %v", requests, main)
 	}
 }
+
+func TestStaffDecisionAndReportOutcomes(t *testing.T) {
+	e := newChatEnv(t)
+	ctx := context.Background()
+	alice, bob := e.register(t, "alice"), e.register(t, "bob")
+	bobID := e.uid(t, bob)
+	svc := moderation.New(moderation.Deps{Store: e.store, Cache: e.modCache})
+
+	r := e.do(t, request{method: http.MethodGet, path: "/me/account-status", token: bob.access})
+	if s := r.json(); s["decided_by"] != "automatic" || s["reason_code"] != nil || s["reason_text"] != nil {
+		t.Fatalf("automatic status %v", s)
+	}
+	if r := e.do(t, request{method: http.MethodPost, path: "/users/" + bobID + "/report", token: alice.access, body: map[string]any{"reason": "spam", "block": false}}); r.Code != http.StatusNoContent {
+		t.Fatalf("report: %d %s", r.Code, r.Body)
+	}
+	if _, err := svc.Decide(ctx, moderation.Decision{UserID: mustID(t, bobID), Status: moderation.Restricted, ReasonCode: "scam", ReasonText: "Asked people for money."}); err != nil {
+		t.Fatal(err)
+	}
+	r = e.do(t, request{method: http.MethodGet, path: "/me/account-status", token: bob.access})
+	if s := r.json(); s["status"] != "restricted" || s["decided_by"] != "staff" || s["reason_code"] != "scam" || s["reason_text"] != "Asked people for money." || s["can_appeal"] != false {
+		t.Fatalf("staff status %v", s)
+	}
+
+	list := func(s session) []any {
+		r := e.do(t, request{method: http.MethodGet, path: "/me/report-outcomes", token: s.access})
+		if r.Code != http.StatusOK {
+			t.Fatalf("outcomes: %d %s", r.Code, r.Body)
+		}
+		return r.json()["items"].([]any)
+	}
+	if items := list(bob); len(items) != 0 {
+		t.Fatalf("the reported user sees no outcomes: %v", items)
+	}
+	items := list(alice)
+	if len(items) != 1 {
+		t.Fatalf("reporter outcomes %v", items)
+	}
+	o := items[0].(map[string]any)
+	if o["subject_type"] != "user" || o["subject_id"] != bobID || o["outcome"] != "action_taken" || o["read"] != false {
+		t.Fatalf("outcome %v", o)
+	}
+	id := o["id"].(string)
+	read := func(s session, id string) reply {
+		return e.do(t, request{method: http.MethodPost, path: "/me/report-outcomes/" + id + "/read", token: s.access})
+	}
+	if r := read(bob, id); r.Code != http.StatusNotFound {
+		t.Fatalf("someone else's outcome: %d %s", r.Code, r.Body)
+	}
+	if r := read(alice, "x"); r.Code != http.StatusBadRequest {
+		t.Fatalf("bad id: %d %s", r.Code, r.Body)
+	}
+	if r := read(alice, id); r.Code != http.StatusNoContent {
+		t.Fatalf("read: %d %s", r.Code, r.Body)
+	}
+	if items := list(alice); items[0].(map[string]any)["read"] != true {
+		t.Fatalf("after reading %v", items)
+	}
+}

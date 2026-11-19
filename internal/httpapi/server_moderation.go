@@ -46,3 +46,19 @@ func (s *Server) AppealAccountStatus(w http.ResponseWriter, r *http.Request, par
 	}
 	s.moderation.AppealAccountStatus(w, r, params)
 }
+
+func (s *Server) ListReportOutcomes(w http.ResponseWriter, r *http.Request, params ListReportOutcomesParams) {
+	if s.moderation == nil {
+		s.AuthServer.ListReportOutcomes(w, r, params)
+		return
+	}
+	s.moderation.ListReportOutcomes(w, r, params)
+}
+
+func (s *Server) MarkReportOutcomeRead(w http.ResponseWriter, r *http.Request, outcomeID ReportOutcomeId, params MarkReportOutcomeReadParams) {
+	if s.moderation == nil {
+		s.AuthServer.MarkReportOutcomeRead(w, r, outcomeID, params)
+		return
+	}
+	s.moderation.MarkReportOutcomeRead(w, r, outcomeID, params)
+}

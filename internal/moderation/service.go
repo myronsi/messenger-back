@@ -378,13 +378,22 @@ type View struct {
 	Restrictions   []Action
 	CanAppeal      bool
 	ProbationUntil *time.Time
+	DecidedBy      string
+	ReasonCode     *string
+	ReasonText     *string
 }
 
 func (s *Service) view(st postgres.ModerationState) View {
-	v := View{Status: ParseStatus(st.Status), Restrictions: Restrictions(ParseStatus(st.Status)), CanAppeal: CanAppeal(st, s.d.Now()), ProbationUntil: st.ProbationUntil}
+	v := View{
+		Status: ParseStatus(st.Status), Restrictions: Restrictions(ParseStatus(st.Status)), CanAppeal: CanAppeal(st, s.d.Now()),
+		ProbationUntil: st.ProbationUntil, DecidedBy: postgres.DecidedAutomatic,
+	}
 	if !st.Since.IsZero() {
 		since := st.Since
 		v.Since = &since
+	}
+	if st.DecidedBy == postgres.DecidedStaff {
+		v.DecidedBy, v.ReasonCode, v.ReasonText = postgres.DecidedStaff, st.ReasonCode, st.ReasonText
 	}
 	return v
 }
@@ -425,22 +434,42 @@ func (s *Service) Appeal(ctx context.Context, userID int64) (View, error) {
 }
 
 func (s *Service) Recompute(ctx context.Context, userID int64) error {
-	now := s.d.Now()
-	before, after, err := s.d.Store.Moderation().Transition(ctx, userID, now.Add(-HalfWeightAge), now, func(cur postgres.ModerationState, facts []postgres.ReportFact) postgres.ModerationState {
-		return Next(cur, facts, now)
-	})
+	_, _, err := s.recompute(ctx, userID, "")
 	if errors.Is(err, postgres.ErrNotFound) {
 		return nil
 	}
+	return err
+}
+
+func (s *Service) recompute(ctx context.Context, userID int64, cause string) (before, after postgres.ModerationState, err error) {
+	now := s.d.Now()
+	before, after, err = s.d.Store.Moderation().Transition(ctx, userID, now.Add(-HalfWeightAge), now, func(cur postgres.ModerationState, facts []postgres.ReportFact) postgres.ModerationState {
+		next := Next(cur, facts, now)
+		if cause != "" && next.Status != cur.Status {
+			next.Cause = cause
+		}
+		return next
+	})
 	if err != nil {
-		return err
+		return before, after, err
 	}
 	s.changed(ctx, before, after)
-	return nil
+	return before, after, nil
+}
+
+func sameDecision(a, b postgres.ModerationState) bool {
+	return a.DecidedBy == b.DecidedBy && equalTime(a.DecidedAt, b.DecidedAt) && equalString(a.ReasonCode, b.ReasonCode) && equalString(a.ReasonText, b.ReasonText)
+}
+
+func equalString(a, b *string) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
 }
 
 func (s *Service) changed(ctx context.Context, before, after postgres.ModerationState) {
-	if before.Status == after.Status && equalTime(before.ProbationUntil, after.ProbationUntil) {
+	if before.Status == after.Status && equalTime(before.ProbationUntil, after.ProbationUntil) && sameDecision(before, after) {
 		return
 	}
 	if s.d.Cache != nil {
@@ -452,7 +481,7 @@ func (s *Service) changed(ctx context.Context, before, after postgres.Moderation
 		if s.d.Metrics != nil {
 			s.d.Metrics.ModerationStatusChange(after.Status)
 		}
-		s.d.Log.InfoContext(ctx, "account status changed", "user_id", after.UserID, "from", before.Status, "to", after.Status, "cause", after.Cause)
+		s.d.Log.InfoContext(ctx, "account status changed", "user_id", after.UserID, "from", before.Status, "to", after.Status, "cause", after.Cause, "decided_by", after.DecidedBy)
 	}
 	if s.d.Notifier != nil {
 		v := s.view(after)
@@ -473,10 +502,16 @@ type StatusEvent struct {
 	Restrictions   []Action   `json:"restrictions"`
 	CanAppeal      bool       `json:"can_appeal"`
 	ProbationUntil *time.Time `json:"probation_until"`
+	DecidedBy      string     `json:"decided_by"`
+	ReasonCode     *string    `json:"reason_code"`
+	ReasonText     *string    `json:"reason_text"`
 }
 
 func EventData(v View) StatusEvent {
-	out := StatusEvent{Status: v.Status, Restrictions: v.Restrictions, CanAppeal: v.CanAppeal}
+	out := StatusEvent{Status: v.Status, Restrictions: v.Restrictions, CanAppeal: v.CanAppeal, DecidedBy: v.DecidedBy, ReasonCode: v.ReasonCode, ReasonText: v.ReasonText}
+	if out.DecidedBy == "" {
+		out.DecidedBy = postgres.DecidedAutomatic
+	}
 	if v.Since != nil {
 		t := v.Since.UTC()
 		out.Since = &t
@@ -510,5 +545,9 @@ func (s *Service) Daily(ctx context.Context) (checked int, purged int64, err err
 		}
 	}
 	purged, err = repo.PurgeReports(ctx, s.d.Now().Add(-ReportRetention))
-	return checked, purged, err
+	if err != nil {
+		return checked, purged, err
+	}
+	outcomes, err := repo.PurgeReportOutcomes(ctx, s.d.Now().Add(-OutcomeRetention))
+	return checked, purged + outcomes, err
 }

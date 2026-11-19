@@ -25,9 +25,24 @@ All routes start with `/internal/v1`.
 | Route | Purpose | Added in |
 |---|---|---|
 | `GET /ping` | `{"service":"messenger-api","version":"…"}`; lets the moderation service check the token and the connection | M0 |
+| `POST /users/{user_id}/status` | Set an account status as a person on the moderation team: `{"status", "reason_code", "reason_text", "staff_ref"?}` → `{"before", "after"}` (each like the `account_status` event) | M2 |
+| `POST /users/{user_id}/reports/dismiss` | Dismiss the account's active reports, all of them or `{"reporter_ids": ["…"]}`; the status is recomputed → `{"dismissed", "before", "after"}` | M2 |
+| `POST /packs/{kind}/{pack_id}/hide`, `POST /packs/{kind}/{pack_id}/unhide` | Hide or restore a pack; `kind` is `sticker_pack` or `emoji_pack`; unhiding clears its reports → `{"changed"}` | M2 |
+| `DELETE /users/{user_id}` | Delete an account like `DELETE /me` without the password: every session ends, chats are cleaned up, `user.deleted` is emitted → `{"deleted": true}` | M2 |
+| `GET /pack-images/{attachment_id}` | The image file of a sticker or custom emoji that belongs to a pack (no other files), for the console's pack page; a `302` to a short-lived storage URL when signed URLs are on | M2 |
 
-Later milestones of the moderation plan add the actions here (set an account status with a reason, dismiss
-reports, hide or unhide packs, remove a message, delete an account, send an in-app notice, storage figures).
+Rules and effects of the M2 actions (staff decisions, reporter notices): [moderation.md](moderation.md#staff-decisions).
+IDs are decimal strings in paths and bodies. Errors are JSON `{"error", "field"?, "message"?}`:
+
+| Status | `error` | When |
+|---|---|---|
+| `400` | `invalid_request` | Bad id, bad JSON, an unknown field, or a value the rules refuse (`field` names it: `status`, `reason_code`, `reason_text`, `staff_ref`, `reporter_ids`, `kind`) |
+| `403` | `forbidden` | Hiding a built-in sticker pack |
+| `404` | `not_found` | Unknown or deleted user or pack |
+| `503` | `unavailable` | A database did not answer; retry after `Retry-After` seconds |
+
+Later milestones of the moderation plan add more actions here (remove a message, send an in-app notice,
+storage figures).
 
 ## Read-only database user for the moderation service
 

@@ -1,6 +1,6 @@
 # User reports and automatic account status
 
-Users can report other users. Reports drive an account status that restricts the reported account step by step. Everything is automatic, including the strictest level and appeals; there is no staff role and no human review. Code: `internal/moderation`, store `internal/store/postgres/moderation.go`, migration `000044_user_moderation`.
+Users can report other users. Reports drive an account status that restricts the reported account step by step. The levels and appeals are automatic; the moderation service (repository `messenger-moderation`) lets a person on the moderation team set a status with a reason, dismiss reports and hide packs ([Staff decisions](#staff-decisions)). Code: `internal/moderation`, store `internal/store/postgres/moderation.go`, migrations `000044_user_moderation` and `000046_moderation_decisions`.
 
 ## Reporting
 
@@ -53,7 +53,25 @@ A "contact" here is someone who took part in a chat with the target: `SharedChat
 - Without a new weighted report the status only goes down: to the score's status when decay lowered the score (`decay`), and one level when the last 30 days had neither a weighted report nor a status change (`quiet`).
 - Appeal (`POST /me/account-status/appeal`, once per 30 days, only when `can_appeal`): the status drops one level at once and a 14-day probation starts (`appeal`). Without a new weighted report in those 14 days the lower level stays (`probation_passed`). A new weighted report during probation restores the status (at least one level above the probation level, or what the score calls for) and blocks appeals for 90 days (`probation_failed`). Otherwise `409`.
 
+A staff decision changes these rules for the account ([Staff decisions](#staff-decisions)).
+
 Every change invalidates the cached status, counts `messenger_moderation_status_changes_total{status}` and sends the WebSocket event `account_status` (an `AccountStatus`) to the user's own sessions.
+
+## Staff decisions
+
+The moderation service applies them through the service functions below (exposed on the internal listener, not on the public API). It keeps its own audit log and cases; Messenger keeps the rules, the status history and the live updates.
+
+- `Service.Decide` sets any status with a reason code (`spam`, `scam`, `harassment`, `impersonation`, `inappropriate_profile`, `illegal`, `other`), a text for the user (1 to 1000 characters) and an optional `staff_ref` (up to 64 printable ASCII characters, the moderation service's reference). It writes `decided_by: staff`, `decided_at`, the reason, ends a running probation and adds a status history row with cause `manual`, also when the level stays the same (confirming an automatic level). `since` changes only when the level changes.
+- Only a person lowers or undoes a staff decision: decay, the quiet step, the automatic appeal (`can_appeal: false`) and reports made before the decision never change it. Only new weighted reports, made after the decision and scored on their own, can raise it: when they call for a higher level, the status rises at once (`cause: reports`) and the decision fields are cleared, and a heavy level opens a case in the moderation service for a person to confirm or reverse, like any automatic `restricted` or `suspended` level.
+- `Service.DismissReports` sets `dismissed_at` on the active reports of an account (all, or those of the given reporters). Dismissed reports stop counting and stay dismissed when their reporter reports again. The status is recomputed at once; a lower level is recorded with cause `dismissed`. A staff decision is not lowered by a dismissal.
+- `Service.HidePack` / `UnhidePack` hide or restore a sticker or emoji pack (`hidden_by: staff`; automatic hiding after 5 reports writes `hidden_by: reports`). Unhiding clears the pack's reports. Built-in sticker packs cannot be hidden.
+- `auth.Service.DeleteAccountByStaff` deletes an account like `DELETE /me` without the password and ends every session.
+
+`AccountStatus` carries `decided_by`, `reason_code` and `reason_text`; the app shows a staff decision as "Reviewed by a person" from "Messenger moderation", never with a person's name.
+
+### Report outcomes
+
+Each decision tells the reporters of the subject once per report (`report_outcomes`, kept 90 days, deleted by the daily job): `action_taken` for a decision above `good` and for hiding a pack, `no_violation` for `good`, dismissals and unhiding. A reporter already told about a report is not told again until they report anew. The reporter gets the WebSocket event `report_outcome`, `GET /me/report-outcomes` lists the last 50 and `POST /me/report-outcomes/{outcome_id}/read` marks one as read. The notice never says what action was taken.
 
 ## Enforcement
 
@@ -97,5 +115,8 @@ A rising share of `weight_bucket="zero"` reports points to brigading by new or r
 ## Tables
 
 - `user_reports (reporter_id, target_id, reason, note, context, weight NUMERIC(3,2), snapshot JSONB, created_at, updated_at, withdrawn_at)`, primary key `(reporter_id, target_id)`, indexes `(target_id, created_at)` and `(reporter_id, created_at)`. Both users `ON DELETE CASCADE`.
-- `user_moderation (user_id, status, score, status_since, probation_until, appeal_blocked_until, last_appeal_at)`: one row per user who was ever recomputed or appealed; no row means `good`.
-- `user_moderation_events`: the audit log of status changes.
+- `user_reports.dismissed_at`: set when the moderation team dismissed the report.
+- `user_moderation (user_id, status, score, status_since, probation_until, appeal_blocked_until, last_appeal_at, decided_by, decided_at, reason_code, reason_text)`: one row per user who was ever recomputed, appealed or decided on; no row means `good`.
+- `user_moderation_events`: the history of status changes, with `reason_code`, `reason_text` and `staff_ref` for manual decisions. The moderation service reads it to open cases for automatic `restricted` and `suspended` levels.
+- `sticker_packs.hidden_by`, `emoji_packs.hidden_by`: `reports` or `staff` while the pack is hidden.
+- `report_outcomes (id, reporter_id, subject_type, subject_id, outcome, created_at, read_at)`.
