@@ -11,6 +11,7 @@ The Go backend is the sole supported backend. The Python implementation and its 
 | `internal/app` | process plumbing shared by the commands: config, logger, tracing, signals, HTTP server lifecycle |
 | `internal/config` | environment configuration, validated on startup |
 | `internal/observability` | JSON `slog` logger with redaction, Prometheus metrics, optional OpenTelemetry tracing |
+| `internal/internalapi` | the internal listener for operator services such as the moderation service ([internal-api.md](internal-api.md)) |
 | `internal/httpapi` | router, middleware, health checks, generated server (`api.gen.go`) |
 | `internal/realtime` | the WebSocket gateway ([realtime.md](realtime.md)): connections, delivery between instances, presence |
 | `internal/messages` | message use cases with their authorization checks |

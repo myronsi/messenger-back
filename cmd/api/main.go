@@ -272,10 +272,14 @@ func run() error {
 	srv := app.NewServer(cfg.HTTP.Addr, router, cfg.HTTP)
 	srv.ErrorLog = slog.NewLogLogger(log.Handler(), slog.LevelWarn)
 
+	internalSrv := startInternal(log, cfg)
+
 	log.Info("api listening", "addr", cfg.HTTP.Addr, "env", cfg.Env)
 	if err := p.Serve(srv); err != nil {
+		stopInternal(log, cfg.HTTP, internalSrv)
 		return err
 	}
+	stopInternal(log, cfg.HTTP, internalSrv)
 	if err := shutdown(log, cfg.HTTP, srv, router.Drain, rt, callsSvc); err != nil {
 		return err
 	}

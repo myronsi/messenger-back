@@ -72,6 +72,7 @@ type Config struct {
 	RecoveryMail  RecoveryMail
 	Calls         Calls
 	Connections   Connections
+	Internal      Internal
 	GeoIPDBPath   string `env:"GEOIP_DB_PATH"`
 
 	// WorkerAddr is where the worker serves /healthz and /metrics.
@@ -158,6 +159,11 @@ type Scylla struct {
 	Consistency string `env:"SCYLLA_CONSISTENCY" envDefault:"local_quorum"`
 	// Timeout bounds every repository call (a page that reads several partitions counts as one).
 	Timeout time.Duration `env:"SCYLLA_TIMEOUT" envDefault:"5s"`
+}
+
+type Internal struct {
+	Addr  string `env:"INTERNAL_ADDR"`
+	Token Secret `env:"INTERNAL_TOKEN"`
 }
 
 // HTTP configures the API server.
@@ -336,6 +342,9 @@ func (c Config) Validate() error {
 	}
 	checkSecret("JWT_SECRET", c.JWTSecret)
 	checkSecret("RECOVERY_PEPPER", c.RecoveryPepper)
+	if c.Internal.Addr != "" {
+		checkSecret("INTERNAL_TOKEN", c.Internal.Token)
+	}
 	if key, err := base64.StdEncoding.DecodeString(c.EncryptionKey.Reveal()); err != nil || len(key) != 32 {
 		add("ENCRYPTION_KEY must be 32 random bytes, base64 encoded (openssl rand -base64 32)")
 	}
