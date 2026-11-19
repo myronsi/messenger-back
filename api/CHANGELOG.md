@@ -2,6 +2,13 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.38
+
+- Review by a person: `POST /me/account-status/review` (`AccountReviewRequest`: `text`, 1 to 500 characters) stores a
+  request for the moderation team while the status is not `good`; one open request at a time (`409`), at most 3 in
+  30 days (`429`). `AccountStatus` gains `review_requested_at` and `can_request_review`, also in the
+  WebSocket event `account_status`.
+
 ## 2.1.0-alpha.37
 
 - `AccountStatus` gains the optional `decided_by` (`AccountStatusDecidedBy`: `automatic`, `staff`), `reason_code`

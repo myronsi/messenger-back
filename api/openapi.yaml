@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.37
+  version: 2.1.0-alpha.38
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -1216,6 +1216,37 @@ paths:
           description: Marked as read
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+  /me/account-status/review:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    post:
+      tags: [me]
+      operationId: requestAccountReview
+      summary: Ask for a review of the account status by a person
+      description: |
+        Stores the request with the user's text and the current status for the moderation team, who review the
+        account and decide; the decision arrives as an account status with `decided_by: staff` and the reason. Allowed while the
+        status is not `good` and no request is open (`can_request_review`), otherwise `409`; at most 3 requests in
+        30 days, otherwise `429`. A request closes when a person decides or when the status returns to `good`. The
+        answer and the WebSocket event `account_status` carry `review_requested_at`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AccountReviewRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: The account status with the open request
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AccountStatus" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
   /users/{user_id}/avatar:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
@@ -6193,7 +6224,7 @@ components:
       enum: [start_direct, invite_to_group, call, create_group, upload, forward, edit_profile, publish_pack, search, send, manage_group]
     AccountStatus:
       type: object
-      required: [status, since, restrictions, can_appeal, probation_until]
+      required: [status, since, restrictions, can_appeal, probation_until, review_requested_at, can_request_review]
       properties:
         status: { $ref: "#/components/schemas/AccountStatusLevel" }
         since:
@@ -6223,6 +6254,25 @@ components:
           description: |
             The explanation written for the user by the moderation team; `null` for automatic statuses. Show it as
             written by "Messenger moderation", never by a person's name.
+        review_requested_at:
+          description: |
+            When the open request for a review by a person (`POST /me/account-status/review`) was made; `null` when
+            none is open.
+          oneOf:
+            - $ref: "#/components/schemas/Timestamp"
+            - type: "null"
+        can_request_review:
+          type: boolean
+          description: Whether `POST /me/account-status/review` is allowed now.
+    AccountReviewRequest:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: What the user wants the reviewer to know. Trimmed; must not be empty.
     AccountStatusDecidedBy:
       type: string
       description: |

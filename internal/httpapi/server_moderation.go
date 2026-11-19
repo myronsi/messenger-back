@@ -62,3 +62,11 @@ func (s *Server) MarkReportOutcomeRead(w http.ResponseWriter, r *http.Request, o
 	}
 	s.moderation.MarkReportOutcomeRead(w, r, outcomeID, params)
 }
+
+func (s *Server) RequestAccountReview(w http.ResponseWriter, r *http.Request, params RequestAccountReviewParams) {
+	if s.moderation == nil {
+		s.AuthServer.RequestAccountReview(w, r, params)
+		return
+	}
+	s.moderation.RequestAccountReview(w, r, params)
+}

@@ -263,3 +263,35 @@ func TestStaffDecisionAndReportOutcomes(t *testing.T) {
 		t.Fatalf("after reading %v", items)
 	}
 }
+
+func TestRequestAccountReview(t *testing.T) {
+	e := newChatEnv(t)
+	alice := e.register(t, "alice")
+	review := func(body any) reply {
+		return e.do(t, request{method: http.MethodPost, path: "/me/account-status/review", token: alice.access, body: body})
+	}
+	if r := review(map[string]any{"text": "please"}); r.Code != http.StatusConflict {
+		t.Fatalf("review of a good account: %d %s", r.Code, r.Body)
+	}
+	e.setStatus(t, e.uid(t, alice), moderation.Restricted)
+	s := e.do(t, request{method: http.MethodGet, path: "/me/account-status", token: alice.access}).json()
+	if s["can_request_review"] != true || s["review_requested_at"] != nil {
+		t.Fatalf("status before the request %v", s)
+	}
+	if r := review(map[string]any{"text": "   "}); r.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("blank text: %d %s", r.Code, r.Body)
+	}
+	if r := review(map[string]any{}); r.Code != http.StatusBadRequest && r.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("missing text: %d %s", r.Code, r.Body)
+	}
+	r := review(map[string]any{"text": "I did not spam anyone."})
+	if r.Code != http.StatusOK || r.json()["review_requested_at"] == nil || r.json()["can_request_review"] != false || r.json()["status"] != "restricted" {
+		t.Fatalf("review: %d %s", r.Code, r.Body)
+	}
+	if r := review(map[string]any{"text": "again"}); r.Code != http.StatusConflict {
+		t.Fatalf("second request: %d %s", r.Code, r.Body)
+	}
+	if r := e.do(t, request{method: http.MethodPost, path: "/me/account-status/review", body: map[string]any{"text": "x"}}); r.Code != http.StatusUnauthorized {
+		t.Fatalf("without a token: %d %s", r.Code, r.Body)
+	}
+}

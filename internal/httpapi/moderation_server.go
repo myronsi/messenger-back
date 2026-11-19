@@ -24,6 +24,7 @@ type ModerationService interface {
 	Appeal(ctx context.Context, userID int64) (moderation.View, error)
 	ReportOutcomes(ctx context.Context, reporterID int64) ([]moderation.Outcome, error)
 	MarkOutcomeRead(ctx context.Context, reporterID, id int64) error
+	RequestReview(ctx context.Context, userID int64, text string) (moderation.View, error)
 }
 
 type ModerationOptions struct {
@@ -97,7 +98,7 @@ func (s *ModerationServer) fail(w http.ResponseWriter, r *http.Request, what str
 	case errors.Is(err, moderation.ErrRateLimited):
 		w.Header().Set("Retry-After", "3600")
 		WriteProblem(w, http.StatusTooManyRequests, ErrorCodeRateLimited)
-	case errors.Is(err, moderation.ErrAppealTooEarly):
+	case errors.Is(err, moderation.ErrAppealTooEarly), errors.Is(err, moderation.ErrReviewNotAllowed):
 		WriteProblem(w, http.StatusConflict, ErrorCodeConflict)
 	case errors.Is(err, moderation.ErrUnavailable):
 		s.o.Log.WarnContext(r.Context(), what, "error", err)
@@ -111,7 +112,7 @@ func (s *ModerationServer) fail(w http.ResponseWriter, r *http.Request, what str
 
 func PresentAccountStatus(v moderation.View) AccountStatus {
 	out := AccountStatus{
-		Status: AccountStatusLevel(v.Status), CanAppeal: v.CanAppeal,
+		Status: AccountStatusLevel(v.Status), CanAppeal: v.CanAppeal, CanRequestReview: v.CanRequestReview,
 		Restrictions: make([]AccountRestriction, 0, len(v.Restrictions)),
 	}
 	for _, a := range v.Restrictions {
@@ -135,6 +136,10 @@ func PresentAccountStatus(v moderation.View) AccountStatus {
 		}
 	}
 	out.DecidedBy = &decided
+	if v.ReviewRequestedAt != nil {
+		t := utc(*v.ReviewRequestedAt)
+		out.ReviewRequestedAt = &t
+	}
 	return out
 }
 
@@ -239,4 +244,21 @@ func (s *ModerationServer) MarkReportOutcomeRead(w http.ResponseWriter, r *http.
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *ModerationServer) RequestAccountReview(w http.ResponseWriter, r *http.Request, _ RequestAccountReviewParams) {
+	p, ok := principalOr401(w, r)
+	if !ok {
+		return
+	}
+	var body AccountReviewRequest
+	if !decode(w, r, &body) {
+		return
+	}
+	v, err := s.o.Service.RequestReview(r.Context(), p.UserID, body.Text)
+	if err != nil {
+		s.fail(w, r, "request account review", err)
+		return
+	}
+	writeJSONStatus(w, http.StatusOK, PresentAccountStatus(v))
 }

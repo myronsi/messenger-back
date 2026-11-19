@@ -61,6 +61,7 @@ type Store interface {
 	Moderation() postgres.ModerationRepository
 	Users() postgres.UserRepository
 	Social() postgres.SocialRepository
+	ReviewRequests() postgres.ReviewRequestRepository
 }
 
 type Cache interface {
@@ -241,19 +242,21 @@ func (s *Service) Labels(ctx context.Context, userIDs []int64) (map[int64]bool, 
 	return out, nil
 }
 
-func cleanNote(note *string) (*string, error) {
-	if note == nil {
+func cleanNote(note *string) (*string, error) { return cleanText("note", note, MaxNote) }
+
+func cleanText(field string, value *string, maxRunes int) (*string, error) {
+	if value == nil {
 		return nil, nil
 	}
-	t := strings.TrimSpace(*note)
+	t := strings.TrimSpace(*value)
 	if t == "" {
 		return nil, nil
 	}
-	if utf8.RuneCountInString(t) > MaxNote {
-		return nil, &FieldError{Field: "note", Message: "at most 500 characters"}
+	if utf8.RuneCountInString(t) > maxRunes {
+		return nil, &FieldError{Field: field, Message: fmt.Sprintf("at most %d characters", maxRunes)}
 	}
 	if strings.IndexFunc(t, func(r rune) bool { return unicode.IsControl(r) && r != '\n' }) >= 0 {
-		return nil, &FieldError{Field: "note", Message: "no control characters"}
+		return nil, &FieldError{Field: field, Message: "no control characters"}
 	}
 	return &t, nil
 }
@@ -373,19 +376,22 @@ func (s *Service) emit(ctx context.Context, target, reporter int64) {
 }
 
 type View struct {
-	Status         Status
-	Since          *time.Time
-	Restrictions   []Action
-	CanAppeal      bool
-	ProbationUntil *time.Time
-	DecidedBy      string
-	ReasonCode     *string
-	ReasonText     *string
+	UserID            int64
+	Status            Status
+	Since             *time.Time
+	Restrictions      []Action
+	CanAppeal         bool
+	ProbationUntil    *time.Time
+	DecidedBy         string
+	ReasonCode        *string
+	ReasonText        *string
+	ReviewRequestedAt *time.Time
+	CanRequestReview  bool
 }
 
 func (s *Service) view(st postgres.ModerationState) View {
 	v := View{
-		Status: ParseStatus(st.Status), Restrictions: Restrictions(ParseStatus(st.Status)), CanAppeal: CanAppeal(st, s.d.Now()),
+		UserID: st.UserID, Status: ParseStatus(st.Status), Restrictions: Restrictions(ParseStatus(st.Status)), CanAppeal: CanAppeal(st, s.d.Now()),
 		ProbationUntil: st.ProbationUntil, DecidedBy: postgres.DecidedAutomatic,
 	}
 	if !st.Since.IsZero() {
@@ -403,7 +409,7 @@ func (s *Service) AccountStatus(ctx context.Context, userID int64) (View, error)
 	if err != nil {
 		return View{}, unavailable(err)
 	}
-	return s.view(st), nil
+	return s.withReview(ctx, s.view(st))
 }
 
 func (s *Service) Appeal(ctx context.Context, userID int64) (View, error) {
@@ -430,7 +436,7 @@ func (s *Service) Appeal(ctx context.Context, userID int64) (View, error) {
 		return View{}, ErrAppealTooEarly
 	}
 	s.changed(ctx, before, after)
-	return s.view(after), nil
+	return s.withReview(ctx, s.view(after))
 }
 
 func (s *Service) Recompute(ctx context.Context, userID int64) error {
@@ -483,8 +489,12 @@ func (s *Service) changed(ctx context.Context, before, after postgres.Moderation
 		}
 		s.d.Log.InfoContext(ctx, "account status changed", "user_id", after.UserID, "from", before.Status, "to", after.Status, "cause", after.Cause, "decided_by", after.DecidedBy)
 	}
+	s.closeReviewIfGood(ctx, before, after)
 	if s.d.Notifier != nil {
-		v := s.view(after)
+		v, err := s.withReview(ctx, s.view(after))
+		if err != nil {
+			s.d.Log.WarnContext(ctx, "read account review request", "user_id", after.UserID, "error", err)
+		}
 		s.d.Notifier.NotifyUser(ctx, after.UserID, "account_status", EventData(v))
 	}
 }
@@ -497,18 +507,27 @@ func equalTime(a, b *time.Time) bool {
 }
 
 type StatusEvent struct {
-	Status         Status     `json:"status"`
-	Since          *time.Time `json:"since"`
-	Restrictions   []Action   `json:"restrictions"`
-	CanAppeal      bool       `json:"can_appeal"`
-	ProbationUntil *time.Time `json:"probation_until"`
-	DecidedBy      string     `json:"decided_by"`
-	ReasonCode     *string    `json:"reason_code"`
-	ReasonText     *string    `json:"reason_text"`
+	Status            Status     `json:"status"`
+	Since             *time.Time `json:"since"`
+	Restrictions      []Action   `json:"restrictions"`
+	CanAppeal         bool       `json:"can_appeal"`
+	ProbationUntil    *time.Time `json:"probation_until"`
+	DecidedBy         string     `json:"decided_by"`
+	ReasonCode        *string    `json:"reason_code"`
+	ReasonText        *string    `json:"reason_text"`
+	ReviewRequestedAt *time.Time `json:"review_requested_at"`
+	CanRequestReview  bool       `json:"can_request_review"`
 }
 
 func EventData(v View) StatusEvent {
-	out := StatusEvent{Status: v.Status, Restrictions: v.Restrictions, CanAppeal: v.CanAppeal, DecidedBy: v.DecidedBy, ReasonCode: v.ReasonCode, ReasonText: v.ReasonText}
+	out := StatusEvent{
+		Status: v.Status, Restrictions: v.Restrictions, CanAppeal: v.CanAppeal, DecidedBy: v.DecidedBy, ReasonCode: v.ReasonCode, ReasonText: v.ReasonText,
+		CanRequestReview: v.CanRequestReview,
+	}
+	if v.ReviewRequestedAt != nil {
+		t := v.ReviewRequestedAt.UTC()
+		out.ReviewRequestedAt = &t
+	}
 	if out.DecidedBy == "" {
 		out.DecidedBy = postgres.DecidedAutomatic
 	}

@@ -73,6 +73,16 @@ The moderation service applies them through the service functions below (exposed
 
 Each decision tells the reporters of the subject once per report (`report_outcomes`, kept 90 days, deleted by the daily job): `action_taken` for a decision above `good` and for hiding a pack, `no_violation` for `good`, dismissals and unhiding. A reporter already told about a report is not told again until they report anew. The reporter gets the WebSocket event `report_outcome`, `GET /me/report-outcomes` lists the last 50 and `POST /me/report-outcomes/{outcome_id}/read` marks one as read. The notice never says what action was taken.
 
+## Review by a person
+
+`POST /me/account-status/review` `{text}` → `200` `AccountStatus`: the user asks the moderation team to look at their account (GDPR Art. 22, DSA Art. 20). The back end only stores the request; the moderation service (`messenger-moderation`) reads `account_review_requests` with its read-only database user, opens a case for it and sends the decision back through the internal endpoints.
+
+- Allowed while the status is not `good` and no request of the user is open, otherwise `409`. The partial unique index `account_review_requests_open_key` keeps it at one open request even under concurrent calls.
+- At most 3 requests in 30 days, closed ones included (`429`).
+- `text` is required: trimmed, 1 to 500 characters, no control characters except line breaks (`422`). The row also keeps the status at the time of the request.
+- `AccountStatus.review_requested_at` is the time of the open request (`null` when none), `can_request_review` tells clients whether the button works now. Both are also in the WebSocket event `account_status`, which goes to the user's own sessions after a request too.
+- A request closes (`closed_at`, `close_reason`) when a person decides (`decided`, set by `Service.Decide`, which the moderation service calls through `POST /internal/v1/users/{user_id}/status`) or when the status returns to `good` on its own (`status_good`, after a decay, the quiet step down or an appeal). Appeals and review requests are independent: a user may do both.
+
 ## Enforcement
 
 `moderation.Service.Allow(ctx, actor, action, target)` is the single check. It returns `*moderation.ErrRestricted{Action}`, which the HTTP layer answers with `403` `account_restricted` and `restriction`, and the WebSocket with an `error` event carrying the same fields.
@@ -120,3 +130,4 @@ A rising share of `weight_bucket="zero"` reports points to brigading by new or r
 - `user_moderation_events`: the history of status changes, with `reason_code`, `reason_text` and `staff_ref` for manual decisions. The moderation service reads it to open cases for automatic `restricted` and `suspended` levels.
 - `sticker_packs.hidden_by`, `emoji_packs.hidden_by`: `reports` or `staff` while the pack is hidden.
 - `report_outcomes (id, reporter_id, subject_type, subject_id, outcome, created_at, read_at)`.
+- `account_review_requests (id, user_id, status, text, created_at, closed_at, close_reason)`: requests for a review by a person; at most one open per user. Migration `000047_account_review_requests`.

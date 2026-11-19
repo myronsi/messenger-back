@@ -146,6 +146,9 @@ func (s *Service) Decide(ctx context.Context, d Decision) (DecisionResult, error
 	if err != nil {
 		return DecisionResult{}, unavailable(err)
 	}
+	if _, err := s.d.Store.ReviewRequests().Close(ctx, d.UserID, postgres.ReviewClosedDecided, now); err != nil {
+		s.d.Log.WarnContext(ctx, "close account review request", "user_id", d.UserID, "error", err)
+	}
 	s.changed(ctx, before, after)
 	outcome := postgres.OutcomeActionTaken
 	if d.Status == Good {
