@@ -167,6 +167,21 @@ type ChatLink struct {
 	CreatedAt time.Time
 }
 
+type ContentReport struct {
+	ID          int64
+	ReporterID  *int64
+	Kind        string
+	ChatID      int64
+	MessageID   int64
+	TargetID    *int64
+	Reason      string
+	Note        *string
+	Content     []byte
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	WithdrawnAt *time.Time
+}
+
 type CustomEmoji struct {
 	ID           int64
 	PackID       int64

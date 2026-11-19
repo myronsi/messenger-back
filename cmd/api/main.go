@@ -21,6 +21,7 @@ import (
 	"github.com/myronsi/messenger-back/internal/calls"
 	"github.com/myronsi/messenger-back/internal/chats"
 	"github.com/myronsi/messenger-back/internal/config"
+	"github.com/myronsi/messenger-back/internal/contentreports"
 	"github.com/myronsi/messenger-back/internal/emoji"
 	"github.com/myronsi/messenger-back/internal/events"
 	"github.com/myronsi/messenger-back/internal/geoip"
@@ -237,6 +238,7 @@ func run() error {
 			PeersChanged: chatSvc.PeerPrivacyChanged,
 		})).WithModeration(httpapi.NewModerationServer(httpapi.ModerationOptions{
 			Service: modSvc, Log: log,
+			Content: contentreports.New(contentreports.Deps{Store: pg, Messages: rt.messages, Metrics: p.Metrics, Log: log}),
 		})).WithChats(httpapi.NewChatServer(httpapi.ChatOptions{
 			Service: chatSvc,
 			Limiter: rt.limiter, BasePath: cfg.HTTP.BasePath, Log: log,
@@ -275,7 +277,8 @@ func run() error {
 
 	internalSrv := startInternal(log, cfg, internalapi.Options{
 		Moderation: modSvc, Accounts: authSvc, AfterDeletion: rt.accountDeleted(storage, callsSvc, log), Events: rt.events, PackImages: mediaSvc,
-		Usage: pg,
+		Usage:    pg,
+		Messages: rt.messages,
 	})
 
 	log.Info("api listening", "addr", cfg.HTTP.Addr, "env", cfg.Env)

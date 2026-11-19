@@ -612,3 +612,16 @@ func TestAllowFailsClosed(t *testing.T) {
 		t.Fatalf("with a cached status: %v", err)
 	}
 }
+
+func TestDailyAlsoPurgesContentCopies(t *testing.T) {
+	e := newEnv(t)
+	calls := 0
+	svc := moderation.New(moderation.Deps{Store: e.pg, Now: e.clock.Now, Purge: func(context.Context) (int64, error) {
+		calls++
+		return 2, nil
+	}})
+	_, purged, err := svc.Daily(context.Background())
+	if err != nil || purged != 2 || calls != 1 {
+		t.Fatalf("purged %d in %d calls: %v", purged, calls, err)
+	}
+}

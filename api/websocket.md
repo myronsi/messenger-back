@@ -66,7 +66,7 @@ The sender also receives the broadcast `message` event with the stored message (
 | --- | --- |
 | `hello` | First event: `api_version`, `min_client_api_version`, `user_id` |
 | `ack`, `error` | Result of a client event, references `client_temp_id` |
-| `message`, `edit`, `delete` | Message created, edited or deleted |
+| `message`, `edit`, `delete` | Message created, edited or deleted; `delete` with `removed_by_moderation` when moderation removed it (the sender's copy also carries `moderation_reason`) |
 | `reaction_add`, `reaction_remove` | Reactions changed |
 | `read` | A user read up to `message_id` |
 | `typing` | A user is typing, recording a voice message, choosing a sticker or sending a photo, video or file (`action`); hide it after 6 s without a repeat |

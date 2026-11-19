@@ -9,8 +9,8 @@ UPDATE user_reports SET withdrawn_at = @now::timestamptz, updated_at = @now::tim
 WHERE reporter_id = @reporter_id AND target_id = @target_id AND withdrawn_at IS NULL;
 
 -- name: CountUserReportsByReporterSince :one
-SELECT count(*) FROM user_reports
-WHERE reporter_id = @reporter_id AND target_id <> @except_target AND updated_at >= @since;
+SELECT ((SELECT count(*) FROM user_reports u WHERE u.reporter_id = @reporter_id AND u.target_id <> @except_target AND u.updated_at >= @since)
+     + (SELECT count(*) FROM content_reports c WHERE c.reporter_id = @reporter_id AND c.updated_at >= @since))::bigint AS total;
 
 -- name: CountReportedUsersSince :one
 SELECT count(*) FROM user_reports

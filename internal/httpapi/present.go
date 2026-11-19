@@ -179,6 +179,11 @@ type MessageParts struct {
 	Drawings     map[uuid.UUID][]byte
 	Sticker      *postgres.Sticker
 	ForwardLink  bool
+	Viewer       int64
+}
+
+func PresentModerationReason(r scylla.ModerationRemoval) ModerationRemovalReason {
+	return ModerationRemovalReason{Code: ModerationReason(r.Code), Text: r.Text}
 }
 
 func PresentSticker(s postgres.Sticker, basePath string) Sticker {
@@ -242,6 +247,10 @@ const replyExcerpt = 100
 func PresentReplyPreview(o ReplyOrigin, basePath string) ReplyPreview {
 	m := o.Message
 	out := ReplyPreview{Id: FormatID(m.ID), Type: MessageType(m.Type), IsDeleted: m.Deleted}
+	if m.Moderation != nil {
+		removed := true
+		out.RemovedByModeration = &removed
+	}
 	if o.Sender != nil {
 		u := PresentUser(*o.Sender)
 		out.Sender = &u
@@ -270,6 +279,14 @@ func PresentMessage(m scylla.Message, p MessageParts) Message {
 	}
 	if out.ReadBy == nil {
 		out.ReadBy = []ReadReceipt{}
+	}
+	if m.Moderation != nil {
+		removed := true
+		out.RemovedByModeration = &removed
+		if m.SenderID != nil && p.Viewer != 0 && *m.SenderID == p.Viewer {
+			reason := PresentModerationReason(*m.Moderation)
+			out.ModerationReason = &reason
+		}
 	}
 	if p.Sender != nil {
 		u := PresentUser(*p.Sender)

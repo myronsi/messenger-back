@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.38
+  version: 2.1.0-alpha.39
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -2194,6 +2194,50 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
+  /chats/{chat_id}/messages/{message_id}/report:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ChatId"
+      - $ref: "#/components/parameters/MessageId"
+    post:
+      tags: [messages]
+      operationId: reportMessage
+      summary: Report a message
+      description: |
+        Sends the message to moderation. The report keeps a copy of the message and of up to 5 messages before and
+        after it that the reporter can see (sender, time, text and file names); moderators see only this copy, and it
+        is deleted after 6 months. One active report per reporter and message; reporting again changes the reason
+        and the note but keeps the first copy. `illegal` is a notice of illegal content and needs a `note` that
+        explains why (`422` without it). A message the caller cannot see, a deleted message or a chat they are not in
+        is `404`; their own messages and system messages are `422`. Reports of users, messages and groups share the
+        limit of 20 a day (`429`). Reporting a message does not block anyone and does not change the sender's
+        account status.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ContentReportRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Reported
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+    delete:
+      tags: [messages]
+      operationId: unreportMessage
+      summary: Withdraw a message report
+      description: Withdraws the current user's report on the message. Withdrawing a report that does not exist is fine.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Withdrawn
+        "401": { $ref: "#/components/responses/Unauthorized" }
   /chats/{chat_id}/messages/forward:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
@@ -2687,6 +2731,46 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
+  /groups/{chat_id}/report:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ChatId"
+    post:
+      tags: [groups]
+      operationId: reportGroup
+      summary: Report a group
+      description: |
+        Sends the group to moderation for its name, description or picture. The report keeps a copy of them; it is
+        deleted after 6 months. Only members can report a group (`404` otherwise, also for direct chats). One active
+        report per reporter and group; reporting again changes the reason and the note but keeps the first copy.
+        `illegal` needs a `note` (`422` without it). Shares the limit of 20 reports a day with user and message
+        reports (`429`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ContentReportRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Reported
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+    delete:
+      tags: [groups]
+      operationId: unreportGroup
+      summary: Withdraw a group report
+      description: Withdraws the current user's report on the group. Withdrawing a report that does not exist is fine.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Withdrawn
+        "401": { $ref: "#/components/responses/Unauthorized" }
   /groups/{chat_id}/role-log:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
@@ -6210,6 +6294,34 @@ components:
           default: true
           description: Also block the user.
       additionalProperties: false
+    ContentReportReason:
+      type: string
+      description: The reasons of `ReportReason` plus `illegal`, a notice of illegal content.
+      enum: [spam, scam, harassment, impersonation, inappropriate_profile, illegal, other]
+    ContentReportRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { $ref: "#/components/schemas/ContentReportReason" }
+        note:
+          type: [string, "null"]
+          maxLength: 1000
+          description: |
+            Details for moderation, never shown to the sender or the group. Required for `illegal`: why the content is
+            illegal, for example which law it breaks.
+      additionalProperties: false
+    ModerationRemovalReason:
+      type: object
+      description: Why moderation removed something, shown only to its author.
+      required: [code, text]
+      properties:
+        code: { $ref: "#/components/schemas/ModerationReason" }
+        text:
+          type: string
+          maxLength: 1000
+          description: |
+            A short explanation written by moderation; may be empty. Show it as written by "Messenger moderation",
+            never by a person's name.
     AccountStatusLevel:
       type: string
       description: |
@@ -6919,6 +7031,9 @@ components:
             - $ref: "#/components/schemas/Attachment"
             - type: "null"
         is_deleted: { type: boolean }
+        removed_by_moderation:
+          type: boolean
+          description: "`true` when moderation removed the answered message. Absent otherwise."
     Message:
       type: object
       required:
@@ -6985,6 +7100,14 @@ components:
             - $ref: "#/components/schemas/Timestamp"
             - type: "null"
         is_deleted: { type: boolean }
+        removed_by_moderation:
+          type: boolean
+          description: |
+            `true` when moderation removed the message; it is then also `is_deleted`. Clients show "Removed by
+            moderation" instead of the deleted placeholder. Absent otherwise.
+        moderation_reason:
+          allOf: [{ $ref: "#/components/schemas/ModerationRemovalReason" }]
+          description: Why moderation removed the message; only for its sender, absent for everyone else.
         system_event:
           $ref: "#/components/schemas/SystemEvent"
         client_temp_id: { $ref: "#/components/schemas/ClientTempId" }

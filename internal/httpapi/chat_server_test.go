@@ -20,6 +20,7 @@ import (
 	"github.com/myronsi/messenger-back/internal/auth"
 	"github.com/myronsi/messenger-back/internal/chats"
 	"github.com/myronsi/messenger-back/internal/config"
+	"github.com/myronsi/messenger-back/internal/contentreports"
 	"github.com/myronsi/messenger-back/internal/events"
 	"github.com/myronsi/messenger-back/internal/ids"
 	"github.com/myronsi/messenger-back/internal/linkpreview"
@@ -115,6 +116,7 @@ type chatEnv struct {
 	cleared   *atomic.Int32
 	modCache  *redis.ModerationCache
 	peersDone chan int64
+	msgs      *messages.Service
 }
 
 type flakyMembers struct {
@@ -217,7 +219,7 @@ func newChatEnvWith(t *testing.T, withSearch bool) *chatEnv {
 	}
 	api := NewServer(NewAuthServer(AuthOptions{Service: authSvc, Log: log, BasePath: apiBase, CookieSecure: true}), nil).
 		WithAccount(NewAccountServer(AccountOptions{Store: store, Directory: dir, Deleter: authSvc, Moderation: modSvc, BasePath: apiBase, Log: log, PeersChanged: peersChanged})).
-		WithModeration(NewModerationServer(ModerationOptions{Service: modSvc, Log: log})).
+		WithModeration(NewModerationServer(ModerationOptions{Service: modSvc, Log: log, Content: contentreports.New(contentreports.Deps{Store: store, Messages: msgs})})).
 		WithChats(NewChatServer(ChatOptions{Service: svc, BasePath: apiBase, Log: log})).
 		WithMessages(NewMessageServer(MessageOptions{Service: msgs, Store: store, Directory: dir, BasePath: apiBase, Log: log, Searcher: searcher(index, msgs, store, repo)})).
 		WithNotifications(NotificationOptions{Store: store.Notifications(), Tokens: tokens}).
@@ -234,7 +236,7 @@ func newChatEnvWith(t *testing.T, withSearch bool) *chatEnv {
 			API:           api,
 			Authenticator: authSvc,
 		})},
-		store: store, events: ev, index: index, tokens: tokens, cacheDown: cacheDown, cleared: cleared, modCache: modCache, peersDone: peersDone,
+		store: store, events: ev, index: index, tokens: tokens, cacheDown: cacheDown, cleared: cleared, modCache: modCache, peersDone: peersDone, msgs: msgs,
 	}
 }
 

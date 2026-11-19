@@ -31,18 +31,35 @@ All routes start with `/internal/v1`.
 | `DELETE /users/{user_id}` | Delete an account like `DELETE /me` without the password: every session ends, chats are cleaned up, `user.deleted` is emitted → `{"deleted": true}` | M2 |
 | `GET /pack-images/{attachment_id}` | The image file of a sticker or custom emoji that belongs to a pack (no other files), for the console's pack page; a `302` to a short-lived storage URL when signed URLs are on | M2 |
 | `GET /stats/usage?day=YYYY-MM-DD` | Counts for the daily statistics of the moderation service: `active_day` (accounts with a session used since 00:00 UTC of the day), `active_30d` (accounts with a session used in the 30 days before the end of the day, or before now for today), `storage_bytes` (stored files plus their converted versions, from `attachments.size` and `attachments.variants`), `as_of`. Only totals, no ids. `400` (`field`: `day`) for a malformed or future day | M5 |
+| `POST /chats/{chat_id}/messages/{message_id}/remove` | Removes a message on a moderation decision, see below | M3 |
 
 Rules and effects of the M2 actions (staff decisions, reporter notices): [moderation.md](moderation.md#staff-decisions).
 IDs are decimal strings in paths and bodies. Errors are JSON `{"error", "field"?, "message"?}`:
 
 | Status | `error` | When |
 |---|---|---|
-| `400` | `invalid_request` | Bad id, bad JSON, an unknown field, or a value the rules refuse (`field` names it: `status`, `reason_code`, `reason_text`, `staff_ref`, `reporter_ids`, `kind`) |
+| `400` | `invalid_request` | Bad id, bad JSON, an unknown field, or a value the rules refuse (`field` names it: `status`, `reason_code`, `reason_text`, `staff_ref`, `reporter_ids`, `kind`, `message_id` for a system message) |
 | `403` | `forbidden` | Hiding a built-in sticker pack |
-| `404` | `not_found` | Unknown or deleted user or pack |
+| `404` | `not_found` | Unknown or deleted user or pack, or a message that does not exist in that chat |
 | `503` | `unavailable` | A database did not answer; retry after `Retry-After` seconds |
 
-Later milestones of the moderation plan add more actions here (remove a message, send an in-app notice).
+Later milestones of the moderation plan add more actions here (send an in-app notice).
+
+### Remove a message
+
+`POST /internal/v1/chats/{chat_id}/messages/{message_id}/remove` with `{"reason_code": "spam", "reason_text": "…"}`.
+
+- `reason_code` is a rule of the community guidelines: `spam`, `scam`, `harassment`, `impersonation`,
+  `inappropriate_profile`, `illegal` or `other`. `reason_text` is what the sender reads, at most 1000 characters,
+  may be empty.
+- The message is deleted for everyone and keeps `removed_by_moderation` with the reason
+  ([moderation.md](moderation.md#removed-by-moderation)): members see "Removed by moderation", only the sender
+  gets the reason, live over the WebSocket and in the history.
+- `200` `{"chat_id", "message_id", "sender_id", "reason_code", "reason_text", "already_removed"}`. Removing a
+  message twice changes nothing: `already_removed` is `true` and the first reason is returned. Errors as in the
+  table above; a system message is `400` with `field` `message_id`.
+- The moderation service writes the audit entry (who, which report or case); the Messenger database only keeps
+  the reason the sender sees. Find the ids in `content_reports` (`chat_id`, `message_id`).
 
 ## Read-only database user for the moderation service
 

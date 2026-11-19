@@ -77,7 +77,7 @@ func (r *Messages) GetMany(ctx context.Context, chatID int64, messageIDs []int64
 		}
 	}
 	err = each(ctx, chunks, func(ctx context.Context, c bucketChunk) error {
-		iter := sess.Query(`SELECT `+messageColumns+` FROM messages WHERE chat_id = ? AND bucket = ? AND message_id IN ?`,
+		iter := sess.Query(`SELECT `+selectColumns+` FROM messages WHERE chat_id = ? AND bucket = ? AND message_id IN ?`,
 			chatID, c.bucket, c.ids).WithContext(ctx).Iter()
 		var rows []Message
 		for {

@@ -410,6 +410,39 @@ func (e ConnectionProvider) Valid() bool {
 	}
 }
 
+// Defines values for ContentReportReason.
+const (
+	ContentReportReasonHarassment           ContentReportReason = "harassment"
+	ContentReportReasonIllegal              ContentReportReason = "illegal"
+	ContentReportReasonImpersonation        ContentReportReason = "impersonation"
+	ContentReportReasonInappropriateProfile ContentReportReason = "inappropriate_profile"
+	ContentReportReasonOther                ContentReportReason = "other"
+	ContentReportReasonScam                 ContentReportReason = "scam"
+	ContentReportReasonSpam                 ContentReportReason = "spam"
+)
+
+// Valid indicates whether the value is a known member of the ContentReportReason enum.
+func (e ContentReportReason) Valid() bool {
+	switch e {
+	case ContentReportReasonHarassment:
+		return true
+	case ContentReportReasonIllegal:
+		return true
+	case ContentReportReasonImpersonation:
+		return true
+	case ContentReportReasonInappropriateProfile:
+		return true
+	case ContentReportReasonOther:
+		return true
+	case ContentReportReasonScam:
+		return true
+	case ContentReportReasonSpam:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CreateUploadSessionRequestKind.
 const (
 	CreateUploadSessionRequestKindAudio CreateUploadSessionRequestKind = "audio"
@@ -2039,6 +2072,19 @@ type ContactNameRequest struct {
 	ContactName string `json:"contact_name"`
 }
 
+// ContentReportReason The reasons of `ReportReason` plus `illegal`, a notice of illegal content.
+type ContentReportReason string
+
+// ContentReportRequest defines model for ContentReportRequest.
+type ContentReportRequest struct {
+	// Note Details for moderation, never shown to the sender or the group. Required for `illegal`: why the content is
+	// illegal, for example which law it breaks.
+	Note *string `json:"note,omitempty"`
+
+	// Reason The reasons of `ReportReason` plus `illegal`, a notice of illegal content.
+	Reason ContentReportReason `json:"reason"`
+}
+
 // CreateChatRequest defines model for CreateChatRequest.
 type CreateChatRequest struct {
 	InitialMessage *string `json:"initial_message,omitempty"`
@@ -2542,10 +2588,17 @@ type Message struct {
 	// Id Decimal ID as a string (Snowflake IDs exceed 2^53).
 	//
 	// Examples: 7217400317439950848
-	Id        Id            `json:"id"`
-	IsDeleted bool          `json:"is_deleted"`
-	Reactions []Reaction    `json:"reactions"`
-	ReadBy    []ReadReceipt `json:"read_by"`
+	Id        Id   `json:"id"`
+	IsDeleted bool `json:"is_deleted"`
+
+	// ModerationReason Why moderation removed the message; only for its sender, absent for everyone else.
+	ModerationReason *ModerationRemovalReason `json:"moderation_reason,omitempty"`
+	Reactions        []Reaction               `json:"reactions"`
+	ReadBy           []ReadReceipt            `json:"read_by"`
+
+	// RemovedByModeration `true` when moderation removed the message; it is then also `is_deleted`. Clients show "Removed by
+	// moderation" instead of the deleted placeholder. Absent otherwise.
+	RemovedByModeration *bool `json:"removed_by_moderation,omitempty"`
 
 	// ReplyPreview What a reply shows of the message it answers, so a client can draw the quote without loading that
 	// message. Set on messages of history pages and `message` events when the recipient can see the answered
@@ -2612,6 +2665,16 @@ type Meta struct {
 
 // ModerationReason The guideline rule behind a moderation decision. Unknown values must be shown as `other`.
 type ModerationReason string
+
+// ModerationRemovalReason Why moderation removed something, shown only to its author.
+type ModerationRemovalReason struct {
+	// Code The guideline rule behind a moderation decision. Unknown values must be shown as `other`.
+	Code ModerationReason `json:"code"`
+
+	// Text A short explanation written by moderation; may be empty. Show it as written by "Messenger moderation",
+	// never by a person's name.
+	Text string `json:"text"`
+}
 
 // NotificationActivity defines model for NotificationActivity.
 type NotificationActivity struct {
@@ -3062,10 +3125,13 @@ type ReplyPreview struct {
 	// Id Decimal ID as a string (Snowflake IDs exceed 2^53).
 	//
 	// Examples: 7217400317439950848
-	Id        Id          `json:"id"`
-	IsDeleted bool        `json:"is_deleted"`
-	Sender    *User       `json:"sender"`
-	Type      MessageType `json:"type"`
+	Id        Id   `json:"id"`
+	IsDeleted bool `json:"is_deleted"`
+
+	// RemovedByModeration `true` when moderation removed the answered message. Absent otherwise.
+	RemovedByModeration *bool       `json:"removed_by_moderation,omitempty"`
+	Sender              *User       `json:"sender"`
+	Type                MessageType `json:"type"`
 }
 
 // ReportOutcome defines model for ReportOutcome.
@@ -4424,6 +4490,24 @@ type SearchMessagesParams struct {
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
 }
 
+// UnreportMessageParams defines parameters for UnreportMessage.
+type UnreportMessageParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// ReportMessageParams defines parameters for ReportMessage.
+type ReportMessageParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
 // UnpinChatParams defines parameters for UnpinChat.
 type UnpinChatParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
@@ -4734,6 +4818,24 @@ type RemoveGroupParticipantParams struct {
 
 // UpdateGroupParticipantRoleParams defines parameters for UpdateGroupParticipantRole.
 type UpdateGroupParticipantRoleParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// UnreportGroupParams defines parameters for UnreportGroup.
+type UnreportGroupParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// ReportGroupParams defines parameters for ReportGroup.
+type ReportGroupParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
@@ -5673,6 +5775,9 @@ type DeleteMessagesJSONRequestBody = DeleteMessagesRequest
 // ForwardMessagesJSONRequestBody defines body for ForwardMessages for application/json ContentType.
 type ForwardMessagesJSONRequestBody = ForwardMessagesRequest
 
+// ReportMessageJSONRequestBody defines body for ReportMessage for application/json ContentType.
+type ReportMessageJSONRequestBody = ContentReportRequest
+
 // MarkChatReadJSONRequestBody defines body for MarkChatRead for application/json ContentType.
 type MarkChatReadJSONRequestBody = MarkReadRequest
 
@@ -5708,6 +5813,9 @@ type AddGroupParticipantJSONRequestBody = AddParticipantRequest
 
 // UpdateGroupParticipantRoleJSONRequestBody defines body for UpdateGroupParticipantRole for application/json ContentType.
 type UpdateGroupParticipantRoleJSONRequestBody = UpdateRoleRequest
+
+// ReportGroupJSONRequestBody defines body for ReportGroup for application/json ContentType.
+type ReportGroupJSONRequestBody = ContentReportRequest
 
 // TransferGroupOwnershipJSONRequestBody defines body for TransferGroupOwnership for application/json ContentType.
 type TransferGroupOwnershipJSONRequestBody = TransferOwnerRequest
@@ -6312,6 +6420,12 @@ type ServerInterface interface {
 	// SearchMessages Search messages in a chat
 	// (GET /chats/{chat_id}/messages/search)
 	SearchMessages(w http.ResponseWriter, r *http.Request, chatId ChatId, params SearchMessagesParams)
+	// UnreportMessage Withdraw a message report
+	// (DELETE /chats/{chat_id}/messages/{message_id}/report)
+	UnreportMessage(w http.ResponseWriter, r *http.Request, chatId ChatId, messageId MessageId, params UnreportMessageParams)
+	// ReportMessage Report a message
+	// (POST /chats/{chat_id}/messages/{message_id}/report)
+	ReportMessage(w http.ResponseWriter, r *http.Request, chatId ChatId, messageId MessageId, params ReportMessageParams)
 	// UnpinChat Unpin a chat
 	// (DELETE /chats/{chat_id}/pin)
 	UnpinChat(w http.ResponseWriter, r *http.Request, chatId ChatId, params UnpinChatParams)
@@ -6414,6 +6528,12 @@ type ServerInterface interface {
 	// UpdateGroupParticipantRole Change a participant's role
 	// (PATCH /groups/{chat_id}/participants/{user_id})
 	UpdateGroupParticipantRole(w http.ResponseWriter, r *http.Request, chatId ChatId, userId UserId, params UpdateGroupParticipantRoleParams)
+	// UnreportGroup Withdraw a group report
+	// (DELETE /groups/{chat_id}/report)
+	UnreportGroup(w http.ResponseWriter, r *http.Request, chatId ChatId, params UnreportGroupParams)
+	// ReportGroup Report a group
+	// (POST /groups/{chat_id}/report)
+	ReportGroup(w http.ResponseWriter, r *http.Request, chatId ChatId, params ReportGroupParams)
 	// GetGroupRoleLog Role changes of the group's members
 	// (GET /groups/{chat_id}/role-log)
 	GetGroupRoleLog(w http.ResponseWriter, r *http.Request, chatId ChatId, params GetGroupRoleLogParams)
@@ -10828,6 +10948,162 @@ func (siw *ServerInterfaceWrapper) SearchMessages(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// UnreportMessage operation middleware
+func (siw *ServerInterfaceWrapper) UnreportMessage(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "message_id" -------------
+	var messageId MessageId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "message_id", r.PathValue("message_id"), &messageId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "message_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UnreportMessageParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UnreportMessage(w, r, chatId, messageId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReportMessage operation middleware
+func (siw *ServerInterfaceWrapper) ReportMessage(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "message_id" -------------
+	var messageId MessageId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "message_id", r.PathValue("message_id"), &messageId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "message_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ReportMessageParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReportMessage(w, r, chatId, messageId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // UnpinChat operation middleware
 func (siw *ServerInterfaceWrapper) UnpinChat(w http.ResponseWriter, r *http.Request) {
 
@@ -13209,6 +13485,144 @@ func (siw *ServerInterfaceWrapper) UpdateGroupParticipantRole(w http.ResponseWri
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateGroupParticipantRole(w, r, chatId, userId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UnreportGroup operation middleware
+func (siw *ServerInterfaceWrapper) UnreportGroup(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UnreportGroupParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UnreportGroup(w, r, chatId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReportGroup operation middleware
+func (siw *ServerInterfaceWrapper) ReportGroup(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ReportGroupParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReportGroup(w, r, chatId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -19455,6 +19869,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/messages/{message_id}", wrapper.DeleteMessage)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/messages/{message_id}", wrapper.EditMessage)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/messages/{message_id}/forward", wrapper.ForwardMessage)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/chats/{chat_id}/messages/{message_id}/report", wrapper.UnreportMessage)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/chats/{chat_id}/messages/{message_id}/report", wrapper.ReportMessage)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/chats/{chat_id}/messages/forward", wrapper.ForwardMessages)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/chats/{chat_id}/messages/delete", wrapper.DeleteMessages)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/search/messages", wrapper.SearchAllMessages)
@@ -19475,6 +19891,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/groups/{chat_id}/participants/{user_id}", wrapper.UpdateGroupParticipantRole)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/groups/{chat_id}/transfer-owner", wrapper.TransferGroupOwnership)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/groups/{chat_id}/leave", wrapper.LeaveGroup)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/groups/{chat_id}/report", wrapper.UnreportGroup)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/groups/{chat_id}/report", wrapper.ReportGroup)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/groups/{chat_id}/role-log", wrapper.GetGroupRoleLog)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/stickers/packs", wrapper.ListStickerPacks)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/stickers/packs", wrapper.CreateStickerPack)
@@ -26648,6 +27066,190 @@ func (response SearchMessages429ApplicationProblemPlusJSONResponse) VisitSearchM
 	return err
 }
 
+type UnreportMessageRequestObject struct {
+	ChatId    ChatId    `json:"chat_id"`
+	MessageId MessageId `json:"message_id"`
+	Params    UnreportMessageParams
+}
+
+type UnreportMessageResponseObject interface {
+	VisitUnreportMessageResponse(w http.ResponseWriter) error
+}
+
+type UnreportMessage204Response struct {
+}
+
+func (response UnreportMessage204Response) VisitUnreportMessageResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type UnreportMessage400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response UnreportMessage400ApplicationProblemPlusJSONResponse) VisitUnreportMessageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnreportMessage401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response UnreportMessage401ApplicationProblemPlusJSONResponse) VisitUnreportMessageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnreportMessage426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response UnreportMessage426ApplicationProblemPlusJSONResponse) VisitUnreportMessageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportMessageRequestObject struct {
+	ChatId    ChatId    `json:"chat_id"`
+	MessageId MessageId `json:"message_id"`
+	Params    ReportMessageParams
+	Body      *ReportMessageJSONRequestBody
+}
+
+type ReportMessageResponseObject interface {
+	VisitReportMessageResponse(w http.ResponseWriter) error
+}
+
+type ReportMessage204Response struct {
+}
+
+func (response ReportMessage204Response) VisitReportMessageResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type ReportMessage400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response ReportMessage400ApplicationProblemPlusJSONResponse) VisitReportMessageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportMessage401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ReportMessage401ApplicationProblemPlusJSONResponse) VisitReportMessageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportMessage404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response ReportMessage404ApplicationProblemPlusJSONResponse) VisitReportMessageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportMessage422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response ReportMessage422ApplicationProblemPlusJSONResponse) VisitReportMessageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportMessage426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response ReportMessage426ApplicationProblemPlusJSONResponse) VisitReportMessageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportMessage429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response ReportMessage429ApplicationProblemPlusJSONResponse) VisitReportMessageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type UnpinChatRequestObject struct {
 	ChatId ChatId `json:"chat_id"`
 	Params UnpinChatParams
@@ -29967,6 +30569,188 @@ func (response UpdateGroupParticipantRole426ApplicationProblemPlusJSONResponse) 
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnreportGroupRequestObject struct {
+	ChatId ChatId `json:"chat_id"`
+	Params UnreportGroupParams
+}
+
+type UnreportGroupResponseObject interface {
+	VisitUnreportGroupResponse(w http.ResponseWriter) error
+}
+
+type UnreportGroup204Response struct {
+}
+
+func (response UnreportGroup204Response) VisitUnreportGroupResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type UnreportGroup400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response UnreportGroup400ApplicationProblemPlusJSONResponse) VisitUnreportGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnreportGroup401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response UnreportGroup401ApplicationProblemPlusJSONResponse) VisitUnreportGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnreportGroup426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response UnreportGroup426ApplicationProblemPlusJSONResponse) VisitUnreportGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportGroupRequestObject struct {
+	ChatId ChatId `json:"chat_id"`
+	Params ReportGroupParams
+	Body   *ReportGroupJSONRequestBody
+}
+
+type ReportGroupResponseObject interface {
+	VisitReportGroupResponse(w http.ResponseWriter) error
+}
+
+type ReportGroup204Response struct {
+}
+
+func (response ReportGroup204Response) VisitReportGroupResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type ReportGroup400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response ReportGroup400ApplicationProblemPlusJSONResponse) VisitReportGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportGroup401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ReportGroup401ApplicationProblemPlusJSONResponse) VisitReportGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportGroup404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response ReportGroup404ApplicationProblemPlusJSONResponse) VisitReportGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportGroup422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response ReportGroup422ApplicationProblemPlusJSONResponse) VisitReportGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportGroup426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response ReportGroup426ApplicationProblemPlusJSONResponse) VisitReportGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportGroup429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response ReportGroup429ApplicationProblemPlusJSONResponse) VisitReportGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -39360,6 +40144,12 @@ type StrictServerInterface interface {
 	// SearchMessages Search messages in a chat
 	// (GET /chats/{chat_id}/messages/search)
 	SearchMessages(ctx context.Context, request SearchMessagesRequestObject) (SearchMessagesResponseObject, error)
+	// UnreportMessage Withdraw a message report
+	// (DELETE /chats/{chat_id}/messages/{message_id}/report)
+	UnreportMessage(ctx context.Context, request UnreportMessageRequestObject) (UnreportMessageResponseObject, error)
+	// ReportMessage Report a message
+	// (POST /chats/{chat_id}/messages/{message_id}/report)
+	ReportMessage(ctx context.Context, request ReportMessageRequestObject) (ReportMessageResponseObject, error)
 	// UnpinChat Unpin a chat
 	// (DELETE /chats/{chat_id}/pin)
 	UnpinChat(ctx context.Context, request UnpinChatRequestObject) (UnpinChatResponseObject, error)
@@ -39462,6 +40252,12 @@ type StrictServerInterface interface {
 	// UpdateGroupParticipantRole Change a participant's role
 	// (PATCH /groups/{chat_id}/participants/{user_id})
 	UpdateGroupParticipantRole(ctx context.Context, request UpdateGroupParticipantRoleRequestObject) (UpdateGroupParticipantRoleResponseObject, error)
+	// UnreportGroup Withdraw a group report
+	// (DELETE /groups/{chat_id}/report)
+	UnreportGroup(ctx context.Context, request UnreportGroupRequestObject) (UnreportGroupResponseObject, error)
+	// ReportGroup Report a group
+	// (POST /groups/{chat_id}/report)
+	ReportGroup(ctx context.Context, request ReportGroupRequestObject) (ReportGroupResponseObject, error)
 	// GetGroupRoleLog Role changes of the group's members
 	// (GET /groups/{chat_id}/role-log)
 	GetGroupRoleLog(ctx context.Context, request GetGroupRoleLogRequestObject) (GetGroupRoleLogResponseObject, error)
@@ -41587,6 +42383,69 @@ func (sh *strictHandler) SearchMessages(w http.ResponseWriter, r *http.Request, 
 	}
 }
 
+// UnreportMessage operation middleware
+func (sh *strictHandler) UnreportMessage(w http.ResponseWriter, r *http.Request, chatId ChatId, messageId MessageId, params UnreportMessageParams) {
+	var request UnreportMessageRequestObject
+
+	request.ChatId = chatId
+	request.MessageId = messageId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UnreportMessage(ctx, request.(UnreportMessageRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UnreportMessage")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UnreportMessageResponseObject); ok {
+		if err := validResponse.VisitUnreportMessageResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ReportMessage operation middleware
+func (sh *strictHandler) ReportMessage(w http.ResponseWriter, r *http.Request, chatId ChatId, messageId MessageId, params ReportMessageParams) {
+	var request ReportMessageRequestObject
+
+	request.ChatId = chatId
+	request.MessageId = messageId
+	request.Params = params
+
+	var body ReportMessageJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ReportMessage(ctx, request.(ReportMessageRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ReportMessage")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ReportMessageResponseObject); ok {
+		if err := validResponse.VisitReportMessageResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // UnpinChat operation middleware
 func (sh *strictHandler) UnpinChat(w http.ResponseWriter, r *http.Request, chatId ChatId, params UnpinChatParams) {
 	var request UnpinChatRequestObject
@@ -42582,6 +43441,67 @@ func (sh *strictHandler) UpdateGroupParticipantRole(w http.ResponseWriter, r *ht
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateGroupParticipantRoleResponseObject); ok {
 		if err := validResponse.VisitUpdateGroupParticipantRoleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UnreportGroup operation middleware
+func (sh *strictHandler) UnreportGroup(w http.ResponseWriter, r *http.Request, chatId ChatId, params UnreportGroupParams) {
+	var request UnreportGroupRequestObject
+
+	request.ChatId = chatId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UnreportGroup(ctx, request.(UnreportGroupRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UnreportGroup")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UnreportGroupResponseObject); ok {
+		if err := validResponse.VisitUnreportGroupResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ReportGroup operation middleware
+func (sh *strictHandler) ReportGroup(w http.ResponseWriter, r *http.Request, chatId ChatId, params ReportGroupParams) {
+	var request ReportGroupRequestObject
+
+	request.ChatId = chatId
+	request.Params = params
+
+	var body ReportGroupJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ReportGroup(ctx, request.(ReportGroupRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ReportGroup")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ReportGroupResponseObject); ok {
+		if err := validResponse.VisitReportGroupResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

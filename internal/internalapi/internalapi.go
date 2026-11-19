@@ -29,6 +29,7 @@ type Options struct {
 	PackImages    PackImages
 	Usage         UsageSource
 	Now           func() time.Time
+	Messages      MessageRemover
 }
 
 func Handler(opts Options) http.Handler {
@@ -43,6 +44,9 @@ func Handler(opts Options) http.Handler {
 	actions{moderation: opts.Moderation, accounts: opts.Accounts, afterDeletion: opts.AfterDeletion, events: opts.Events, images: opts.PackImages, log: log}.register(mux)
 	if opts.Usage != nil {
 		mux.HandleFunc("GET "+BasePath+"/stats/usage", usage(opts))
+	}
+	if opts.Messages != nil {
+		mux.HandleFunc("POST "+BasePath+"/chats/{chat_id}/messages/{message_id}/remove", removeMessage(opts.Messages, log))
 	}
 	return requireToken(opts.Token, opts.Log, mux)
 }

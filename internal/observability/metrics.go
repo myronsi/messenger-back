@@ -35,6 +35,7 @@ type Metrics struct {
 	mediaSaved     *prometheus.CounterVec
 	statusChanges  *prometheus.CounterVec
 	userReports    *prometheus.CounterVec
+	contentReports *prometheus.CounterVec
 }
 
 // NewMetrics registers the collectors together with the Go runtime and process collectors.
@@ -116,6 +117,10 @@ func NewMetrics() *Metrics {
 			Name: "messenger_user_reports_total",
 			Help: "New user reports by reason and weight bucket (zero, low, medium, full).",
 		}, []string{"reason", "weight_bucket"}),
+		contentReports: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "messenger_content_reports_total",
+			Help: "New reports of messages and groups by kind and reason.",
+		}, []string{"kind", "reason"}),
 		storeCheckTime: prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Name:    "messenger_store_check_duration_seconds",
 			Help:    "Duration of the readiness check per data store.",
@@ -127,7 +132,7 @@ func NewMetrics() *Metrics {
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 		m.requests, m.duration, m.inFlight, m.webSockets, m.messages, m.storeErrors, m.storeCheckTime, m.events, m.clientAPI, m.notifications,
 		m.callsStarted, m.callsEnded, m.callJoined, m.callJoinFailed, m.callWebhooks, m.mediaJobs, m.mediaJobTime, m.mediaSaved,
-		m.statusChanges, m.userReports,
+		m.statusChanges, m.userReports, m.contentReports,
 	)
 	return m
 }
@@ -150,6 +155,10 @@ func (m *Metrics) ModerationStatusChange(status string) {
 
 func (m *Metrics) UserReport(reason, weightBucket string) {
 	m.userReports.WithLabelValues(reason, weightBucket).Inc()
+}
+
+func (m *Metrics) ContentReport(kind, reason string) {
+	m.contentReports.WithLabelValues(kind, reason).Inc()
 }
 
 func (m *Metrics) CallEnded(reason string) { m.callsEnded.WithLabelValues(reason).Inc() }

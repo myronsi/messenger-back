@@ -63,6 +63,9 @@ looked up in `message_locations`.
 - **Edit and delete** are lightweight transactions (`IF deleted = false`, `IF EXISTS`), so they are serialized per
   message and an edit racing a delete for everyone can never bring the text back. A deleted message keeps its
   ID and place and shows as deleted; its content and attachment are cleared.
+- **Remove** (a moderation decision) is a delete in the same lightweight transaction that also sets
+  `removed_by_moderation` and the reason columns (migration `000004_moderation_removal`), see
+  [moderation.md](moderation.md#removed-by-moderation).
 - **Delete for me** inserts into `hidden_messages`; `Unhide` only clears `not_delivered`. Every write of a hidden
   row is a lightweight transaction, so `deleted_for_me` is final: a late `not_delivered` cannot replace it.
 - **Reactions** of a page are read with one query (`message_id IN (...)`).
