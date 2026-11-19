@@ -15,6 +15,7 @@ import (
 	"github.com/myronsi/messenger-back/internal/emoji"
 	"github.com/myronsi/messenger-back/internal/events"
 	"github.com/myronsi/messenger-back/internal/ids"
+	"github.com/myronsi/messenger-back/internal/jobs"
 	"github.com/myronsi/messenger-back/internal/media"
 	"github.com/myronsi/messenger-back/internal/messages"
 	"github.com/myronsi/messenger-back/internal/moderation"
@@ -233,44 +234,11 @@ func (st *realtimeStack) stop() {
 // members and handed to the worker (which deletes their messages), the groups it left get a fresh member list,
 // and the files of v1 chats are deleted.
 func (st *realtimeStack) accountDeleted(storage media.Storage, callsSvc *calls.Service, log *slog.Logger) func(ctx context.Context, userID int64, d postgres.DeletedAccount) {
-	return func(ctx context.Context, userID int64, d postgres.DeletedAccount) {
-		if callsSvc != nil {
-			for _, chatID := range d.LeftGroups {
-				callsSvc.MembersRemoved(ctx, chatID, []int64{userID})
-			}
-			if len(d.DeletedChats) > 0 {
-				callsSvc.ChatsDeleted(ctx)
-			}
-		}
-		changed := make([]int64, 0, len(d.DeletedChats)+len(d.LeftGroups))
-		for chatID, others := range d.DeletedChats {
-			changed = append(changed, chatID)
-			st.fanout.Removed(ctx, chatID, others)
-			if err := st.unread.Forget(ctx, chatID, others...); err != nil {
-				log.WarnContext(ctx, "forget unread", "error", err)
-			}
-			if err := st.events.Emit(ctx, events.Event{Type: events.ChatDeleted, ChatID: chatID, ActorID: userID}); err != nil {
-				log.WarnContext(ctx, "emit chat.deleted", "error", err)
-			}
-		}
-		for _, chatID := range d.LeftGroups {
-			changed = append(changed, chatID)
-			if err := st.events.Emit(ctx, events.Event{Type: events.ChatMemberRemoved, ChatID: chatID, UserID: userID, ActorID: userID}); err != nil {
-				log.WarnContext(ctx, "emit chat.member_removed", "error", err)
-			}
-		}
-		if err := st.members.Invalidate(ctx, changed...); err != nil {
-			log.WarnContext(ctx, "invalidate members", "error", err)
-		}
-		if err := st.unread.Drop(ctx, userID); err != nil {
-			log.WarnContext(ctx, "drop unread counters", "error", err)
-		}
-		for _, key := range d.AttachmentKeys {
-			if err := storage.Delete(ctx, key); err != nil {
-				log.WarnContext(ctx, "delete file of a deleted chat", "error", err)
-			}
-		}
+	cleanup := jobs.AccountCleanup{Notifier: st.fanout, Unread: st.unread, Events: st.events, Members: st.members, DeleteFile: storage.Delete, Log: log}
+	if callsSvc != nil {
+		cleanup.Calls = callsSvc
 	}
+	return cleanup.AfterDeletion
 }
 
 // searchAccess tells the searcher which chats a user is in and which messages they can see.

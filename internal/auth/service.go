@@ -35,6 +35,7 @@ type Store interface {
 	Passkeys() postgres.PasskeyRepository
 	RecoveryEmails() postgres.RecoveryEmailRepository
 	SecurityEvents() postgres.SecurityEventRepository
+	InactiveAccounts() postgres.InactiveAccountRepository
 }
 
 // Config configures the service. Secrets come from the environment; none of them is ever logged.
@@ -1011,6 +1012,14 @@ func (s *Service) DeleteAccount(ctx context.Context, p Principal, password strin
 
 func (s *Service) DeleteAccountByStaff(ctx context.Context, userID int64) (postgres.DeletedAccount, error) {
 	deleted, err := s.store.Users().DeleteAccount(ctx, userID)
+	if err != nil {
+		return postgres.DeletedAccount{}, err
+	}
+	return deleted, s.revokeInCache(ctx, deleted.Sessions...)
+}
+
+func (s *Service) DeleteInactiveAccount(ctx context.Context, userID int64, rule postgres.InactivityRule) (postgres.DeletedAccount, error) {
+	deleted, err := s.store.InactiveAccounts().Delete(ctx, rule, userID)
 	if err != nil {
 		return postgres.DeletedAccount{}, err
 	}

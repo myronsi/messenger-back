@@ -324,13 +324,23 @@ func (r userRepo) TouchLastSeen(ctx context.Context, id int64) error {
 }
 
 func (r userRepo) DeleteAccount(ctx context.Context, id int64) (DeletedAccount, error) {
+	return r.s.deleteAccount(ctx, id, nil)
+}
+
+func (s *Store) deleteAccount(ctx context.Context, id int64, stillDue func(ctx context.Context, tx pgx.Tx) error) (DeletedAccount, error) {
 	var out DeletedAccount
-	err := r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
+	err := s.inRawTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		q := s.q.WithTx(tx)
 		out = DeletedAccount{DeletedChats: map[int64][]int64{}} // the transaction can be retried
 		var err error
 		// Concurrent writers that reference the user wait for this lock instead of racing the deletion.
 		if _, err := q.LockUser(ctx, id); err != nil {
 			return err
+		}
+		if stillDue != nil {
+			if err := stillDue(ctx, tx); err != nil {
+				return err
+			}
 		}
 		// Deleted here, under the lock, so a login that commits meanwhile is in the list as well.
 		if out.Sessions, err = q.DeleteSessionsOfUser(ctx, id); err != nil {
