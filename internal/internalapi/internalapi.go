@@ -7,11 +7,16 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 )
 
 const BasePath = "/internal/v1"
+
+type UsageSource interface {
+	Usage(ctx context.Context, dayStart, dayEnd time.Time) (postgres.UsageFigures, error)
+}
 
 type Options struct {
 	Token         string
@@ -22,6 +27,8 @@ type Options struct {
 	AfterDeletion func(ctx context.Context, userID int64, deleted postgres.DeletedAccount)
 	Events        EventLog
 	PackImages    PackImages
+	Usage         UsageSource
+	Now           func() time.Time
 }
 
 func Handler(opts Options) http.Handler {
@@ -34,7 +41,42 @@ func Handler(opts Options) http.Handler {
 		log = slog.New(slog.DiscardHandler)
 	}
 	actions{moderation: opts.Moderation, accounts: opts.Accounts, afterDeletion: opts.AfterDeletion, events: opts.Events, images: opts.PackImages, log: log}.register(mux)
+	if opts.Usage != nil {
+		mux.HandleFunc("GET "+BasePath+"/stats/usage", usage(opts))
+	}
 	return requireToken(opts.Token, opts.Log, mux)
+}
+
+func usage(opts Options) http.HandlerFunc {
+	now := opts.Now
+	if now == nil {
+		now = time.Now
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		day, err := time.Parse(time.DateOnly, r.URL.Query().Get("day"))
+		current := now().UTC()
+		if err != nil || day.After(current) {
+			invalid(w, "day", "a date (YYYY-MM-DD), not in the future")
+			return
+		}
+		end := day.AddDate(0, 0, 1)
+		if end.After(current) {
+			end = current
+		}
+		u, err := opts.Usage.Usage(r.Context(), day, end)
+		if err != nil {
+			if opts.Log != nil {
+				opts.Log.ErrorContext(r.Context(), "internal api: usage figures", "error", err)
+			}
+			w.Header().Set("Retry-After", "2")
+			writeJSON(w, http.StatusServiceUnavailable, problem{Error: "unavailable"})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"day": day.Format(time.DateOnly), "as_of": current,
+			"active_day": u.ActiveDay, "active_30d": u.Active30d, "storage_bytes": u.StorageBytes,
+		})
+	}
 }
 
 func requireToken(token string, log *slog.Logger, next http.Handler) http.Handler {

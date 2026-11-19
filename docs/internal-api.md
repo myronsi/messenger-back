@@ -30,6 +30,7 @@ All routes start with `/internal/v1`.
 | `POST /packs/{kind}/{pack_id}/hide`, `POST /packs/{kind}/{pack_id}/unhide` | Hide or restore a pack; `kind` is `sticker_pack` or `emoji_pack`; unhiding clears its reports → `{"changed"}` | M2 |
 | `DELETE /users/{user_id}` | Delete an account like `DELETE /me` without the password: every session ends, chats are cleaned up, `user.deleted` is emitted → `{"deleted": true}` | M2 |
 | `GET /pack-images/{attachment_id}` | The image file of a sticker or custom emoji that belongs to a pack (no other files), for the console's pack page; a `302` to a short-lived storage URL when signed URLs are on | M2 |
+| `GET /stats/usage?day=YYYY-MM-DD` | Counts for the daily statistics of the moderation service: `active_day` (accounts with a session used since 00:00 UTC of the day), `active_30d` (accounts with a session used in the 30 days before the end of the day, or before now for today), `storage_bytes` (stored files plus their converted versions, from `attachments.size` and `attachments.variants`), `as_of`. Only totals, no ids. `400` (`field`: `day`) for a malformed or future day | M5 |
 
 Rules and effects of the M2 actions (staff decisions, reporter notices): [moderation.md](moderation.md#staff-decisions).
 IDs are decimal strings in paths and bodies. Errors are JSON `{"error", "field"?, "message"?}`:
@@ -41,8 +42,7 @@ IDs are decimal strings in paths and bodies. Errors are JSON `{"error", "field"?
 | `404` | `not_found` | Unknown or deleted user or pack |
 | `503` | `unavailable` | A database did not answer; retry after `Retry-After` seconds |
 
-Later milestones of the moderation plan add more actions here (remove a message, send an in-app notice,
-storage figures).
+Later milestones of the moderation plan add more actions here (remove a message, send an in-app notice).
 
 ## Read-only database user for the moderation service
 
