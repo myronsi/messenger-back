@@ -38,11 +38,11 @@ only read. Create it once as the database owner (replace the password and the da
 CREATE ROLE moderation_reader LOGIN PASSWORD '<random password>';
 GRANT CONNECT ON DATABASE messenger TO moderation_reader;
 GRANT USAGE ON SCHEMA public TO moderation_reader;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO moderation_reader;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO moderation_reader;
 ```
 
-- `ALTER DEFAULT PRIVILEGES` covers tables that later migrations add; run it as the role that runs the
-  migrations.
+- The user gets **only the tables and columns a moderation feature needs**, never `ALL TABLES` and no default
+  privileges, so password hashes, sessions, recovery data and messages stay out of reach. The exact grants per
+  feature are listed in messenger-moderation's `docs/deploy.md` ("Read grants"); a change here that a
+  moderation feature must read (a new table or column) needs a matching grant there.
 - The moderation service keeps its own data in a separate database (`moderation`) owned by its own user; it
   never writes to the Messenger database. Changes go through the internal routes above.
