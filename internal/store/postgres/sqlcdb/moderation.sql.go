@@ -65,8 +65,8 @@ func (q *Queries) CountUnconnectedReportsSince(ctx context.Context, arg CountUnc
 }
 
 const countUserReportsByReporterSince = `-- name: CountUserReportsByReporterSince :one
-SELECT count(*) FROM user_reports
-WHERE reporter_id = $1 AND target_id <> $2 AND updated_at >= $3
+SELECT ((SELECT count(*) FROM user_reports u WHERE u.reporter_id = $1 AND u.target_id <> $2 AND u.updated_at >= $3)
+     + (SELECT count(*) FROM content_reports c WHERE c.reporter_id = $1 AND c.updated_at >= $3))::bigint AS total
 `
 
 type CountUserReportsByReporterSinceParams struct {
@@ -77,9 +77,9 @@ type CountUserReportsByReporterSinceParams struct {
 
 func (q *Queries) CountUserReportsByReporterSince(ctx context.Context, arg CountUserReportsByReporterSinceParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countUserReportsByReporterSince, arg.ReporterID, arg.ExceptTarget, arg.Since)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
+	var total int64
+	err := row.Scan(&total)
+	return total, err
 }
 
 const deleteUserReportsBefore = `-- name: DeleteUserReportsBefore :execrows

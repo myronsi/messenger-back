@@ -589,6 +589,22 @@ func (Unimplemented) UnreportUser(w http.ResponseWriter, r *http.Request, _ User
 	notImplemented(w, r)
 }
 
+func (Unimplemented) ReportMessage(w http.ResponseWriter, r *http.Request, _ ChatId, _ MessageId, _ ReportMessageParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) UnreportMessage(w http.ResponseWriter, r *http.Request, _ ChatId, _ MessageId, _ UnreportMessageParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) ReportGroup(w http.ResponseWriter, r *http.Request, _ ChatId, _ ReportGroupParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) UnreportGroup(w http.ResponseWriter, r *http.Request, _ ChatId, _ UnreportGroupParams) {
+	notImplemented(w, r)
+}
+
 func (Unimplemented) GetAccountStatus(w http.ResponseWriter, r *http.Request, _ GetAccountStatusParams) {
 	notImplemented(w, r)
 }

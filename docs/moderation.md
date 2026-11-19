@@ -13,6 +13,27 @@ Users can report other users. Reports drive an account status that restricts the
 - The target never learns who reported them. The report stores a snapshot of the target's display name, username, avatar attachment id and bio, and the context of the pair. No message content is stored.
 - Every report and withdrawal emits `user.reported` (`user_id` = target, `actor_id` = reporter) on `events:users`.
 
+## Content reports
+
+Members can report a message or a group. Code: `internal/contentreports`, store `internal/store/postgres/content_reports.go`, migration `000048_content_reports`. The moderation service (`messenger-moderation`) reads the table read-only; moderators see only the copy, never the chat.
+
+- `POST /chats/{chat_id}/messages/{message_id}/report` and `POST /groups/{chat_id}/report` `{reason, note?}` → `204`; `DELETE` on the same paths withdraws (`withdrawn_at`, as for user reports).
+- Reasons: those of user reports plus `illegal`, a notice of illegal content under the Digital Services Act, which needs a `note` explaining why (`422` without it). Notes are at most 1000 characters.
+- A message report copies the reported message and up to 5 messages before and after it **as the reporter sees the chat** (`messages.Service.ReportWindow`: messages hidden for the reporter, deleted ones, system messages and those before their cleared history are left out). Each copied message keeps its id, sender id, display name and username, type, text or caption, file names, forwarded-from name, reply id, time, edit time and whether it is the reported one. The chat's type and, for groups, title go with it. The sender is stored as `target_id`.
+- A group report copies the title, description, avatar attachment id, creator, owner and member count; only members can report a group (`404` otherwise and for direct chats). The owner is `target_id`.
+- One active report per reporter and message (or group): reporting again changes the reason and the note but keeps the first copy and `created_at`. Own messages and system messages are `422`; a message the reporter cannot see is `404`.
+- User, message and group reports share the limit of 20 per reporter in 24 hours (`429`); updates and withdrawals count, as for user reports.
+- Content reports do not block anyone and do not change the sender's automatic account status; a moderator decides. Each new report counts `messenger_content_reports_total{kind, reason}`.
+- Retention: the daily moderation job deletes content reports 6 months after `created_at` (`contentreports.Service.Purge`). When the reporter deletes their account, `reporter_id` becomes `NULL` and the copy stays until then.
+
+## Removed by moderation
+
+A moderator's decision can remove a message (`messages.Service.RemoveByModeration`, called by the internal endpoint of the moderation service). The message is deleted for everyone like a sender's delete (content and files cleared, files unlinked, `message.deleted` event for search) and also stores `removed_by_moderation` with the reason (`moderation_reason_code`, `moderation_reason_text`; ScyllaDB migration `000004_moderation_removal`). Removing twice keeps the first reason.
+
+- History, reply previews and `message` renderings carry `removed_by_moderation: true`; clients show "Removed by moderation" instead of the deleted placeholder. Older clients still see a deleted message.
+- Only the sender's rendering carries `moderation_reason` (`code`, `text`).
+- Members get the WebSocket `delete` event with `scope: everyone` and `removed_by_moderation: true`; the sender's copy adds `moderation_reason`.
+
 ## Weight of one report
 
 Computed when the report is first made (`moderation.Weight`) and stored in `user_reports.weight`.
@@ -123,6 +144,8 @@ sum(increase(messenger_moderation_status_changes_total[1h]))
 A rising share of `weight_bucket="zero"` reports points to brigading by new or restricted accounts.
 
 ## Tables
+
+- `content_reports (id, reporter_id, kind, chat_id, message_id, target_id, reason, note, content JSONB, created_at, updated_at, withdrawn_at)`: `kind` `message` or `group` (`message_id` 0); unique `(reporter_id, chat_id, message_id)`; `reporter_id` and `target_id` `ON DELETE SET NULL`; no foreign key on the chat, so the copy outlives a deleted chat until the 6 months are over.
 
 - `user_reports (reporter_id, target_id, reason, note, context, weight NUMERIC(3,2), snapshot JSONB, created_at, updated_at, withdrawn_at)`, primary key `(reporter_id, target_id)`, indexes `(target_id, created_at)` and `(reporter_id, created_at)`. Both users `ON DELETE CASCADE`.
 - `user_reports.dismissed_at`: set when the moderation team dismissed the report.

@@ -85,7 +85,7 @@ func (r *Messages) readBucket(ctx context.Context, sess *gocql.Session, sc scan,
 	cursor := sc.bound
 	for {
 		want := max(sc.need-len(*out), minFetch)
-		stmt := `SELECT ` + messageColumns + ` FROM messages WHERE chat_id = ? AND bucket = ?`
+		stmt := `SELECT ` + selectColumns + ` FROM messages WHERE chat_id = ? AND bucket = ?`
 		args := []any{sc.chatID, b}
 		if cursor != 0 {
 			if sc.desc {

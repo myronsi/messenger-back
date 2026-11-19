@@ -29,6 +29,7 @@ type ModerationService interface {
 
 type ModerationOptions struct {
 	Service ModerationService
+	Content ContentReporter
 	Log     *slog.Logger
 }
 

@@ -187,7 +187,7 @@ func (f *Fanout) renderMessage(ctx context.Context, m scylla.Message, recipients
 	}
 	out := make(map[int64]httpapi.Message, len(recipients))
 	for _, uid := range recipients {
-		parts := httpapi.MessageParts{Attachment: att, Album: album, Reactions: reactions, BasePath: f.basePath, Reply: replies[uid], Drawings: drawings, Sticker: sticker, ForwardLink: links[uid]}
+		parts := httpapi.MessageParts{Attachment: att, Album: album, Reactions: reactions, BasePath: f.basePath, Reply: replies[uid], Drawings: drawings, Sticker: sticker, ForwardLink: links[uid], Viewer: uid}
 		if m.SenderID != nil {
 			v, ok := senders[uid]
 			if !ok {
@@ -297,6 +297,23 @@ func (f *Fanout) MessageEdited(ctx context.Context, m scylla.Message, recipients
 // MessageDeleted implements messages.Notifier.
 func (f *Fanout) MessageDeleted(ctx context.Context, chatID, messageID int64, scope string, recipients []int64) {
 	f.same(ctx, "delete", chatID, map[string]any{"message_id": idString(messageID), "scope": scope}, recipients)
+}
+
+func (f *Fanout) MessageRemoved(ctx context.Context, m scylla.Message, recipients []int64) {
+	frames := make(map[int64]frame, len(recipients))
+	for _, uid := range recipients {
+		data := map[string]any{"message_id": idString(m.ID), "scope": "everyone", "removed_by_moderation": true}
+		if m.Moderation != nil && m.SenderID != nil && *m.SenderID == uid {
+			data["moderation_reason"] = httpapi.PresentModerationReason(*m.Moderation)
+		}
+		raw, err := f.encode("delete", m.ChatID, data, "")
+		if err != nil {
+			f.log.ErrorContext(ctx, "encode event", "error", err, "type", "delete")
+			return
+		}
+		frames[uid] = frame{Kind: kindEvent, ChatID: m.ChatID, Event: raw}
+	}
+	f.publish(ctx, frames)
 }
 
 // ReactionChanged implements messages.Notifier.

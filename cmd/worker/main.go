@@ -13,6 +13,7 @@ import (
 	"github.com/gocql/gocql"
 
 	"github.com/myronsi/messenger-back/internal/app"
+	"github.com/myronsi/messenger-back/internal/contentreports"
 	"github.com/myronsi/messenger-back/internal/events"
 	"github.com/myronsi/messenger-back/internal/jobs"
 	"github.com/myronsi/messenger-back/internal/media"
@@ -122,7 +123,7 @@ func run() error {
 	notifier := realtime.NewAttachmentNotifier(attachmentBus, pg.Attachments(), cfg.HTTP.BasePath, log)
 	modSvc := moderation.New(moderation.Deps{
 		Store: pg, Cache: redis.NewModerationCache(rd.Client(), "", 0), Notifier: realtime.NewUserNotifier(attachmentBus, log),
-		Metrics: p.Metrics, Log: log,
+		Metrics: p.Metrics, Log: log, Purge: contentreports.New(contentreports.Deps{Store: pg, Log: log}).Purge,
 	})
 	wg.Go(func() { modSvc.RunDaily(bg, log, moderationEvery, redis.NewOnce(rd.Client(), "", "moderation_daily")) })
 	if !prober.Available() {

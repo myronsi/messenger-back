@@ -117,7 +117,7 @@ func (m *MessageServer) renderWith(ctx context.Context, viewer, chatID int64, ms
 	}
 	out := make([]Message, len(msgs))
 	for i, msg := range msgs {
-		parts := MessageParts{Reactions: deco.Reactions[msg.ID], BasePath: m.o.BasePath, Drawings: drawings[msg.ID]}
+		parts := MessageParts{Reactions: deco.Reactions[msg.ID], BasePath: m.o.BasePath, Drawings: drawings[msg.ID], Viewer: viewer}
 		if f := msg.Forwarded; f != nil && f.SenderID != nil {
 			parts.ForwardLink = links[*f.SenderID]
 		}

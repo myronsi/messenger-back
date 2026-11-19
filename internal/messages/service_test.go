@@ -35,6 +35,7 @@ type recorder struct {
 	created    []scylla.Message
 	recipients []int64
 	deleted    []string
+	removed    map[int64]scylla.Message
 	reads      [][]int64
 	typing     []typingCall
 }
@@ -62,6 +63,17 @@ func (r *recorder) MessageCreated(_ context.Context, m scylla.Message, recipient
 func (r *recorder) MessageDeleted(_ context.Context, _, _ int64, scope string, recipients []int64) {
 	r.mu.Lock()
 	r.deleted = append(r.deleted, scope)
+	r.mu.Unlock()
+}
+
+func (r *recorder) MessageRemoved(_ context.Context, m scylla.Message, recipients []int64) {
+	r.mu.Lock()
+	if r.removed == nil {
+		r.removed = map[int64]scylla.Message{}
+	}
+	for _, uid := range recipients {
+		r.removed[uid] = m
+	}
 	r.mu.Unlock()
 }
 

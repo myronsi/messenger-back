@@ -2,6 +2,15 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.39
+
+- Content reports: `POST /chats/{chat_id}/messages/{message_id}/report` and `POST /groups/{chat_id}/report`
+  (`ContentReportRequest`: `ContentReportReason`, which adds `illegal` with a required `note`), and `DELETE` on both
+  to withdraw. User, message and group reports share the limit of 20 a day.
+- `Message.removed_by_moderation` and, for the sender only, `Message.moderation_reason` (`ModerationRemovalReason`:
+  a `ModerationReason` `code` and a `text`); `ReplyPreview.removed_by_moderation`. The WebSocket `delete` event gains
+  the optional `removed_by_moderation` and, in the sender's copy, `moderation_reason`.
+
 ## 2.1.0-alpha.38
 
 - Review by a person: `POST /me/account-status/review` (`AccountReviewRequest`: `text`, 1 to 500 characters) stores a

@@ -92,6 +92,7 @@ type Deps struct {
 	Notifier  Notifier
 	Metrics   Metrics
 	OnBlocked func(ctx context.Context, blocker, blocked int64)
+	Purge     func(ctx context.Context) (int64, error)
 	Log       *slog.Logger
 	Now       func() time.Time
 }
@@ -568,5 +569,10 @@ func (s *Service) Daily(ctx context.Context) (checked int, purged int64, err err
 		return checked, purged, err
 	}
 	outcomes, err := repo.PurgeReportOutcomes(ctx, s.d.Now().Add(-OutcomeRetention))
-	return checked, purged + outcomes, err
+	purged += outcomes
+	if err != nil || s.d.Purge == nil {
+		return checked, purged, err
+	}
+	more, err := s.d.Purge(ctx)
+	return checked, purged + more, err
 }

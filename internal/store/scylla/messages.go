@@ -60,6 +60,12 @@ type Message struct {
 	EditedAt     *time.Time
 	Deleted      bool
 	CreatedAt    time.Time
+	Moderation   *ModerationRemoval
+}
+
+type ModerationRemoval struct {
+	Code string
+	Text string
 }
 
 // AttachmentIDs returns the attachments in display order, including legacy single-file messages.
@@ -119,6 +125,7 @@ type MessageRepository interface {
 	Edit(ctx context.Context, chatID, messageID int64, content string, at time.Time) error
 	// Delete deletes the message for everyone: it keeps its id and shows as deleted.
 	Delete(ctx context.Context, chatID, messageID int64) error
+	Remove(ctx context.Context, chatID, messageID int64, reason ModerationRemoval) error
 	// Hide hides the message from one user.
 	Hide(ctx context.Context, userID, chatID, messageID int64, reason string) error
 	// Hidden reports whether the message is hidden for the user.
@@ -182,6 +189,8 @@ func (r *Messages) session(ctx context.Context) (context.Context, context.Cancel
 const messageColumns = `message_id, sender_id, type, content, attachment_id, reply_to, forwarded_from_message_id,
 forwarded_from_sender_id, forwarded_from_sender_name, edited_at, deleted, created_at, album_ids, sticker_id`
 
+const selectColumns = messageColumns + `, removed_by_moderation, moderation_reason_code, moderation_reason_text`
+
 func scanMessage(chatID int64, scan func(dest ...any) bool) (Message, bool) {
 	var (
 		m          = Message{ChatID: chatID}
@@ -193,9 +202,21 @@ func scanMessage(chatID int64, scan func(dest ...any) bool) (Message, bool) {
 		fwdName    *string
 		edited     *time.Time
 		deleted    *bool
+		removed    *bool
+		modCode    *string
+		modText    *string
 	)
-	if !scan(&m.ID, &sender, &m.Type, &content, &attachment, &m.ReplyTo, &fwdID, &fwdSender, &fwdName, &edited, &deleted, &m.CreatedAt, &m.AlbumIDs, &m.StickerID) {
+	if !scan(&m.ID, &sender, &m.Type, &content, &attachment, &m.ReplyTo, &fwdID, &fwdSender, &fwdName, &edited, &deleted, &m.CreatedAt, &m.AlbumIDs, &m.StickerID, &removed, &modCode, &modText) {
 		return Message{}, false
+	}
+	if removed != nil && *removed {
+		m.Moderation = &ModerationRemoval{}
+		if modCode != nil {
+			m.Moderation.Code = *modCode
+		}
+		if modText != nil {
+			m.Moderation.Text = *modText
+		}
 	}
 	m.SenderID, m.Content, m.AttachmentID, m.EditedAt = sender, content, attachment, edited
 	m.Deleted = deleted != nil && *deleted
@@ -311,7 +332,7 @@ func (r *Messages) get(ctx context.Context, sess *gocql.Session, chatID, message
 	if err != nil {
 		return Message{}, 0, err
 	}
-	iter := sess.Query(`SELECT `+messageColumns+` FROM messages WHERE chat_id = ? AND bucket = ? AND message_id = ?`,
+	iter := sess.Query(`SELECT `+selectColumns+` FROM messages WHERE chat_id = ? AND bucket = ? AND message_id = ?`,
 		chatID, bucket, messageID).WithContext(ctx).Iter()
 	m, ok := scanMessage(chatID, iter.Scan)
 	if err := iter.Close(); err != nil {
@@ -397,6 +418,24 @@ func (r *Messages) Delete(ctx context.Context, chatID, messageID int64) error {
 		chatID, bucket, messageID).WithContext(ctx).SerialConsistency(gocql.LocalSerial).MapScanCAS(map[string]any{})
 	if err != nil {
 		return fmt.Errorf("delete message: %w", err)
+	}
+	return nil
+}
+
+func (r *Messages) Remove(ctx context.Context, chatID, messageID int64, reason ModerationRemoval) error {
+	ctx, cancel, sess, err := r.session(ctx)
+	if err != nil {
+		return err
+	}
+	defer cancel()
+	_, bucket, err := r.get(ctx, sess, chatID, messageID)
+	if err != nil {
+		return err
+	}
+	_, err = sess.Query(`UPDATE messages SET deleted = true, content = null, attachment_id = null, album_ids = null, sticker_id = null, removed_by_moderation = true, moderation_reason_code = ?, moderation_reason_text = ? WHERE chat_id = ? AND bucket = ? AND message_id = ? IF EXISTS`,
+		reason.Code, reason.Text, chatID, bucket, messageID).WithContext(ctx).SerialConsistency(gocql.LocalSerial).MapScanCAS(map[string]any{})
+	if err != nil {
+		return fmt.Errorf("remove message: %w", err)
 	}
 	return nil
 }

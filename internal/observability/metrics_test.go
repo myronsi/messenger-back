@@ -32,6 +32,7 @@ func TestModerationMetrics(t *testing.T) {
 	m.ModerationStatusChange("limited")
 	m.ModerationStatusChange("limited")
 	m.UserReport("spam", "full")
+	m.ContentReport("message", "illegal")
 
 	rec := httptest.NewRecorder()
 	m.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", http.NoBody))
@@ -39,6 +40,7 @@ func TestModerationMetrics(t *testing.T) {
 	for _, want := range []string{
 		`messenger_moderation_status_changes_total{status="limited"} 2`,
 		`messenger_user_reports_total{reason="spam",weight_bucket="full"} 1`,
+		`messenger_content_reports_total{kind="message",reason="illegal"} 1`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("metrics lack %s", want)

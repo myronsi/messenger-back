@@ -70,3 +70,35 @@ func (s *Server) RequestAccountReview(w http.ResponseWriter, r *http.Request, pa
 	}
 	s.moderation.RequestAccountReview(w, r, params)
 }
+
+func (s *Server) ReportMessage(w http.ResponseWriter, r *http.Request, chatID ChatId, messageID MessageId, params ReportMessageParams) {
+	if s.moderation == nil {
+		s.AuthServer.ReportMessage(w, r, chatID, messageID, params)
+		return
+	}
+	s.moderation.ReportMessage(w, r, chatID, messageID, params)
+}
+
+func (s *Server) UnreportMessage(w http.ResponseWriter, r *http.Request, chatID ChatId, messageID MessageId, params UnreportMessageParams) {
+	if s.moderation == nil {
+		s.AuthServer.UnreportMessage(w, r, chatID, messageID, params)
+		return
+	}
+	s.moderation.UnreportMessage(w, r, chatID, messageID, params)
+}
+
+func (s *Server) ReportGroup(w http.ResponseWriter, r *http.Request, chatID ChatId, params ReportGroupParams) {
+	if s.moderation == nil {
+		s.AuthServer.ReportGroup(w, r, chatID, params)
+		return
+	}
+	s.moderation.ReportGroup(w, r, chatID, params)
+}
+
+func (s *Server) UnreportGroup(w http.ResponseWriter, r *http.Request, chatID ChatId, params UnreportGroupParams) {
+	if s.moderation == nil {
+		s.AuthServer.UnreportGroup(w, r, chatID, params)
+		return
+	}
+	s.moderation.UnreportGroup(w, r, chatID, params)
+}
