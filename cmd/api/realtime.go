@@ -19,6 +19,7 @@ import (
 	"github.com/myronsi/messenger-back/internal/messages"
 	"github.com/myronsi/messenger-back/internal/moderation"
 	"github.com/myronsi/messenger-back/internal/realtime"
+	"github.com/myronsi/messenger-back/internal/stats"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/redis"
 	"github.com/myronsi/messenger-back/internal/store/scylla"
@@ -171,6 +172,7 @@ func startRealtime(p *app.Process, pg *postgres.Store, rd *redis.Store, sc *scyl
 	dir := users.NewDirectory(pg, presence, cfg.HTTP.BasePath).WithLabels(mod)
 
 	var svc *messages.Service
+	counter := stats.NewDayCounter(pg.MessageCounts(), log)
 	fan := realtime.NewFanout(realtime.FanoutDeps{
 		Bus: bus, Directory: dir, Store: pg, IDs: idsrc, BasePath: cfg.HTTP.BasePath, Log: log,
 		Members:   func(ctx context.Context, chatID int64) ([]int64, error) { return svc.Members(ctx, chatID) },
@@ -181,6 +183,7 @@ func startRealtime(p *app.Process, pg *postgres.Store, rd *redis.Store, sc *scyl
 		Messages: repo, Store: pg, Members: members, Unread: redis.NewUnread(rdb, ""),
 		Dedup: redis.NewDedup(rdb, "", 0), IDs: idsrc, Notifier: fan, Accepted: p.Metrics.MessageAccepted, Log: log,
 		Events: st.events, QueueNotification: pg.Notifications().Enqueue, Emoji: emoji.New(pg), Moderation: mod,
+		Counter: counter,
 	})
 	gw, err = realtime.New(realtime.Options{
 		Auth: ticketAuth, Messages: svc, Fanout: fan, Bus: bus, Presence: presence,
@@ -196,6 +199,7 @@ func startRealtime(p *app.Process, pg *postgres.Store, rd *redis.Store, sc *scyl
 	st.members, st.unread, st.store = members, redis.NewUnread(rdb, ""), repo
 	st.done.Go(func() { bus.Run(st.ctx) })
 	st.done.Go(func() { presence.Run(st.ctx) })
+	st.done.Go(func() { counter.Run(st.ctx, stats.FlushEvery) })
 	return st, nil
 }
 

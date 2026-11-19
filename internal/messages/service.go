@@ -108,7 +108,12 @@ type Deps struct {
 	Accepted   func()
 	Emoji      EmojiFilter
 	Moderation Moderation
+	Counter    Counter
 	Log        *slog.Logger
+}
+
+type Counter interface {
+	Message(typ string, attachments int, at time.Time)
 }
 
 type Moderation interface {
@@ -510,6 +515,7 @@ func (s *Service) abandon(ctx context.Context, r SendRequest, id int64, keep boo
 // leave derived state stale; the message itself is stored.
 func (s *Service) delivered(ctx context.Context, m scylla.Message, members []int64, clientTempID string) {
 	s.d.Accepted()
+	s.count(m)
 	// The chat moves up in its members' lists; a failure only leaves the order stale until the next message.
 	if err := s.d.Store.Chats().TouchActivity(ctx, m.ChatID, m.ID, m.CreatedAt); err != nil {
 		s.d.Log.WarnContext(ctx, "chat activity", "error", err, "chat_id", m.ChatID)
@@ -523,6 +529,17 @@ func (s *Service) delivered(ctx context.Context, m scylla.Message, members []int
 	}
 	s.d.Notifier.MessageCreated(ctx, m, members, clientTempID)
 	s.emit(ctx, events.Event{Type: events.MessageCreated, ChatID: m.ChatID, MessageID: m.ID, ActorID: sender, At: m.CreatedAt})
+}
+
+func (s *Service) count(m scylla.Message) {
+	if s.d.Counter == nil {
+		return
+	}
+	attachments := 0
+	if m.Type == scylla.TypeFile || m.Type == scylla.TypeVoice {
+		attachments = len(m.AttachmentIDs())
+	}
+	s.d.Counter.Message(m.Type, attachments, m.CreatedAt)
 }
 
 // ErrSendInProgress: a send with this client_temp_id is still being stored. The client retries.

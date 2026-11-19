@@ -27,6 +27,7 @@ users, chats and their participants, attachment metadata and the security log.
 | `000030_user_sticker_packs` | `sticker_packs.slug` and `hidden_at`, `sticker_pack_reports` ([media.md](media.md#stickers)) |
 | `000042_chat_requests` | `participants.is_request` and the partial index `participants_requests_idx (user_id) WHERE is_request` ([chats.md](chats.md#requests-folder)) |
 | `000044_user_moderation` | `user_reports`, `user_moderation`, `user_moderation_events` ([moderation.md](moderation.md#tables)) |
+| `000045_message_day_counts` | `message_day_counts` ([messages.md](messages.md#day-counts)) |
 
 Changes compared to v1:
 
