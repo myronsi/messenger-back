@@ -31,6 +31,7 @@ users, chats and their participants, attachment metadata and the security log.
 | `000046_moderation_decisions` | `user_moderation.decided_by`, `decided_at`, `reason_code`, `reason_text`; reason and `staff_ref` on `user_moderation_events`; `user_reports.dismissed_at`; `hidden_by` on `sticker_packs` and `emoji_packs`; `report_outcomes` ([moderation.md](moderation.md#staff-decisions)) |
 | `000047_account_review_requests` | `account_review_requests` ([moderation.md](moderation.md#review-by-a-person)) |
 | `000048_content_reports` | `content_reports` ([moderation.md](moderation.md#content-reports)) |
+| `000049_security_events_created_idx` | index on `user_security_events (created_at)`: the worker deletes security events older than a year (`Store.PurgeSecurityEvents`, hourly maintenance) |
 
 Changes compared to v1:
 

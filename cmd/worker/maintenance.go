@@ -41,6 +41,11 @@ func maintain(ctx context.Context, log *slog.Logger, store *postgres.Store, ever
 		} else if sessions+rotated > 0 {
 			log.InfoContext(ctx, "purged ended sessions", "sessions", sessions, "rotated_tokens", rotated)
 		}
+		if n, err := store.PurgeSecurityEvents(ctx, postgres.SecurityEventRetention); err != nil {
+			log.ErrorContext(ctx, "purging old security events failed", "err", err)
+		} else if n > 0 {
+			log.InfoContext(ctx, "purged old security events", "count", n)
+		}
 		purged, err := store.Calls().Purge(ctx, calls.Retention)
 		if err != nil {
 			log.ErrorContext(ctx, "purging old calls failed", "err", err)
