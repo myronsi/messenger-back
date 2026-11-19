@@ -135,12 +135,15 @@ INSERT INTO sticker_pack_reports (pack_id, reporter_id, reason) VALUES (@pack_id
 ON CONFLICT (pack_id, reporter_id) DO NOTHING;
 
 -- name: HideReportedStickerPack :execrows
-UPDATE sticker_packs SET hidden_at = now()
+UPDATE sticker_packs SET hidden_at = now(), hidden_by = 'reports'
 WHERE id = @id AND hidden_at IS NULL
   AND (SELECT count(*) FROM sticker_pack_reports r WHERE r.pack_id = @id) >= @threshold::int;
 
 -- name: UnhideStickerPack :execrows
-UPDATE sticker_packs SET hidden_at = NULL WHERE id = @id AND hidden_at IS NOT NULL;
+UPDATE sticker_packs SET hidden_at = NULL, hidden_by = NULL WHERE id = @id AND hidden_at IS NOT NULL;
+
+-- name: HideStickerPackByStaff :execrows
+UPDATE sticker_packs SET hidden_at = @now::timestamptz, hidden_by = 'staff' WHERE id = @id AND hidden_at IS NULL;
 
 -- name: ClearStickerPackReports :exec
 DELETE FROM sticker_pack_reports WHERE pack_id = @pack_id;

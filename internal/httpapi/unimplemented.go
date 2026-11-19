@@ -597,6 +597,14 @@ func (Unimplemented) AppealAccountStatus(w http.ResponseWriter, r *http.Request,
 	notImplemented(w, r)
 }
 
+func (Unimplemented) ListReportOutcomes(w http.ResponseWriter, r *http.Request, _ ListReportOutcomesParams) {
+	notImplemented(w, r)
+}
+
+func (Unimplemented) MarkReportOutcomeRead(w http.ResponseWriter, r *http.Request, _ ReportOutcomeId, _ MarkReportOutcomeReadParams) {
+	notImplemented(w, r)
+}
+
 func (Unimplemented) AcceptChatRequest(w http.ResponseWriter, r *http.Request, chatId ChatId, params AcceptChatRequestParams) {
 	notImplemented(w, r)
 }

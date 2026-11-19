@@ -876,3 +876,25 @@ func TestNewServiceRejectsWeakConfig(t *testing.T) {
 		}
 	}
 }
+
+func TestDeleteAccountByStaff(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	a := e.register(t, "olga", "correct horse")
+	if _, err := e.svc.Authenticate(ctx, a.AccessToken); err != nil {
+		t.Fatal(err)
+	}
+	deleted, err := e.svc.DeleteAccountByStaff(ctx, a.User.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(deleted.Sessions) != 1 {
+		t.Fatalf("revoked sessions %v", deleted.Sessions)
+	}
+	if _, err := e.svc.Authenticate(ctx, a.AccessToken); !errors.Is(err, ErrUnauthenticated) {
+		t.Fatalf("token after the deletion: %v", err)
+	}
+	if _, err := e.svc.DeleteAccountByStaff(ctx, a.User.ID); !errors.Is(err, postgres.ErrNotFound) {
+		t.Fatalf("deleting again: %v", err)
+	}
+}

@@ -47,6 +47,15 @@ func (q *Queries) AddCustomEmoji(ctx context.Context, arg AddCustomEmojiParams) 
 	return i, err
 }
 
+const clearEmojiPackReports = `-- name: ClearEmojiPackReports :exec
+DELETE FROM emoji_pack_reports WHERE pack_id = $1
+`
+
+func (q *Queries) ClearEmojiPackReports(ctx context.Context, packID int64) error {
+	_, err := q.db.Exec(ctx, clearEmojiPackReports, packID)
+	return err
+}
+
 const countPackEmoji = `-- name: CountPackEmoji :one
 SELECT count(*)::int FROM custom_emoji WHERE pack_id = $1 AND deleted_at IS NULL
 `
@@ -76,7 +85,7 @@ func (q *Queries) CountRecentEmojiReports(ctx context.Context, arg CountRecentEm
 
 const createEmojiPack = `-- name: CreateEmojiPack :one
 INSERT INTO emoji_packs (owner_id, title, slug) VALUES ($1, $2, $3)
-RETURNING id, owner_id, chat_id, title, slug, version, hidden_at, deleted_at, created_at
+RETURNING id, owner_id, chat_id, title, slug, version, hidden_at, deleted_at, created_at, hidden_by
 `
 
 type CreateEmojiPackParams struct {
@@ -98,6 +107,7 @@ func (q *Queries) CreateEmojiPack(ctx context.Context, arg CreateEmojiPackParams
 		&i.HiddenAt,
 		&i.DeletedAt,
 		&i.CreatedAt,
+		&i.HiddenBy,
 	)
 	return i, err
 }
@@ -190,7 +200,7 @@ func (q *Queries) GetCustomEmoji(ctx context.Context, id int64) (GetCustomEmojiR
 }
 
 const getEmojiPack = `-- name: GetEmojiPack :one
-SELECT id, owner_id, chat_id, title, slug, version, hidden_at, deleted_at, created_at FROM emoji_packs WHERE id = $1
+SELECT id, owner_id, chat_id, title, slug, version, hidden_at, deleted_at, created_at, hidden_by FROM emoji_packs WHERE id = $1
 `
 
 func (q *Queries) GetEmojiPack(ctx context.Context, id int64) (EmojiPack, error) {
@@ -206,12 +216,13 @@ func (q *Queries) GetEmojiPack(ctx context.Context, id int64) (EmojiPack, error)
 		&i.HiddenAt,
 		&i.DeletedAt,
 		&i.CreatedAt,
+		&i.HiddenBy,
 	)
 	return i, err
 }
 
 const getEmojiPackBySlug = `-- name: GetEmojiPackBySlug :one
-SELECT id, owner_id, chat_id, title, slug, version, hidden_at, deleted_at, created_at FROM emoji_packs WHERE slug = $1 AND deleted_at IS NULL
+SELECT id, owner_id, chat_id, title, slug, version, hidden_at, deleted_at, created_at, hidden_by FROM emoji_packs WHERE slug = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) GetEmojiPackBySlug(ctx context.Context, slug *string) (EmojiPack, error) {
@@ -227,12 +238,13 @@ func (q *Queries) GetEmojiPackBySlug(ctx context.Context, slug *string) (EmojiPa
 		&i.HiddenAt,
 		&i.DeletedAt,
 		&i.CreatedAt,
+		&i.HiddenBy,
 	)
 	return i, err
 }
 
 const getGroupEmojiPack = `-- name: GetGroupEmojiPack :one
-SELECT id, owner_id, chat_id, title, slug, version, hidden_at, deleted_at, created_at FROM emoji_packs WHERE chat_id = $1 AND deleted_at IS NULL
+SELECT id, owner_id, chat_id, title, slug, version, hidden_at, deleted_at, created_at, hidden_by FROM emoji_packs WHERE chat_id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) GetGroupEmojiPack(ctx context.Context, chatID *int64) (EmojiPack, error) {
@@ -248,12 +260,30 @@ func (q *Queries) GetGroupEmojiPack(ctx context.Context, chatID *int64) (EmojiPa
 		&i.HiddenAt,
 		&i.DeletedAt,
 		&i.CreatedAt,
+		&i.HiddenBy,
 	)
 	return i, err
 }
 
+const hideEmojiPackByStaff = `-- name: HideEmojiPackByStaff :execrows
+UPDATE emoji_packs SET hidden_at = $1::timestamptz, hidden_by = 'staff', version = version + 1 WHERE id = $2 AND hidden_at IS NULL
+`
+
+type HideEmojiPackByStaffParams struct {
+	Now time.Time
+	ID  int64
+}
+
+func (q *Queries) HideEmojiPackByStaff(ctx context.Context, arg HideEmojiPackByStaffParams) (int64, error) {
+	result, err := q.db.Exec(ctx, hideEmojiPackByStaff, arg.Now, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const hideReportedEmojiPack = `-- name: HideReportedEmojiPack :execrows
-UPDATE emoji_packs SET hidden_at = now(), version = version + 1
+UPDATE emoji_packs SET hidden_at = now(), hidden_by = 'reports', version = version + 1
 WHERE id = $1 AND hidden_at IS NULL
   AND (SELECT count(*) FROM emoji_pack_reports r WHERE r.pack_id = $1) >= $2::int
 `
@@ -407,7 +437,7 @@ func (q *Queries) ListUsableEmoji(ctx context.Context, arg ListUsableEmojiParams
 }
 
 const listUserEmojiPacks = `-- name: ListUserEmojiPacks :many
-SELECT p.id, p.owner_id, p.chat_id, p.title, p.slug, p.version, p.hidden_at, p.deleted_at, p.created_at, EXISTS (SELECT 1 FROM user_emoji_packs u WHERE u.pack_id = p.id AND u.user_id = $1)::bool AS installed
+SELECT p.id, p.owner_id, p.chat_id, p.title, p.slug, p.version, p.hidden_at, p.deleted_at, p.created_at, p.hidden_by, EXISTS (SELECT 1 FROM user_emoji_packs u WHERE u.pack_id = p.id AND u.user_id = $1)::bool AS installed
 FROM emoji_packs p
 WHERE p.deleted_at IS NULL
   AND (p.owner_id = $1
@@ -432,6 +462,7 @@ type ListUserEmojiPacksRow struct {
 	HiddenAt  *time.Time
 	DeletedAt *time.Time
 	CreatedAt time.Time
+	HiddenBy  *string
 	Installed bool
 }
 
@@ -454,6 +485,7 @@ func (q *Queries) ListUserEmojiPacks(ctx context.Context, arg ListUserEmojiPacks
 			&i.HiddenAt,
 			&i.DeletedAt,
 			&i.CreatedAt,
+			&i.HiddenBy,
 			&i.Installed,
 		); err != nil {
 			return nil, err
@@ -467,7 +499,7 @@ func (q *Queries) ListUserEmojiPacks(ctx context.Context, arg ListUserEmojiPacks
 }
 
 const lockEmojiPack = `-- name: LockEmojiPack :one
-SELECT id, owner_id, chat_id, title, slug, version, hidden_at, deleted_at, created_at FROM emoji_packs WHERE id = $1 FOR UPDATE
+SELECT id, owner_id, chat_id, title, slug, version, hidden_at, deleted_at, created_at, hidden_by FROM emoji_packs WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) LockEmojiPack(ctx context.Context, id int64) (EmojiPack, error) {
@@ -483,6 +515,7 @@ func (q *Queries) LockEmojiPack(ctx context.Context, id int64) (EmojiPack, error
 		&i.HiddenAt,
 		&i.DeletedAt,
 		&i.CreatedAt,
+		&i.HiddenBy,
 	)
 	return i, err
 }
@@ -525,6 +558,18 @@ type RenameEmojiPackParams struct {
 
 func (q *Queries) RenameEmojiPack(ctx context.Context, arg RenameEmojiPackParams) (int64, error) {
 	result, err := q.db.Exec(ctx, renameEmojiPack, arg.Title, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const unhideEmojiPack = `-- name: UnhideEmojiPack :execrows
+UPDATE emoji_packs SET hidden_at = NULL, hidden_by = NULL, version = version + 1 WHERE id = $1 AND hidden_at IS NOT NULL
+`
+
+func (q *Queries) UnhideEmojiPack(ctx context.Context, id int64) (int64, error) {
+	result, err := q.db.Exec(ctx, unhideEmojiPack, id)
 	if err != nil {
 		return 0, err
 	}

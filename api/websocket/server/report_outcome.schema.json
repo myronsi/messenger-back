@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ServerReportOutcomeEvent",
+  "description": "The moderation team reviewed something the current user reported (sent only to the reporter's own sessions).",
+  "type": "object",
+  "required": [
+    "type",
+    "event_id",
+    "chat_id",
+    "data"
+  ],
+  "properties": {
+    "type": {
+      "const": "report_outcome"
+    },
+    "event_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "chat_id": {
+      "type": "null"
+    },
+    "data": {
+      "$ref": "../../openapi.yaml#/components/schemas/ReportOutcome"
+    }
+  }
+}

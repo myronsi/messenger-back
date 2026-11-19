@@ -87,9 +87,18 @@ ON CONFLICT DO NOTHING;
 SELECT count(*)::int FROM emoji_pack_reports WHERE reporter_id = @reporter_id AND created_at > @since;
 
 -- name: HideReportedEmojiPack :execrows
-UPDATE emoji_packs SET hidden_at = now(), version = version + 1
+UPDATE emoji_packs SET hidden_at = now(), hidden_by = 'reports', version = version + 1
 WHERE id = @id AND hidden_at IS NULL
   AND (SELECT count(*) FROM emoji_pack_reports r WHERE r.pack_id = @id) >= @threshold::int;
+
+-- name: HideEmojiPackByStaff :execrows
+UPDATE emoji_packs SET hidden_at = @now::timestamptz, hidden_by = 'staff', version = version + 1 WHERE id = @id AND hidden_at IS NULL;
+
+-- name: UnhideEmojiPack :execrows
+UPDATE emoji_packs SET hidden_at = NULL, hidden_by = NULL, version = version + 1 WHERE id = @id AND hidden_at IS NOT NULL;
+
+-- name: ClearEmojiPackReports :exec
+DELETE FROM emoji_pack_reports WHERE pack_id = @pack_id;
 
 -- name: IsEmojiImage :one
 SELECT EXISTS (SELECT 1 FROM custom_emoji WHERE attachment_id = @attachment_id);

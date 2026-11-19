@@ -73,6 +73,9 @@
       "$ref": "server/account_status.schema.json"
     },
     {
+      "$ref": "server/report_outcome.schema.json"
+    },
+    {
       "$ref": "server/recovery_request.schema.json"
     },
     {

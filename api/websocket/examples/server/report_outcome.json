@@ -1,0 +1,13 @@
+{
+  "type": "report_outcome",
+  "event_id": "7217400317439950012",
+  "chat_id": null,
+  "data": {
+    "id": "41",
+    "subject_type": "user",
+    "subject_id": "7217400317439950848",
+    "outcome": "action_taken",
+    "created_at": "2026-11-19T10:15:00Z",
+    "read": false
+  }
+}

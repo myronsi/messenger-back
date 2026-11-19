@@ -206,3 +206,62 @@ func TestRestrictionsPerStatus(t *testing.T) {
 		}
 	}
 }
+
+func facts(at time.Time, n int, weight float64) []postgres.ReportFact {
+	out := make([]postgres.ReportFact, n)
+	for i := range out {
+		out[i] = postgres.ReportFact{ReporterID: int64(i + 1), Weight: weight, CreatedAt: at.Add(time.Duration(i) * time.Minute)}
+	}
+	return out
+}
+
+func TestDecideSetsStaffDecision(t *testing.T) {
+	now := time.Date(2026, 11, 19, 12, 0, 0, 0, time.UTC)
+	probation := now.Add(day)
+	cur := postgres.ModerationState{Status: "restricted", Since: now.Add(-day), ProbationUntil: &probation, DecidedBy: postgres.DecidedAutomatic}
+	got := Decide(cur, facts(now.Add(-time.Hour), 10, 1), Decision{Status: Restricted, ReasonCode: "spam", ReasonText: "Spam links", StaffRef: "case-1"}, now)
+	if got.Status != "restricted" || !got.Since.Equal(cur.Since) || got.ProbationUntil != nil || got.Score != 10 {
+		t.Fatalf("confirming keeps the level and since, ends probation: %+v", got)
+	}
+	if got.DecidedBy != postgres.DecidedStaff || got.DecidedAt == nil || !got.DecidedAt.Equal(now) || *got.ReasonCode != "spam" || *got.ReasonText != "Spam links" || *got.StaffRef != "case-1" || got.Cause != CauseManual {
+		t.Fatalf("decision fields %+v", got)
+	}
+	lower := Decide(cur, nil, Decision{Status: Good, ReasonCode: "other", ReasonText: "No violation"}, now)
+	if lower.Status != "good" || !lower.Since.Equal(now) || lower.StaffRef != nil {
+		t.Fatalf("reversing %+v", lower)
+	}
+	if CanAppeal(got, now) {
+		t.Fatal("a staff decision must not be open to the automatic appeal")
+	}
+}
+
+func TestNextAfterStaffDecision(t *testing.T) {
+	decided := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
+	code, text := "spam", "Spam"
+	cur := postgres.ModerationState{Status: "warned", Since: decided, DecidedBy: postgres.DecidedStaff, DecidedAt: &decided, ReasonCode: &code, ReasonText: &text}
+	old := facts(decided.Add(-day), 12, 1)
+
+	later := decided.Add(60 * day)
+	if got := Next(cur, nil, later); got.Status != "warned" || got.DecidedBy != postgres.DecidedStaff {
+		t.Fatalf("neither decay nor the quiet step lowers a staff decision: %+v", got)
+	}
+	if got := Next(cur, old, decided.Add(time.Hour)); got.Status != "warned" || got.Score != 12 {
+		t.Fatalf("reports before the decision do not raise it: %+v", got)
+	}
+	newer := append(old, facts(decided.Add(time.Hour), 6, 1)...)
+	got := Next(cur, newer, decided.Add(2*time.Hour))
+	if got.Status != "limited" || got.Cause != CauseReports || got.DecidedBy != postgres.DecidedAutomatic || got.DecidedAt != nil || got.ReasonCode != nil || got.ReasonText != nil {
+		t.Fatalf("new reports after the decision raise it automatically: %+v", got)
+	}
+}
+
+func TestValidStatus(t *testing.T) {
+	for _, s := range []string{"good", "warned", "limited", "restricted", "suspended"} {
+		if !ValidStatus(s) {
+			t.Errorf("%s is valid", s)
+		}
+	}
+	if ValidStatus("banned") || ValidStatus("") {
+		t.Error("unknown statuses are not valid")
+	}
+}

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.36
+  version: 2.1.0-alpha.37
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -1144,7 +1144,8 @@ paths:
       operationId: getAccountStatus
       summary: The current user's account status
       description: |
-        The status follows the reports on the account automatically (`docs/moderation.md`). `restrictions` lists
+        The status follows the reports on the account automatically (`docs/moderation.md`), unless a person on the
+        moderation team decided it (`decided_by: staff`, with `reason_code` and `reason_text`). `restrictions` lists
         what the status blocks. The WebSocket event `account_status` carries the same object when it changes.
       responses:
         "426": { $ref: "#/components/responses/ClientOutdated" }
@@ -1177,6 +1178,44 @@ paths:
               schema: { $ref: "#/components/schemas/AccountStatus" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "409": { $ref: "#/components/responses/Conflict" }
+  /me/report-outcomes:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    get:
+      tags: [me]
+      operationId: listReportOutcomes
+      summary: Outcomes of the current user's reports
+      description: |
+        Short notices about reports the current user made: the moderation team took action or found no violation.
+        They never say what action was taken. Newest first, at most 50, kept for 90 days. A new one also arrives as
+        the WebSocket event `report_outcome`.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: The report outcomes
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReportOutcomeList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /me/report-outcomes/{outcome_id}/read:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ReportOutcomeId"
+    post:
+      tags: [me]
+      operationId: markReportOutcomeRead
+      summary: Mark a report outcome as read
+      description: Marking an outcome that is already read is fine.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Marked as read
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /users/{user_id}/avatar:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
@@ -5275,6 +5314,11 @@ components:
       in: path
       required: true
       schema: { $ref: "#/components/schemas/Id" }
+    ReportOutcomeId:
+      name: outcome_id
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/Id" }
     RequestId:
       name: request_id
       in: path
@@ -6166,6 +6210,58 @@ components:
           oneOf:
             - $ref: "#/components/schemas/Timestamp"
             - type: "null"
+        decided_by:
+          $ref: "#/components/schemas/AccountStatusDecidedBy"
+        reason_code:
+          description: The guideline rule a person on the moderation team named; `null` for automatic statuses.
+          oneOf:
+            - $ref: "#/components/schemas/ModerationReason"
+            - type: "null"
+        reason_text:
+          type: [string, "null"]
+          maxLength: 1000
+          description: |
+            The explanation written for the user by the moderation team; `null` for automatic statuses. Show it as
+            written by "Messenger moderation", never by a person's name.
+    AccountStatusDecidedBy:
+      type: string
+      description: |
+        Who set the current status: `automatic` (reports, decay, appeal) or `staff` (reviewed by a person on the
+        moderation team). Missing means `automatic`. Unknown values must be treated like `automatic`.
+      enum: [automatic, staff]
+    ModerationReason:
+      type: string
+      description: The guideline rule behind a moderation decision. Unknown values must be shown as `other`.
+      enum: [spam, scam, harassment, impersonation, inappropriate_profile, illegal, other]
+    ReportOutcomeKind:
+      type: string
+      description: |
+        `action_taken` the moderation team acted on the report, `no_violation` it found no violation. Unknown values
+        must be shown as a generic "your report was reviewed".
+      enum: [action_taken, no_violation]
+    ReportSubjectType:
+      type: string
+      description: What was reported. Unknown values must be shown without the subject.
+      enum: [user, sticker_pack, emoji_pack]
+    ReportOutcome:
+      type: object
+      required: [id, subject_type, subject_id, outcome, created_at, read]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        subject_type: { $ref: "#/components/schemas/ReportSubjectType" }
+        subject_id:
+          allOf: [{ $ref: "#/components/schemas/Id" }]
+          description: The reported user, sticker pack or emoji pack.
+        outcome: { $ref: "#/components/schemas/ReportOutcomeKind" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        read: { type: boolean }
+    ReportOutcomeList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/ReportOutcome" }
     Me:
       allOf:
         - $ref: "#/components/schemas/User"

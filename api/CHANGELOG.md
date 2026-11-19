@@ -2,6 +2,15 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.37
+
+- `AccountStatus` gains the optional `decided_by` (`AccountStatusDecidedBy`: `automatic`, `staff`), `reason_code`
+  (`ModerationReason`: `spam`, `scam`, `harassment`, `impersonation`, `inappropriate_profile`, `illegal`, `other`) and
+  `reason_text` for statuses a person on the moderation team set. `can_appeal` is `false` for those.
+- Reporter outcome notices: `GET /me/report-outcomes` (`ReportOutcomeList` of `ReportOutcome`: `ReportSubjectType`,
+  `ReportOutcomeKind`) and `POST /me/report-outcomes/{outcome_id}/read`; the WebSocket event `report_outcome` carries a
+  new one to the reporter's own sessions.
+
 ## 2.1.0-alpha.36
 
 - User reports: `POST /users/{user_id}/report` (`ReportUserRequest`: `ReportReason`, optional `note`, `block`

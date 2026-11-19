@@ -42,7 +42,12 @@ type ModerationState struct {
 	ProbationUntil     *time.Time
 	AppealBlockedUntil *time.Time
 	LastAppealAt       *time.Time
+	DecidedBy          string
+	DecidedAt          *time.Time
+	ReasonCode         *string
+	ReasonText         *string
 	Cause              string
+	StaffRef           *string
 }
 
 type ModerationEvent struct {
@@ -52,6 +57,9 @@ type ModerationEvent struct {
 	ToStatus   string
 	Score      float64
 	Cause      string
+	ReasonCode *string
+	ReasonText *string
+	StaffRef   *string
 	CreatedAt  time.Time
 }
 
@@ -68,6 +76,13 @@ type ModerationRepository interface {
 	Due(ctx context.Context, after int64, limit int) ([]int64, error)
 	PurgeReports(ctx context.Context, before time.Time) (int64, error)
 	Events(ctx context.Context, userID int64) ([]ModerationEvent, error)
+	DismissReports(ctx context.Context, targetID int64, reporterIDs []int64, now time.Time) (dismissed int, outcomes []ReportOutcome, err error)
+	NotifyUserReporters(ctx context.Context, targetID int64, outcome string, now time.Time) ([]ReportOutcome, error)
+	HidePack(ctx context.Context, kind PackKind, packID int64, now time.Time) (bool, []ReportOutcome, error)
+	UnhidePack(ctx context.Context, kind PackKind, packID int64, now time.Time) (bool, []ReportOutcome, error)
+	ReportOutcomes(ctx context.Context, reporterID int64, since time.Time, limit int) ([]ReportOutcome, error)
+	MarkReportOutcomeRead(ctx context.Context, reporterID, id int64, now time.Time) error
+	PurgeReportOutcomes(ctx context.Context, before time.Time) (int64, error)
 }
 
 const (
@@ -75,7 +90,37 @@ const (
 	ContextSharedChat      = "shared_chat"
 	ContextNone            = "none"
 	StatusGood             = "good"
+	DecidedAutomatic       = "automatic"
+	DecidedStaff           = "staff"
+	CauseManual            = "manual"
+	OutcomeActionTaken     = "action_taken"
+	OutcomeNoViolation     = "no_violation"
 )
+
+type PackKind string
+
+const (
+	StickerPackKind PackKind = "sticker_pack"
+	EmojiPackKind   PackKind = "emoji_pack"
+)
+
+type ReportOutcome struct {
+	ID          int64
+	ReporterID  int64
+	SubjectType string
+	SubjectID   int64
+	Outcome     string
+	CreatedAt   time.Time
+	ReadAt      *time.Time
+}
+
+func outcomesFrom(rows []sqlcdb.ReportOutcome) []ReportOutcome {
+	out := make([]ReportOutcome, len(rows))
+	for i, r := range rows {
+		out[i] = ReportOutcome{ID: r.ID, ReporterID: r.ReporterID, SubjectType: r.SubjectType, SubjectID: r.SubjectID, Outcome: r.Outcome, CreatedAt: r.CreatedAt, ReadAt: r.ReadAt}
+	}
+	return out
+}
 
 type moderationRepo struct{ s *Store }
 
@@ -166,13 +211,29 @@ func (r moderationRepo) DirectChatsStartedSince(ctx context.Context, userID int6
 	return int(n), mapError(err)
 }
 
-func stateFrom(userID int64, status string, score float64, since time.Time, probation, blocked, appeal *time.Time) ModerationState {
+type moderationRow struct {
+	UserID             int64
+	Status             string
+	Score              float64
+	StatusSince        time.Time
+	ProbationUntil     *time.Time
+	AppealBlockedUntil *time.Time
+	LastAppealAt       *time.Time
+	DecidedBy          string
+	DecidedAt          *time.Time
+	ReasonCode         *string
+	ReasonText         *string
+}
+
+func stateFrom(row moderationRow) ModerationState {
+	since := row.StatusSince
 	if since.Unix() <= 0 {
 		since = time.Time{}
 	}
 	return ModerationState{
-		UserID: userID, Status: status, Score: score, Since: since,
-		ProbationUntil: probation, AppealBlockedUntil: blocked, LastAppealAt: appeal,
+		UserID: row.UserID, Status: row.Status, Score: row.Score, Since: since,
+		ProbationUntil: row.ProbationUntil, AppealBlockedUntil: row.AppealBlockedUntil, LastAppealAt: row.LastAppealAt,
+		DecidedBy: row.DecidedBy, DecidedAt: row.DecidedAt, ReasonCode: row.ReasonCode, ReasonText: row.ReasonText,
 	}
 }
 
@@ -181,12 +242,12 @@ func (r moderationRepo) State(ctx context.Context, userID int64) (ModerationStat
 	defer cancel()
 	row, err := r.s.q.GetUserModeration(ctx, userID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ModerationState{UserID: userID, Status: StatusGood}, nil
+		return ModerationState{UserID: userID, Status: StatusGood, DecidedBy: DecidedAutomatic}, nil
 	}
 	if err != nil {
 		return ModerationState{}, mapError(err)
 	}
-	return stateFrom(row.UserID, row.Status, row.Score, row.StatusSince, row.ProbationUntil, row.AppealBlockedUntil, row.LastAppealAt), nil
+	return stateFrom(moderationRow(row)), nil
 }
 
 func (r moderationRepo) Statuses(ctx context.Context, userIDs []int64) (map[int64]string, error) {
@@ -216,7 +277,7 @@ func (r moderationRepo) Transition(ctx context.Context, userID int64, factsSince
 		if err != nil {
 			return err
 		}
-		before = stateFrom(row.UserID, row.Status, row.Score, row.StatusSince, row.ProbationUntil, row.AppealBlockedUntil, row.LastAppealAt)
+		before = stateFrom(moderationRow(row))
 		rows, err := q.ListReportFacts(ctx, sqlcdb.ListReportFactsParams{TargetID: userID, Since: factsSince})
 		if err != nil {
 			return err
@@ -227,6 +288,9 @@ func (r moderationRepo) Transition(ctx context.Context, userID int64, factsSince
 		}
 		after = next(before, facts)
 		after.UserID = userID
+		if after.DecidedBy == "" {
+			after.DecidedBy = DecidedAutomatic
+		}
 		since := after.Since
 		if since.IsZero() {
 			since = time.Unix(0, 0)
@@ -234,14 +298,16 @@ func (r moderationRepo) Transition(ctx context.Context, userID int64, factsSince
 		if err := q.UpdateUserModeration(ctx, sqlcdb.UpdateUserModerationParams{
 			UserID: userID, Status: after.Status, Score: after.Score, StatusSince: since,
 			ProbationUntil: after.ProbationUntil, AppealBlockedUntil: after.AppealBlockedUntil, LastAppealAt: after.LastAppealAt,
+			DecidedBy: after.DecidedBy, DecidedAt: after.DecidedAt, ReasonCode: after.ReasonCode, ReasonText: after.ReasonText,
 		}); err != nil {
 			return err
 		}
-		if after.Status == before.Status {
+		if after.Status == before.Status && after.Cause != CauseManual {
 			return nil
 		}
 		return q.InsertUserModerationEvent(ctx, sqlcdb.InsertUserModerationEventParams{
-			UserID: userID, FromStatus: before.Status, ToStatus: after.Status, Score: after.Score, Cause: after.Cause, Now: now,
+			UserID: userID, FromStatus: before.Status, ToStatus: after.Status, Score: after.Score, Cause: after.Cause,
+			ReasonCode: after.ReasonCode, ReasonText: after.ReasonText, StaffRef: after.StaffRef, Now: now,
 		})
 	})
 	return before, after, mapError(err)
@@ -270,7 +336,166 @@ func (r moderationRepo) Events(ctx context.Context, userID int64) ([]ModerationE
 	}
 	out := make([]ModerationEvent, len(rows))
 	for i, row := range rows {
-		out[i] = ModerationEvent{ID: row.ID, UserID: row.UserID, FromStatus: row.FromStatus, ToStatus: row.ToStatus, Score: row.Score, Cause: row.Cause, CreatedAt: row.CreatedAt}
+		out[i] = ModerationEvent{
+			ID: row.ID, UserID: row.UserID, FromStatus: row.FromStatus, ToStatus: row.ToStatus, Score: row.Score, Cause: row.Cause,
+			ReasonCode: row.ReasonCode, ReasonText: row.ReasonText, StaffRef: row.StaffRef, CreatedAt: row.CreatedAt,
+		}
 	}
 	return out, nil
+}
+
+func (r moderationRepo) DismissReports(ctx context.Context, targetID int64, reporterIDs []int64, now time.Time) (int, []ReportOutcome, error) {
+	var dismissed int
+	var outcomes []ReportOutcome
+	err := r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
+		ids, err := q.DismissUserReports(ctx, sqlcdb.DismissUserReportsParams{Now: now, TargetID: targetID, ReporterIds: reporterIDs})
+		if err != nil {
+			return err
+		}
+		dismissed = len(ids)
+		outcomes = nil
+		if len(ids) == 0 {
+			return nil
+		}
+		rows, err := q.InsertDismissedReportOutcomes(ctx, sqlcdb.InsertDismissedReportOutcomesParams{Now: now, TargetID: targetID, ReporterIds: ids})
+		outcomes = outcomesFrom(rows)
+		return err
+	})
+	return dismissed, outcomes, mapError(err)
+}
+
+func (r moderationRepo) NotifyUserReporters(ctx context.Context, targetID int64, outcome string, now time.Time) ([]ReportOutcome, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	rows, err := r.s.q.InsertUserReportOutcomes(ctx, sqlcdb.InsertUserReportOutcomesParams{Outcome: outcome, Now: now, TargetID: targetID})
+	if err != nil {
+		return nil, mapError(err)
+	}
+	return outcomesFrom(rows), nil
+}
+
+func lockPack(ctx context.Context, q *sqlcdb.Queries, kind PackKind, packID int64) error {
+	switch kind {
+	case StickerPackKind:
+		p, err := q.LockStickerPack(ctx, packID)
+		if err != nil {
+			return err
+		}
+		if p.DeletedAt != nil {
+			return ErrNotFound
+		}
+		if p.BuiltinKey != nil {
+			return ErrForbidden
+		}
+	case EmojiPackKind:
+		p, err := q.LockEmojiPack(ctx, packID)
+		if err != nil {
+			return err
+		}
+		if p.DeletedAt != nil {
+			return ErrNotFound
+		}
+	default:
+		return ErrNotFound
+	}
+	return nil
+}
+
+func packOutcomes(ctx context.Context, q *sqlcdb.Queries, kind PackKind, packID int64, outcome string, now time.Time) ([]ReportOutcome, error) {
+	var rows []sqlcdb.ReportOutcome
+	var err error
+	if kind == StickerPackKind {
+		rows, err = q.InsertStickerPackReportOutcomes(ctx, sqlcdb.InsertStickerPackReportOutcomesParams{Outcome: outcome, Now: now, PackID: packID})
+	} else {
+		rows, err = q.InsertEmojiPackReportOutcomes(ctx, sqlcdb.InsertEmojiPackReportOutcomesParams{Outcome: outcome, Now: now, PackID: packID})
+	}
+	return outcomesFrom(rows), err
+}
+
+func (r moderationRepo) HidePack(ctx context.Context, kind PackKind, packID int64, now time.Time) (bool, []ReportOutcome, error) {
+	var changed bool
+	var outcomes []ReportOutcome
+	err := r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
+		if err := lockPack(ctx, q, kind, packID); err != nil {
+			return err
+		}
+		var n int64
+		var err error
+		if kind == StickerPackKind {
+			n, err = q.HideStickerPackByStaff(ctx, sqlcdb.HideStickerPackByStaffParams{ID: packID, Now: now})
+		} else {
+			n, err = q.HideEmojiPackByStaff(ctx, sqlcdb.HideEmojiPackByStaffParams{ID: packID, Now: now})
+		}
+		if err != nil {
+			return err
+		}
+		changed = n > 0
+		outcomes, err = packOutcomes(ctx, q, kind, packID, OutcomeActionTaken, now)
+		return err
+	})
+	return changed, outcomes, mapError(err)
+}
+
+func (r moderationRepo) UnhidePack(ctx context.Context, kind PackKind, packID int64, now time.Time) (bool, []ReportOutcome, error) {
+	var changed bool
+	var outcomes []ReportOutcome
+	err := r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
+		if err := lockPack(ctx, q, kind, packID); err != nil {
+			return err
+		}
+		var err error
+		if outcomes, err = packOutcomes(ctx, q, kind, packID, OutcomeNoViolation, now); err != nil {
+			return err
+		}
+		var n int64
+		if kind == StickerPackKind {
+			if n, err = q.UnhideStickerPack(ctx, packID); err == nil {
+				err = q.ClearStickerPackReports(ctx, packID)
+			}
+		} else {
+			if n, err = q.UnhideEmojiPack(ctx, packID); err == nil {
+				err = q.ClearEmojiPackReports(ctx, packID)
+			}
+		}
+		changed = n > 0
+		return err
+	})
+	return changed, outcomes, mapError(err)
+}
+
+func (r moderationRepo) ReportOutcomes(ctx context.Context, reporterID int64, since time.Time, limit int) ([]ReportOutcome, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	rows, err := r.s.q.ListReportOutcomes(ctx, sqlcdb.ListReportOutcomesParams{ReporterID: reporterID, Since: since, MaxRows: clampLimit(limit)})
+	if err != nil {
+		return nil, mapError(err)
+	}
+	return outcomesFrom(rows), nil
+}
+
+func (r moderationRepo) MarkReportOutcomeRead(ctx context.Context, reporterID, id int64, now time.Time) error {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	n, err := r.s.q.MarkReportOutcomeRead(ctx, sqlcdb.MarkReportOutcomeReadParams{ID: id, ReporterID: reporterID, Now: now})
+	if err != nil {
+		return mapError(err)
+	}
+	if n > 0 {
+		return nil
+	}
+	exists, err := r.s.q.ReportOutcomeExists(ctx, sqlcdb.ReportOutcomeExistsParams{ID: id, ReporterID: reporterID})
+	if err != nil {
+		return mapError(err)
+	}
+	if !exists {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (r moderationRepo) PurgeReportOutcomes(ctx context.Context, before time.Time) (int64, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	n, err := r.s.q.DeleteReportOutcomesBefore(ctx, before)
+	return n, mapError(err)
 }

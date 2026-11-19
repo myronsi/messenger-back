@@ -94,6 +94,39 @@ func (q *Queries) DeleteUserReportsBefore(ctx context.Context, before time.Time)
 	return result.RowsAffected(), nil
 }
 
+const dismissUserReports = `-- name: DismissUserReports :many
+UPDATE user_reports SET dismissed_at = $1::timestamptz
+WHERE target_id = $2 AND withdrawn_at IS NULL AND dismissed_at IS NULL
+  AND ($3::BIGINT[] IS NULL OR reporter_id = ANY($3::BIGINT[]))
+RETURNING reporter_id
+`
+
+type DismissUserReportsParams struct {
+	Now         time.Time
+	TargetID    int64
+	ReporterIds []int64
+}
+
+func (q *Queries) DismissUserReports(ctx context.Context, arg DismissUserReportsParams) ([]int64, error) {
+	rows, err := q.db.Query(ctx, dismissUserReports, arg.Now, arg.TargetID, arg.ReporterIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int64{}
+	for rows.Next() {
+		var reporter_id int64
+		if err := rows.Scan(&reporter_id); err != nil {
+			return nil, err
+		}
+		items = append(items, reporter_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const ensureUserModeration = `-- name: EnsureUserModeration :exec
 INSERT INTO user_moderation (user_id, status_since) VALUES ($1, 'epoch') ON CONFLICT (user_id) DO NOTHING
 `
@@ -104,7 +137,8 @@ func (q *Queries) EnsureUserModeration(ctx context.Context, userID int64) error 
 }
 
 const getUserModeration = `-- name: GetUserModeration :one
-SELECT user_id, status, score::float8 AS score, status_since, probation_until, appeal_blocked_until, last_appeal_at
+SELECT user_id, status, score::float8 AS score, status_since, probation_until, appeal_blocked_until, last_appeal_at,
+       decided_by, decided_at, reason_code, reason_text
 FROM user_moderation WHERE user_id = $1
 `
 
@@ -116,6 +150,10 @@ type GetUserModerationRow struct {
 	ProbationUntil     *time.Time
 	AppealBlockedUntil *time.Time
 	LastAppealAt       *time.Time
+	DecidedBy          string
+	DecidedAt          *time.Time
+	ReasonCode         *string
+	ReasonText         *string
 }
 
 func (q *Queries) GetUserModeration(ctx context.Context, userID int64) (GetUserModerationRow, error) {
@@ -129,13 +167,17 @@ func (q *Queries) GetUserModeration(ctx context.Context, userID int64) (GetUserM
 		&i.ProbationUntil,
 		&i.AppealBlockedUntil,
 		&i.LastAppealAt,
+		&i.DecidedBy,
+		&i.DecidedAt,
+		&i.ReasonCode,
+		&i.ReasonText,
 	)
 	return i, err
 }
 
 const insertUserModerationEvent = `-- name: InsertUserModerationEvent :exec
-INSERT INTO user_moderation_events (user_id, from_status, to_status, score, cause, created_at)
-VALUES ($1, $2, $3, $4::float8, $5, $6)
+INSERT INTO user_moderation_events (user_id, from_status, to_status, score, cause, reason_code, reason_text, staff_ref, created_at)
+VALUES ($1, $2, $3, $4::float8, $5, $6, $7, $8, $9)
 `
 
 type InsertUserModerationEventParams struct {
@@ -144,6 +186,9 @@ type InsertUserModerationEventParams struct {
 	ToStatus   string
 	Score      float64
 	Cause      string
+	ReasonCode *string
+	ReasonText *string
+	StaffRef   *string
 	Now        time.Time
 }
 
@@ -154,6 +199,9 @@ func (q *Queries) InsertUserModerationEvent(ctx context.Context, arg InsertUserM
 		arg.ToStatus,
 		arg.Score,
 		arg.Cause,
+		arg.ReasonCode,
+		arg.ReasonText,
+		arg.StaffRef,
 		arg.Now,
 	)
 	return err
@@ -222,7 +270,7 @@ func (q *Queries) ListModerationStatuses(ctx context.Context, userIds []int64) (
 
 const listReportFacts = `-- name: ListReportFacts :many
 SELECT reporter_id, weight::float8 AS weight, created_at FROM user_reports
-WHERE target_id = $1 AND created_at >= $2 AND withdrawn_at IS NULL
+WHERE target_id = $1 AND created_at >= $2 AND withdrawn_at IS NULL AND dismissed_at IS NULL
 ORDER BY created_at
 `
 
@@ -258,7 +306,7 @@ func (q *Queries) ListReportFacts(ctx context.Context, arg ListReportFactsParams
 }
 
 const listUserModerationEvents = `-- name: ListUserModerationEvents :many
-SELECT id, user_id, from_status, to_status, score::float8 AS score, cause, created_at
+SELECT id, user_id, from_status, to_status, score::float8 AS score, cause, reason_code, reason_text, staff_ref, created_at
 FROM user_moderation_events WHERE user_id = $1 ORDER BY id
 `
 
@@ -269,6 +317,9 @@ type ListUserModerationEventsRow struct {
 	ToStatus   string
 	Score      float64
 	Cause      string
+	ReasonCode *string
+	ReasonText *string
+	StaffRef   *string
 	CreatedAt  time.Time
 }
 
@@ -288,6 +339,9 @@ func (q *Queries) ListUserModerationEvents(ctx context.Context, userID int64) ([
 			&i.ToStatus,
 			&i.Score,
 			&i.Cause,
+			&i.ReasonCode,
+			&i.ReasonText,
+			&i.StaffRef,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -301,7 +355,8 @@ func (q *Queries) ListUserModerationEvents(ctx context.Context, userID int64) ([
 }
 
 const lockUserModeration = `-- name: LockUserModeration :one
-SELECT user_id, status, score::float8 AS score, status_since, probation_until, appeal_blocked_until, last_appeal_at
+SELECT user_id, status, score::float8 AS score, status_since, probation_until, appeal_blocked_until, last_appeal_at,
+       decided_by, decided_at, reason_code, reason_text
 FROM user_moderation WHERE user_id = $1 FOR UPDATE
 `
 
@@ -313,6 +368,10 @@ type LockUserModerationRow struct {
 	ProbationUntil     *time.Time
 	AppealBlockedUntil *time.Time
 	LastAppealAt       *time.Time
+	DecidedBy          string
+	DecidedAt          *time.Time
+	ReasonCode         *string
+	ReasonText         *string
 }
 
 func (q *Queries) LockUserModeration(ctx context.Context, userID int64) (LockUserModerationRow, error) {
@@ -326,6 +385,10 @@ func (q *Queries) LockUserModeration(ctx context.Context, userID int64) (LockUse
 		&i.ProbationUntil,
 		&i.AppealBlockedUntil,
 		&i.LastAppealAt,
+		&i.DecidedBy,
+		&i.DecidedAt,
+		&i.ReasonCode,
+		&i.ReasonText,
 	)
 	return i, err
 }
@@ -380,8 +443,9 @@ func (q *Queries) TargetInitiatedContact(ctx context.Context, arg TargetInitiate
 const updateUserModeration = `-- name: UpdateUserModeration :exec
 UPDATE user_moderation
 SET status = $1, score = $2::float8, status_since = $3, probation_until = $4,
-    appeal_blocked_until = $5, last_appeal_at = $6
-WHERE user_id = $7
+    appeal_blocked_until = $5, last_appeal_at = $6,
+    decided_by = $7, decided_at = $8, reason_code = $9, reason_text = $10
+WHERE user_id = $11
 `
 
 type UpdateUserModerationParams struct {
@@ -391,6 +455,10 @@ type UpdateUserModerationParams struct {
 	ProbationUntil     *time.Time
 	AppealBlockedUntil *time.Time
 	LastAppealAt       *time.Time
+	DecidedBy          string
+	DecidedAt          *time.Time
+	ReasonCode         *string
+	ReasonText         *string
 	UserID             int64
 }
 
@@ -402,6 +470,10 @@ func (q *Queries) UpdateUserModeration(ctx context.Context, arg UpdateUserModera
 		arg.ProbationUntil,
 		arg.AppealBlockedUntil,
 		arg.LastAppealAt,
+		arg.DecidedBy,
+		arg.DecidedAt,
+		arg.ReasonCode,
+		arg.ReasonText,
 		arg.UserID,
 	)
 	return err

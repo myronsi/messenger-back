@@ -187,6 +187,7 @@ type EmojiPack struct {
 	HiddenAt  *time.Time
 	DeletedAt *time.Time
 	CreatedAt time.Time
+	HiddenBy  *string
 }
 
 type EmojiPackReport struct {
@@ -338,6 +339,16 @@ type RecoveryToken struct {
 	UsedAt    *time.Time
 }
 
+type ReportOutcome struct {
+	ID          int64
+	ReporterID  int64
+	SubjectType string
+	SubjectID   int64
+	Outcome     string
+	CreatedAt   time.Time
+	ReadAt      *time.Time
+}
+
 type Sticker struct {
 	ID           int64
 	PackID       int64
@@ -361,6 +372,7 @@ type StickerPack struct {
 	Slug       *string
 	HiddenAt   *time.Time
 	Version    int64
+	HiddenBy   *string
 }
 
 type StickerPackReport struct {
@@ -486,6 +498,10 @@ type UserModeration struct {
 	ProbationUntil     *time.Time
 	AppealBlockedUntil *time.Time
 	LastAppealAt       *time.Time
+	DecidedBy          string
+	DecidedAt          *time.Time
+	ReasonCode         *string
+	ReasonText         *string
 }
 
 type UserModerationEvent struct {
@@ -496,6 +512,9 @@ type UserModerationEvent struct {
 	Score      pgtype.Numeric
 	Cause      string
 	CreatedAt  time.Time
+	ReasonCode *string
+	ReasonText *string
+	StaffRef   *string
 }
 
 type UserPasskey struct {
@@ -555,6 +574,7 @@ type UserReport struct {
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 	WithdrawnAt *time.Time
+	DismissedAt *time.Time
 }
 
 type UserSecurityEvent struct {
