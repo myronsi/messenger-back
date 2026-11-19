@@ -207,3 +207,29 @@ func TestParseErrorNamesTheVariable(t *testing.T) {
 		t.Fatalf("error leaks the value: %v", err)
 	}
 }
+
+func TestInternalListener(t *testing.T) {
+	cfg, err := LoadFrom(validEnv())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Internal.Addr != "" {
+		t.Fatalf("internal listener must be off by default, got %q", cfg.Internal.Addr)
+	}
+
+	env := validEnv()
+	env["INTERNAL_ADDR"] = ":8082"
+	env["INTERNAL_TOKEN"] = "short"
+	if _, err := LoadFrom(env); err == nil || !strings.Contains(err.Error(), "INTERNAL_TOKEN") {
+		t.Fatalf("want an INTERNAL_TOKEN error, got %v", err)
+	}
+
+	env["INTERNAL_TOKEN"] = strings.Repeat("i", 32)
+	cfg, err = LoadFrom(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Internal.Addr != ":8082" || cfg.Internal.Token.Reveal() != strings.Repeat("i", 32) {
+		t.Fatalf("internal = %+v", cfg.Internal)
+	}
+}
