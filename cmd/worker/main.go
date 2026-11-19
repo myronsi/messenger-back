@@ -15,6 +15,7 @@ import (
 	"github.com/myronsi/messenger-back/internal/app"
 	"github.com/myronsi/messenger-back/internal/contentreports"
 	"github.com/myronsi/messenger-back/internal/events"
+	"github.com/myronsi/messenger-back/internal/inactive"
 	"github.com/myronsi/messenger-back/internal/jobs"
 	"github.com/myronsi/messenger-back/internal/media"
 	"github.com/myronsi/messenger-back/internal/moderation"
@@ -47,6 +48,9 @@ func run() error {
 	defer pg.Close()
 	if len(os.Args) > 1 && os.Args[1] == "unhide-sticker-pack" {
 		return unhideStickerPack(p.Ctx, log, pg, os.Args[2:])
+	}
+	if len(os.Args) > 1 && os.Args[1] == "inactive-accounts" {
+		return inactiveAccountsReport(p.Ctx, cfg, pg, os.Stdout)
 	}
 	rd, err := redis.New(cfg.RedisURL.Reveal(), redis.Options{
 		Timeout: cfg.Redis.Timeout,
@@ -90,11 +94,6 @@ func run() error {
 		wg.Wait()
 	}()
 	wg.Go(func() { maintain(bg, log, pg, maintenanceEvery) })
-	mailWorker, err := recoveryMailWorker(cfg, pg, rd.Client(), log)
-	if err != nil {
-		return err
-	}
-	wg.Go(func() { mailWorker(bg) })
 	pushSender, err := notifications.NewSender(cfg.Notifications)
 	if err != nil {
 		return err
@@ -119,6 +118,23 @@ func run() error {
 	attachmentBus, err := redis.NewBus(rd.Client(), redis.BusOptions{Handler: func(int64, []byte) {}})
 	if err != nil {
 		return err
+	}
+	fanout := realtime.NewFanout(realtime.FanoutDeps{Bus: attachmentBus, Log: log})
+	authSvc, err := workerAuth(cfg, pg, rd.Client(), log, fanout.CloseSessions)
+	if err != nil {
+		return err
+	}
+	mailWorker := recoveryMailWorker(cfg, authSvc)
+	wg.Go(func() { mailWorker(bg) })
+	evlog := events.NewLog(redis.NewStreams(rd.Client(), "", 0))
+	if cfg.Inactive.Deletion {
+		job := inactiveAccounts(inactiveAccountsDeps{
+			cfg: cfg, pg: pg, accounts: authSvc, fanout: fanout, rdb: rd.Client(), storage: storage, events: evlog, log: log,
+		})
+		wg.Go(func() {
+			job.RunDaily(bg, inactiveAccountsEvery, redis.NewOnce(rd.Client(), "", "inactive_accounts_daily"))
+		})
+		log.Info("automatic deletion of inactive accounts is on", "after", inactive.Period)
 	}
 	notifier := realtime.NewAttachmentNotifier(attachmentBus, pg.Attachments(), cfg.HTTP.BasePath, log)
 	modSvc := moderation.New(moderation.Deps{
@@ -153,7 +169,6 @@ func run() error {
 		log.Info("consumer started", "stream", o.Stream, "group", group)
 		return nil
 	}
-	evlog := events.NewLog(redis.NewStreams(rd.Client(), "", 0))
 	wg.Go(func() { resendChatDeletions(bg, log, pg.Chats(), evlog, deletionSweepEvery, deletionLostAfter) })
 	if err := start(redis.ConsumerOptions{Stream: redis.StreamUsers, Group: moderation.Group, Handler: modSvc.Handle}); err != nil {
 		return err

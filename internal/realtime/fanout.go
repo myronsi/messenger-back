@@ -104,6 +104,9 @@ func NewFanout(d FanoutDeps) *Fanout {
 
 // eventID numbers an event; without an id source (Redis lost the node lease) the event still goes out.
 func (f *Fanout) eventID() string {
+	if f.ids == nil {
+		return "0"
+	}
 	id, err := f.ids.Next()
 	if err != nil {
 		return "0"

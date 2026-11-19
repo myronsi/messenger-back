@@ -14,6 +14,18 @@ The profile, privacy, blocking, contact-name and user lookup endpoints (`interna
 
   Access tokens stop working at once; only when Redis cannot be reached does a cached session survive, at most for the session cache TTL. The remaining members of a group the user left learn about the change (member list, new owner) when they reload the group; live group events come with the group endpoints.
 
+## Inactive accounts
+
+Accounts nobody used for 1 year are deleted automatically. The rule is **off by default**; it runs only when the worker has `INACTIVE_ACCOUNT_DELETION=true` (`internal/inactive`, `cmd/worker/inactive_accounts.go`).
+
+- **Inactive** means all of these are older than 1 year: `users.last_seen_at` (written when the user's last WebSocket closes), the `last_active_at` of every session still on record (sign-in, token refresh) and `users.created_at` (an account that never signed in counts from its creation).
+- **Warning.** When SMTP is configured (`SMTP_HOST`) and the account has a verified recovery email, the account is warned once when it has been inactive for 1 year minus 30 days: one email through the recovery mail queue (`recovery_mail_queue.kind = 'inactive_account'`), recorded in `inactive_account_warnings` (migration 000050). The email says: "Your Messenger account @name will be deleted on DATE because it was not used for 1 year. Sign in to keep it". DATE is the start of the 31st day after the warning; the account is deleted on the first daily run after it, and never before it has been inactive for 1 year.
+- **Activity cancels.** Any sign-in, token refresh or WebSocket session after the warning removes the warning and the account stays; it is warned again only after another year without use. The deletion checks the rule again under the user's row lock, so a sign-in in the last moment wins.
+- **No warning possible.** Without a verified recovery email, or when SMTP is not configured, the account is deleted without a warning as soon as it has been inactive for 1 year.
+- **Deletion** is exactly `DELETE /me`: the same transaction and every step listed above, including `user.deleted`, the session cache and closing sockets. Calls are not touched: an account unused for a year is in no call.
+- **Schedule.** The worker runs the job once a day; a Redis `once` key (`inactive_accounts_daily`) makes only one worker instance run it per day. Accounts are read in batches of 100.
+- **Dry run.** `worker inactive-accounts` prints how many accounts would be warned and deleted today, whether the setting is on and whether warnings are sent. It changes nothing and needs only PostgreSQL.
+
 ## Privacy
 
 `GET`/`PATCH /me/privacy`. `PATCH` changes only the settings it sends.
