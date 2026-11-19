@@ -5,6 +5,12 @@
 # Python deployment has been retired. This is the production stack.
 name: messenger-go
 
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
+
 x-app: &app
   image: ${BACKEND_IMAGE:-unset}
   # The whole .env: the backend's settings are documented in .env.example and docs/go-backend.md.
@@ -13,6 +19,7 @@ x-app: &app
     - path: .env.notifications
       required: false
   restart: unless-stopped
+  logging: *logging
   # The image has no shell for a healthcheck; deploy.sh checks /readyz and /healthz from the host.
   volumes:
     - geoip-data:/geoip:ro
@@ -166,6 +173,7 @@ services:
       timeout: 5s
       retries: 20
     restart: unless-stopped
+    logging: *logging
 
   redis:
     image: redis:8-alpine
@@ -182,6 +190,7 @@ services:
       timeout: 3s
       retries: 20
     restart: unless-stopped
+    logging: *logging
 
   scylla:
     image: scylladb/scylla:2026.1
@@ -196,6 +205,7 @@ services:
       retries: 30
       start_period: 40s
     restart: unless-stopped
+    logging: *logging
 
   # The keyspace golang-migrate needs. A cluster gets its own, with replication factor 3 (docs/deployment.md).
   scylla-keyspace:
@@ -229,6 +239,7 @@ services:
       retries: 30
       start_period: 30s
     restart: unless-stopped
+    logging: *logging
 
   object-storage:
     image: rustfs/rustfs:1.0.1
@@ -244,6 +255,7 @@ services:
       timeout: 5s
       retries: 20
     restart: unless-stopped
+    logging: *logging
 
   object-storage-init:
     image: amazon/aws-cli:2.37.9
