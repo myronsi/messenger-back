@@ -66,6 +66,12 @@ type Config struct {
 	RecoveryApprovalMaxAge        time.Duration
 	RecoveryApprovalMinSessionAge time.Duration
 	GeoIP                         *geoip.Locator
+	RequireTermsAcceptance        bool
+}
+
+type Consent struct {
+	TermsVersion *string
+	AgeConfirmed *bool
 }
 
 // Client describes who is calling, for rate limits and the security log.
@@ -229,6 +235,7 @@ type Service struct {
 	recoveryApprovalMinSessionAge time.Duration
 	dummy                         func() (string, error)
 	geo                           *geoip.Locator
+	requireTerms                  bool
 }
 
 // NewService wires the service.
@@ -287,6 +294,7 @@ func NewService(store Store, rdb Redis, cfg Config, log *slog.Logger) (*Service,
 		recoveryApprovalMaxAge:        cfg.RecoveryApprovalMaxAge,
 		recoveryApprovalMinSessionAge: cfg.RecoveryApprovalMinSessionAge,
 		geo:                           cfg.GeoIP,
+		requireTerms:                  cfg.RequireTermsAcceptance,
 	}
 	s.dummy = sync.OnceValues(func() (string, error) { return s.hasher.dummyHash(context.Background()) })
 	return s, nil
@@ -511,7 +519,7 @@ func (s *Service) startSessionWithRecoveryCode(ctx context.Context, u postgres.U
 // ---------------------------------------------------------------- register and login
 
 // Register creates an account and signs it in.
-func (s *Service) Register(ctx context.Context, c Client, username, displayName, password string, bio *string) (*TokenSet, error) {
+func (s *Service) Register(ctx context.Context, c Client, username, displayName, password string, bio *string, consent Consent) (*TokenSet, error) {
 	username = strings.TrimSpace(username)
 	if err := validateUsername(username); err != nil {
 		return nil, err
@@ -536,6 +544,10 @@ func (s *Service) Register(ctx context.Context, c Client, username, displayName,
 			bio = &b
 		}
 	}
+	terms, err := s.consent(consent)
+	if err != nil {
+		return nil, err
+	}
 	if err := s.take(ctx, RuleRegisterIP, c.ipString()); err != nil {
 		return nil, err
 	}
@@ -544,7 +556,7 @@ func (s *Service) Register(ctx context.Context, c Client, username, displayName,
 		return nil, err
 	}
 	recoveryKey, recoveryHash := s.newRecoveryKey()
-	u, err := s.store.RecoveryKeys().Register(ctx, strings.ToLower(username), displayName, hash, recoveryHash)
+	u, err := s.store.RecoveryKeys().Register(ctx, strings.ToLower(username), displayName, hash, recoveryHash, terms)
 	if errors.Is(err, postgres.ErrUsernameTaken) {
 		return nil, ErrUsernameTaken
 	}
@@ -566,6 +578,37 @@ func (s *Service) Register(ctx context.Context, c Client, username, displayName,
 	ts.RecoveryKey = recoveryKey
 	s.event(ctx, u.ID, "register", c, nil)
 	return ts, nil
+}
+
+func (s *Service) consent(c Consent) (postgres.Consent, error) {
+	var out postgres.Consent
+	if c.AgeConfirmed != nil && !*c.AgeConfirmed {
+		return out, &ValidationError{"age_confirmed", "must be true"}
+	}
+	var version *string
+	if c.TermsVersion != nil {
+		v := strings.TrimSpace(*c.TermsVersion)
+		if _, err := time.Parse(time.DateOnly, v); err != nil {
+			return out, &ValidationError{"terms_version", "must be the date of the terms, such as 2026-11-19"}
+		}
+		version = &v
+	}
+	if s.requireTerms {
+		if version == nil {
+			return out, &ValidationError{"terms_version", "is required"}
+		}
+		if c.AgeConfirmed == nil {
+			return out, &ValidationError{"age_confirmed", "must be true"}
+		}
+	}
+	now := s.now().UTC()
+	if version != nil {
+		out.TermsVersion, out.TermsAcceptedAt = version, &now
+	}
+	if c.AgeConfirmed != nil {
+		out.AgeConfirmedAt = &now
+	}
+	return out, nil
 }
 
 // Login checks the password. With two-factor enabled it returns a challenge instead of tokens.

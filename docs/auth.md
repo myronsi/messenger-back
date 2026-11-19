@@ -31,6 +31,24 @@ The worker (`cmd/worker`) runs a maintenance job every hour: it deletes sessions
 
 The Python migration is complete. Keep migrated password verification for existing accounts. Refresh cookies must use `/api/v2/auth/refresh` (or the matching public Go base path); `/api/auth` does not match the Go endpoint and causes logout when access tokens expire.
 
+## Registration
+
+`POST /auth/register` creates the account and signs it in (`201`, tokens and the `recovery_key`). Besides
+`username`, `password`, `display_name` and `bio` it takes two optional consent fields:
+
+| Field | Meaning | Stored |
+| --- | --- | --- |
+| `terms_version` | The Terms of Use the user accepted, named by their date (`2026-11-19`). Any other value is `422` on `terms_version`. | `users.terms_version` and `users.terms_accepted_at` (the time of registration) |
+| `age_confirmed` | The user is at least 13; under 16 a parent or guardian agrees. `false` is `422` on `age_confirmed`. | `users.age_confirmed_at` (the time of registration) |
+
+Validation runs before the rate limit and before the account is created, so a refused request creates nothing.
+`GET /me` (and `PATCH /me`) return `terms_version` and `terms_accepted_at`, both `null` when nothing was recorded,
+for example for accounts created before migration `000051_terms_acceptance`.
+
+`REQUIRE_TERMS_ACCEPTANCE` (default `false`) makes both fields mandatory: a registration without `terms_version`
+or without `age_confirmed: true` is `422` with the missing field. It stays off until the released app sends the
+fields, so older apps can still create accounts; turn it on afterwards.
+
 ## Passwords
 
 Argon2id for new hashes. Verified: the Argon2id PHC strings of v1 (`argon2$…`, argon2-cffi) and legacy PBKDF2 `salt:hash`. A successful login with an old format rehashes to the current parameters. At most `PASSWORD_HASH_CONCURRENCY` hashes run at once so that a flood of logins cannot exhaust memory. Unknown users are verified against a dummy hash, so timing does not reveal whether a username exists. Test fixtures are hashes created by the real v1 code.
@@ -113,4 +131,4 @@ Migration 000012 is additive. Apply it before deploying the updated API. Keep re
 
 ## Configuration
 
-`JWT_SECRET`, `ENCRYPTION_KEY`, `RECOVERY_PEPPER` (required), `COOKIE_SECURE`, `REFRESH_COOKIE_PATH`, `SESSION_CACHE_TTL`, `REFRESH_REUSE_GRACE`, `PASSWORD_HASH_CONCURRENCY`, `TRUSTED_PROXIES`; see `.env.example`.
+`JWT_SECRET`, `ENCRYPTION_KEY`, `RECOVERY_PEPPER` (required), `COOKIE_SECURE`, `REFRESH_COOKIE_PATH`, `SESSION_CACHE_TTL`, `REFRESH_REUSE_GRACE`, `PASSWORD_HASH_CONCURRENCY`, `TRUSTED_PROXIES`, `REQUIRE_TERMS_ACCEPTANCE`; see `.env.example`.

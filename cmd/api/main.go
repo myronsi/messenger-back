@@ -123,6 +123,7 @@ func run() error {
 		HashConcurrency:               cfg.Auth.PasswordHashConcurrency,
 		RecoveryApprovalMaxAge:        cfg.Auth.RecoveryApprovalMaxAge,
 		RecoveryApprovalMinSessionAge: cfg.Auth.RecoveryApprovalMinSessionAge,
+		RequireTermsAcceptance:        cfg.Auth.RequireTermsAcceptance,
 		GeoIP:                         geo,
 		OnRecoveryRequest: func(ctx context.Context, uid int64, notice auth.RecoveryRequestNotice) {
 			if rt != nil && rt.fanout != nil {

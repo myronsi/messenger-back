@@ -465,6 +465,9 @@ type User struct {
 	BackgroundAttachmentID *uuid.UUID
 	BackgroundPreset       *string
 	BackgroundColors       []string
+	TermsVersion           *string
+	TermsAcceptedAt        *time.Time
+	AgeConfirmedAt         *time.Time
 }
 
 type User2faRecoveryCode struct {

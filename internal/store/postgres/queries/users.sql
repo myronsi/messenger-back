@@ -1,6 +1,6 @@
 -- name: CreateUser :one
-INSERT INTO users (username, display_name, password_hash)
-VALUES (@username, @display_name, @password_hash)
+INSERT INTO users (username, display_name, password_hash, terms_version, terms_accepted_at, age_confirmed_at)
+VALUES (@username, @display_name, @password_hash, sqlc.narg(terms_version), sqlc.narg(terms_accepted_at), sqlc.narg(age_confirmed_at))
 RETURNING *;
 
 -- name: GetUser :one

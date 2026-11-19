@@ -33,6 +33,7 @@ users, chats and their participants, attachment metadata and the security log.
 | `000048_content_reports` | `content_reports` ([moderation.md](moderation.md#content-reports)) |
 | `000049_security_events_created_idx` | index on `user_security_events (created_at)`: the worker deletes security events older than a year (`Store.PurgeSecurityEvents`, hourly maintenance) |
 | `000050_inactive_accounts` | `inactive_account_warnings`, the index `users_last_seen_idx`; `recovery_mail_queue.kind` allows `inactive_account` ([accounts.md](accounts.md#inactive-accounts)) |
+| `000051_terms_acceptance` | `users.terms_version`, `terms_accepted_at` and `age_confirmed_at`, recorded at registration ([auth.md](auth.md#registration)) |
 
 Changes compared to v1:
 

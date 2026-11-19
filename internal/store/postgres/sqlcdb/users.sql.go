@@ -13,19 +13,29 @@ import (
 )
 
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (username, display_name, password_hash)
-VALUES ($1, $2, $3)
-RETURNING id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id, profile_version, pronouns, birthday_day, birthday_month, birthday_year, time_zone, music_attachment_id, music_title, music_artist, background_kind, background_attachment_id, background_preset, background_colors
+INSERT INTO users (username, display_name, password_hash, terms_version, terms_accepted_at, age_confirmed_at)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id, profile_version, pronouns, birthday_day, birthday_month, birthday_year, time_zone, music_attachment_id, music_title, music_artist, background_kind, background_attachment_id, background_preset, background_colors, terms_version, terms_accepted_at, age_confirmed_at
 `
 
 type CreateUserParams struct {
-	Username     string
-	DisplayName  string
-	PasswordHash string
+	Username        string
+	DisplayName     string
+	PasswordHash    string
+	TermsVersion    *string
+	TermsAcceptedAt *time.Time
+	AgeConfirmedAt  *time.Time
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
-	row := q.db.QueryRow(ctx, createUser, arg.Username, arg.DisplayName, arg.PasswordHash)
+	row := q.db.QueryRow(ctx, createUser,
+		arg.Username,
+		arg.DisplayName,
+		arg.PasswordHash,
+		arg.TermsVersion,
+		arg.TermsAcceptedAt,
+		arg.AgeConfirmedAt,
+	)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -51,6 +61,9 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.BackgroundAttachmentID,
 		&i.BackgroundPreset,
 		&i.BackgroundColors,
+		&i.TermsVersion,
+		&i.TermsAcceptedAt,
+		&i.AgeConfirmedAt,
 	)
 	return i, err
 }
@@ -101,7 +114,7 @@ func (q *Queries) EnsurePrivacySettings(ctx context.Context, userID int64) error
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id, profile_version, pronouns, birthday_day, birthday_month, birthday_year, time_zone, music_attachment_id, music_title, music_artist, background_kind, background_attachment_id, background_preset, background_colors FROM users WHERE id = $1
+SELECT id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id, profile_version, pronouns, birthday_day, birthday_month, birthday_year, time_zone, music_attachment_id, music_title, music_artist, background_kind, background_attachment_id, background_preset, background_colors, terms_version, terms_accepted_at, age_confirmed_at FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
@@ -131,12 +144,15 @@ func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
 		&i.BackgroundAttachmentID,
 		&i.BackgroundPreset,
 		&i.BackgroundColors,
+		&i.TermsVersion,
+		&i.TermsAcceptedAt,
+		&i.AgeConfirmedAt,
 	)
 	return i, err
 }
 
 const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id, profile_version, pronouns, birthday_day, birthday_month, birthday_year, time_zone, music_attachment_id, music_title, music_artist, background_kind, background_attachment_id, background_preset, background_colors FROM users WHERE LOWER(username) = LOWER($1)
+SELECT id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id, profile_version, pronouns, birthday_day, birthday_month, birthday_year, time_zone, music_attachment_id, music_title, music_artist, background_kind, background_attachment_id, background_preset, background_colors, terms_version, terms_accepted_at, age_confirmed_at FROM users WHERE LOWER(username) = LOWER($1)
 `
 
 func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User, error) {
@@ -166,6 +182,9 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 		&i.BackgroundAttachmentID,
 		&i.BackgroundPreset,
 		&i.BackgroundColors,
+		&i.TermsVersion,
+		&i.TermsAcceptedAt,
+		&i.AgeConfirmedAt,
 	)
 	return i, err
 }
@@ -244,7 +263,7 @@ func (q *Queries) ListBirthdayCandidates(ctx context.Context, arg ListBirthdayCa
 }
 
 const listUsersByIDs = `-- name: ListUsersByIDs :many
-SELECT id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id, profile_version, pronouns, birthday_day, birthday_month, birthday_year, time_zone, music_attachment_id, music_title, music_artist, background_kind, background_attachment_id, background_preset, background_colors FROM users WHERE id = ANY($1::BIGINT[])
+SELECT id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id, profile_version, pronouns, birthday_day, birthday_month, birthday_year, time_zone, music_attachment_id, music_title, music_artist, background_kind, background_attachment_id, background_preset, background_colors, terms_version, terms_accepted_at, age_confirmed_at FROM users WHERE id = ANY($1::BIGINT[])
 `
 
 func (q *Queries) ListUsersByIDs(ctx context.Context, ids []int64) ([]User, error) {
@@ -280,6 +299,9 @@ func (q *Queries) ListUsersByIDs(ctx context.Context, ids []int64) ([]User, erro
 			&i.BackgroundAttachmentID,
 			&i.BackgroundPreset,
 			&i.BackgroundColors,
+			&i.TermsVersion,
+			&i.TermsAcceptedAt,
+			&i.AgeConfirmedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -292,7 +314,7 @@ func (q *Queries) ListUsersByIDs(ctx context.Context, ids []int64) ([]User, erro
 }
 
 const lockUser = `-- name: LockUser :one
-SELECT id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id, profile_version, pronouns, birthday_day, birthday_month, birthday_year, time_zone, music_attachment_id, music_title, music_artist, background_kind, background_attachment_id, background_preset, background_colors FROM users WHERE id = $1 FOR UPDATE
+SELECT id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id, profile_version, pronouns, birthday_day, birthday_month, birthday_year, time_zone, music_attachment_id, music_title, music_artist, background_kind, background_attachment_id, background_preset, background_colors, terms_version, terms_accepted_at, age_confirmed_at FROM users WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) LockUser(ctx context.Context, id int64) (User, error) {
@@ -322,6 +344,9 @@ func (q *Queries) LockUser(ctx context.Context, id int64) (User, error) {
 		&i.BackgroundAttachmentID,
 		&i.BackgroundPreset,
 		&i.BackgroundColors,
+		&i.TermsVersion,
+		&i.TermsAcceptedAt,
+		&i.AgeConfirmedAt,
 	)
 	return i, err
 }
@@ -368,7 +393,7 @@ SET display_name = COALESCE($1, display_name),
     birthday_year = CASE WHEN $6::bool THEN $9::smallint ELSE birthday_year END,
     time_zone = COALESCE($10, time_zone)
 WHERE id = $11
-RETURNING id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id, profile_version, pronouns, birthday_day, birthday_month, birthday_year, time_zone, music_attachment_id, music_title, music_artist, background_kind, background_attachment_id, background_preset, background_colors
+RETURNING id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id, profile_version, pronouns, birthday_day, birthday_month, birthday_year, time_zone, music_attachment_id, music_title, music_artist, background_kind, background_attachment_id, background_preset, background_colors, terms_version, terms_accepted_at, age_confirmed_at
 `
 
 type PatchUserProfileParams struct {
@@ -425,6 +450,9 @@ func (q *Queries) PatchUserProfile(ctx context.Context, arg PatchUserProfilePara
 		&i.BackgroundAttachmentID,
 		&i.BackgroundPreset,
 		&i.BackgroundColors,
+		&i.TermsVersion,
+		&i.TermsAcceptedAt,
+		&i.AgeConfirmedAt,
 	)
 	return i, err
 }
@@ -470,7 +498,7 @@ UPDATE users
 SET background_kind = $1, background_attachment_id = $2,
     background_preset = $3, background_colors = $4::text[]
 WHERE id = $5
-RETURNING id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id, profile_version, pronouns, birthday_day, birthday_month, birthday_year, time_zone, music_attachment_id, music_title, music_artist, background_kind, background_attachment_id, background_preset, background_colors
+RETURNING id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id, profile_version, pronouns, birthday_day, birthday_month, birthday_year, time_zone, music_attachment_id, music_title, music_artist, background_kind, background_attachment_id, background_preset, background_colors, terms_version, terms_accepted_at, age_confirmed_at
 `
 
 type SetUserBackgroundParams struct {
@@ -514,6 +542,9 @@ func (q *Queries) SetUserBackground(ctx context.Context, arg SetUserBackgroundPa
 		&i.BackgroundAttachmentID,
 		&i.BackgroundPreset,
 		&i.BackgroundColors,
+		&i.TermsVersion,
+		&i.TermsAcceptedAt,
+		&i.AgeConfirmedAt,
 	)
 	return i, err
 }
@@ -522,7 +553,7 @@ const setUserMusic = `-- name: SetUserMusic :one
 UPDATE users
 SET music_attachment_id = $1, music_title = $2, music_artist = $3
 WHERE id = $4
-RETURNING id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id, profile_version, pronouns, birthday_day, birthday_month, birthday_year, time_zone, music_attachment_id, music_title, music_artist, background_kind, background_attachment_id, background_preset, background_colors
+RETURNING id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id, profile_version, pronouns, birthday_day, birthday_month, birthday_year, time_zone, music_attachment_id, music_title, music_artist, background_kind, background_attachment_id, background_preset, background_colors, terms_version, terms_accepted_at, age_confirmed_at
 `
 
 type SetUserMusicParams struct {
@@ -564,6 +595,9 @@ func (q *Queries) SetUserMusic(ctx context.Context, arg SetUserMusicParams) (Use
 		&i.BackgroundAttachmentID,
 		&i.BackgroundPreset,
 		&i.BackgroundColors,
+		&i.TermsVersion,
+		&i.TermsAcceptedAt,
+		&i.AgeConfirmedAt,
 	)
 	return i, err
 }
@@ -584,7 +618,7 @@ const updateUserProfile = `-- name: UpdateUserProfile :one
 UPDATE users
 SET display_name = $1, bio = $2, avatar_url = $3
 WHERE id = $4
-RETURNING id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id, profile_version, pronouns, birthday_day, birthday_month, birthday_year, time_zone, music_attachment_id, music_title, music_artist, background_kind, background_attachment_id, background_preset, background_colors
+RETURNING id, username, display_name, password_hash, avatar_url, bio, last_seen_at, created_at, updated_at, avatar_attachment_id, profile_version, pronouns, birthday_day, birthday_month, birthday_year, time_zone, music_attachment_id, music_title, music_artist, background_kind, background_attachment_id, background_preset, background_colors, terms_version, terms_accepted_at, age_confirmed_at
 `
 
 type UpdateUserProfileParams struct {
@@ -626,6 +660,9 @@ func (q *Queries) UpdateUserProfile(ctx context.Context, arg UpdateUserProfilePa
 		&i.BackgroundAttachmentID,
 		&i.BackgroundPreset,
 		&i.BackgroundColors,
+		&i.TermsVersion,
+		&i.TermsAcceptedAt,
+		&i.AgeConfirmedAt,
 	)
 	return i, err
 }

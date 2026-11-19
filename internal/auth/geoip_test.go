@@ -29,7 +29,7 @@ func TestLocationSnapshots(t *testing.T) {
 	ctx := context.Background()
 	berlin, paris, private := e.client("203.0.113.9"), e.client("198.51.100.20"), e.client("10.0.0.5")
 
-	ts, err := e.svc.Register(ctx, berlin, "geo_owner", "Geo Owner", "correct horse", nil)
+	ts, err := e.svc.Register(ctx, berlin, "geo_owner", "Geo Owner", "correct horse", nil, Consent{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,7 @@ func TestLocationSnapshots(t *testing.T) {
 func TestNoLocationWithoutDatabase(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
-	ts, err := e.svc.Register(ctx, e.client("203.0.113.9"), "geo_none", "Geo None", "correct horse", nil)
+	ts, err := e.svc.Register(ctx, e.client("203.0.113.9"), "geo_none", "Geo None", "correct horse", nil, Consent{})
 	if err != nil {
 		t.Fatal(err)
 	}

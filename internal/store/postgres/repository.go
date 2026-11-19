@@ -30,6 +30,15 @@ type User struct {
 	MusicTitle         *string
 	MusicArtist        *string
 	Background         *Background
+	TermsVersion       *string
+	TermsAcceptedAt    *time.Time
+	AgeConfirmedAt     *time.Time
+}
+
+type Consent struct {
+	TermsVersion    *string
+	TermsAcceptedAt *time.Time
+	AgeConfirmedAt  *time.Time
 }
 
 type Birthday struct {

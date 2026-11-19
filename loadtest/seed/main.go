@@ -89,7 +89,7 @@ func run(n int, out, allowEnv string) error {
 		// Every user from an address of its own, so the per-address limits of registration and login hold.
 		client := auth.Client{IP: netip.AddrFrom4([4]byte{10, byte(i >> 16), byte(i >> 8), byte(i)}), UserAgent: "loadtest-seed"}
 		name := fmt.Sprintf("load_%05d", i)
-		tokens, err := svc.Register(ctx, client, name, "Load "+strconv.Itoa(i), password, nil)
+		tokens, err := svc.Register(ctx, client, name, "Load "+strconv.Itoa(i), password, nil, auth.Consent{})
 		if errors.Is(err, auth.ErrUsernameTaken) {
 			res, lerr := svc.Login(ctx, client, name, password)
 			if lerr != nil {

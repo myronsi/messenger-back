@@ -2552,6 +2552,12 @@ type Me struct {
 	Pronouns              *string `json:"pronouns"`
 	RecoverySetupRequired *bool   `json:"recovery_setup_required,omitempty"`
 
+	// TermsAcceptedAt When the Terms of Use were accepted; `null` when no acceptance was recorded.
+	TermsAcceptedAt *time.Time `json:"terms_accepted_at"`
+
+	// TermsVersion The version of the Terms of Use accepted at registration; `null` when none was recorded.
+	TermsVersion *string `json:"terms_version"`
+
 	// TimeZone The user's time zone; birthday reminders arrive at 09:00 in it. `UTC` until a client sets it.
 	TimeZone TimeZone `json:"time_zone"`
 	Username Username `json:"username"`
@@ -3072,12 +3078,23 @@ type RecoveryOverview struct {
 
 // RegisterRequest defines model for RegisterRequest.
 type RegisterRequest struct {
-	Bio *string `json:"bio,omitempty"`
+	// AgeConfirmed The user confirmed being at least 13 years old, and that a parent or guardian agrees when under 16.
+	// `false` is refused with `422` and the field `age_confirmed`.
+	AgeConfirmed *bool   `json:"age_confirmed,omitempty"`
+	Bio          *string `json:"bio,omitempty"`
 
 	// DisplayName Defaults to the username when it is missing, empty or only whitespace.
-	DisplayName *string  `json:"display_name,omitempty"`
-	Password    *string  `json:"password,omitempty"`
-	Username    Username `json:"username"`
+	DisplayName *string `json:"display_name,omitempty"`
+	Password    *string `json:"password,omitempty"`
+
+	// TermsVersion The version of the Terms of Use the user accepted: the date of those terms, such as `2026-11-19`. Stored
+	// with the time of registration. Required, together with `age_confirmed: true`, when the server requires
+	// terms acceptance (`422` with the field otherwise).
+	//
+	//
+	// Examples: 2026-11-19
+	TermsVersion *string  `json:"terms_version,omitempty"`
+	Username     Username `json:"username"`
 }
 
 // RegisterResponse defines model for RegisterResponse.

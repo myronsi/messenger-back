@@ -2,6 +2,14 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.40
+
+- `RegisterRequest` gains the optional `terms_version` (the date of the accepted Terms of Use, such as `2026-11-19`)
+  and `age_confirmed` (at least 13, a parent or guardian agrees under 16). `age_confirmed: false` or a
+  `terms_version` that is not such a date is `422` with the field. When the server requires terms acceptance, a
+  registration without `terms_version` or without `age_confirmed: true` is `422` as well.
+- `Me` gains the required, nullable `terms_version` and `terms_accepted_at`.
+
 ## 2.1.0-alpha.39
 
 - Content reports: `POST /chats/{chat_id}/messages/{message_id}/report` and `POST /groups/{chat_id}/report`

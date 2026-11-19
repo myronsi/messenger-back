@@ -45,7 +45,7 @@ func (p RecoveryProof) Pin() PinnedProof {
 }
 
 type RecoveryKeyRepository interface {
-	Register(context.Context, string, string, string, string) (User, error)
+	Register(context.Context, string, string, string, string, Consent) (User, error)
 	Get(context.Context, int64) (RecoveryKey, error)
 	Replace(context.Context, int64, RecoveryProof, string) error
 	Reset(context.Context, int64, string, RecoveryProof, string, string) (PasswordReset, error)
@@ -59,11 +59,14 @@ func (r recoveryKeyRepo) transaction(ctx context.Context, fn func(context.Contex
 	return r.s.inRawTx(ctx, fn)
 }
 
-func (r recoveryKeyRepo) Register(ctx context.Context, username, name, passwordHash, keyHash string) (User, error) {
+func (r recoveryKeyRepo) Register(ctx context.Context, username, name, passwordHash, keyHash string, consent Consent) (User, error) {
 	var out User
 	err := r.transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := sqlcdb.New(tx)
-		u, err := q.CreateUser(ctx, sqlcdb.CreateUserParams{Username: username, DisplayName: name, PasswordHash: passwordHash})
+		u, err := q.CreateUser(ctx, sqlcdb.CreateUserParams{
+			Username: username, DisplayName: name, PasswordHash: passwordHash,
+			TermsVersion: consent.TermsVersion, TermsAcceptedAt: consent.TermsAcceptedAt, AgeConfirmedAt: consent.AgeConfirmedAt,
+		})
 		if err != nil {
 			return err
 		}

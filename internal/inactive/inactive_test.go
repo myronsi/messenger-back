@@ -169,7 +169,7 @@ func TestRecentlyActiveAccountsAreKept(t *testing.T) {
 	if _, err := e.pg.Pool().Exec(e.ctx, `UPDATE users SET last_seen_at = $2 WHERE id = $1`, seen, e.now.AddDate(0, 0, -1)); err != nil {
 		t.Fatal(err)
 	}
-	ts, err := e.auth.Register(e.ctx, auth.Client{IP: netip.MustParseAddr("10.0.0.1")}, "session", "Session", "correct horse battery", nil)
+	ts, err := e.auth.Register(e.ctx, auth.Client{IP: netip.MustParseAddr("10.0.0.1")}, "session", "Session", "correct horse battery", nil, auth.Consent{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,7 +191,7 @@ func TestRecentlyActiveAccountsAreKept(t *testing.T) {
 
 func TestWarnedAccountThatSignsInIsKept(t *testing.T) {
 	e := newEnv(t, true, true)
-	ts, err := e.auth.Register(e.ctx, auth.Client{IP: netip.MustParseAddr("10.0.0.1")}, "returns", "Returns", "correct horse battery", nil)
+	ts, err := e.auth.Register(e.ctx, auth.Client{IP: netip.MustParseAddr("10.0.0.1")}, "returns", "Returns", "correct horse battery", nil, auth.Consent{})
 	if err != nil {
 		t.Fatal(err)
 	}
