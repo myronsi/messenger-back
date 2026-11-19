@@ -159,6 +159,28 @@ WebSocket, with the same rules as the WebSocket events:
   let in; `sender_name` stays, so clients show the name as plain text. The original sender always sees their own
   link.
 
+## Day counts
+
+The API counts sent messages per UTC day in PostgreSQL table `message_day_counts`, so the moderation service
+can show messages per day without counting ScyllaDB rows. It has one row per day and message type:
+
+| Column | Meaning |
+| --- | --- |
+| `day` | UTC date of the message id (the time the message was sent) |
+| `type` | `text`, `file`, `voice` or `sticker` |
+| `messages` | Messages of that type sent that day |
+| `attachments` | Files in those messages; an album counts every file. Only `file` and `voice` have attachments |
+
+- A message counts once when it is stored: a new send or a forward. A retried send with the same
+  `client_temp_id`, a rejected send and system messages (group changes) are not counted. Edits and deletions do
+  not change the count.
+- Each API instance adds up its sends in memory and writes them every 10 seconds with one
+  `INSERT … ON CONFLICT DO UPDATE SET messages = messages + …`, so any number of replicas add to the same rows
+  without losing counts or locking each other on every message. A failed write is kept and tried again with the
+  next one; on shutdown the instance writes what is left. A crashed instance loses at most its last 10 seconds.
+- The rows hold totals only, never who sent what. They are kept forever (four rows a day). The moderation
+  service reads the table with its read-only database user and copies the day into its own daily statistics.
+
 ## Rejected sends
 
 A send that fails for a reason that may pass later is kept for the sender, so it survives a sign-out and shows on
