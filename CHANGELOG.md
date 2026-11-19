@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.28.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.27.0-alpha.1...v1.28.0-alpha.1) (2026-11-19)
+
+
+### Features
+
+* **internal:** usage figures for the moderation statistics ([#214](https://github.com/myronsi/messenger-back/issues/214)) ([04f0692](https://github.com/myronsi/messenger-back/commit/04f0692f006087023f94df6b67db0cf8461788f2))
+* **moderation:** let users ask for a review by a person ([#211](https://github.com/myronsi/messenger-back/issues/211)) ([720b5f8](https://github.com/myronsi/messenger-back/commit/720b5f8f63ca455a36e46696837420a2bc6a89e6))
+* **moderation:** report messages and groups, remove messages by moderation ([#212](https://github.com/myronsi/messenger-back/issues/212)) ([b69ee78](https://github.com/myronsi/messenger-back/commit/b69ee78affc162923a03b46c2506c6125e283ffa))
+
 ## [1.27.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.26.0-alpha.1...v1.27.0-alpha.1) (2026-11-19)
 
 
