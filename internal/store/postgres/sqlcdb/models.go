@@ -218,6 +218,13 @@ type MediaJob struct {
 	CreatedAt    time.Time
 }
 
+type MessageDayCount struct {
+	Day         pgtype.Date
+	Type        string
+	Messages    int64
+	Attachments int64
+}
+
 type NotificationActivity struct {
 	DeviceID    uuid.UUID
 	SessionID   uuid.UUID
