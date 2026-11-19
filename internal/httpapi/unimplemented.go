@@ -605,6 +605,10 @@ func (Unimplemented) MarkReportOutcomeRead(w http.ResponseWriter, r *http.Reques
 	notImplemented(w, r)
 }
 
+func (Unimplemented) RequestAccountReview(w http.ResponseWriter, r *http.Request, _ RequestAccountReviewParams) {
+	notImplemented(w, r)
+}
+
 func (Unimplemented) AcceptChatRequest(w http.ResponseWriter, r *http.Request, chatId ChatId, params AcceptChatRequestParams) {
 	notImplemented(w, r)
 }

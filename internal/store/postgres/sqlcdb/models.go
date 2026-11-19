@@ -12,6 +12,16 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AccountReviewRequest struct {
+	ID          int64
+	UserID      int64
+	Status      string
+	Text        string
+	CreatedAt   time.Time
+	ClosedAt    *time.Time
+	CloseReason *string
+}
+
 type ApprovalRequest struct {
 	ID          int64
 	Type        string

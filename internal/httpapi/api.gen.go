@@ -1499,9 +1499,18 @@ type AccountLabel string
 // AccountRestriction An action the account status blocks. Unknown values must be shown as a generic restriction.
 type AccountRestriction string
 
+// AccountReviewRequest defines model for AccountReviewRequest.
+type AccountReviewRequest struct {
+	// Text What the user wants the reviewer to know. Trimmed; must not be empty.
+	Text string `json:"text"`
+}
+
 // AccountStatus defines model for AccountStatus.
 type AccountStatus struct {
 	CanAppeal bool `json:"can_appeal"`
+
+	// CanRequestReview Whether `POST /me/account-status/review` is allowed now.
+	CanRequestReview bool `json:"can_request_review"`
 
 	// DecidedBy Who set the current status: `automatic` (reports, decay, appeal) or `staff` (reviewed by a person on the
 	// moderation team). Missing means `automatic`. Unknown values must be treated like `automatic`.
@@ -1517,6 +1526,10 @@ type AccountStatus struct {
 	// written by "Messenger moderation", never by a person's name.
 	ReasonText   *string              `json:"reason_text,omitempty"`
 	Restrictions []AccountRestriction `json:"restrictions"`
+
+	// ReviewRequestedAt When the open request for a review by a person (`POST /me/account-status/review`) was made; `null` when
+	// none is open.
+	ReviewRequestedAt *Timestamp `json:"review_requested_at"`
 
 	// Since When the account reached this status; `null` when it never changed.
 	Since *Timestamp `json:"since"`
@@ -4841,6 +4854,15 @@ type AppealAccountStatusParams struct {
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
 }
 
+// RequestAccountReviewParams defines parameters for RequestAccountReview.
+type RequestAccountReviewParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
 // SetMyAvatarParams defines parameters for SetMyAvatar.
 type SetMyAvatarParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
@@ -5705,6 +5727,9 @@ type DisableTwoFactorJSONRequestBody = DisableTwoFactorRequest
 // SetupTwoFactorJSONRequestBody defines body for SetupTwoFactor for application/json ContentType.
 type SetupTwoFactorJSONRequestBody = PasswordConfirmation
 
+// RequestAccountReviewJSONRequestBody defines body for RequestAccountReview for application/json ContentType.
+type RequestAccountReviewJSONRequestBody = AccountReviewRequest
+
 // SetMyAvatarJSONRequestBody defines body for SetMyAvatar for application/json ContentType.
 type SetMyAvatarJSONRequestBody = SetAvatarRequest
 
@@ -6425,6 +6450,9 @@ type ServerInterface interface {
 	// AppealAccountStatus Appeal the account status
 	// (POST /me/account-status/appeal)
 	AppealAccountStatus(w http.ResponseWriter, r *http.Request, params AppealAccountStatusParams)
+	// RequestAccountReview Ask for a review of the account status by a person
+	// (POST /me/account-status/review)
+	RequestAccountReview(w http.ResponseWriter, r *http.Request, params RequestAccountReviewParams)
 	// SetMyAvatar Set the avatar from an uploaded attachment
 	// (PUT /me/avatar)
 	SetMyAvatar(w http.ResponseWriter, r *http.Request, params SetMyAvatarParams)
@@ -13967,6 +13995,66 @@ func (siw *ServerInterfaceWrapper) AppealAccountStatus(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
+// RequestAccountReview operation middleware
+func (siw *ServerInterfaceWrapper) RequestAccountReview(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RequestAccountReviewParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RequestAccountReview(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // SetMyAvatar operation middleware
 func (siw *ServerInterfaceWrapper) SetMyAvatar(w http.ResponseWriter, r *http.Request) {
 
@@ -19332,6 +19420,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/me/account-status/appeal", wrapper.AppealAccountStatus)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/report-outcomes", wrapper.ListReportOutcomes)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/me/report-outcomes/{outcome_id}/read", wrapper.MarkReportOutcomeRead)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/me/account-status/review", wrapper.RequestAccountReview)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/users/{user_id}/avatar", wrapper.GetUserAvatar)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/users/{user_id}/avatars", wrapper.ListUserAvatars)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/users/{user_id}/contact-name", wrapper.RemoveContactName)
@@ -31100,6 +31189,128 @@ func (response AppealAccountStatus426ApplicationProblemPlusJSONResponse) VisitAp
 	return err
 }
 
+type RequestAccountReviewRequestObject struct {
+	Params RequestAccountReviewParams
+	Body   *RequestAccountReviewJSONRequestBody
+}
+
+type RequestAccountReviewResponseObject interface {
+	VisitRequestAccountReviewResponse(w http.ResponseWriter) error
+}
+
+type RequestAccountReview200JSONResponse AccountStatus
+
+func (response RequestAccountReview200JSONResponse) VisitRequestAccountReviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RequestAccountReview400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response RequestAccountReview400ApplicationProblemPlusJSONResponse) VisitRequestAccountReviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RequestAccountReview401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response RequestAccountReview401ApplicationProblemPlusJSONResponse) VisitRequestAccountReviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RequestAccountReview409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response RequestAccountReview409ApplicationProblemPlusJSONResponse) VisitRequestAccountReviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RequestAccountReview422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response RequestAccountReview422ApplicationProblemPlusJSONResponse) VisitRequestAccountReviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RequestAccountReview426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response RequestAccountReview426ApplicationProblemPlusJSONResponse) VisitRequestAccountReviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RequestAccountReview429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response RequestAccountReview429ApplicationProblemPlusJSONResponse) VisitRequestAccountReviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type SetMyAvatarRequestObject struct {
 	Params SetMyAvatarParams
 	Body   *SetMyAvatarJSONRequestBody
@@ -39287,6 +39498,9 @@ type StrictServerInterface interface {
 	// AppealAccountStatus Appeal the account status
 	// (POST /me/account-status/appeal)
 	AppealAccountStatus(ctx context.Context, request AppealAccountStatusRequestObject) (AppealAccountStatusResponseObject, error)
+	// RequestAccountReview Ask for a review of the account status by a person
+	// (POST /me/account-status/review)
+	RequestAccountReview(ctx context.Context, request RequestAccountReviewRequestObject) (RequestAccountReviewResponseObject, error)
 	// SetMyAvatar Set the avatar from an uploaded attachment
 	// (PUT /me/avatar)
 	SetMyAvatar(ctx context.Context, request SetMyAvatarRequestObject) (SetMyAvatarResponseObject, error)
@@ -42724,6 +42938,39 @@ func (sh *strictHandler) AppealAccountStatus(w http.ResponseWriter, r *http.Requ
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(AppealAccountStatusResponseObject); ok {
 		if err := validResponse.VisitAppealAccountStatusResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RequestAccountReview operation middleware
+func (sh *strictHandler) RequestAccountReview(w http.ResponseWriter, r *http.Request, params RequestAccountReviewParams) {
+	var request RequestAccountReviewRequestObject
+
+	request.Params = params
+
+	var body RequestAccountReviewJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RequestAccountReview(ctx, request.(RequestAccountReviewRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RequestAccountReview")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RequestAccountReviewResponseObject); ok {
+		if err := validResponse.VisitRequestAccountReviewResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

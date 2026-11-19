@@ -10,6 +10,8 @@
     "probation_until": null,
     "decided_by": "staff",
     "reason_code": "spam",
-    "reason_text": "Your account sent the same advertising link to many people who did not know you."
+    "reason_text": "Your account sent the same advertising link to many people who did not know you.",
+    "review_requested_at": null,
+    "can_request_review": true
   }
 }
