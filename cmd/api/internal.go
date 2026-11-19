@@ -12,11 +12,12 @@ import (
 	"github.com/myronsi/messenger-back/internal/version"
 )
 
-func startInternal(log *slog.Logger, cfg config.Config) *http.Server {
+func startInternal(log *slog.Logger, cfg config.Config, opts internalapi.Options) *http.Server {
 	if cfg.Internal.Addr == "" {
 		return nil
 	}
-	handler := internalapi.Handler(internalapi.Options{Token: cfg.Internal.Token.Reveal(), Version: version.Backend, Log: log})
+	opts.Token, opts.Version, opts.Log = cfg.Internal.Token.Reveal(), version.Backend, log
+	handler := internalapi.Handler(opts)
 	srv := app.NewServer(cfg.Internal.Addr, handler, cfg.HTTP)
 	srv.ErrorLog = slog.NewLogLogger(log.Handler(), slog.LevelWarn)
 	go func() {
