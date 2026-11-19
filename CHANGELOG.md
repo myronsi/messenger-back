@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.29.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.28.0-alpha.1...v1.29.0-alpha.1) (2026-11-19)
+
+
+### Features
+
+* **accounts:** delete accounts nobody used for 1 year ([#219](https://github.com/myronsi/messenger-back/issues/219)) ([6269023](https://github.com/myronsi/messenger-back/commit/62690232dba08d865f130fe23fbed4ca02a08302))
+* **auth:** record terms acceptance and age confirmation at sign-up ([#220](https://github.com/myronsi/messenger-back/issues/220)) ([f8d8843](https://github.com/myronsi/messenger-back/commit/f8d8843a8cce6e31051f3d0378adebbfce9aad0d))
+
 ## [1.28.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.27.0-alpha.1...v1.28.0-alpha.1) (2026-11-19)
 
 
