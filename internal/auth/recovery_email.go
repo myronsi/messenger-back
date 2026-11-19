@@ -251,6 +251,9 @@ func (s *Service) processRecoveryMail(ctx context.Context, job postgres.Recovery
 	if err = json.Unmarshal([]byte(plain), &payload); err != nil {
 		return err
 	}
+	if job.Kind == inactiveAccountMail {
+		return s.sendInactivityWarning(ctx, payload.UserID, send)
+	}
 	var email postgres.RecoveryEmail
 	if job.Kind == "password_reset" {
 		email, err = s.store.RecoveryEmails().FindVerified(ctx, payload.Identifier)
@@ -292,6 +295,28 @@ func (s *Service) processRecoveryMail(ctx context.Context, job postgres.Recovery
 	link := strings.TrimRight(s.recoveryWebURL, "/") + "/" + page + "?token=" + token
 	body := "Open this link to continue:\n\n" + link + "\n\nThis link expires in 30 minutes and works once. If you did not request this, ignore this email. Never share this link.\n"
 	return send(ctx, email.Address, subject, body)
+}
+
+const inactiveAccountMail = "inactive_account"
+
+func (s *Service) InactivityWarningPayload(userID int64) (string, error) {
+	return s.sealedMailPayload(inactiveAccountMail, recoveryMailPayload{UserID: userID})
+}
+
+func (s *Service) sendInactivityWarning(ctx context.Context, userID int64, send func(context.Context, string, string, string) error) error {
+	warning, err := s.store.InactiveAccounts().PendingWarning(ctx, userID)
+	if errors.Is(err, postgres.ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	date := warning.DeletesAt.UTC().Format("2 January 2006")
+	subject := "Your Messenger account will be deleted on " + date
+	body := "Your Messenger account @" + warning.Username + " will be deleted on " + date + " because it was not used for 1 year.\n\n" +
+		"Sign in to keep it:\n\n" + strings.TrimRight(s.recoveryWebURL, "/") + "\n\n" +
+		"Signing in once is enough: the account then stays. If you no longer need it, ignore this email.\n"
+	return send(ctx, warning.Address, subject, body)
 }
 
 func (s *Service) RunRecoveryMail(ctx context.Context, send func(context.Context, string, string, string) error) {

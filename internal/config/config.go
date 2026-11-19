@@ -71,6 +71,7 @@ type Config struct {
 	Notifications Notifications
 	RecoveryMail  RecoveryMail
 	Calls         Calls
+	Inactive      InactiveAccounts
 	Connections   Connections
 	Internal      Internal
 	GeoIPDBPath   string `env:"GEOIP_DB_PATH"`

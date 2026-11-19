@@ -35,6 +35,7 @@ x-go-app: &go-app
     SMTP_FROM: ${SMTP_FROM:-}
     SMTP_TLS_MODE: ${SMTP_TLS_MODE:-starttls}
     RECOVERY_WEB_URL: ${RECOVERY_WEB_URL:-http://localhost:5173}
+    INACTIVE_ACCOUNT_DELETION: ${INACTIVE_ACCOUNT_DELETION:-false}
     DATABASE_URL: postgres://${POSTGRES_USER:-messenger}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-messenger}?sslmode=disable
     REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
     SCYLLA_HOSTS: scylla

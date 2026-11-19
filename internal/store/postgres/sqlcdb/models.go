@@ -231,6 +231,12 @@ type GroupRoleEvent struct {
 	CreatedAt time.Time
 }
 
+type InactiveAccountWarning struct {
+	UserID    int64
+	WarnedAt  time.Time
+	DeletesAt time.Time
+}
+
 type MediaJob struct {
 	ID           int64
 	AttachmentID uuid.UUID
