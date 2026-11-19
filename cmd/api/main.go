@@ -277,7 +277,8 @@ func run() error {
 
 	internalSrv := startInternal(log, cfg, internalapi.Options{
 		Moderation: modSvc, Accounts: authSvc, AfterDeletion: rt.accountDeleted(storage, callsSvc, log), Events: rt.events, PackImages: mediaSvc,
-		Usage: pg,
+		Usage:    pg,
+		Messages: rt.messages,
 	})
 
 	log.Info("api listening", "addr", cfg.HTTP.Addr, "env", cfg.Env)

@@ -81,8 +81,8 @@ func TestRemoveByModerationDeletesForEveryoneAndKeepsTheReasonForTheSender(t *te
 	chat, _, _ := f.pg.Chats().CreateDirect(ctx, alice, bob)
 	m := f.send(chat.ID, alice, "x", "buy now")
 	reason := scylla.ModerationRemoval{Code: "spam", Text: "Advertising is not allowed."}
-	removed, err := f.svc.RemoveByModeration(ctx, chat.ID, m.ID, reason)
-	if err != nil {
+	removed, changed, err := f.svc.RemoveByModeration(ctx, chat.ID, m.ID, reason)
+	if err != nil || !changed {
 		t.Fatal(err)
 	}
 	if !removed.Deleted || removed.Content != nil || removed.Moderation == nil || *removed.Moderation != reason {
@@ -107,14 +107,14 @@ func TestRemoveByModerationDeletesForEveryoneAndKeepsTheReasonForTheSender(t *te
 	if _, err := f.svc.Edit(ctx, alice, chat.ID, m.ID, "again"); !errors.Is(err, messages.ErrNotFound) {
 		t.Fatalf("editing a removed message: %v", err)
 	}
-	again, err := f.svc.RemoveByModeration(ctx, chat.ID, m.ID, scylla.ModerationRemoval{Code: "other"})
-	if err != nil || again.Moderation.Code != "spam" {
+	again, changed, err := f.svc.RemoveByModeration(ctx, chat.ID, m.ID, scylla.ModerationRemoval{Code: "other"})
+	if err != nil || changed || again.Moderation.Code != "spam" {
 		t.Fatalf("second removal keeps the first reason: %+v %v", again, err)
 	}
-	if _, err := f.svc.RemoveByModeration(ctx, chat.ID, m.ID+1000, reason); !errors.Is(err, messages.ErrNotFound) {
+	if _, _, err := f.svc.RemoveByModeration(ctx, chat.ID, m.ID+1000, reason); !errors.Is(err, messages.ErrNotFound) {
 		t.Fatalf("unknown message: %v", err)
 	}
-	if _, err := f.svc.RemoveByModeration(ctx, chat.ID, m.ID, scylla.ModerationRemoval{}); !errors.Is(err, messages.ErrInvalid) {
+	if _, _, err := f.svc.RemoveByModeration(ctx, chat.ID, m.ID, scylla.ModerationRemoval{}); !errors.Is(err, messages.ErrInvalid) {
 		t.Fatalf("missing code: %v", err)
 	}
 }

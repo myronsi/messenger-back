@@ -28,7 +28,7 @@ Members can report a message or a group. Code: `internal/contentreports`, store 
 
 ## Removed by moderation
 
-A moderator's decision can remove a message (`messages.Service.RemoveByModeration`, called by the internal endpoint of the moderation service). The message is deleted for everyone like a sender's delete (content and files cleared, files unlinked, `message.deleted` event for search) and also stores `removed_by_moderation` with the reason (`moderation_reason_code`, `moderation_reason_text`; ScyllaDB migration `000004_moderation_removal`). Removing twice keeps the first reason.
+A moderator's decision can remove a message (`messages.Service.RemoveByModeration`, called by the moderation service through `POST /internal/v1/chats/{chat_id}/messages/{message_id}/remove`, [internal-api.md](internal-api.md#remove-a-message)). The message is deleted for everyone like a sender's delete (content and files cleared, files unlinked, `message.deleted` event for search) and also stores `removed_by_moderation` with the reason (`moderation_reason_code`, `moderation_reason_text`; ScyllaDB migration `000004_moderation_removal`). Removing twice keeps the first reason.
 
 - History, reply previews and `message` renderings carry `removed_by_moderation: true`; clients show "Removed by moderation" instead of the deleted placeholder. Older clients still see a deleted message.
 - Only the sender's rendering carries `moderation_reason` (`code`, `text`).

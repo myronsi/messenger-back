@@ -55,37 +55,37 @@ func copyable(m scylla.Message) bool {
 	return !m.Deleted && m.Type != scylla.TypeSystem
 }
 
-func (s *Service) RemoveByModeration(ctx context.Context, chatID, messageID int64, reason scylla.ModerationRemoval) (scylla.Message, error) {
+func (s *Service) RemoveByModeration(ctx context.Context, chatID, messageID int64, reason scylla.ModerationRemoval) (scylla.Message, bool, error) {
 	reason.Code = strings.TrimSpace(reason.Code)
 	reason.Text = strings.TrimSpace(reason.Text)
 	if reason.Code == "" || !validText(reason.Code, 64) {
-		return scylla.Message{}, invalid("reason code is required")
+		return scylla.Message{}, false, invalid("reason code is required")
 	}
 	if !utf8.ValidString(reason.Text) || utf8.RuneCountInString(reason.Text) > MaxRemovalReasonLen {
-		return scylla.Message{}, invalid("reason text is at most 1000 characters")
+		return scylla.Message{}, false, invalid("reason text is at most 1000 characters")
 	}
 	m, err := s.message(ctx, chatID, messageID)
 	if err != nil {
-		return scylla.Message{}, err
+		return scylla.Message{}, false, err
 	}
 	if m.Type == scylla.TypeSystem {
-		return scylla.Message{}, invalid("system messages cannot be removed")
+		return scylla.Message{}, false, invalid("system messages cannot be removed")
 	}
 	if m.Moderation != nil {
-		return m, nil
+		return m, false, nil
 	}
 	if err := s.d.Messages.Remove(ctx, chatID, messageID, reason); errors.Is(err, scylla.ErrNotFound) {
-		return scylla.Message{}, ErrNotFound
+		return scylla.Message{}, false, ErrNotFound
 	} else if err != nil {
-		return scylla.Message{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
+		return scylla.Message{}, false, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
 	removed, err := s.message(ctx, chatID, messageID)
 	if err != nil {
-		return scylla.Message{}, err
+		return scylla.Message{}, false, err
 	}
 	if members, err := s.Members(ctx, chatID); err == nil {
 		s.d.Notifier.MessageRemoved(ctx, removed, members)
 	}
 	s.emit(ctx, events.Event{Type: events.MessageDeleted, ChatID: chatID, MessageID: messageID})
-	return removed, s.unlink(ctx, m)
+	return removed, true, s.unlink(ctx, m)
 }

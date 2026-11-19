@@ -81,7 +81,7 @@ func TestRemovedMessageShowsTheReasonOnlyToItsSender(t *testing.T) {
 	if reply.Code != http.StatusCreated {
 		t.Fatalf("reply: %d %s", reply.Code, reply.Body)
 	}
-	if _, err := e.msgs.RemoveByModeration(context.Background(), mustID(t, chatID), mustID(t, msgID), scylla.ModerationRemoval{Code: "spam", Text: "Advertising"}); err != nil {
+	if _, _, err := e.msgs.RemoveByModeration(context.Background(), mustID(t, chatID), mustID(t, msgID), scylla.ModerationRemoval{Code: "spam", Text: "Advertising"}); err != nil {
 		t.Fatal(err)
 	}
 	find := func(s session) (removed, answer map[string]any) {
