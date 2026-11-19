@@ -9,8 +9,11 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/google/uuid"
+
 	"github.com/myronsi/messenger-back/internal/auth"
 	"github.com/myronsi/messenger-back/internal/events"
+	"github.com/myronsi/messenger-back/internal/media"
 	"github.com/myronsi/messenger-back/internal/moderation"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 )
@@ -37,6 +40,7 @@ type actions struct {
 	accounts      AccountDeleter
 	afterDeletion func(ctx context.Context, userID int64, deleted postgres.DeletedAccount)
 	events        EventLog
+	images        PackImages
 	log           *slog.Logger
 }
 
@@ -49,6 +53,9 @@ func (a actions) register(mux *http.ServeMux) {
 	}
 	if a.accounts != nil {
 		mux.HandleFunc("DELETE "+BasePath+"/users/{user_id}", a.deleteAccount)
+	}
+	if a.images != nil {
+		mux.HandleFunc("GET "+BasePath+"/pack-images/{attachment_id}", a.packImage)
 	}
 }
 
@@ -215,4 +222,39 @@ func (a actions) deleteAccount(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"deleted": true})
+}
+
+type PackImages interface {
+	OpenPackImage(ctx context.Context, id uuid.UUID) (media.Download, error)
+}
+
+func (a actions) packImage(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.PathValue("attachment_id"))
+	if err != nil {
+		invalid(w, "attachment_id", "not an attachment id")
+		return
+	}
+	d, err := a.images.OpenPackImage(r.Context(), id)
+	if errors.Is(err, media.ErrNoAccess) {
+		writeJSON(w, http.StatusNotFound, problem{Error: "not_found"})
+		return
+	}
+	if err != nil {
+		a.fail(w, r, "pack image", err)
+		return
+	}
+	h := w.Header()
+	h.Set("Cache-Control", "no-store")
+	h.Set("X-Content-Type-Options", "nosniff")
+	if d.RedirectURL != "" {
+		http.Redirect(w, r, d.RedirectURL, http.StatusFound)
+		return
+	}
+	defer func() { _ = d.Object.Body.Close() }()
+	h.Set("Content-Type", d.ContentType)
+	if d.Object.Size >= 0 {
+		h.Set("Content-Length", strconv.FormatInt(d.Object.Size, 10))
+	}
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.Copy(w, d.Object.Body)
 }

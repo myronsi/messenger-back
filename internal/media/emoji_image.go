@@ -3,11 +3,14 @@ package media
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"image"
 	"image/png"
 	"io"
 	"os"
+
+	"github.com/google/uuid"
 
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 )
@@ -113,4 +116,28 @@ func (s *Service) canSeeEmoji(ctx context.Context, viewerID int64, a postgres.At
 		return true, nil
 	}
 	return s.o.Attachments.IsEmojiImage(ctx, a.ID)
+}
+
+func (s *Service) OpenPackImage(ctx context.Context, id uuid.UUID) (Download, error) {
+	a, err := s.o.Attachments.Get(ctx, id)
+	if errors.Is(err, postgres.ErrNotFound) {
+		return Download{}, ErrNoAccess
+	}
+	if err != nil {
+		return Download{}, err
+	}
+	var ok bool
+	switch a.Purpose {
+	case PurposeSticker:
+		ok, err = s.o.Attachments.IsStickerImage(ctx, a.ID)
+	case PurposeEmoji:
+		ok, err = s.o.Attachments.IsEmojiImage(ctx, a.ID)
+	}
+	if err != nil {
+		return Download{}, err
+	}
+	if !ok {
+		return Download{}, ErrNoAccess
+	}
+	return s.content(ctx, a, VariantOriginal)
 }

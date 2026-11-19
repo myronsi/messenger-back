@@ -274,7 +274,7 @@ func run() error {
 	srv.ErrorLog = slog.NewLogLogger(log.Handler(), slog.LevelWarn)
 
 	internalSrv := startInternal(log, cfg, internalapi.Options{
-		Moderation: modSvc, Accounts: authSvc, AfterDeletion: rt.accountDeleted(storage, callsSvc, log), Events: rt.events,
+		Moderation: modSvc, Accounts: authSvc, AfterDeletion: rt.accountDeleted(storage, callsSvc, log), Events: rt.events, PackImages: mediaSvc,
 	})
 
 	log.Info("api listening", "addr", cfg.HTTP.Addr, "env", cfg.Env)

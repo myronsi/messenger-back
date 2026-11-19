@@ -3,13 +3,17 @@ package internalapi
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
+
 	"github.com/myronsi/messenger-back/internal/auth"
 	"github.com/myronsi/messenger-back/internal/events"
+	"github.com/myronsi/messenger-back/internal/media"
 	"github.com/myronsi/messenger-back/internal/moderation"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 )
@@ -209,5 +213,33 @@ func TestActionsAbsentWithoutServices(t *testing.T) {
 	h := Handler(Options{Token: token})
 	if rec := send(t, h, http.MethodPost, BasePath+"/users/5/status", `{}`); rec.Code != http.StatusNotFound {
 		t.Fatalf("status route without a service: %d", rec.Code)
+	}
+}
+
+type fakeImages struct{ download media.Download }
+
+func (f fakeImages) OpenPackImage(_ context.Context, id uuid.UUID) (media.Download, error) {
+	if id == uuid.Nil {
+		return media.Download{}, media.ErrNoAccess
+	}
+	return f.download, nil
+}
+
+func TestPackImage(t *testing.T) {
+	body := io.NopCloser(strings.NewReader("webp"))
+	h := Handler(Options{Token: token, PackImages: fakeImages{download: media.Download{Object: media.Object{Body: body, Size: 4}, ContentType: "image/webp"}}})
+	rec := send(t, h, http.MethodGet, BasePath+"/pack-images/"+uuid.NewString(), "")
+	if rec.Code != http.StatusOK || rec.Body.String() != "webp" || rec.Header().Get("Content-Type") != "image/webp" || rec.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("image %d %q %v", rec.Code, rec.Body, rec.Header())
+	}
+	if rec := send(t, h, http.MethodGet, BasePath+"/pack-images/"+uuid.Nil.String(), ""); rec.Code != http.StatusNotFound {
+		t.Fatalf("not a pack image %d", rec.Code)
+	}
+	if rec := send(t, h, http.MethodGet, BasePath+"/pack-images/nope", ""); rec.Code != http.StatusBadRequest {
+		t.Fatalf("bad id %d", rec.Code)
+	}
+	redirect := Handler(Options{Token: token, PackImages: fakeImages{download: media.Download{RedirectURL: "https://bucket.example/x"}}})
+	if rec := send(t, redirect, http.MethodGet, BasePath+"/pack-images/"+uuid.NewString(), ""); rec.Code != http.StatusFound || rec.Header().Get("Location") != "https://bucket.example/x" {
+		t.Fatalf("signed url %d %v", rec.Code, rec.Header())
 	}
 }
