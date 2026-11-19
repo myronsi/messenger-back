@@ -512,7 +512,7 @@ func (q *Queries) PatchPrivacySettings(ctx context.Context, arg PatchPrivacySett
 }
 
 const searchUsers = `-- name: SearchUsers :many
-SELECT u.id, u.username, u.display_name, u.password_hash, u.avatar_url, u.bio, u.last_seen_at, u.created_at, u.updated_at, u.avatar_attachment_id, u.profile_version, u.pronouns, u.birthday_day, u.birthday_month, u.birthday_year, u.time_zone, u.music_attachment_id, u.music_title, u.music_artist, u.background_kind, u.background_attachment_id, u.background_preset, u.background_colors
+SELECT u.id, u.username, u.display_name, u.password_hash, u.avatar_url, u.bio, u.last_seen_at, u.created_at, u.updated_at, u.avatar_attachment_id, u.profile_version, u.pronouns, u.birthday_day, u.birthday_month, u.birthday_year, u.time_zone, u.music_attachment_id, u.music_title, u.music_artist, u.background_kind, u.background_attachment_id, u.background_preset, u.background_colors, u.terms_version, u.terms_accepted_at, u.age_confirmed_at
 FROM users u
 LEFT JOIN user_privacy_settings p ON p.user_id = u.id
 WHERE (LOWER(u.username) LIKE $1::text || '%' OR LOWER(u.display_name) LIKE '%' || $2::text || '%')
@@ -575,6 +575,9 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 			&i.BackgroundAttachmentID,
 			&i.BackgroundPreset,
 			&i.BackgroundColors,
+			&i.TermsVersion,
+			&i.TermsAcceptedAt,
+			&i.AgeConfirmedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -587,7 +590,7 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 }
 
 const searchUsersByUsername = `-- name: SearchUsersByUsername :many
-SELECT u.id, u.username, u.display_name, u.password_hash, u.avatar_url, u.bio, u.last_seen_at, u.created_at, u.updated_at, u.avatar_attachment_id, u.profile_version, u.pronouns, u.birthday_day, u.birthday_month, u.birthday_year, u.time_zone, u.music_attachment_id, u.music_title, u.music_artist, u.background_kind, u.background_attachment_id, u.background_preset, u.background_colors
+SELECT u.id, u.username, u.display_name, u.password_hash, u.avatar_url, u.bio, u.last_seen_at, u.created_at, u.updated_at, u.avatar_attachment_id, u.profile_version, u.pronouns, u.birthday_day, u.birthday_month, u.birthday_year, u.time_zone, u.music_attachment_id, u.music_title, u.music_artist, u.background_kind, u.background_attachment_id, u.background_preset, u.background_colors, u.terms_version, u.terms_accepted_at, u.age_confirmed_at
 FROM users u
 LEFT JOIN user_privacy_settings p ON p.user_id = u.id
 WHERE LOWER(u.username) LIKE $1::text || '%'
@@ -647,6 +650,9 @@ func (q *Queries) SearchUsersByUsername(ctx context.Context, arg SearchUsersByUs
 			&i.BackgroundAttachmentID,
 			&i.BackgroundPreset,
 			&i.BackgroundColors,
+			&i.TermsVersion,
+			&i.TermsAcceptedAt,
+			&i.AgeConfirmedAt,
 		); err != nil {
 			return nil, err
 		}

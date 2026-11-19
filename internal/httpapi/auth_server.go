@@ -223,10 +223,12 @@ func (a *AuthServer) principal(w http.ResponseWriter, r *http.Request) (auth.Pri
 // ---------------------------------------------------------------- sign in and out
 
 type registerBody struct {
-	Username    string  `json:"username"`
-	DisplayName string  `json:"display_name"`
-	Password    string  `json:"password"`
-	Bio         *string `json:"bio"`
+	Username     string  `json:"username"`
+	DisplayName  string  `json:"display_name"`
+	Password     string  `json:"password"`
+	Bio          *string `json:"bio"`
+	TermsVersion *string `json:"terms_version"`
+	AgeConfirmed *bool   `json:"age_confirmed"`
 }
 
 // Register implements POST /auth/register.
@@ -235,7 +237,7 @@ func (a *AuthServer) Register(w http.ResponseWriter, r *http.Request, _ Register
 	if !decode(w, r, &body) {
 		return
 	}
-	ts, err := a.svc.Register(r.Context(), a.clientOf(r), body.Username, body.DisplayName, body.Password, body.Bio)
+	ts, err := a.svc.Register(r.Context(), a.clientOf(r), body.Username, body.DisplayName, body.Password, body.Bio, auth.Consent{TermsVersion: body.TermsVersion, AgeConfirmed: body.AgeConfirmed})
 	if err != nil {
 		a.fail(w, r, err, false)
 		return

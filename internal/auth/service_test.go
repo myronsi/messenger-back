@@ -121,7 +121,7 @@ func (e *env) client(ip string) Client {
 
 func (e *env) register(t *testing.T, name, password string) *TokenSet {
 	t.Helper()
-	ts, err := e.svc.Register(context.Background(), e.client("10.0.0.1"), name, "Display "+name, password, nil)
+	ts, err := e.svc.Register(context.Background(), e.client("10.0.0.1"), name, "Display "+name, password, nil, Consent{})
 	if err != nil {
 		t.Fatalf("register %s: %v", name, err)
 	}
@@ -169,14 +169,14 @@ func TestRegisterAndLogin(t *testing.T) {
 		t.Fatalf("fresh access token: %v", err)
 	}
 
-	if _, err := e.svc.Register(ctx, e.client("10.0.0.1"), "ALICE_1", "Other", "another pass", nil); !errors.Is(err, ErrUsernameTaken) {
+	if _, err := e.svc.Register(ctx, e.client("10.0.0.1"), "ALICE_1", "Other", "another pass", nil, Consent{}); !errors.Is(err, ErrUsernameTaken) {
 		t.Fatalf("duplicate (case-insensitive) username: got %v", err)
 	}
 	var ve *ValidationError
-	if _, err := e.svc.Register(ctx, e.client("10.0.0.1"), "a b", "x", "correct horse", nil); !errors.As(err, &ve) || ve.Field != "username" {
+	if _, err := e.svc.Register(ctx, e.client("10.0.0.1"), "a b", "x", "correct horse", nil, Consent{}); !errors.As(err, &ve) || ve.Field != "username" {
 		t.Fatalf("invalid username: got %v", err)
 	}
-	if _, err := e.svc.Register(ctx, e.client("10.0.0.1"), "bob", "x", "short", nil); !errors.As(err, &ve) || ve.Field != "password" {
+	if _, err := e.svc.Register(ctx, e.client("10.0.0.1"), "bob", "x", "short", nil, Consent{}); !errors.As(err, &ve) || ve.Field != "password" {
 		t.Fatalf("short password: got %v", err)
 	}
 
@@ -199,7 +199,7 @@ func TestRegisterDefaultsDisplayNameToUsername(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 	for name, given := range map[string]string{"Carol_1": "", "Carol_2": "   \t "} {
-		ts, err := e.svc.Register(ctx, e.client("10.0.0.3"), " "+name+" ", given, "correct horse", nil)
+		ts, err := e.svc.Register(ctx, e.client("10.0.0.3"), " "+name+" ", given, "correct horse", nil, Consent{})
 		if err != nil {
 			t.Fatalf("register with display name %q: %v", given, err)
 		}
@@ -207,7 +207,7 @@ func TestRegisterDefaultsDisplayNameToUsername(t *testing.T) {
 			t.Fatalf("display name %q: got %q, want the username %q", given, ts.User.DisplayName, name)
 		}
 	}
-	ts, err := e.svc.Register(ctx, e.client("10.0.0.3"), "dave", "  Dave   D ", "correct horse", nil)
+	ts, err := e.svc.Register(ctx, e.client("10.0.0.3"), "dave", "  Dave   D ", "correct horse", nil, Consent{})
 	if err != nil || ts.User.DisplayName != "Dave D" {
 		t.Fatalf("a given display name is kept: %v %+v", err, ts)
 	}

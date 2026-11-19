@@ -117,15 +117,16 @@ func TestAuthDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	a := cfg.Auth
-	if !a.CookieSecure || a.RefreshCookiePath != "" || a.SessionCacheTTL != 30*time.Second || a.RefreshReuseGrace != 10*time.Second || a.PasswordHashConcurrency != 4 || a.RecoveryApprovalMinSessionAge != 72*time.Hour {
+	if !a.CookieSecure || a.RefreshCookiePath != "" || a.SessionCacheTTL != 30*time.Second || a.RefreshReuseGrace != 10*time.Second || a.PasswordHashConcurrency != 4 || a.RecoveryApprovalMinSessionAge != 72*time.Hour || a.RequireTermsAcceptance {
 		t.Fatalf("unexpected defaults: %+v", a)
 	}
 	e := validEnv()
 	e["COOKIE_SECURE"] = "false"
 	e["REFRESH_REUSE_GRACE"] = "0s"
 	e["RECOVERY_APPROVAL_MIN_SESSION_AGE"] = "0s"
+	e["REQUIRE_TERMS_ACCEPTANCE"] = "true"
 	e["TRUSTED_PROXIES"] = "10.0.0.0/8, 192.0.2.7 ,::1"
-	if cfg, err = LoadFrom(e); err != nil || cfg.Auth.CookieSecure || cfg.Auth.RefreshReuseGrace != 0 || cfg.Auth.RecoveryApprovalMinSessionAge != 0 {
+	if cfg, err = LoadFrom(e); err != nil || cfg.Auth.CookieSecure || cfg.Auth.RefreshReuseGrace != 0 || cfg.Auth.RecoveryApprovalMinSessionAge != 0 || !cfg.Auth.RequireTermsAcceptance {
 		t.Fatalf("overrides not applied: %v %+v", err, cfg.Auth)
 	}
 	prefixes, err := cfg.Auth.TrustedProxyPrefixes()

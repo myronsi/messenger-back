@@ -60,7 +60,12 @@ func PresentMe(u postgres.User, basePath string, media users.Media) Me {
 	id := FormatID(u.ID)
 	me := Me{Id: id, Username: u.Username, DisplayName: u.DisplayName, Bio: u.Bio, CreatedAt: utc(u.CreatedAt), IsOnline: true,
 		ProfileVersion: int(u.ProfileVersion), Pronouns: u.Pronouns, Birthday: presentBirthday(u.Birthday), TimeZone: u.TimeZone,
-		Music: presentMusic(media.MusicOf(u), basePath), Background: presentBackground(media.BackgroundOf(u.Background), basePath)}
+		Music: presentMusic(media.MusicOf(u), basePath), Background: presentBackground(media.BackgroundOf(u.Background), basePath),
+		TermsVersion: u.TermsVersion}
+	if u.TermsAcceptedAt != nil {
+		at := utc(*u.TermsAcceptedAt)
+		me.TermsAcceptedAt = &at
+	}
 	if me.TimeZone == "" {
 		me.TimeZone = "UTC"
 	}

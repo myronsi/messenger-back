@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.39
+  version: 2.1.0-alpha.40
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -5865,6 +5865,19 @@ components:
           description: Defaults to the username when it is missing, empty or only whitespace.
         password: { type: string, minLength: 8, maxLength: 128, writeOnly: true }
         bio: { type: [string, "null"], maxLength: 500 }
+        terms_version:
+          type: string
+          pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          description: |
+            The version of the Terms of Use the user accepted: the date of those terms, such as `2026-11-19`. Stored
+            with the time of registration. Required, together with `age_confirmed: true`, when the server requires
+            terms acceptance (`422` with the field otherwise).
+          examples: ["2026-11-19"]
+        age_confirmed:
+          type: boolean
+          description: |
+            The user confirmed being at least 13 years old, and that a parent or guardian agrees when under 16.
+            `false` is refused with `422` and the field `age_confirmed`.
     LoginRequest:
       type: object
       required: [username, password]
@@ -6428,13 +6441,20 @@ components:
       allOf:
         - $ref: "#/components/schemas/User"
         - type: object
-          required: [created_at, time_zone]
+          required: [created_at, time_zone, terms_version, terms_accepted_at]
           properties:
             created_at: { $ref: "#/components/schemas/Timestamp" }
             recovery_setup_required: { type: boolean }
             time_zone:
               allOf: [{ $ref: "#/components/schemas/TimeZone" }]
               description: The user's time zone; birthday reminders arrive at 09:00 in it. `UTC` until a client sets it.
+            terms_version:
+              type: [string, "null"]
+              description: The version of the Terms of Use accepted at registration; `null` when none was recorded.
+            terms_accepted_at:
+              type: [string, "null"]
+              format: date-time
+              description: When the Terms of Use were accepted; `null` when no acceptance was recorded.
     TimeZone:
       type: string
       minLength: 1

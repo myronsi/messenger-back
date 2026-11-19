@@ -37,6 +37,9 @@ func userFrom(u sqlcdb.User) User {
 		MusicTitle:         u.MusicTitle,
 		MusicArtist:        u.MusicArtist,
 		Background:         backgroundFrom(u.BackgroundKind, u.BackgroundAttachmentID, u.BackgroundPreset, u.BackgroundColors),
+		TermsVersion:       u.TermsVersion,
+		TermsAcceptedAt:    u.TermsAcceptedAt,
+		AgeConfirmedAt:     u.AgeConfirmedAt,
 	}
 }
 

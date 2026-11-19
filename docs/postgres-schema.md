@@ -32,6 +32,7 @@ users, chats and their participants, attachment metadata and the security log.
 | `000047_account_review_requests` | `account_review_requests` ([moderation.md](moderation.md#review-by-a-person)) |
 | `000048_content_reports` | `content_reports` ([moderation.md](moderation.md#content-reports)) |
 | `000049_security_events_created_idx` | index on `user_security_events (created_at)`: the worker deletes security events older than a year (`Store.PurgeSecurityEvents`, hourly maintenance) |
+| `000051_terms_acceptance` | `users.terms_version`, `terms_accepted_at` and `age_confirmed_at`, recorded at registration ([auth.md](auth.md#registration)) |
 
 Changes compared to v1:
 

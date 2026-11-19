@@ -211,7 +211,8 @@ type Auth struct {
 	PasswordHashConcurrency int `env:"PASSWORD_HASH_CONCURRENCY" envDefault:"4"`
 	// TrustedProxies lists the IPs or CIDRs of reverse proxies whose X-Forwarded-For and X-Real-IP headers
 	// are believed when working out the client address (rate limits, session records).
-	TrustedProxies []string `env:"TRUSTED_PROXIES" envSeparator:","`
+	TrustedProxies         []string `env:"TRUSTED_PROXIES" envSeparator:","`
+	RequireTermsAcceptance bool     `env:"REQUIRE_TERMS_ACCEPTANCE" envDefault:"false"`
 }
 
 var loopbackProxies = []netip.Prefix{netip.MustParsePrefix("127.0.0.0/8"), netip.MustParsePrefix("::1/128")}
