@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.26.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.25.0-alpha.1...v1.26.0-alpha.1) (2026-11-19)
+
+
+### Features
+
+* **internal:** internal listener for operator services ([#210](https://github.com/myronsi/messenger-back/issues/210)) ([8888842](https://github.com/myronsi/messenger-back/commit/888884200d33c4328416e7aa8a6ecd037d1bdabb))
+
 ## [1.25.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.24.0-alpha.1...v1.25.0-alpha.1) (2026-11-18)
 
 
