@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.27.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.26.0-alpha.1...v1.27.0-alpha.1) (2026-11-19)
+
+
+### Features
+
+* **moderation:** staff decisions, reporter outcomes and internal actions ([#213](https://github.com/myronsi/messenger-back/issues/213)) ([b1bd733](https://github.com/myronsi/messenger-back/commit/b1bd7336fe3dfccffc5485f25a211515290b1844))
+* **stats:** count sent messages per day ([#209](https://github.com/myronsi/messenger-back/issues/209)) ([ddb18c4](https://github.com/myronsi/messenger-back/commit/ddb18c4d1bb47580aabf316d32be328d5fb72d1c))
+
 ## [1.26.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.25.0-alpha.1...v1.26.0-alpha.1) (2026-11-19)
 
 
