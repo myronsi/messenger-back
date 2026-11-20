@@ -207,3 +207,53 @@ func TestRejectedDestinationIsDroppedAfterRepeatedFailures(t *testing.T) {
 		t.Fatalf("destination still registered: %+v", got)
 	}
 }
+
+func TestReadyJobWakesListenerOnceTheMessageIsSaved(t *testing.T) {
+	s := newTestStore(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	a := mustUser(t, s, "alice")
+	b := mustUser(t, s, "bob")
+	chat, _, err := s.Chats().CreateDirect(ctx, a.ID, b.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := s.Notifications()
+	wake := make(chan struct{}, 1)
+	listening := make(chan error, 1)
+	go func() { listening <- q.ListenJobs(ctx, wake) }()
+	select {
+	case <-wake:
+	case <-time.After(5 * time.Second):
+		t.Fatal("listener did not start")
+	}
+	if err := q.Enqueue(ctx, chat.ID, 500, []int64{b.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := q.Claim(ctx); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("a job must wait while its message is not saved: %v", err)
+	}
+	if err := q.Ready(ctx, 500); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-wake:
+	case <-time.After(5 * time.Second):
+		t.Fatal("ready job did not wake the listener")
+	}
+	j, err := q.Claim(ctx)
+	if err != nil || j.MessageID != 500 {
+		t.Fatalf("ready job not claimable at once: %+v %v", j, err)
+	}
+	if err := q.Ready(ctx, 500); err != nil {
+		t.Fatal(err)
+	}
+	var leased bool
+	if err := s.Pool().QueryRow(ctx, `SELECT next_at>now() FROM notification_jobs WHERE message_id=500`).Scan(&leased); err != nil || !leased {
+		t.Fatalf("ready must not cut a running lease short: %v %v", leased, err)
+	}
+	cancel()
+	if err := <-listening; !errors.Is(err, context.Canceled) {
+		t.Fatalf("listener must stop with its context: %v", err)
+	}
+}

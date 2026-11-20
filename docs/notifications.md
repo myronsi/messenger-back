@@ -2,9 +2,16 @@
 
 The Go API stores account preferences, timed chat mutes and session-bound push destinations in PostgreSQL
 (migration `000013`). New messages and forwards commit a notification intent **before** writing the message to
-ScyllaDB. If committing the intent fails, sending fails before the message is written. The worker waits five
-seconds, verifies that the message exists, and checks membership, join time, blocks, hidden messages, read markers,
-preferences, mutes and live-device activity before delivery. A failed Scylla write cannot produce a phantom alert.
+ScyllaDB. If committing the intent fails, sending fails before the message is written. As soon as ScyllaDB confirms
+the write (`LOCAL_QUORUM`), the API marks the intent due and wakes the worker in one statement (`pg_notify` on the
+`notification_jobs` channel). The worker holds one connection that `LISTEN`s on that channel and claims at once, so
+the push leaves within milliseconds of the save. Every intent still starts five seconds in the future: if the API
+dies between the write and the wake-up, the worker picks it up after those five seconds, and a lost wake-up is
+caught by the once-a-second poll. The worker verifies that the message exists, and checks membership, join time,
+blocks, hidden messages, read markers, preferences, mutes and live-device activity before delivery. A failed Scylla
+write never marks the intent due and cannot produce a phantom alert. Marking due only touches an intent that no
+worker has claimed yet. The wake-up needs a direct PostgreSQL connection: a pooler in transaction mode drops
+`LISTEN`; the worker then still delivers through the poll, one second later.
 
 The queue does not depend on Redis event publishing. Each worker runs four claim loops; they claim with `SKIP LOCKED`
 and a two-minute lease. One job loads its recipients and their destinations in two batch queries and sends to at

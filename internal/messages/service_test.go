@@ -155,7 +155,7 @@ func newFixtureWith(t *testing.T, wrap func(scylla.MessageRepository) scylla.Mes
 	svc := messages.New(messages.Deps{
 		Messages: repo, Store: flakyLinkStore{pg, linkDown}, Members: redis.NewMembers(rd.Client(), prefix, time.Minute), Unread: unread,
 		Dedup: redis.NewDedup(rd.Client(), prefix, 0), IDs: gen, Notifier: rec, Events: log,
-		QueueNotification: pg.Notifications().Enqueue,
+		QueueNotification: pg.Notifications().Enqueue, NotificationReady: pg.Notifications().Ready,
 	})
 	return &fixture{t: t, pg: pg, svc: svc, unread: unread, rec: rec, events: log, linkDown: linkDown}
 }
@@ -368,9 +368,23 @@ func TestRetryAfterFailedInsertKeepsTheMessageID(t *testing.T) {
 			t.Fatalf("failed insert: %v", err)
 		}
 	}
+	due := func() bool {
+		t.Helper()
+		var ready bool
+		if err := f.pg.Pool().QueryRow(ctx, `SELECT next_at<=now() FROM notification_jobs WHERE message_id=$1`, flaky.ids[0]).Scan(&ready); err != nil {
+			t.Fatal(err)
+		}
+		return ready
+	}
+	if due() {
+		t.Fatal("an unsaved message must not make its notification due")
+	}
 	sent, err := f.svc.Send(ctx, req)
 	if err != nil || sent.Duplicate {
 		t.Fatalf("retry: %+v %v", sent, err)
+	}
+	if !due() {
+		t.Fatal("the saved retry must make its notification due at once")
 	}
 	if len(flaky.ids) != 3 || flaky.ids[1] != flaky.ids[0] || flaky.ids[2] != flaky.ids[0] || sent.Message.ID != flaky.ids[0] {
 		t.Fatalf("every retry must store the first id: %v, sent %d", flaky.ids, sent.Message.ID)

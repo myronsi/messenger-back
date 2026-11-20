@@ -26,6 +26,7 @@ const (
 	maxAttempts   = 8
 	activityGrace = 2 * time.Second
 	pruneEvery    = time.Minute
+	listenRetry   = 5 * time.Second
 	titleRunes    = 64
 	bodyRunes     = 160
 )
@@ -58,15 +59,17 @@ type Worker struct {
 }
 
 func (w *Worker) Run(ctx context.Context) {
+	wake := make(chan struct{}, jobsAtOnce)
 	var wg sync.WaitGroup
 	for range jobsAtOnce {
-		wg.Go(func() { w.loop(ctx) })
+		wg.Go(func() { w.loop(ctx, wake) })
 	}
+	wg.Go(func() { w.listen(ctx, wake) })
 	wg.Go(func() { w.prune(ctx) })
 	wg.Wait()
 }
 
-func (w *Worker) loop(ctx context.Context) {
+func (w *Worker) loop(ctx context.Context, wake <-chan struct{}) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {
@@ -74,11 +77,27 @@ func (w *Worker) loop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			for range jobsPerTick {
-				if !w.next(ctx) {
-					break
-				}
+		case <-wake:
+		}
+		for range jobsPerTick {
+			if !w.next(ctx) {
+				break
 			}
+		}
+	}
+}
+
+func (w *Worker) listen(ctx context.Context, wake chan<- struct{}) {
+	for {
+		err := w.Queue.ListenJobs(ctx, wake)
+		if ctx.Err() != nil {
+			return
+		}
+		w.Log.WarnContext(ctx, "notification wake-up listener stopped", "error", err)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(listenRetry):
 		}
 	}
 }

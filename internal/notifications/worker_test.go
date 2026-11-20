@@ -416,3 +416,41 @@ func TestInvalidDeviceIsRemoved(t *testing.T) {
 		t.Fatalf("cleanup failed: %v", err)
 	}
 }
+
+type wakingQueue struct {
+	postgres.NotificationRepository
+	claimed chan time.Time
+}
+
+func (q *wakingQueue) ListenJobs(ctx context.Context, wake chan<- struct{}) error {
+	wake <- struct{}{}
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func (q *wakingQueue) Claim(context.Context) (postgres.NotificationJob, error) {
+	select {
+	case q.claimed <- time.Now():
+	default:
+	}
+	return postgres.NotificationJob{}, postgres.ErrNotFound
+}
+
+func TestWakeUpClaimsWithoutWaitingForThePoll(t *testing.T) {
+	q := &wakingQueue{claimed: make(chan time.Time, 1)}
+	w := &Worker{Queue: q, Log: slog.New(slog.DiscardHandler)}
+	ctx, cancel := context.WithCancel(context.Background())
+	start := time.Now()
+	done := make(chan struct{})
+	go func() { w.Run(ctx); close(done) }()
+	select {
+	case at := <-q.claimed:
+		if at.Sub(start) > 500*time.Millisecond {
+			t.Fatalf("claimed after %v; the wake-up was ignored", at.Sub(start))
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("no claim")
+	}
+	cancel()
+	<-done
+}

@@ -19,6 +19,15 @@ func (s *Service) queueNotification(ctx context.Context, m scylla.Message, membe
 	return s.d.QueueNotification(ctx, m.ChatID, m.ID, recipients)
 }
 
+func (s *Service) notificationReady(ctx context.Context, m scylla.Message) {
+	if s.d.NotificationReady == nil || m.SenderID == nil || m.Type == scylla.TypeSystem {
+		return
+	}
+	if err := s.d.NotificationReady(context.WithoutCancel(ctx), m.ID); err != nil {
+		s.d.Log.WarnContext(ctx, "notification ready", "error", err, "message_id", m.ID)
+	}
+}
+
 func (s *Service) requestHolders(ctx context.Context, chatID int64) ([]int64, error) {
 	holders, err := s.d.Store.Chats().RequestHolders(ctx, chatID)
 	if err != nil {

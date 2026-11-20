@@ -367,6 +367,7 @@ func (s *Service) forwardCopy(ctx context.Context, sender, chatID int64, members
 	if err := s.d.Messages.Insert(ctx, m); err != nil {
 		return scylla.Message{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
+	s.notificationReady(ctx, m)
 	s.delivered(ctx, m, members, "")
 	return m, nil
 }

@@ -40,6 +40,8 @@ type NotificationRecipient struct {
 
 const DeviceFailureLimit = 3
 
+const notificationJobsChannel = "notification_jobs"
+
 type NotificationJob struct {
 	MessageID, ChatID int64
 	Recipients        []int64
@@ -58,6 +60,8 @@ type NotificationRepository interface {
 	Unregister(context.Context, int64, uuid.UUID, uuid.UUID) error
 	Activity(context.Context, int64, uuid.UUID, uuid.UUID, uuid.UUID, bool) error
 	Enqueue(context.Context, int64, int64, []int64) error
+	Ready(ctx context.Context, messageID int64) error
+	ListenJobs(ctx context.Context, wake chan<- struct{}) error
 	Claim(context.Context) (NotificationJob, error)
 	Finish(context.Context, int64) error
 	Defer(context.Context, int64, time.Time) error
@@ -156,6 +160,40 @@ func (r notificationRepo) Enqueue(ctx context.Context, cid, mid int64, recipient
 	_, err := r.s.pool.Exec(ctx, `INSERT INTO notification_jobs(chat_id,message_id,recipients) VALUES($1,$2,$3) ON CONFLICT DO NOTHING`, cid, mid, recipients)
 	return err
 }
+func (r notificationRepo) Ready(ctx context.Context, mid int64) error {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	_, err := r.s.pool.Exec(ctx, `WITH ready AS (
+ UPDATE notification_jobs SET next_at=now() WHERE message_id=$1 AND attempts=0 AND next_at>now() RETURNING message_id)
+ SELECT pg_notify('`+notificationJobsChannel+`', message_id::text) FROM ready`, mid)
+	return err
+}
+
+func (r notificationRepo) ListenJobs(ctx context.Context, wake chan<- struct{}) error {
+	pooled, err := r.s.pool.Acquire(ctx)
+	if err != nil {
+		return err
+	}
+	conn := pooled.Hijack()
+	defer func() { _ = conn.Close(context.WithoutCancel(ctx)) }()
+	if _, err := conn.Exec(ctx, "LISTEN "+notificationJobsChannel); err != nil {
+		return err
+	}
+	select {
+	case wake <- struct{}{}:
+	default:
+	}
+	for {
+		if _, err := conn.WaitForNotification(ctx); err != nil {
+			return err
+		}
+		select {
+		case wake <- struct{}{}:
+		default:
+		}
+	}
+}
+
 func (r notificationRepo) Claim(ctx context.Context) (NotificationJob, error) {
 	ctx, cancel := r.s.call(ctx)
 	defer cancel()
