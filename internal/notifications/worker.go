@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -271,6 +272,9 @@ func (w *Worker) content(ctx context.Context, j postgres.NotificationJob, m scyl
 		r := eligible[uid]
 		p := base
 		p.UserID, p.Sound = fmt.Sprint(uid), r.Preferences.Sound
+		if m.MentionsAll || slices.Contains(m.Mentions, uid) {
+			p.Kind = MentionKind
+		}
 		if r.Preferences.Previews {
 			p.Preview, p.SenderID = true, fmt.Sprint(*m.SenderID)
 			p.Title = clip(emoji.Plain(cmp.Or(names[uid], senderName)), titleRunes)

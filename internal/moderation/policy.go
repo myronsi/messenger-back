@@ -62,6 +62,9 @@ const (
 	ManageGroup   Action = "manage_group"
 	Send          Action = "send"
 	Search        Action = "search"
+	ShareGroup    Action = "share_group"
+	JoinByLink    Action = "join_by_link"
+	Mention       Action = "mention"
 )
 
 const (
@@ -91,11 +94,11 @@ const (
 func Restrictions(s Status) []Action {
 	switch s {
 	case Limited:
-		return []Action{StartDirect, InviteToGroup, Call}
+		return []Action{StartDirect, InviteToGroup, Call, ShareGroup}
 	case Restricted:
-		return []Action{StartDirect, InviteToGroup, Call, CreateGroup, Upload, Forward, EditProfile, PublishPack, Search}
+		return []Action{StartDirect, InviteToGroup, Call, CreateGroup, Upload, Forward, EditProfile, PublishPack, Search, ShareGroup, JoinByLink}
 	case Suspended:
-		return []Action{StartDirect, InviteToGroup, Call, CreateGroup, Upload, Forward, EditProfile, PublishPack, Search, Send, ManageGroup}
+		return []Action{StartDirect, InviteToGroup, Call, CreateGroup, Upload, Forward, EditProfile, PublishPack, Search, Send, ManageGroup, ShareGroup, JoinByLink}
 	}
 	return []Action{}
 }

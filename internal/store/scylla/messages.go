@@ -61,6 +61,8 @@ type Message struct {
 	Deleted      bool
 	CreatedAt    time.Time
 	Moderation   *ModerationRemoval
+	Mentions     []int64
+	MentionsAll  bool
 }
 
 type ModerationRemoval struct {
@@ -122,7 +124,7 @@ type MessageRepository interface {
 	Locate(ctx context.Context, messageID int64) (chatID int64, err error)
 	Page(ctx context.Context, q PageQuery) (Page, error)
 	// Edit replaces the content of a message that is not deleted.
-	Edit(ctx context.Context, chatID, messageID int64, content string, at time.Time) error
+	Edit(ctx context.Context, chatID, messageID int64, content string, at time.Time, mentions []int64, all bool) error
 	// Delete deletes the message for everyone: it keeps its id and shows as deleted.
 	Delete(ctx context.Context, chatID, messageID int64) error
 	Remove(ctx context.Context, chatID, messageID int64, reason ModerationRemoval) error
@@ -187,7 +189,7 @@ func (r *Messages) session(ctx context.Context) (context.Context, context.Cancel
 }
 
 const messageColumns = `message_id, sender_id, type, content, attachment_id, reply_to, forwarded_from_message_id,
-forwarded_from_sender_id, forwarded_from_sender_name, edited_at, deleted, created_at, album_ids, sticker_id`
+forwarded_from_sender_id, forwarded_from_sender_name, edited_at, deleted, created_at, album_ids, sticker_id, mentions, mentions_all`
 
 const selectColumns = messageColumns + `, removed_by_moderation, moderation_reason_code, moderation_reason_text`
 
@@ -205,8 +207,9 @@ func scanMessage(chatID int64, scan func(dest ...any) bool) (Message, bool) {
 		removed    *bool
 		modCode    *string
 		modText    *string
+		all        *bool
 	)
-	if !scan(&m.ID, &sender, &m.Type, &content, &attachment, &m.ReplyTo, &fwdID, &fwdSender, &fwdName, &edited, &deleted, &m.CreatedAt, &m.AlbumIDs, &m.StickerID, &removed, &modCode, &modText) {
+	if !scan(&m.ID, &sender, &m.Type, &content, &attachment, &m.ReplyTo, &fwdID, &fwdSender, &fwdName, &edited, &deleted, &m.CreatedAt, &m.AlbumIDs, &m.StickerID, &m.Mentions, &all, &removed, &modCode, &modText) {
 		return Message{}, false
 	}
 	if removed != nil && *removed {
@@ -220,6 +223,7 @@ func scanMessage(chatID int64, scan func(dest ...any) bool) (Message, bool) {
 	}
 	m.SenderID, m.Content, m.AttachmentID, m.EditedAt = sender, content, attachment, edited
 	m.Deleted = deleted != nil && *deleted
+	m.MentionsAll = all != nil && *all
 	if fwdID != nil {
 		m.Forwarded = &Forwarded{MessageID: *fwdID, SenderID: fwdSender}
 		if fwdName != nil {
@@ -227,7 +231,7 @@ func scanMessage(chatID int64, scan func(dest ...any) bool) (Message, bool) {
 		}
 	}
 	if m.Deleted {
-		m.Content, m.AttachmentID, m.AlbumIDs, m.StickerID = nil, nil, nil, nil
+		m.Content, m.AttachmentID, m.AlbumIDs, m.StickerID, m.Mentions, m.MentionsAll = nil, nil, nil, nil, nil, false
 	}
 	return m, true
 }
@@ -309,9 +313,9 @@ func (r *Messages) Insert(ctx context.Context, m Message) error {
 	if f := m.Forwarded; f != nil {
 		fwdID, fwdSender, fwdName = &f.MessageID, f.SenderID, &f.SenderName
 	}
-	err = sess.Query(`INSERT INTO messages (chat_id, bucket, `+messageColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) USING TIMESTAMP ?`,
+	err = sess.Query(`INSERT INTO messages (chat_id, bucket, `+messageColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) USING TIMESTAMP ?`,
 		m.ChatID, bucket, m.ID, m.SenderID, m.Type, m.Content, m.AttachmentID, m.ReplyTo,
-		fwdID, fwdSender, fwdName, m.EditedAt, m.Deleted, m.CreatedAt, m.AlbumIDs, m.StickerID, ts,
+		fwdID, fwdSender, fwdName, m.EditedAt, m.Deleted, m.CreatedAt, m.AlbumIDs, m.StickerID, mentionSet(m.Mentions), mentionsAll(m.MentionsAll), ts,
 	).WithContext(ctx).Idempotent(true).Exec()
 	if err != nil {
 		return fmt.Errorf("insert message: %w", err)
@@ -376,7 +380,7 @@ func (r *Messages) Locate(ctx context.Context, messageID int64) (int64, error) {
 	return chat, nil
 }
 
-func (r *Messages) Edit(ctx context.Context, chatID, messageID int64, content string, at time.Time) error {
+func (r *Messages) Edit(ctx context.Context, chatID, messageID int64, content string, at time.Time, mentions []int64, all bool) error {
 	ctx, cancel, sess, err := r.session(ctx)
 	if err != nil {
 		return err
@@ -391,8 +395,8 @@ func (r *Messages) Edit(ctx context.Context, chatID, messageID int64, content st
 	}
 	// Edits and deletes are lightweight transactions, so they are serialized per message: an edit racing a
 	// delete for everyone can never write the text back. Both are rare, so the extra round trips are fine.
-	applied, err := sess.Query(`UPDATE messages SET content = ?, edited_at = ? WHERE chat_id = ? AND bucket = ? AND message_id = ? IF deleted = false`,
-		content, at, chatID, bucket, messageID).WithContext(ctx).SerialConsistency(gocql.LocalSerial).MapScanCAS(map[string]any{})
+	applied, err := sess.Query(`UPDATE messages SET content = ?, edited_at = ?, mentions = ?, mentions_all = ? WHERE chat_id = ? AND bucket = ? AND message_id = ? IF deleted = false`,
+		content, at, mentionSet(mentions), mentionsAll(all), chatID, bucket, messageID).WithContext(ctx).SerialConsistency(gocql.LocalSerial).MapScanCAS(map[string]any{})
 	if err != nil {
 		return fmt.Errorf("edit message: %w", err)
 	}
@@ -414,7 +418,7 @@ func (r *Messages) Delete(ctx context.Context, chatID, messageID int64) error {
 	}
 	// A lightweight transaction like Edit, so the two are serialized (mixing them with plain writes would
 	// order them by client timestamps instead). Deleting twice is harmless.
-	_, err = sess.Query(`UPDATE messages SET deleted = true, content = null, attachment_id = null, album_ids = null, sticker_id = null WHERE chat_id = ? AND bucket = ? AND message_id = ? IF EXISTS`,
+	_, err = sess.Query(`UPDATE messages SET deleted = true, content = null, attachment_id = null, album_ids = null, sticker_id = null, mentions = null, mentions_all = null WHERE chat_id = ? AND bucket = ? AND message_id = ? IF EXISTS`,
 		chatID, bucket, messageID).WithContext(ctx).SerialConsistency(gocql.LocalSerial).MapScanCAS(map[string]any{})
 	if err != nil {
 		return fmt.Errorf("delete message: %w", err)
@@ -432,7 +436,7 @@ func (r *Messages) Remove(ctx context.Context, chatID, messageID int64, reason M
 	if err != nil {
 		return err
 	}
-	_, err = sess.Query(`UPDATE messages SET deleted = true, content = null, attachment_id = null, album_ids = null, sticker_id = null, removed_by_moderation = true, moderation_reason_code = ?, moderation_reason_text = ? WHERE chat_id = ? AND bucket = ? AND message_id = ? IF EXISTS`,
+	_, err = sess.Query(`UPDATE messages SET deleted = true, content = null, attachment_id = null, album_ids = null, sticker_id = null, mentions = null, mentions_all = null, removed_by_moderation = true, moderation_reason_code = ?, moderation_reason_text = ? WHERE chat_id = ? AND bucket = ? AND message_id = ? IF EXISTS`,
 		reason.Code, reason.Text, chatID, bucket, messageID).WithContext(ctx).SerialConsistency(gocql.LocalSerial).MapScanCAS(map[string]any{})
 	if err != nil {
 		return fmt.Errorf("remove message: %w", err)
@@ -904,4 +908,18 @@ func (r *Messages) deleteChunkUpTo(ctx context.Context, sess *gocql.Session, cha
 	err = sess.Query(`DELETE FROM messages WHERE chat_id = ? AND bucket = ? AND message_id >= ? AND message_id <= ?`,
 		chatID, b, ids[len(ids)-1], ids[0]).WithContext(ctx).Idempotent(true).Exec()
 	return false, err
+}
+
+func mentionSet(ids []int64) []int64 {
+	if len(ids) == 0 {
+		return nil
+	}
+	return ids
+}
+
+func mentionsAll(all bool) *bool {
+	if !all {
+		return nil
+	}
+	return &all
 }

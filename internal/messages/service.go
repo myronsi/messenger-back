@@ -89,6 +89,7 @@ type Store interface {
 	Users() postgres.UserRepository
 	Stickers() postgres.StickerRepository
 	Unsent() postgres.UnsentRepository
+	Sharing() postgres.SharingRepository
 }
 
 // Deps are the collaborators of the service.
@@ -439,6 +440,9 @@ func (s *Service) send(ctx context.Context, r SendRequest) (Sent, error) {
 		image, emoji := gocql.UUID(sticker.Image.ID), sticker.Emoji
 		m.StickerID, m.AttachmentID, m.Content = &sticker.ID, &image, &emoji
 	}
+	if chat.Type == postgres.ChatGroup && m.Content != nil && (m.Type == scylla.TypeText || m.Type == scylla.TypeFile) {
+		m.Mentions, m.MentionsAll = s.resolveMentions(ctx, r.ChatID, r.SenderID, *m.Content)
+	}
 	if err := s.linkAttachments(ctx, m, drawings); err != nil {
 		s.abandon(ctx, r, id, resumed)
 		return Sent{}, err
@@ -453,6 +457,7 @@ func (s *Service) send(ctx context.Context, r SendRequest) (Sent, error) {
 		s.abandon(ctx, r, id, true)
 		return Sent{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
+	s.recordMentions(ctx, m, members, false)
 	s.notificationReady(ctx, m)
 	s.delivered(ctx, m, members, r.ClientTempID)
 	s.repliedToRequest(ctx, r.ChatID, r.SenderID, holders)
@@ -746,18 +751,27 @@ func (s *Service) Edit(ctx context.Context, userID, chatID, messageID int64, con
 		return scylla.Message{}, err
 	}
 	at := s.now().UTC().Truncate(time.Millisecond)
-	if err := s.d.Messages.Edit(ctx, chatID, messageID, content, at); errors.Is(err, scylla.ErrNotFound) {
+	var mentioned []int64
+	var mentionsAll, group bool
+	if chat, err := s.d.Store.Chats().Get(ctx, chatID); err == nil && chat.Type == postgres.ChatGroup {
+		group = true
+		mentioned, mentionsAll = s.resolveMentions(ctx, chatID, userID, content)
+	}
+	if err := s.d.Messages.Edit(ctx, chatID, messageID, content, at, mentioned, mentionsAll); errors.Is(err, scylla.ErrNotFound) {
 		return scylla.Message{}, ErrNotFound
 	} else if err != nil {
 		return scylla.Message{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
-	m.Content, m.EditedAt = &content, &at
+	m.Content, m.EditedAt, m.Mentions, m.MentionsAll = &content, &at, mentioned, mentionsAll
 	urls := linkpreview.FindURLs(content, postgres.MaxMessageURLs)
 	if err := s.d.Store.Attachments().SetMessageURLs(context.WithoutCancel(ctx), chatID, messageID, urls, m.CreatedAt); err != nil {
 		s.d.Log.WarnContext(ctx, "link index", "error", err, "chat_id", chatID, "message_id", messageID)
 	}
 	if members, err := s.Members(ctx, chatID); err == nil {
 		// Members who deleted the message for themselves do not get its new text.
+		if group {
+			s.recordMentions(ctx, m, members, true)
+		}
 		s.d.Notifier.MessageEdited(ctx, m, s.withoutHidden(ctx, chatID, messageID, members))
 	}
 	s.emit(ctx, events.Event{Type: events.MessageEdited, ChatID: chatID, MessageID: messageID, ActorID: userID, At: at})
@@ -875,6 +889,9 @@ func (s *Service) requireNotHidden(ctx context.Context, userID int64, m scylla.M
 }
 
 func (s *Service) unlink(ctx context.Context, m scylla.Message) error {
+	if err := s.d.Store.Sharing().RemoveUnreadMentions(context.WithoutCancel(ctx), m.ChatID, []int64{m.ID}); err != nil {
+		s.d.Log.WarnContext(ctx, "remove unread mentions", "error", err, "chat_id", m.ChatID)
+	}
 	if err := s.d.Store.Attachments().UnlinkMessage(context.WithoutCancel(ctx), m.ChatID, m.ID); err != nil {
 		return fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}

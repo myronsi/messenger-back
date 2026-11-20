@@ -201,6 +201,11 @@ func run() error {
 	if storagePing != nil {
 		checks = append(checks, httpapi.Check{Name: "object_storage", Ping: storagePing})
 	}
+	mediaServer := httpapi.NewMediaServer(httpapi.MediaOptions{
+		Service: mediaSvc, Store: pg, Directory: rt.directory, Limiter: rt.limiter, Events: rt.events, BasePath: cfg.HTTP.BasePath, Log: log,
+		Playback:       media.NewPlaybackSigner(cfg.JWTSecret.Reveal()),
+		ProfileChanged: rt.profileChanged,
+	})
 	chatSvc := chats.New(chats.Deps{
 		Store: pg, Messages: rt.store, Unread: rt.unread, Members: rt.members, Sender: rt.messages,
 		Directory: rt.directory, Notifier: rt.fanout, Events: rt.events, DeleteFile: storage.Delete, Calls: callHooks,
@@ -223,11 +228,7 @@ func run() error {
 				TrustedProxies: trustedProxies,
 				Directory:      rt.directory,
 			}),
-			httpapi.NewMediaServer(httpapi.MediaOptions{
-				Service: mediaSvc, Store: pg, Directory: rt.directory, Limiter: rt.limiter, Events: rt.events, BasePath: cfg.HTTP.BasePath, Log: log,
-				Playback:       media.NewPlaybackSigner(cfg.JWTSecret.Reveal()),
-				ProfileChanged: rt.profileChanged,
-			}),
+			mediaServer,
 		).WithAccount(httpapi.NewAccountServer(httpapi.AccountOptions{
 			Store: pg, Directory: rt.directory, Deleter: authSvc, AfterDeletion: rt.accountDeleted(storage, callsSvc, log), Emoji: emoji.New(pg),
 			OnBlocked: func(ctx context.Context, blocker, blocked int64) {
@@ -240,6 +241,9 @@ func run() error {
 		})).WithModeration(httpapi.NewModerationServer(httpapi.ModerationOptions{
 			Service: modSvc, Log: log,
 			Content: contentreports.New(contentreports.Deps{Store: pg, Messages: rt.messages, Metrics: p.Metrics, Log: log}),
+		})).WithPublic(httpapi.NewPublicServer(httpapi.PublicOptions{
+			Store: pg, Groups: chatSvc, Hidden: modSvc, Media: mediaServer, Limiter: rt.limiter, TrustedProxies: trustedProxies,
+			BasePath: cfg.HTTP.BasePath, WebOrigin: cfg.HTTP.PublicWebOrigin, Log: log,
 		})).WithChats(httpapi.NewChatServer(httpapi.ChatOptions{
 			Service: chatSvc,
 			Limiter: rt.limiter, BasePath: cfg.HTTP.BasePath, Log: log,

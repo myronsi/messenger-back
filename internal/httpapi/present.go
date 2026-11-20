@@ -282,6 +282,17 @@ func PresentMessage(m scylla.Message, p MessageParts) Message {
 		Content: m.Content, ReplyTo: formatIDPtr(m.ReplyTo), CreatedAt: utc(m.CreatedAt),
 		IsDeleted: m.Deleted, Reactions: make([]Reaction, 0, len(p.Reactions)), ReadBy: p.ReadBy,
 	}
+	if !m.Deleted && len(m.Mentions) > 0 {
+		ids := make([]Id, len(m.Mentions))
+		for i, id := range m.Mentions {
+			ids[i] = FormatID(id)
+		}
+		out.Mentions = &ids
+	}
+	if !m.Deleted && m.MentionsAll {
+		all := true
+		out.MentionsAll = &all
+	}
 	if out.ReadBy == nil {
 		out.ReadBy = []ReadReceipt{}
 	}

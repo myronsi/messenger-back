@@ -56,6 +56,7 @@ type Store interface {
 	Approvals() postgres.ApprovalRepository
 	Attachments() postgres.AttachmentRepository
 	Stickers() postgres.StickerRepository
+	Sharing() postgres.SharingRepository
 }
 
 // MessageStore is the part of the message store the chat list reads.
@@ -186,11 +187,12 @@ type LastMessage struct {
 type View struct {
 	Entry postgres.ChatEntry
 	// Peer is the other user of a direct chat.
-	Peer        *users.View
-	PeerVoice   bool
-	Unread      int64
-	FirstUnread *int64
-	Last        *LastMessage
+	Peer           *users.View
+	PeerVoice      bool
+	Unread         int64
+	UnreadMentions int
+	FirstUnread    *int64
+	Last           *LastMessage
 }
 
 // RequestView is an approval request with the requester as the recipient sees them.
@@ -421,6 +423,16 @@ func (s *Service) render(ctx context.Context, viewer int64, entries []postgres.C
 			s.d.Log.WarnContext(ctx, "last message stickers", "error", err)
 		}
 	}
+	var groupIDs []int64
+	for _, v := range views {
+		if v.Entry.Chat.Type == postgres.ChatGroup {
+			groupIDs = append(groupIDs, v.Entry.Chat.ID)
+		}
+	}
+	mentions, err := s.d.Store.Sharing().UnreadMentionCounts(ctx, viewer, groupIDs)
+	if err != nil {
+		s.d.Log.WarnContext(ctx, "unread mentions", "error", err)
+	}
 	for i := range views {
 		e := views[i].Entry
 		if m, ok := peerOf[e.Chat.ID]; ok {
@@ -432,6 +444,7 @@ func (s *Service) render(ctx context.Context, viewer int64, entries []postgres.C
 		}
 		// The counters only count up between reads; the contract stops at 999.
 		views[i].Unread = min(counts[e.Chat.ID], unreadCap)
+		views[i].UnreadMentions = mentions[e.Chat.ID]
 		if views[i].Unread > 0 {
 			views[i].FirstUnread = firstUnread[i]
 		}

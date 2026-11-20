@@ -260,7 +260,8 @@ func (r notificationRepo) Devices(ctx context.Context, cid, mid int64, uids []in
  LEFT JOIN notification_preferences n ON n.user_id=d.user_id
  WHERE d.user_id=ANY($3) AND s.revoked_at IS NULL AND s.expires_at>now() AND COALESCE(n.enabled,true)
  AND (p.last_read_message_id IS NULL OR p.last_read_message_id<$2)
- AND NOT EXISTS(SELECT 1 FROM notification_mutes m WHERE m.user_id=d.user_id AND m.chat_id=$1 AND m.until_at>now())
+ AND (NOT EXISTS(SELECT 1 FROM notification_mutes m WHERE m.user_id=d.user_id AND m.chat_id=$1 AND m.until_at>now())
+  OR (COALESCE(n.mentions_in_muted,true) AND EXISTS(SELECT 1 FROM unread_mentions um WHERE um.user_id=d.user_id AND um.chat_id=$1 AND um.message_id=$2)))
  AND NOT EXISTS(SELECT 1 FROM notification_deliveries x WHERE x.message_id=$2 AND x.device_id=d.id)
  ORDER BY d.user_id,d.id`, cid, mid, uids)
 	if err != nil {
