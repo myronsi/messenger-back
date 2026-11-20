@@ -16,12 +16,16 @@ type birthdayStoreFake struct {
 	candidates []postgres.BirthdayCandidate
 	marked     map[[3]int64]bool
 	calls      int
+	limit      int
 }
 
 func (b *birthdayStoreFake) BirthdayCandidates(context.Context, time.Time, int, int) ([]postgres.BirthdayCandidate, error) {
 	b.calls++
 	out := []postgres.BirthdayCandidate{}
 	for _, c := range b.candidates {
+		if b.limit > 0 && len(out) == b.limit {
+			break
+		}
 		if !b.marked[[3]int64{c.UserID, c.ReceiverID, int64(c.Year)}] {
 			out = append(out, c)
 		}
@@ -86,7 +90,7 @@ func birthdayFixture() (*Birthdays, *birthdayStoreFake, *senderFake, birthdayPri
 	devices := birthdayDevicesFake{
 		prefs: map[int64]postgres.NotificationPreferences{},
 		devices: map[int64][]postgres.NotificationDevice{
-			10: {{ID: uuid.New()}}, 11: {{ID: uuid.New()}}, 12: {{ID: uuid.New()}},
+			10: {{ID: uuid.New(), UserID: 10}}, 11: {{ID: uuid.New(), UserID: 11}}, 12: {{ID: uuid.New(), UserID: 12}},
 		},
 	}
 	sender := &senderFake{}
@@ -134,5 +138,32 @@ func TestBirthdayRemindersAreSentOnce(t *testing.T) {
 		if p.UserID == "11" {
 			t.Fatal("receiver 11 turned birthday reminders off")
 		}
+	}
+}
+
+func TestHiddenBirthdaysDoNotBlockLaterReceivers(t *testing.T) {
+	b, store, sender, privacy, devices := birthdayFixture()
+	hidden := postgres.DefaultPrivacy(1)
+	hidden.BirthdayVisibility = postgres.VisibleNobody
+	privacy.settings[1] = hidden
+	store.candidates = nil
+	for i := range birthdayBatch {
+		store.candidates = append(store.candidates, postgres.BirthdayCandidate{ReceiverID: int64(1000 + i), UserID: 1, DisplayName: "Anna", ChatID: int64(5000 + i), Year: 2026})
+	}
+	store.candidates = append(store.candidates, postgres.BirthdayCandidate{ReceiverID: 12, UserID: 2, DisplayName: "Ben", ChatID: 102, Year: 2026})
+	store.limit = birthdayBatch
+	devices.prefs[12] = postgres.NotificationPreferences{Enabled: true, Previews: true, BirthdayReminders: true}
+	b.Tokens = NewActionTokens("secret")
+	if _, err := b.RunOnce(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if len(sender.sent) != 1 || sender.sent[0].UserID != "12" {
+		t.Fatalf("a full batch of hidden birthdays must not starve receiver 12: %+v", sender.sent)
+	}
+	if got, err := b.Tokens.ParseAvatar(sender.sent[0].AvatarToken); err != nil || got.IDs[0] != 2 || got.Recipient != 12 {
+		t.Fatalf("birthday preview needs the avatar: %v", err)
+	}
+	if _, err := b.RunOnce(t.Context()); err != nil || store.calls > 4 {
+		t.Fatalf("hidden pairs must be settled, not queried again: calls=%d err=%v", store.calls, err)
 	}
 }

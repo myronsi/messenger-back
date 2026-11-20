@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,9 +19,12 @@ import (
 
 type NotificationOptions struct {
 	Store  postgres.NotificationRepository
+	Chats  postgres.ChatRepository
 	Config config.Notifications
 	Tokens *notifications.ActionTokens
 }
+
+const notificationAvatarSize = 256
 
 func (s *Server) WithNotifications(o NotificationOptions) *Server { s.notifications = &o; return s }
 func (s *Server) GetNotificationSettings(w http.ResponseWriter, r *http.Request) {
@@ -236,12 +240,48 @@ func (s *Server) GetNotificationAvatar(w http.ResponseWriter, r *http.Request, t
 		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
 		return
 	}
+	if strings.HasPrefix(token, "c.") {
+		s.notificationChatAvatar(w, r, token)
+		return
+	}
 	t, ok := s.actionToken(w, r, s.notifications.tokens().ParseAvatar, token)
 	if !ok {
 		return
 	}
 	ctx := context.WithValue(r.Context(), principalKey{}, auth.Principal{UserID: t.Recipient})
-	s.media.GetUserAvatar(w, r.WithContext(ctx), strconv.FormatInt(t.IDs[0], 10), GetUserAvatarParams{})
+	size := notificationAvatarSize
+	s.media.GetUserAvatar(w, r.WithContext(ctx), strconv.FormatInt(t.IDs[0], 10), GetUserAvatarParams{Size: &size})
+}
+
+func (s *Server) notificationChatAvatar(w http.ResponseWriter, r *http.Request, token string) {
+	if s.notifications == nil || s.notifications.Chats == nil {
+		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
+		return
+	}
+	t, ok := s.actionToken(w, r, s.notifications.tokens().ParseChatAvatar, token)
+	if !ok {
+		return
+	}
+	chats := s.notifications.Chats
+	_, err := chats.Participant(r.Context(), t.IDs[0], t.Recipient)
+	if errors.Is(err, postgres.ErrNotFound) {
+		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
+		return
+	}
+	if err != nil {
+		WriteProblem(w, http.StatusServiceUnavailable, ErrorCodeInternalError)
+		return
+	}
+	chat, err := chats.Get(r.Context(), t.IDs[0])
+	if errors.Is(err, postgres.ErrNotFound) || err == nil && chat.Type != postgres.ChatGroup {
+		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
+		return
+	}
+	if err != nil {
+		WriteProblem(w, http.StatusServiceUnavailable, ErrorCodeInternalError)
+		return
+	}
+	s.media.ServeChatAvatar(w, r, chat.AvatarAttachmentID, notificationAvatarSize)
 }
 
 func (s *Server) MarkNotificationRead(w http.ResponseWriter, r *http.Request, token string) {

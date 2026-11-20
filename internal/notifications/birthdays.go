@@ -35,6 +35,7 @@ type Birthdays struct {
 	Privacy BirthdayPrivacy
 	Devices postgres.NotificationRepository
 	Sender  Delivery
+	Tokens  *ActionTokens
 	Log     *slog.Logger
 	Now     func() time.Time
 }
@@ -73,7 +74,7 @@ func (b *Birthdays) RunOnce(ctx context.Context) (int, error) {
 			return sent, err
 		}
 		progress := 0
-		for _, c := range allowed {
+		for _, c := range candidates {
 			marked, err := b.Store.MarkBirthdayReminder(ctx, c.UserID, c.ReceiverID, c.Year)
 			if err != nil {
 				return sent, err
@@ -82,6 +83,9 @@ func (b *Birthdays) RunOnce(ctx context.Context) (int, error) {
 				continue
 			}
 			progress++
+			if !allowed[[2]int64{c.UserID, c.ReceiverID}] {
+				continue
+			}
 			if err := b.deliver(ctx, c); err != nil {
 				b.Log.WarnContext(ctx, "birthday reminder not delivered", "receiver_id", c.ReceiverID, "error", err)
 				continue
@@ -95,7 +99,7 @@ func (b *Birthdays) RunOnce(ctx context.Context) (int, error) {
 	return sent, nil
 }
 
-func (b *Birthdays) visible(ctx context.Context, candidates []postgres.BirthdayCandidate) ([]postgres.BirthdayCandidate, error) {
+func (b *Birthdays) visible(ctx context.Context, candidates []postgres.BirthdayCandidate) (map[[2]int64]bool, error) {
 	receivers := map[int64][]int64{}
 	for _, c := range candidates {
 		receivers[c.UserID] = append(receivers[c.UserID], c.ReceiverID)
@@ -119,10 +123,10 @@ func (b *Birthdays) visible(ctx context.Context, candidates []postgres.BirthdayC
 		}
 		exceptions[subject] = exc
 	}
-	out := make([]postgres.BirthdayCandidate, 0, len(candidates))
+	out := make(map[[2]int64]bool, len(candidates))
 	for _, c := range candidates {
 		if users.Visible(settings[c.UserID].BirthdayVisibility, exceptions[c.UserID][c.ReceiverID][postgres.SettingBirthday], true) {
-			out = append(out, c)
+			out[[2]int64{c.UserID, c.ReceiverID}] = true
 		}
 	}
 	return out, nil
@@ -143,6 +147,7 @@ func (b *Birthdays) deliver(ctx context.Context, c postgres.BirthdayCandidate) e
 	p := Payload{
 		Title: "Messenger", Body: "Someone you chat with has a birthday today", ChatID: fmt.Sprint(c.ChatID),
 		UserID: fmt.Sprint(c.ReceiverID), Sound: prefs.Sound, ExpiresAt: b.now().Add(birthdayLifetime).Unix(), Kind: BirthdayKind,
+		ChatType: string(postgres.ChatDirect),
 	}
 	if prefs.Previews {
 		p.Preview, p.SenderID = true, fmt.Sprint(c.UserID)
@@ -151,7 +156,11 @@ func (b *Birthdays) deliver(ctx context.Context, c postgres.BirthdayCandidate) e
 	}
 	var failed error
 	for _, d := range devices {
-		err := b.Sender.Send(ctx, d, p)
+		dp := p
+		if dp.Preview && b.Tokens != nil {
+			dp.AvatarToken = b.Tokens.Avatar(c.ReceiverID, d.ID, d.SessionID, c.UserID)
+		}
+		err := b.Sender.Send(ctx, d, dp)
 		if errors.Is(err, ErrUnregistered) {
 			err = b.Devices.RemoveDevice(ctx, d.ID)
 		}

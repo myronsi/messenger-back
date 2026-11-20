@@ -30,7 +30,11 @@ type nativeAuth struct {
 	mu      sync.Mutex
 	token   string
 	expires time.Time
+	apns    string
+	apnsAt  time.Time
 }
+
+const apnsTokenAge = 40 * time.Minute
 
 func newNativeAuth(cfg config.Notifications) (*nativeAuth, error) {
 	n := &nativeAuth{}
@@ -84,12 +88,28 @@ func (n *nativeAuth) fcmToken(ctx context.Context, client *http.Client) (string,
 	n.expires = now.Add(time.Duration(result.Expires)*time.Second - time.Minute)
 	return n.token, nil
 }
-func (n *nativeAuth) apnsToken(cfg config.Notifications) (string, error) {
-	t := jwt.NewWithClaims(jwt.SigningMethodES256, jwt.MapClaims{"iss": cfg.APNsTeamID, "iat": time.Now().Unix()})
+func (n *nativeAuth) apnsToken(cfg config.Notifications, now time.Time) (string, error) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if n.apns != "" && now.Sub(n.apnsAt) < apnsTokenAge {
+		return n.apns, nil
+	}
+	t := jwt.NewWithClaims(jwt.SigningMethodES256, jwt.MapClaims{"iss": cfg.APNsTeamID, "iat": now.Unix()})
 	t.Header["kid"] = cfg.APNsKeyID
 	token, err := t.SignedString(n.ec)
 	if err != nil {
 		return "", errors.New("sign APNs credentials")
 	}
+	n.apns, n.apnsAt = token, now
 	return token, nil
+}
+
+func (n *nativeAuth) forget(platform string) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if platform == "ios" {
+		n.apns = ""
+		return
+	}
+	n.token, n.expires = "", time.Time{}
 }

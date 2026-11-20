@@ -90,6 +90,9 @@ WHERE COALESCE(n.enabled, true) AND COALESCE(n.birthday_reminders, true)
                   WHERE s.user_id = u.id AND s.receiver_id = r.id AND s.year = date_part('year', timezone(r.time_zone, sqlc.arg(now)::timestamptz))::smallint)
   AND NOT EXISTS (SELECT 1 FROM user_blocks b
                   WHERE (b.blocker_id = u.id AND b.blocked_id = r.id) OR (b.blocker_id = r.id AND b.blocked_id = u.id))
+  AND NOT pr.is_request AND NOT pu.is_request
+  AND NOT EXISTS (SELECT 1 FROM notification_mutes m
+                  WHERE m.user_id = r.id AND m.chat_id = c.id AND m.until_at > now())
 ORDER BY r.id, u.id
 LIMIT sqlc.arg(max_rows);
 

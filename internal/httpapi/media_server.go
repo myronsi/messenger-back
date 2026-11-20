@@ -491,15 +491,27 @@ func (m *MediaServer) GetUserAvatar(w http.ResponseWriter, r *http.Request, user
 			}
 		}
 	}
+	cache := "private, max-age=60"
+	if attachment != nil && params.Version == nil && params.Rev != nil && *params.Rev == attachment.String() {
+		cache = cacheForever
+	}
+	m.serveAvatar(w, r, attachment, params.Size, cache)
+}
+
+func (m *MediaServer) ServeChatAvatar(w http.ResponseWriter, r *http.Request, attachment *uuid.UUID, size int) {
+	m.serveAvatar(w, r, attachment, &size, "private, max-age=60")
+}
+
+func (m *MediaServer) serveAvatar(w http.ResponseWriter, r *http.Request, attachment *uuid.UUID, size *int, cache string) {
 	if attachment == nil {
 		serveDefaultAvatar(w)
 		return
 	}
 	variant, suffix := media.VariantOriginal, ""
-	if params.Size != nil {
-		variant = media.AvatarSizeVariant(*params.Size)
+	if size != nil {
+		variant = media.AvatarSizeVariant(*size)
 		if variant != media.VariantOriginal {
-			suffix = "-" + media.AvatarVariantFor(*params.Size)
+			suffix = "-" + media.AvatarVariantFor(*size)
 		}
 	}
 	d, err := m.o.Service.OpenUnchecked(r.Context(), *attachment, variant)
@@ -511,10 +523,6 @@ func (m *MediaServer) GetUserAvatar(w http.ResponseWriter, r *http.Request, user
 		m.o.Log.ErrorContext(r.Context(), "open avatar", "error", err)
 		WriteProblem(w, http.StatusInternalServerError, ErrorCodeInternalError)
 		return
-	}
-	cache := "private, max-age=60"
-	if params.Version == nil && params.Rev != nil && *params.Rev == attachment.String() {
-		cache = cacheForever
 	}
 	m.serve(w, r, d, cache, attachment.String()+suffix)
 }

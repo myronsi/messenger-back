@@ -6,12 +6,31 @@ ScyllaDB. If committing the intent fails, sending fails before the message is wr
 seconds, verifies that the message exists, and checks membership, join time, blocks, hidden messages, read markers,
 preferences, mutes and live-device activity before delivery. A failed Scylla write cannot produce a phantom alert.
 
-The queue does not depend on Redis event publishing. Workers claim with `SKIP LOCKED` and a two-minute lease.
+The queue does not depend on Redis event publishing. Each worker runs four claim loops; they claim with `SKIP LOCKED`
+and a two-minute lease. One job loads its recipients and their destinations in two batch queries and sends to at
+most eight destinations at a time, so a large group or a slow provider no longer holds up other chats.
 Transient failures retry after the lease; intents expire after fifteen minutes or eight delivery attempts. Delivery
 receipts prevent successful destinations from being resent during partial retries. A crash after provider acceptance
 and before saving a receipt can still repeat a push: delivery is at least once. Web notification tags and native
 collapse identifiers replace a conversation's existing notification. Push-provider acceptance does not guarantee
 that the operating system displayed an alert.
+
+Provider answers fall into four groups:
+
+| Answer | Effect |
+|---|---|
+| Web 404/410, APNs 410 or `BadDeviceToken`/`Unregistered`, FCM `UNREGISTERED` | The destination is removed at once. |
+| Web 400/403, APNs `DeviceTokenNotForTopic`, FCM `SENDER_ID_MISMATCH` | Closed for this message, counted on the destination (`notification_devices.failures`, migration `000052`). Three in a row remove it; a delivery resets the count. A 403 is not removed at once because a wrong server key would otherwise drop every destination. |
+| Web/APNs 413 (`PayloadTooLarge`) | Closed for this message, not counted. |
+| Anything else (429, 5xx, transport errors) | The job retries after the lease. A 401 (FCM, APNs) or APNs 403 also drops the cached provider token. |
+
+The APNs signing token is reused for 40 minutes (Apple allows a new one at most every 20 minutes and accepts one for
+an hour). The push lifetime (`TTL`, FCM `ttl`, `apns-expiration`) follows the payload's `expires_at`, between 30
+seconds and a day: fifteen minutes for messages, twelve hours for birthday reminders.
+
+Birthday reminders go to members of a shared direct chat at 09:00 local time. Pairs where the birthday is hidden
+from the receiver are recorded as handled without a push, so they cannot fill every batch and block the receivers
+after them. Message requests (either side) and chats the receiver muted get no reminder.
 
 Only new messages are notification events. Edits, typing, reactions and read receipts do not alert. Own messages,
 system messages and messages from before a member joined are excluded. Members whose chat is still in their Requests
@@ -19,7 +38,11 @@ folder ([chats.md](chats.md#requests-folder)) are left out of the intent, and a 
 no intent. Previews and sound default off. The React
 client suppresses alerts in the focused conversation and elects one visible browser tab for live alerts. A visible,
 focused client with a healthy socket reports activity every ten seconds; its push is suppressed for 25 seconds.
-Closing a browser abruptly can therefore leave a short suppression window. Different devices remain independent.
+Hiding or closing the page reports inactivity at once (a `keepalive` request). When a destination was skipped only
+because it was active, the job is not finished: it runs once more two seconds after the latest lease ends
+(`notification_jobs.deferred`, the deferral does not count as an attempt). If the message is still unread and the
+destination is no longer active (tab closed, laptop asleep), it gets the push then; a destination that is still
+active is done. Different devices remain independent.
 
 ## Call pushes
 
@@ -93,8 +116,17 @@ adding the provider configuration are required before device delivery can be ver
 - `GET /notifications/avatar/{token}` and `POST /notifications/read/{token}`: no session. The service worker uses
   them for the sender's photo and the "Mark as read" action. The tokens come in the push payload.
 
-A web push payload carries `preview` (whether the title and body show the sender and text), with previews `sender_id`, `read_token` (always, valid seven days) and, only with previews on, `avatar_token`
-(valid one hour). Each token is an HMAC bound to one purpose, recipient, push device and chat or sender, keyed from
+A message push carries `chat_id`, `message_id`, `user_id`, `sound`, `expires_at`, `content_type` (`text`, `photo`,
+`video`, `audio`, `voice`, `file`, `album`, `sticker`), `chat_type` (`direct` or `group`) and `preview` (whether the
+title and body show the sender and text). The server sends no English placeholder text: without previews `title` is
+`Messenger` and `body` is empty, and the client shows a localized label for `content_type`. With previews, `title`
+is the sender (the recipient's contact name for the sender when there is one, at most 64 characters), `body` is the
+text or caption (at most 160 characters, for a sticker its emoji), and a group adds `chat_title` (at most 64
+characters). `read_token` comes always (valid seven days) and, only with previews on, `avatar_token`
+(valid one hour). In a group with a picture `avatar_token` is a group-picture token (`c.` prefix) for the same
+`/notifications/avatar/{token}` route, which answers only while the recipient is still a member; otherwise it is the
+sender's. Birthday reminders carry `kind: "birthday"`, the birthday user's avatar token with previews, and their own
+web push topic (`birthday-<chat_id>`) so they do not replace a pending message push. Each token is an HMAC bound to one purpose, recipient, push device and chat or sender, keyed from
 `PUSH_VAPID_PRIVATE_KEY`, so API and worker need no extra secret. Rotating that key invalidates all tokens. A token names its device and that device's session, and works only while both
 still match and the session is active. Logging out, revoking the session or registering the browser again under
 a new session ends it at once. The two token routes are left out of
@@ -109,15 +141,16 @@ API is an additive contract extension; frontend notification DTOs are isolated u
 is published and can be pinned. Existing generated frontend types remain aligned with the currently pinned
 package. Publish/pin the contract as part of the coordinated release.
 
-Monitor `messenger_notifications_total{outcome=~"delivered|retry|expired|unregistered"}` on the worker. Alert on
+Monitor `messenger_notifications_total{outcome=~"delivered|retry|expired|unregistered|rejected"}` on the worker. Alert on
 sustained retries/expirations and inspect `notification_jobs` for queue depth/oldest creation time. Retrying a
 provider-authentication error will not repair invalid credentials.
 
 ## Verification
 
-Unit tests cover privacy, eligibility, partial retries and provider error classification. HTTP tests validate
+Unit tests cover privacy, eligibility, partial retries, parallel sending, the active-window deferral, content types,
+group payloads, provider error classification, push lifetimes and the APNs token cache. HTTP tests validate
 authentication, ownership and contract response shapes. PostgreSQL integration tests cover mutes, read markers,
-session revocation and lease recovery; they require `TEST_DATABASE_URL`. The normal migration up/down tests include
+session revocation, lease recovery, deferral, batch recipients and the failure counter; they require `TEST_DATABASE_URL`. The normal migration up/down tests include
 the new tables. Before release, test actual browser pushes, denied/revoked permissions, logout, multiple tabs and
 devices, foreground/background transitions, direct/group navigation after login, token rotation, and physical
 Android/iOS devices with production-equivalent credentials.
