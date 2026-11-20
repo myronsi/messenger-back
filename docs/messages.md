@@ -178,7 +178,7 @@ can show messages per day without counting ScyllaDB rows. It has one row per day
   `client_temp_id`, a rejected send and system messages (group changes) are not counted. Edits and deletions do
   not change the count.
 - Each API instance adds up its sends in memory and writes them every 10 seconds with one
-  `INSERT … ON CONFLICT DO UPDATE SET messages = messages + …`, so any number of replicas add to the same rows
+  `INSERT â€¦ ON CONFLICT DO UPDATE SET messages = messages + â€¦`, so any number of replicas add to the same rows
   without losing counts or locking each other on every message. A failed write is kept and tried again with the
   next one; on shutdown the instance writes what is left. A crashed instance loses at most its last 10 seconds.
 - The rows hold totals only, never who sent what. They are kept forever (four rows a day). The moderation
