@@ -23,6 +23,7 @@ import (
 
 	"github.com/myronsi/messenger-back/internal/events"
 	"github.com/myronsi/messenger-back/internal/media"
+	"github.com/myronsi/messenger-back/internal/notifications"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/redis"
 	"github.com/myronsi/messenger-back/internal/users"
@@ -496,6 +497,27 @@ func (m *MediaServer) GetUserAvatar(w http.ResponseWriter, r *http.Request, user
 		cache = cacheForever
 	}
 	m.serveAvatar(w, r, attachment, params.Size, cache)
+}
+
+func (m *MediaServer) ServeNotificationImage(w http.ResponseWriter, r *http.Request, src notifications.ImageSource) {
+	variant, suffix := media.VariantOriginal, ""
+	switch src.Size {
+	case notifications.ImageDisplay:
+		variant, suffix = media.VariantDisplay, "-display"
+	case notifications.ImageThumbnail:
+		variant, suffix = media.VariantThumbnail, "-thumbnail"
+	}
+	d, err := m.o.Service.OpenUnchecked(r.Context(), src.Attachment, variant)
+	if errors.Is(err, media.ErrNoAccess) {
+		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
+		return
+	}
+	if err != nil {
+		m.o.Log.ErrorContext(r.Context(), "open notification image", "error", err)
+		WriteProblem(w, http.StatusInternalServerError, ErrorCodeInternalError)
+		return
+	}
+	m.serve(w, r, d, "private, max-age=3600", src.Attachment.String()+suffix)
 }
 
 func (m *MediaServer) ServeChatAvatar(w http.ResponseWriter, r *http.Request, attachment *uuid.UUID, size int) {

@@ -262,7 +262,7 @@ func run() error {
 			Service: callsSvc, Limits: callLimits(cfg.Calls), Limiter: rt.limiter, Log: log,
 		})).WithConnections(httpapi.NewConnectionServer(httpapi.ConnectionOptions{
 			Service: connectionService(cfg.Connections, pg, rd.Client()), Users: pg.Users(), Directory: rt.directory, Limiter: rt.limiter, Log: log,
-		})).WithNotifications(httpapi.NotificationOptions{Store: pg.Notifications(), Chats: pg.Chats(), Config: cfg.Notifications, Tokens: notifications.NewActionTokens(cfg.Notifications.VAPIDPrivate.Reveal())}).WithMeta(httpapi.MetaInfo{
+		})).WithNotifications(httpapi.NotificationOptions{Store: pg.Notifications(), Chats: pg.Chats(), Messages: rt.store, Attachments: pg.Attachments(), Emoji: pg.Emoji(), Config: cfg.Notifications, Tokens: notifications.NewActionTokens(cfg.Notifications.VAPIDPrivate.Reveal())}).WithMeta(httpapi.MetaInfo{
 			BackendVersion: version.Backend, Commit: os.Getenv("APP_COMMIT"), MinClientAPIVersion: cfg.Realtime.MinClientAPIVersion,
 		}),
 		Authenticator:       authSvc,
