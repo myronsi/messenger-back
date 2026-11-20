@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.30.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.29.1-alpha.1...v1.30.0-alpha.1) (2026-11-20)
+
+
+### Features
+
+* **notifications:** pictures for photos, videos, stickers and custom emoji ([#225](https://github.com/myronsi/messenger-back/issues/225)) ([459ddae](https://github.com/myronsi/messenger-back/commit/459ddaef06a10aec81e395bc33ca018243152d16))
+
 ## [1.29.1-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.29.0-alpha.1...v1.29.1-alpha.1) (2026-11-20)
 
 
