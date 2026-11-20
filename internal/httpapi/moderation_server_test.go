@@ -92,7 +92,7 @@ func TestAccountStatusAndAppeal(t *testing.T) {
 		t.Fatalf("appeal of a good account: %d %s", r.Code, r.Body)
 	}
 	e.setStatus(t, e.uid(t, alice), moderation.Limited)
-	if s := status(); s["status"] != "limited" || s["can_appeal"] != true || len(s["restrictions"].([]any)) != 3 {
+	if s := status(); s["status"] != "limited" || s["can_appeal"] != true || len(s["restrictions"].([]any)) != 4 {
 		t.Fatalf("limited %v", s)
 	}
 	r := appeal()

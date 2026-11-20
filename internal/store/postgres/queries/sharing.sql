@@ -112,3 +112,6 @@ WHERE p.chat_id = @chat_id AND LOWER(u.username) = ANY(@lower_usernames::TEXT[])
 
 -- name: ListGroupMemberIDs :many
 SELECT user_id FROM participants WHERE chat_id = @chat_id;
+
+-- name: GetInviteLinkByToken :one
+SELECT * FROM chat_invite_links WHERE token = @token;

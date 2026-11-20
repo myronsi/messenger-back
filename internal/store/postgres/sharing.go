@@ -299,12 +299,21 @@ func (r sharingRepo) JoinByLink(ctx context.Context, userID int64, token string)
 		if _, err := q.LockUserShared(ctx, userID); err != nil {
 			return err
 		}
-		l, err := q.GetActiveInviteLink(ctx, token)
+		l, err := q.GetInviteLinkByToken(ctx, token)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrLinkInvalid
 		}
 		if err != nil {
 			return err
+		}
+		if _, err := q.LockParticipant(ctx, sqlcdb.LockParticipantParams{ChatID: l.ChatID, UserID: userID}); err == nil {
+			chatID = l.ChatID
+			return nil
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		if !linkFrom(l).Active(time.Now()) {
+			return ErrLinkInvalid
 		}
 		chatID = l.ChatID
 		joined, err = joinChat(ctx, q, l.ChatID, userID)

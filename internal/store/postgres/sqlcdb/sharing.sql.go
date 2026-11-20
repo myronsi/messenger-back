@@ -203,6 +203,28 @@ func (q *Queries) GetInviteLink(ctx context.Context, arg GetInviteLinkParams) (C
 	return i, err
 }
 
+const getInviteLinkByToken = `-- name: GetInviteLinkByToken :one
+SELECT id, chat_id, token, name, created_by, created_at, expires_at, max_uses, use_count, revoked_at FROM chat_invite_links WHERE token = $1
+`
+
+func (q *Queries) GetInviteLinkByToken(ctx context.Context, token string) (ChatInviteLink, error) {
+	row := q.db.QueryRow(ctx, getInviteLinkByToken, token)
+	var i ChatInviteLink
+	err := row.Scan(
+		&i.ID,
+		&i.ChatID,
+		&i.Token,
+		&i.Name,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.MaxUses,
+		&i.UseCount,
+		&i.RevokedAt,
+	)
+	return i, err
+}
+
 const getPublicName = `-- name: GetPublicName :one
 SELECT lower_name, user_id, chat_id FROM public_names WHERE lower_name = LOWER($1::text)
 `

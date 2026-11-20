@@ -227,7 +227,8 @@ func newChatEnvWith(t *testing.T, withSearch bool) *chatEnv {
 			Service:  linkpreview.New(linkpreview.Options{SignKey: []byte("test-key"), AllowAddr: func(netip.Addr) bool { return true }, AnyPort: true}),
 			BasePath: apiBase, Log: log,
 		})).
-		WithStickers(NewStickerServer(StickerOptions{Service: stickers.New(store.Stickers()), BasePath: apiBase, Log: log}))
+		WithStickers(NewStickerServer(StickerOptions{Service: stickers.New(store.Stickers()), BasePath: apiBase, Log: log})).
+		WithPublic(NewPublicServer(PublicOptions{Store: store, Groups: svc, Hidden: modSvc, BasePath: apiBase, WebOrigin: "https://chat.example", Log: log}))
 	return &chatEnv{
 		authEnv: &authEnv{router: NewRouter(Options{
 			HTTP:          config.HTTP{BasePath: apiBase, RequestTimeout: 10 * time.Second, ReadinessTimeout: time.Second, MaxBodyBytes: 4096},
