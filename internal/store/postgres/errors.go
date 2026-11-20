@@ -64,7 +64,7 @@ func mapError(err error) error {
 	switch pg.Code {
 	case codeUniqueViolation:
 		switch pg.ConstraintName {
-		case "users_username_lower_key":
+		case "users_username_lower_key", "public_names_pkey":
 			return ErrUsernameTaken
 		case "participants_pkey":
 			return ErrAlreadyParticipant

@@ -17,6 +17,7 @@ func entryFrom(r sqlcdb.ListChatEntriesRow) ChatEntry {
 			ID: r.ID, Type: r.Type, Name: r.Name, Description: r.Description, AvatarUrl: r.AvatarUrl, DirectKey: r.DirectKey,
 			CreatedBy: r.CreatedBy, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt, AvatarAttachmentID: r.AvatarAttachmentID,
 			LastMessageID: r.LastMessageID, LastActivityAt: r.LastActivityAt, ClearedBeforeMessageID: r.ClearedBeforeMessageID,
+			PublicName: r.PublicName,
 		}),
 		Role: Role(r.Role), LastReadMessageID: r.LastReadMessageID, PinnedAt: r.PinnedAt, PinPosition: r.PinPosition,
 		ArchivedAt: r.ArchivedAt, MyClearedBefore: r.MyClearedBeforeMessageID, HiddenAt: r.HiddenAt, IsRequest: r.IsRequest, SortAt: r.SortAt,

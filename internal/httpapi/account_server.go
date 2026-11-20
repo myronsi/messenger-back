@@ -290,6 +290,7 @@ func (a *AccountServer) privacy(ctx context.Context, userID int64) (PrivacySetti
 		TypingIndicatorsEnabled: s.TypingIndicatorsEnabled,
 		VoiceVideoMessages:      VoiceVideoPolicy(visibilityFromDB(s.VoiceVideoMessages)),
 		ForwardLink:             ForwardLinkPolicy(visibilityFromDB(s.ForwardLink)),
+		WebProfileVisibility:    WebProfileVisibility(s.WebProfileVisibility),
 		Exceptions:              PrivacyExceptions{},
 	}
 	for _, k := range exceptionSettings {
@@ -414,6 +415,13 @@ func (a *AccountServer) UpdatePrivacySettings(w http.ResponseWriter, r *http.Req
 			return
 		}
 		set(&s.ForwardLink, visibilityToDB(string(*body.ForwardLink)))
+	}
+	if body.WebProfileVisibility != nil {
+		if !body.WebProfileVisibility.Valid() {
+			WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "web_profile_visibility", Message: "unknown value"})
+			return
+		}
+		set(&s.WebProfileVisibility, string(*body.WebProfileVisibility))
 	}
 	if body.TypingIndicatorsEnabled != nil {
 		s.TypingIndicatorsEnabled, changed = body.TypingIndicatorsEnabled, true

@@ -69,6 +69,7 @@ func (s *Server) UpdateNotificationSettings(w http.ResponseWriter, r *http.Reque
 		Sound             *bool `json:"sound"`
 		Previews          *bool `json:"previews"`
 		BirthdayReminders *bool `json:"birthday_reminders"`
+		MentionsInMuted   *bool `json:"mentions_in_muted"`
 	}
 	if !decode(w, r, &b) {
 		return
@@ -77,16 +78,20 @@ func (s *Server) UpdateNotificationSettings(w http.ResponseWriter, r *http.Reque
 		WriteProblem(w, 400, ErrorCodeInvalidRequest)
 		return
 	}
-	prefs := postgres.NotificationPreferences{Enabled: *b.Enabled, Sound: *b.Sound, Previews: *b.Previews, BirthdayReminders: true}
-	if b.BirthdayReminders != nil {
-		prefs.BirthdayReminders = *b.BirthdayReminders
-	} else {
+	prefs := postgres.NotificationPreferences{Enabled: *b.Enabled, Sound: *b.Sound, Previews: *b.Previews, BirthdayReminders: true, MentionsInMuted: true}
+	if b.BirthdayReminders == nil || b.MentionsInMuted == nil {
 		current, err := s.notifications.Store.Preferences(r.Context(), p.UserID)
 		if err != nil {
 			WriteProblem(w, 503, ErrorCodeInternalError)
 			return
 		}
-		prefs.BirthdayReminders = current.BirthdayReminders
+		prefs.BirthdayReminders, prefs.MentionsInMuted = current.BirthdayReminders, current.MentionsInMuted
+	}
+	if b.BirthdayReminders != nil {
+		prefs.BirthdayReminders = *b.BirthdayReminders
+	}
+	if b.MentionsInMuted != nil {
+		prefs.MentionsInMuted = *b.MentionsInMuted
 	}
 	if err := s.notifications.Store.SetPreferences(r.Context(), p.UserID, prefs); err != nil {
 		WriteProblem(w, 503, ErrorCodeInternalError)

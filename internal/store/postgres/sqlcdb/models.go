@@ -150,6 +150,14 @@ type Chat struct {
 	BackgroundAttachmentID *uuid.UUID
 	BackgroundPreset       *string
 	BackgroundColors       []string
+	PublicName             *string
+}
+
+type ChatBan struct {
+	ChatID    int64
+	UserID    int64
+	BannedBy  *int64
+	CreatedAt time.Time
 }
 
 type ChatDeletion struct {
@@ -158,6 +166,19 @@ type ChatDeletion struct {
 	EmittedAt    *time.Time
 	MessagesDone bool
 	SearchDone   bool
+}
+
+type ChatInviteLink struct {
+	ID        int64
+	ChatID    int64
+	Token     string
+	Name      *string
+	CreatedBy *int64
+	CreatedAt time.Time
+	ExpiresAt *time.Time
+	MaxUses   *int32
+	UseCount  int32
+	RevokedAt *time.Time
 }
 
 type ChatLink struct {
@@ -303,6 +324,7 @@ type NotificationPreference struct {
 	Sound             bool
 	Previews          bool
 	BirthdayReminders bool
+	MentionsInMuted   bool
 }
 
 type Participant struct {
@@ -317,6 +339,12 @@ type Participant struct {
 	HiddenAt               *time.Time
 	Engaged                bool
 	IsRequest              bool
+}
+
+type PublicName struct {
+	LowerName string
+	UserID    *int64
+	ChatID    *int64
 }
 
 type QrLoginRequest struct {
@@ -413,6 +441,12 @@ type StickerPackReport struct {
 	ReporterID int64
 	Reason     string
 	CreatedAt  time.Time
+}
+
+type UnreadMention struct {
+	UserID    int64
+	ChatID    int64
+	MessageID int64
 }
 
 type UnsentMessage struct {
@@ -585,6 +619,7 @@ type UserPrivacySetting struct {
 	CallsFrom               string
 	VoiceVideoMessages      string
 	ForwardLink             string
+	WebProfileVisibility    string
 }
 
 type UserRecentSticker struct {
