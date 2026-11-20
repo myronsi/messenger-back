@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.29.1-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.29.0-alpha.1...v1.29.1-alpha.1) (2026-11-20)
+
+
+### Bug Fixes
+
+* **notifications:** reliable delivery, group context and birthday fixes ([#223](https://github.com/myronsi/messenger-back/issues/223)) ([323f29d](https://github.com/myronsi/messenger-back/commit/323f29decf44079735f4988020a6bcf60c295f86))
+
 ## [1.29.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.28.0-alpha.1...v1.29.0-alpha.1) (2026-11-19)
 
 
