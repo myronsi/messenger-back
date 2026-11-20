@@ -291,7 +291,7 @@ func TestEditAndDelete(t *testing.T) {
 	chat := newChat()
 	id := seed(t, r, chat, 1, 1, time.Now(), 0)[0]
 	at := time.Now().UTC().Truncate(time.Millisecond)
-	if err := r.Edit(ctx, chat, id, "edited", at); err != nil {
+	if err := r.Edit(ctx, chat, id, "edited", at, nil, false); err != nil {
 		t.Fatal(err)
 	}
 	m, _ := r.Get(ctx, chat, id)
@@ -305,14 +305,14 @@ func TestEditAndDelete(t *testing.T) {
 	if !m.Deleted || m.Content != nil || m.AttachmentID != nil {
 		t.Fatalf("after delete: %+v", m)
 	}
-	if err := r.Edit(ctx, chat, id, "back", at); !errors.Is(err, ErrNotFound) {
+	if err := r.Edit(ctx, chat, id, "back", at, nil, false); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("edit of a deleted message: %v", err)
 	}
 	p, _ := r.Page(ctx, PageQuery{ChatID: chat})
 	if len(p.Messages) != 1 || !p.Messages[0].Deleted {
 		t.Fatal("a deleted message keeps its place")
 	}
-	if err := r.Edit(ctx, chat, id+1, "x", at); !errors.Is(err, ErrNotFound) {
+	if err := r.Edit(ctx, chat, id+1, "x", at, nil, false); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("edit of a missing message: %v", err)
 	}
 	if err := r.Delete(ctx, chat, id+1); !errors.Is(err, ErrNotFound) {
@@ -328,7 +328,7 @@ func TestEditRacingDelete(t *testing.T) {
 	id := seed(t, r, chat, 1, 1, time.Now(), 0)[0]
 	var wg sync.WaitGroup
 	for i := range 8 {
-		wg.Go(func() { _ = r.Edit(ctx, chat, id, fmt.Sprint("edit ", i), time.Now()) })
+		wg.Go(func() { _ = r.Edit(ctx, chat, id, fmt.Sprint("edit ", i), time.Now(), nil, false) })
 	}
 	wg.Go(func() {
 		if err := r.Delete(ctx, chat, id); err != nil {
@@ -422,7 +422,7 @@ func TestV1MessagesSortBeforeSnowflakes(t *testing.T) {
 	if !slices.Equal(idsOf(p.Messages), append([]int64{103}, fresh...)) {
 		t.Fatalf("after a v1 id: %v", idsOf(p.Messages))
 	}
-	if err := r.Edit(ctx, chat, 102, "edited v1", time.Now()); err != nil {
+	if err := r.Edit(ctx, chat, 102, "edited v1", time.Now(), nil, false); err != nil {
 		t.Fatal(err)
 	}
 	if m, _ := r.Get(ctx, chat, 102); *m.Content != "edited v1" {

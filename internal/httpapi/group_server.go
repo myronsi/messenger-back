@@ -28,6 +28,7 @@ func PresentGroup(g chats.GroupView, basePath string) Group {
 		Id: FormatID(g.Chat.ID), OwnerId: FormatID(g.OwnerID), MyRole: PresentRole(g.MyRole),
 		CreatedAt: utc(g.Chat.CreatedAt), Members: make([]GroupMember, len(g.Members)),
 	}
+	out.PublicName = g.Chat.PublicName
 	if g.Chat.Name != nil {
 		out.Name = *g.Chat.Name
 	}

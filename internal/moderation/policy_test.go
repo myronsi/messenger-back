@@ -200,7 +200,7 @@ func TestCannotAppealGood(t *testing.T) {
 }
 
 func TestRestrictionsPerStatus(t *testing.T) {
-	for st, n := range map[Status]int{Good: 0, Warned: 0, Limited: 3, Restricted: 9, Suspended: 11} {
+	for st, n := range map[Status]int{Good: 0, Warned: 0, Limited: 4, Restricted: 11, Suspended: 13} {
 		if got := len(Restrictions(st)); got != n {
 			t.Errorf("%s has %d restrictions, want %d", st, got, n)
 		}

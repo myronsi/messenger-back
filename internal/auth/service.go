@@ -21,6 +21,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/myronsi/messenger-back/internal/geoip"
+	"github.com/myronsi/messenger-back/internal/publicnames"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 )
 
@@ -430,6 +431,9 @@ func normalizeUsername(u string) string { return strings.ToLower(strings.TrimSpa
 func validateUsername(u string) error {
 	if !usernameRE.MatchString(u) {
 		return &ValidationError{"username", "must be 3 to 32 letters, digits or underscores"}
+	}
+	if publicnames.Reserved(u) {
+		return &ValidationError{"username", "is reserved"}
 	}
 	return nil
 }

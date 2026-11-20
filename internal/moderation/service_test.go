@@ -355,7 +355,7 @@ func TestRecomputeChangesStatus(t *testing.T) {
 		t.Fatalf("status metrics %v", e.rec.statuses)
 	}
 	notices := e.rec.notices[target]
-	if len(notices) != 1 || notices[0].Status != moderation.Limited || len(notices[0].Restrictions) != 3 || !notices[0].CanAppeal {
+	if len(notices) != 1 || notices[0].Status != moderation.Limited || len(notices[0].Restrictions) != 4 || !notices[0].CanAppeal {
 		t.Fatalf("account_status events %+v", notices)
 	}
 	log, err := e.pg.Moderation().Events(ctx, target)

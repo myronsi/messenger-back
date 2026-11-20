@@ -7,11 +7,11 @@ SELECT * FROM user_privacy_settings WHERE user_id = ANY(@user_ids::BIGINT[]);
 INSERT INTO user_privacy_settings (
     user_id, avatar_visibility, profile_visibility, presence_visibility, last_seen_visibility, birthday_visibility,
     read_receipts_enabled, direct_messages, group_invites, search_visibility, calls_from, typing_indicators_enabled,
-    voice_video_messages, forward_link
+    voice_video_messages, forward_link, web_profile_visibility
 ) VALUES (
     @user_id, @avatar_visibility, @profile_visibility, @presence_visibility, @last_seen_visibility, @birthday_visibility,
     @read_receipts_enabled, @direct_messages, @group_invites, @search_visibility, @calls_from, @typing_indicators_enabled,
-    @voice_video_messages, @forward_link
+    @voice_video_messages, @forward_link, @web_profile_visibility
 )
 ON CONFLICT (user_id) DO UPDATE SET
     avatar_visibility = EXCLUDED.avatar_visibility,
@@ -26,7 +26,8 @@ ON CONFLICT (user_id) DO UPDATE SET
     calls_from = EXCLUDED.calls_from,
     typing_indicators_enabled = EXCLUDED.typing_indicators_enabled,
     voice_video_messages = EXCLUDED.voice_video_messages,
-    forward_link = EXCLUDED.forward_link
+    forward_link = EXCLUDED.forward_link,
+    web_profile_visibility = EXCLUDED.web_profile_visibility
 RETURNING *;
 
 -- name: ListPrivacyExceptions :many
@@ -142,7 +143,8 @@ SET avatar_visibility = COALESCE(sqlc.narg(avatar_visibility), avatar_visibility
     calls_from = COALESCE(sqlc.narg(calls_from), calls_from),
     typing_indicators_enabled = COALESCE(sqlc.narg(typing_indicators_enabled)::bool, typing_indicators_enabled),
     voice_video_messages = COALESCE(sqlc.narg(voice_video_messages), voice_video_messages),
-    forward_link = COALESCE(sqlc.narg(forward_link), forward_link)
+    forward_link = COALESCE(sqlc.narg(forward_link), forward_link),
+    web_profile_visibility = COALESCE(sqlc.narg(web_profile_visibility), web_profile_visibility)
 WHERE user_id = @user_id
 RETURNING *;
 

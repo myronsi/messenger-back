@@ -632,3 +632,67 @@ func (Unimplemented) AcceptChatRequest(w http.ResponseWriter, r *http.Request, c
 func (Unimplemented) CountChatRequests(w http.ResponseWriter, r *http.Request, params CountChatRequestsParams) {
 	notImplemented(w, r)
 }
+
+func (Unimplemented) ListGroupInviteLinks(w http.ResponseWriter, r *http.Request, _ ChatId, _ ListGroupInviteLinksParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) CreateGroupInviteLink(w http.ResponseWriter, r *http.Request, _ ChatId, _ CreateGroupInviteLinkParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) UpdateGroupInviteLink(w http.ResponseWriter, r *http.Request, _ ChatId, _ InviteLinkId, _ UpdateGroupInviteLinkParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) RevokeGroupInviteLink(w http.ResponseWriter, r *http.Request, _ ChatId, _ InviteLinkId, _ RevokeGroupInviteLinkParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) SetGroupPublicName(w http.ResponseWriter, r *http.Request, _ ChatId, _ SetGroupPublicNameParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) ClearGroupPublicName(w http.ResponseWriter, r *http.Request, _ ChatId, _ ClearGroupPublicNameParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) ListGroupBans(w http.ResponseWriter, r *http.Request, _ ChatId, _ ListGroupBansParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) UnbanGroupUser(w http.ResponseWriter, r *http.Request, _ ChatId, _ UserId, _ UnbanGroupUserParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) GetInvite(w http.ResponseWriter, r *http.Request, _ InviteToken, _ GetInviteParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) JoinByInvite(w http.ResponseWriter, r *http.Request, _ InviteToken, _ JoinByInviteParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) SearchPublicGroups(w http.ResponseWriter, r *http.Request, _ SearchPublicGroupsParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) GetPublicGroup(w http.ResponseWriter, r *http.Request, _ PublicNameParam, _ GetPublicGroupParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) JoinPublicGroup(w http.ResponseWriter, r *http.Request, _ PublicNameParam, _ JoinPublicGroupParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) GetPublicNameAvailability(w http.ResponseWriter, r *http.Request, _ PublicNameParam, _ GetPublicNameAvailabilityParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) ListUnreadMentions(w http.ResponseWriter, r *http.Request, _ ChatId, _ ListUnreadMentionsParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) GetPublicName(w http.ResponseWriter, r *http.Request, _ PublicNameParam) {
+	notImplemented(w, r)
+}
+func (Unimplemented) GetPublicInvite(w http.ResponseWriter, r *http.Request, _ InviteToken) {
+	notImplemented(w, r)
+}
+func (Unimplemented) GetPublicNameAvatar(w http.ResponseWriter, r *http.Request, _ PublicNameParam, _ GetPublicNameAvatarParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) GetPublicInviteAvatar(w http.ResponseWriter, r *http.Request, _ InviteToken, _ GetPublicInviteAvatarParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) GetOpenGraphName(w http.ResponseWriter, r *http.Request, _ PublicNameParam) {
+	notImplemented(w, r)
+}
+func (Unimplemented) GetOpenGraphInvite(w http.ResponseWriter, r *http.Request, _ InviteToken) {
+	notImplemented(w, r)
+}

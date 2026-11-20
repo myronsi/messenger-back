@@ -15,6 +15,7 @@ import (
 const (
 	BirthdayHour      = 9
 	BirthdayKind      = "birthday"
+	MentionKind       = "mention"
 	birthdayBatch     = 500
 	birthdayMaxRounds = 20
 	birthdayLifetime  = 12 * time.Hour

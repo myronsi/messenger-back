@@ -398,7 +398,7 @@ func (q *Queries) ListPrivacyExceptionsOfOwnerFor(ctx context.Context, arg ListP
 
 const listPrivacySettings = `-- name: ListPrivacySettings :many
 
-SELECT user_id, avatar_visibility, profile_visibility, presence_visibility, read_receipts_enabled, direct_messages, group_invites, search_visibility, typing_indicators_enabled, last_seen_visibility, birthday_visibility, calls_from, voice_video_messages, forward_link FROM user_privacy_settings WHERE user_id = ANY($1::BIGINT[])
+SELECT user_id, avatar_visibility, profile_visibility, presence_visibility, read_receipts_enabled, direct_messages, group_invites, search_visibility, typing_indicators_enabled, last_seen_visibility, birthday_visibility, calls_from, voice_video_messages, forward_link, web_profile_visibility FROM user_privacy_settings WHERE user_id = ANY($1::BIGINT[])
 `
 
 // Privacy settings, exceptions, blocks and contact names: what one user lets others see and do.
@@ -426,6 +426,7 @@ func (q *Queries) ListPrivacySettings(ctx context.Context, userIds []int64) ([]U
 			&i.CallsFrom,
 			&i.VoiceVideoMessages,
 			&i.ForwardLink,
+			&i.WebProfileVisibility,
 		); err != nil {
 			return nil, err
 		}
@@ -451,9 +452,10 @@ SET avatar_visibility = COALESCE($1, avatar_visibility),
     calls_from = COALESCE($10, calls_from),
     typing_indicators_enabled = COALESCE($11::bool, typing_indicators_enabled),
     voice_video_messages = COALESCE($12, voice_video_messages),
-    forward_link = COALESCE($13, forward_link)
-WHERE user_id = $14
-RETURNING user_id, avatar_visibility, profile_visibility, presence_visibility, read_receipts_enabled, direct_messages, group_invites, search_visibility, typing_indicators_enabled, last_seen_visibility, birthday_visibility, calls_from, voice_video_messages, forward_link
+    forward_link = COALESCE($13, forward_link),
+    web_profile_visibility = COALESCE($14, web_profile_visibility)
+WHERE user_id = $15
+RETURNING user_id, avatar_visibility, profile_visibility, presence_visibility, read_receipts_enabled, direct_messages, group_invites, search_visibility, typing_indicators_enabled, last_seen_visibility, birthday_visibility, calls_from, voice_video_messages, forward_link, web_profile_visibility
 `
 
 type PatchPrivacySettingsParams struct {
@@ -470,6 +472,7 @@ type PatchPrivacySettingsParams struct {
 	TypingIndicatorsEnabled *bool
 	VoiceVideoMessages      *string
 	ForwardLink             *string
+	WebProfileVisibility    *string
 	UserID                  int64
 }
 
@@ -489,6 +492,7 @@ func (q *Queries) PatchPrivacySettings(ctx context.Context, arg PatchPrivacySett
 		arg.TypingIndicatorsEnabled,
 		arg.VoiceVideoMessages,
 		arg.ForwardLink,
+		arg.WebProfileVisibility,
 		arg.UserID,
 	)
 	var i UserPrivacySetting
@@ -507,6 +511,7 @@ func (q *Queries) PatchPrivacySettings(ctx context.Context, arg PatchPrivacySett
 		&i.CallsFrom,
 		&i.VoiceVideoMessages,
 		&i.ForwardLink,
+		&i.WebProfileVisibility,
 	)
 	return i, err
 }
@@ -794,11 +799,11 @@ const updatePrivacySettings = `-- name: UpdatePrivacySettings :one
 INSERT INTO user_privacy_settings (
     user_id, avatar_visibility, profile_visibility, presence_visibility, last_seen_visibility, birthday_visibility,
     read_receipts_enabled, direct_messages, group_invites, search_visibility, calls_from, typing_indicators_enabled,
-    voice_video_messages, forward_link
+    voice_video_messages, forward_link, web_profile_visibility
 ) VALUES (
     $1, $2, $3, $4, $5, $6,
     $7, $8, $9, $10, $11, $12,
-    $13, $14
+    $13, $14, $15
 )
 ON CONFLICT (user_id) DO UPDATE SET
     avatar_visibility = EXCLUDED.avatar_visibility,
@@ -813,8 +818,9 @@ ON CONFLICT (user_id) DO UPDATE SET
     calls_from = EXCLUDED.calls_from,
     typing_indicators_enabled = EXCLUDED.typing_indicators_enabled,
     voice_video_messages = EXCLUDED.voice_video_messages,
-    forward_link = EXCLUDED.forward_link
-RETURNING user_id, avatar_visibility, profile_visibility, presence_visibility, read_receipts_enabled, direct_messages, group_invites, search_visibility, typing_indicators_enabled, last_seen_visibility, birthday_visibility, calls_from, voice_video_messages, forward_link
+    forward_link = EXCLUDED.forward_link,
+    web_profile_visibility = EXCLUDED.web_profile_visibility
+RETURNING user_id, avatar_visibility, profile_visibility, presence_visibility, read_receipts_enabled, direct_messages, group_invites, search_visibility, typing_indicators_enabled, last_seen_visibility, birthday_visibility, calls_from, voice_video_messages, forward_link, web_profile_visibility
 `
 
 type UpdatePrivacySettingsParams struct {
@@ -832,6 +838,7 @@ type UpdatePrivacySettingsParams struct {
 	TypingIndicatorsEnabled bool
 	VoiceVideoMessages      string
 	ForwardLink             string
+	WebProfileVisibility    string
 }
 
 func (q *Queries) UpdatePrivacySettings(ctx context.Context, arg UpdatePrivacySettingsParams) (UserPrivacySetting, error) {
@@ -850,6 +857,7 @@ func (q *Queries) UpdatePrivacySettings(ctx context.Context, arg UpdatePrivacySe
 		arg.TypingIndicatorsEnabled,
 		arg.VoiceVideoMessages,
 		arg.ForwardLink,
+		arg.WebProfileVisibility,
 	)
 	var i UserPrivacySetting
 	err := row.Scan(
@@ -867,6 +875,7 @@ func (q *Queries) UpdatePrivacySettings(ctx context.Context, arg UpdatePrivacySe
 		&i.CallsFrom,
 		&i.VoiceVideoMessages,
 		&i.ForwardLink,
+		&i.WebProfileVisibility,
 	)
 	return i, err
 }

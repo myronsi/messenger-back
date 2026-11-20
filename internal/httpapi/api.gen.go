@@ -42,10 +42,12 @@ const (
 	AccountRestrictionEditProfile   AccountRestriction = "edit_profile"
 	AccountRestrictionForward       AccountRestriction = "forward"
 	AccountRestrictionInviteToGroup AccountRestriction = "invite_to_group"
+	AccountRestrictionJoinByLink    AccountRestriction = "join_by_link"
 	AccountRestrictionManageGroup   AccountRestriction = "manage_group"
 	AccountRestrictionPublishPack   AccountRestriction = "publish_pack"
 	AccountRestrictionSearch        AccountRestriction = "search"
 	AccountRestrictionSend          AccountRestriction = "send"
+	AccountRestrictionShareGroup    AccountRestriction = "share_group"
 	AccountRestrictionStartDirect   AccountRestriction = "start_direct"
 	AccountRestrictionUpload        AccountRestriction = "upload"
 )
@@ -63,6 +65,8 @@ func (e AccountRestriction) Valid() bool {
 		return true
 	case AccountRestrictionInviteToGroup:
 		return true
+	case AccountRestrictionJoinByLink:
+		return true
 	case AccountRestrictionManageGroup:
 		return true
 	case AccountRestrictionPublishPack:
@@ -70,6 +74,8 @@ func (e AccountRestriction) Valid() bool {
 	case AccountRestrictionSearch:
 		return true
 	case AccountRestrictionSend:
+		return true
+	case AccountRestrictionShareGroup:
 		return true
 	case AccountRestrictionStartDirect:
 		return true
@@ -932,6 +938,27 @@ func (e ProfileBackgroundKind) Valid() bool {
 	}
 }
 
+// Defines values for PublicNameKind.
+const (
+	PublicNameKindGroup       PublicNameKind = "group"
+	PublicNameKindUnavailable PublicNameKind = "unavailable"
+	PublicNameKindUser        PublicNameKind = "user"
+)
+
+// Valid indicates whether the value is a known member of the PublicNameKind enum.
+func (e PublicNameKind) Valid() bool {
+	switch e {
+	case PublicNameKindGroup:
+		return true
+	case PublicNameKindUnavailable:
+		return true
+	case PublicNameKindUser:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for QrLoginPollResult0Status.
 const (
 	QrLoginPollResult0StatusDenied  QrLoginPollResult0Status = "denied"
@@ -1364,6 +1391,24 @@ func (e VoiceVideoPolicy) Valid() bool {
 	case VoiceVideoPolicyContacts:
 		return true
 	case VoiceVideoPolicyEveryone:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WebProfileVisibility.
+const (
+	WebProfileVisibilityEveryone WebProfileVisibility = "everyone"
+	WebProfileVisibilityNobody   WebProfileVisibility = "nobody"
+)
+
+// Valid indicates whether the value is a known member of the WebProfileVisibility enum.
+func (e WebProfileVisibility) Valid() bool {
+	switch e {
+	case WebProfileVisibilityEveryone:
+		return true
+	case WebProfileVisibilityNobody:
 		return true
 	default:
 		return false
@@ -1963,6 +2008,10 @@ type Chat struct {
 	PinPosition *int     `json:"pin_position"`
 	Type        ChatType `json:"type"`
 	UnreadCount int      `json:"unread_count"`
+
+	// UnreadMentionsCount Unread messages that mention the caller (`GET /chats/{chat_id}/mentions`). Clients show an `@` badge while
+	// it is above 0. Always 0 in direct chats.
+	UnreadMentionsCount int `json:"unread_mentions_count"`
 }
 
 // ChatPage defines model for ChatPage.
@@ -2100,6 +2149,16 @@ type CreateGroupRequest struct {
 	Description *string `json:"description,omitempty"`
 	MemberIds   []Id    `json:"member_ids"`
 	Name        string  `json:"name"`
+}
+
+// CreateInviteLinkRequest defines model for CreateInviteLinkRequest.
+type CreateInviteLinkRequest struct {
+	// ExpiresAt In the future, at most 366 days ahead; `null` or absent for a link that never expires.
+	ExpiresAt *Timestamp `json:"expires_at,omitempty"`
+
+	// MaxUses `null` or absent for no limit.
+	MaxUses *int    `json:"max_uses,omitempty"`
+	Name    *string `json:"name,omitempty"`
 }
 
 // CreateStickerPackRequest defines model for CreateStickerPackRequest.
@@ -2391,6 +2450,26 @@ type Group struct {
 	//
 	// Examples: 7217400317439950848
 	OwnerId Id `json:"owner_id"`
+
+	// PublicName The group's public name (`/@name`); `null` for a private group.
+	PublicName *PublicName `json:"public_name"`
+}
+
+// GroupBan defines model for GroupBan.
+type GroupBan struct {
+	BannedBy  *Id       `json:"banned_by"`
+	CreatedAt Timestamp `json:"created_at"`
+
+	// User A user as visible to the requesting user; hidden fields are `null`.
+	User User `json:"user"`
+}
+
+// GroupBanPage defines model for GroupBanPage.
+type GroupBanPage struct {
+	Items []GroupBan `json:"items"`
+
+	// NextCursor Opaque cursor; `null` when there are no more results.
+	NextCursor *Cursor `json:"next_cursor"`
 }
 
 // GroupInvitePolicy Who may add the user to a group. Defaults to `contacts`. Deprecated: `everyone_except` and `nobody_except`
@@ -2415,6 +2494,23 @@ type GroupMemberPage struct {
 	// NextCursor Opaque cursor; `null` when there are no more results.
 	NextCursor *Cursor `json:"next_cursor"`
 	Total      int     `json:"total"`
+}
+
+// GroupPreview A group the caller may join, as seen before joining.
+type GroupPreview struct {
+	// ChatId The chat when the caller is already a member; `null` otherwise.
+	ChatId *Id `json:"chat_id"`
+
+	// Group The card of a group for someone without an account. No members and no messages.
+	Group PublicGroup `json:"group"`
+}
+
+// GroupPreviewPage defines model for GroupPreviewPage.
+type GroupPreviewPage struct {
+	Items []GroupPreview `json:"items"`
+
+	// NextCursor Opaque cursor; `null` when there are no more results.
+	NextCursor *Cursor `json:"next_cursor"`
 }
 
 // GroupRole A moderator may delete other members' messages; owners and admins also manage the group.
@@ -2448,6 +2544,42 @@ type GroupRoleLog struct {
 //
 // Examples: 7217400317439950848
 type Id = string
+
+// InviteLink defines model for InviteLink.
+type InviteLink struct {
+	CreatedAt Timestamp `json:"created_at"`
+
+	// CreatedBy The user who created the link; `null` after that account was deleted.
+	CreatedBy *Id `json:"created_by"`
+
+	// ExpiresAt `null`: never expires.
+	ExpiresAt *Timestamp `json:"expires_at"`
+
+	// Id Decimal ID as a string (Snowflake IDs exceed 2^53).
+	//
+	// Examples: 7217400317439950848
+	Id Id `json:"id"`
+
+	// IsActive Not revoked, not expired and not used up.
+	IsActive bool `json:"is_active"`
+
+	// MaxUses `null`: no limit.
+	MaxUses   *int       `json:"max_uses"`
+	Name      *string    `json:"name"`
+	RevokedAt *Timestamp `json:"revoked_at"`
+
+	// Token The secret part of an invite link `/join/{token}`.
+	Token    InviteToken `json:"token"`
+	UseCount int         `json:"use_count"`
+}
+
+// InviteLinkList defines model for InviteLinkList.
+type InviteLinkList struct {
+	Items []InviteLink `json:"items"`
+}
+
+// InviteToken The secret part of an invite link `/join/{token}`.
+type InviteToken = string
 
 // JoinCallRequest defines model for JoinCallRequest.
 type JoinCallRequest struct {
@@ -2570,6 +2702,11 @@ type MediaKind string
 // MediaProcessing defines model for MediaProcessing.
 type MediaProcessing string
 
+// MentionList defines model for MentionList.
+type MentionList struct {
+	MessageIds []Id `json:"message_ids"`
+}
+
 // Message defines model for Message.
 type Message struct {
 	Attachment *Attachment `json:"attachment"`
@@ -2596,6 +2733,14 @@ type Message struct {
 	// Examples: 7217400317439950848
 	Id        Id   `json:"id"`
 	IsDeleted bool `json:"is_deleted"`
+
+	// Mentions Group members the text mentions by `@username` (ignoring case), found by the server when the message was
+	// sent or last edited; at most 20. Absent when there are none and in direct chats. Clients render every
+	// `@name` token as a link to `/@name`; these IDs only decide highlighting and notifications.
+	Mentions *[]Id `json:"mentions,omitempty"`
+
+	// MentionsAll `true` when an owner or admin wrote `@all`; it mentions every member. Absent otherwise.
+	MentionsAll *bool `json:"mentions_all,omitempty"`
 
 	// ModerationReason Why moderation removed the message; only for its sender, absent for everyone else.
 	ModerationReason *ModerationRemovalReason `json:"moderation_reason,omitempty"`
@@ -2718,8 +2863,12 @@ type NotificationPreferences struct {
 	// by the server; when a `PUT` leaves it out, it stays as it is. Defaults to `true`.
 	BirthdayReminders *bool `json:"birthday_reminders,omitempty"`
 	Enabled           bool  `json:"enabled"`
-	Previews          bool  `json:"previews"`
-	Sound             bool  `json:"sound"`
+
+	// MentionsInMuted A push when someone mentions you (`@username`, or `@all` from an owner or admin) in a chat you muted.
+	// Always sent by the server; when a `PUT` leaves it out, it stays as it is. Defaults to `true`.
+	MentionsInMuted *bool `json:"mentions_in_muted,omitempty"`
+	Previews        bool  `json:"previews"`
+	Sound           bool  `json:"sound"`
 }
 
 // NotificationSettings defines model for NotificationSettings.
@@ -2882,6 +3031,11 @@ type PrivacySettings struct {
 	// VoiceVideoMessages Who may send this user voice messages, and file messages with a video, in a direct chat. Others get
 	// `403` (`forbidden`, field `voice_video_messages`); their `Chat.peer.can_send_voice_video` is `false`.
 	VoiceVideoMessages VoiceVideoPolicy `json:"voice_video_messages"`
+
+	// WebProfileVisibility Whether people without an account (and link previews in other apps) see the profile card at `/@username`:
+	// display name, username, and the avatar and bio when `avatar_visibility` and `profile_visibility` are
+	// `everyone`. Defaults to `everyone`.
+	WebProfileVisibility WebProfileVisibility `json:"web_profile_visibility"`
 }
 
 // Problem RFC 9457 problem details. `426 Upgrade Required` (`client_outdated`) uses the same format.
@@ -2941,6 +3095,58 @@ type ProfileMusic struct {
 	// Attachment The clip (at most 30 s). `thumbnail_url` is the cover when the file had one.
 	Attachment Attachment `json:"attachment"`
 	Title      *string    `json:"title"`
+}
+
+// PublicGroup The card of a group for someone without an account. No members and no messages.
+type PublicGroup struct {
+	// AvatarUrl A public avatar URL (`/api/v2/public/names/…/avatar` or `/api/v2/public/invites/…/avatar`), or `null`.
+	AvatarUrl   *string `json:"avatar_url"`
+	Description *string `json:"description"`
+	MemberCount int     `json:"member_count"`
+	Name        string  `json:"name"`
+
+	// PublicName Set for a public group.
+	PublicName *PublicName `json:"public_name"`
+}
+
+// PublicName A username or a group's public name. One name space for both, unique ignoring case; links are `/@name` on the
+// web app's origin.
+type PublicName = string
+
+// PublicNameAvailability defines model for PublicNameAvailability.
+type PublicNameAvailability struct {
+	// Available `false` when a user or another group has the name (ignoring case) or it is reserved.
+	Available bool `json:"available"`
+
+	// PublicName A username or a group's public name. One name space for both, unique ignoring case; links are `/@name` on the
+	// web app's origin.
+	PublicName PublicName `json:"public_name"`
+}
+
+// PublicNameKind Unknown values must be treated like `unavailable`.
+type PublicNameKind string
+
+// PublicNameLookup defines model for PublicNameLookup.
+type PublicNameLookup struct {
+	// Group Set when `kind` is `group`.
+	Group *PublicGroup `json:"group,omitempty"`
+
+	// Kind Unknown values must be treated like `unavailable`.
+	Kind PublicNameKind `json:"kind"`
+
+	// User Set when `kind` is `user`.
+	User *PublicUser `json:"user,omitempty"`
+}
+
+// PublicUser The card of a user for someone without an account. Never carries an ID, presence or other fields.
+type PublicUser struct {
+	// AvatarUrl `/api/v2/public/names/{username}/avatar?rev=…`; `null` when hidden or unset.
+	AvatarUrl *string `json:"avatar_url"`
+
+	// Bio `null` when `profile_visibility` is not `everyone` or the bio is empty.
+	Bio         *string  `json:"bio"`
+	DisplayName string   `json:"display_name"`
+	Username    Username `json:"username"`
 }
 
 // QrLoginApproval defines model for QrLoginApproval.
@@ -3327,6 +3533,13 @@ type SetMusicRequest struct {
 	Title *string `json:"title,omitempty"`
 }
 
+// SetPublicNameRequest defines model for SetPublicNameRequest.
+type SetPublicNameRequest struct {
+	// PublicName A username or a group's public name. One name space for both, unique ignoring case; links are `/@name` on the
+	// web app's origin.
+	PublicName PublicName `json:"public_name"`
+}
+
 // SetRecoveryEmail defines model for SetRecoveryEmail.
 type SetRecoveryEmail struct {
 	Code     *string             `json:"code,omitempty"`
@@ -3535,6 +3748,13 @@ type UpdateGroupRequest struct {
 	Name        *string `json:"name,omitempty"`
 }
 
+// UpdateInviteLinkRequest Fields left out stay as they are; `null` clears the expiry or the limit.
+type UpdateInviteLinkRequest struct {
+	ExpiresAt *Timestamp `json:"expires_at,omitempty"`
+	MaxUses   *int       `json:"max_uses,omitempty"`
+	Name      *string    `json:"name,omitempty"`
+}
+
 // UpdateMeRequest defines model for UpdateMeRequest.
 type UpdateMeRequest struct {
 	// Bio At most 500 characters, counting custom emoji tokens as their `:shortcode:` text.
@@ -3624,6 +3844,11 @@ type UpdatePrivacySettingsRequest struct {
 
 	// VoiceVideoMessages Who may send the user voice messages and videos in a direct chat. Groups are not affected.
 	VoiceVideoMessages *VoiceVideoPolicy `json:"voice_video_messages,omitempty"`
+
+	// WebProfileVisibility Whether people without an account (and link previews in other apps) see the profile card at `/@username`:
+	// display name, username, and the avatar and bio when `avatar_visibility` and `profile_visibility` are
+	// `everyone`. Defaults to `everyone`.
+	WebProfileVisibility *WebProfileVisibility `json:"web_profile_visibility,omitempty"`
 }
 
 // UpdateRoleRequest defines model for UpdateRoleRequest.
@@ -3783,6 +4008,11 @@ type Visibility string
 // VoiceVideoPolicy Who may send the user voice messages and videos in a direct chat. Groups are not affected.
 type VoiceVideoPolicy string
 
+// WebProfileVisibility Whether people without an account (and link previews in other apps) see the profile card at `/@username`:
+// display name, username, and the avatar and bio when `avatar_visibility` and `profile_visibility` are
+// `everyone`. Defaults to `everyone`.
+type WebProfileVisibility string
+
 // WebSocketTicket defines model for WebSocketTicket.
 type WebSocketTicket struct {
 	// ExpiresIn Seconds the ticket stays valid
@@ -3829,6 +4059,11 @@ type EmojiId = Id
 // Examples: 7217400317439950848
 type EmojiPackId = Id
 
+// InviteLinkId Decimal ID as a string (Snowflake IDs exceed 2^53).
+//
+// Examples: 7217400317439950848
+type InviteLinkId = Id
+
 // Limit defines model for Limit.
 type Limit = int
 
@@ -3836,6 +4071,10 @@ type Limit = int
 //
 // Examples: 7217400317439950848
 type MessageId = Id
+
+// PublicNameParam A username or a group's public name. One name space for both, unique ignoring case; links are `/@name` on the
+// web app's origin.
+type PublicNameParam = PublicName
 
 // QrLoginRequestId defines model for QrLoginRequestId.
 type QrLoginRequestId = string
@@ -4442,6 +4681,15 @@ type ListChatMediaParams struct {
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
 }
 
+// ListUnreadMentionsParams defines parameters for ListUnreadMentions.
+type ListUnreadMentionsParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
 // ListMessagesParams defines parameters for ListMessages.
 type ListMessagesParams struct {
 	// Limit Page size
@@ -4780,8 +5028,68 @@ type SetGroupBackgroundParams struct {
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
 }
 
+// ListGroupBansParams defines parameters for ListGroupBans.
+type ListGroupBansParams struct {
+	// Limit Page size
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// After Opaque `next_cursor` of the previous page
+	After *After `form:"after,omitempty" json:"after,omitempty"`
+
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// UnbanGroupUserParams defines parameters for UnbanGroupUser.
+type UnbanGroupUserParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
 // GetGroupEmojiParams defines parameters for GetGroupEmoji.
 type GetGroupEmojiParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// ListGroupInviteLinksParams defines parameters for ListGroupInviteLinks.
+type ListGroupInviteLinksParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// CreateGroupInviteLinkParams defines parameters for CreateGroupInviteLink.
+type CreateGroupInviteLinkParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// RevokeGroupInviteLinkParams defines parameters for RevokeGroupInviteLink.
+type RevokeGroupInviteLinkParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// UpdateGroupInviteLinkParams defines parameters for UpdateGroupInviteLink.
+type UpdateGroupInviteLinkParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
@@ -4842,6 +5150,24 @@ type UpdateGroupParticipantRoleParams struct {
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
 }
 
+// ClearGroupPublicNameParams defines parameters for ClearGroupPublicName.
+type ClearGroupPublicNameParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// SetGroupPublicNameParams defines parameters for SetGroupPublicName.
+type SetGroupPublicNameParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
 // UnreportGroupParams defines parameters for UnreportGroup.
 type UnreportGroupParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
@@ -4871,6 +5197,24 @@ type GetGroupRoleLogParams struct {
 
 // TransferGroupOwnershipParams defines parameters for TransferGroupOwnership.
 type TransferGroupOwnershipParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// GetInviteParams defines parameters for GetInvite.
+type GetInviteParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// JoinByInviteParams defines parameters for JoinByInvite.
+type JoinByInviteParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
@@ -5324,6 +5668,64 @@ type ForwardMessageParams struct {
 
 	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// SearchPublicGroupsParams defines parameters for SearchPublicGroups.
+type SearchPublicGroupsParams struct {
+	Q string `form:"q" json:"q"`
+
+	// Limit Page size
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// After Opaque `next_cursor` of the previous page
+	After *After `form:"after,omitempty" json:"after,omitempty"`
+
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// GetPublicGroupParams defines parameters for GetPublicGroup.
+type GetPublicGroupParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// JoinPublicGroupParams defines parameters for JoinPublicGroup.
+type JoinPublicGroupParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// GetPublicNameAvailabilityParams defines parameters for GetPublicNameAvailability.
+type GetPublicNameAvailabilityParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// GetPublicInviteAvatarParams defines parameters for GetPublicInviteAvatar.
+type GetPublicInviteAvatarParams struct {
+	Rev  *string `form:"rev,omitempty" json:"rev,omitempty"`
+	Size *int    `form:"size,omitempty" json:"size,omitempty"`
+}
+
+// GetPublicNameAvatarParams defines parameters for GetPublicNameAvatar.
+type GetPublicNameAvatarParams struct {
+	Rev *string `form:"rev,omitempty" json:"rev,omitempty"`
+
+	// Size As in `GET /users/{user_id}/avatar`.
+	Size *int `form:"size,omitempty" json:"size,omitempty"`
 }
 
 // ListApprovalRequestsParams defines parameters for ListApprovalRequests.
@@ -5825,11 +6227,20 @@ type SetGroupAvatarJSONRequestBody = SetAvatarRequest
 // SetGroupBackgroundJSONRequestBody defines body for SetGroupBackground for application/json ContentType.
 type SetGroupBackgroundJSONRequestBody = SetBackgroundRequest
 
+// CreateGroupInviteLinkJSONRequestBody defines body for CreateGroupInviteLink for application/json ContentType.
+type CreateGroupInviteLinkJSONRequestBody = CreateInviteLinkRequest
+
+// UpdateGroupInviteLinkJSONRequestBody defines body for UpdateGroupInviteLink for application/json ContentType.
+type UpdateGroupInviteLinkJSONRequestBody = UpdateInviteLinkRequest
+
 // AddGroupParticipantJSONRequestBody defines body for AddGroupParticipant for application/json ContentType.
 type AddGroupParticipantJSONRequestBody = AddParticipantRequest
 
 // UpdateGroupParticipantRoleJSONRequestBody defines body for UpdateGroupParticipantRole for application/json ContentType.
 type UpdateGroupParticipantRoleJSONRequestBody = UpdateRoleRequest
+
+// SetGroupPublicNameJSONRequestBody defines body for SetGroupPublicName for application/json ContentType.
+type SetGroupPublicNameJSONRequestBody = SetPublicNameRequest
 
 // ReportGroupJSONRequestBody defines body for ReportGroup for application/json ContentType.
 type ReportGroupJSONRequestBody = ContentReportRequest
@@ -6422,6 +6833,9 @@ type ServerInterface interface {
 	// ListChatMedia Photos, videos, audio, voice messages, files or links of a chat
 	// (GET /chats/{chat_id}/media)
 	ListChatMedia(w http.ResponseWriter, r *http.Request, chatId ChatId, params ListChatMediaParams)
+	// ListUnreadMentions The caller's unread mentions in a chat
+	// (GET /chats/{chat_id}/mentions)
+	ListUnreadMentions(w http.ResponseWriter, r *http.Request, chatId ChatId, params ListUnreadMentionsParams)
 	// ListMessages Message history
 	// (GET /chats/{chat_id}/messages)
 	ListMessages(w http.ResponseWriter, r *http.Request, chatId ChatId, params ListMessagesParams)
@@ -6527,9 +6941,27 @@ type ServerInterface interface {
 	// SetGroupBackground Set the group background
 	// (PUT /groups/{chat_id}/background)
 	SetGroupBackground(w http.ResponseWriter, r *http.Request, chatId ChatId, params SetGroupBackgroundParams)
+	// ListGroupBans Users banned from the group
+	// (GET /groups/{chat_id}/bans)
+	ListGroupBans(w http.ResponseWriter, r *http.Request, chatId ChatId, params ListGroupBansParams)
+	// UnbanGroupUser Lift a ban
+	// (DELETE /groups/{chat_id}/bans/{user_id})
+	UnbanGroupUser(w http.ResponseWriter, r *http.Request, chatId ChatId, userId UserId, params UnbanGroupUserParams)
 	// GetGroupEmoji The group's emoji
 	// (GET /groups/{chat_id}/emoji)
 	GetGroupEmoji(w http.ResponseWriter, r *http.Request, chatId ChatId, params GetGroupEmojiParams)
+	// ListGroupInviteLinks Invite links of the group
+	// (GET /groups/{chat_id}/invite-links)
+	ListGroupInviteLinks(w http.ResponseWriter, r *http.Request, chatId ChatId, params ListGroupInviteLinksParams)
+	// CreateGroupInviteLink Create an invite link
+	// (POST /groups/{chat_id}/invite-links)
+	CreateGroupInviteLink(w http.ResponseWriter, r *http.Request, chatId ChatId, params CreateGroupInviteLinkParams)
+	// RevokeGroupInviteLink Revoke an invite link
+	// (DELETE /groups/{chat_id}/invite-links/{link_id})
+	RevokeGroupInviteLink(w http.ResponseWriter, r *http.Request, chatId ChatId, linkId InviteLinkId, params RevokeGroupInviteLinkParams)
+	// UpdateGroupInviteLink Rename an invite link or change its expiry or use limit
+	// (PATCH /groups/{chat_id}/invite-links/{link_id})
+	UpdateGroupInviteLink(w http.ResponseWriter, r *http.Request, chatId ChatId, linkId InviteLinkId, params UpdateGroupInviteLinkParams)
 	// LeaveGroup Leave the group
 	// (POST /groups/{chat_id}/leave)
 	LeaveGroup(w http.ResponseWriter, r *http.Request, chatId ChatId, params LeaveGroupParams)
@@ -6545,6 +6977,12 @@ type ServerInterface interface {
 	// UpdateGroupParticipantRole Change a participant's role
 	// (PATCH /groups/{chat_id}/participants/{user_id})
 	UpdateGroupParticipantRole(w http.ResponseWriter, r *http.Request, chatId ChatId, userId UserId, params UpdateGroupParticipantRoleParams)
+	// ClearGroupPublicName Make the group private again
+	// (DELETE /groups/{chat_id}/public-name)
+	ClearGroupPublicName(w http.ResponseWriter, r *http.Request, chatId ChatId, params ClearGroupPublicNameParams)
+	// SetGroupPublicName Make the group public under a name, or change that name
+	// (PUT /groups/{chat_id}/public-name)
+	SetGroupPublicName(w http.ResponseWriter, r *http.Request, chatId ChatId, params SetGroupPublicNameParams)
 	// UnreportGroup Withdraw a group report
 	// (DELETE /groups/{chat_id}/report)
 	UnreportGroup(w http.ResponseWriter, r *http.Request, chatId ChatId, params UnreportGroupParams)
@@ -6557,6 +6995,12 @@ type ServerInterface interface {
 	// TransferGroupOwnership Make another member the owner
 	// (POST /groups/{chat_id}/transfer-owner)
 	TransferGroupOwnership(w http.ResponseWriter, r *http.Request, chatId ChatId, params TransferGroupOwnershipParams)
+	// GetInvite The group behind an invite link
+	// (GET /invites/{token})
+	GetInvite(w http.ResponseWriter, r *http.Request, token InviteToken, params GetInviteParams)
+	// JoinByInvite Join a group through an invite link
+	// (POST /invites/{token}/join)
+	JoinByInvite(w http.ResponseWriter, r *http.Request, token InviteToken, params JoinByInviteParams)
 	// GetLinkPreview Preview of a web page for a link in a message
 	// (GET /link-preview)
 	GetLinkPreview(w http.ResponseWriter, r *http.Request, params GetLinkPreviewParams)
@@ -6725,6 +7169,36 @@ type ServerInterface interface {
 	// MarkNotificationRead Mark a chat read from a push notification
 	// (POST /notifications/read/{token})
 	MarkNotificationRead(w http.ResponseWriter, r *http.Request, token string)
+	// GetOpenGraphInvite Link preview page for `/join/{token}`, for crawlers
+	// (GET /og/invites/{token})
+	GetOpenGraphInvite(w http.ResponseWriter, r *http.Request, token InviteToken)
+	// GetOpenGraphName Link preview page for `/@name`, for crawlers
+	// (GET /og/names/{public_name})
+	GetOpenGraphName(w http.ResponseWriter, r *http.Request, publicName PublicNameParam)
+	// SearchPublicGroups Search public groups by public name or group name
+	// (GET /public-groups)
+	SearchPublicGroups(w http.ResponseWriter, r *http.Request, params SearchPublicGroupsParams)
+	// GetPublicGroup A public group by its public name
+	// (GET /public-groups/{public_name})
+	GetPublicGroup(w http.ResponseWriter, r *http.Request, publicName PublicNameParam, params GetPublicGroupParams)
+	// JoinPublicGroup Join a public group
+	// (POST /public-groups/{public_name}/join)
+	JoinPublicGroup(w http.ResponseWriter, r *http.Request, publicName PublicNameParam, params JoinPublicGroupParams)
+	// GetPublicNameAvailability Whether a public name is free for a group
+	// (GET /public-names/{public_name}/availability)
+	GetPublicNameAvailability(w http.ResponseWriter, r *http.Request, publicName PublicNameParam, params GetPublicNameAvailabilityParams)
+	// GetPublicInvite What an invite link shows to someone without an account
+	// (GET /public/invites/{token})
+	GetPublicInvite(w http.ResponseWriter, r *http.Request, token InviteToken)
+	// GetPublicInviteAvatar Avatar of the group behind an invite link
+	// (GET /public/invites/{token}/avatar)
+	GetPublicInviteAvatar(w http.ResponseWriter, r *http.Request, token InviteToken, params GetPublicInviteAvatarParams)
+	// GetPublicName What a public link `/@name` shows to someone without an account
+	// (GET /public/names/{public_name})
+	GetPublicName(w http.ResponseWriter, r *http.Request, publicName PublicNameParam)
+	// GetPublicNameAvatar Avatar of a public user or group
+	// (GET /public/names/{public_name}/avatar)
+	GetPublicNameAvatar(w http.ResponseWriter, r *http.Request, publicName PublicNameParam, params GetPublicNameAvatarParams)
 	// ListApprovalRequests Inbox of approval requests
 	// (GET /requests)
 	ListApprovalRequests(w http.ResponseWriter, r *http.Request, params ListApprovalRequestsParams)
@@ -10529,6 +11003,75 @@ func (siw *ServerInterfaceWrapper) ListChatMedia(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
+// ListUnreadMentions operation middleware
+func (siw *ServerInterfaceWrapper) ListUnreadMentions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListUnreadMentionsParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListUnreadMentions(w, r, chatId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListMessages operation middleware
 func (siw *ServerInterfaceWrapper) ListMessages(w http.ResponseWriter, r *http.Request) {
 
@@ -13040,6 +13583,179 @@ func (siw *ServerInterfaceWrapper) SetGroupBackground(w http.ResponseWriter, r *
 	handler.ServeHTTP(w, r)
 }
 
+// ListGroupBans operation middleware
+func (siw *ServerInterfaceWrapper) ListGroupBans(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListGroupBansParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "after" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "after", r.URL.Query(), &params.After, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "after"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after", Err: err})
+		}
+		return
+	}
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListGroupBans(w, r, chatId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UnbanGroupUser operation middleware
+func (siw *ServerInterfaceWrapper) UnbanGroupUser(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "user_id" -------------
+	var userId UserId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "user_id", r.PathValue("user_id"), &userId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "user_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UnbanGroupUserParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UnbanGroupUser(w, r, chatId, userId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetGroupEmoji operation middleware
 func (siw *ServerInterfaceWrapper) GetGroupEmoji(w http.ResponseWriter, r *http.Request) {
 
@@ -13100,6 +13816,300 @@ func (siw *ServerInterfaceWrapper) GetGroupEmoji(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetGroupEmoji(w, r, chatId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListGroupInviteLinks operation middleware
+func (siw *ServerInterfaceWrapper) ListGroupInviteLinks(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListGroupInviteLinksParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListGroupInviteLinks(w, r, chatId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateGroupInviteLink operation middleware
+func (siw *ServerInterfaceWrapper) CreateGroupInviteLink(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateGroupInviteLinkParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateGroupInviteLink(w, r, chatId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RevokeGroupInviteLink operation middleware
+func (siw *ServerInterfaceWrapper) RevokeGroupInviteLink(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "link_id" -------------
+	var linkId InviteLinkId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "link_id", r.PathValue("link_id"), &linkId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "link_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RevokeGroupInviteLinkParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RevokeGroupInviteLink(w, r, chatId, linkId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateGroupInviteLink operation middleware
+func (siw *ServerInterfaceWrapper) UpdateGroupInviteLink(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "link_id" -------------
+	var linkId InviteLinkId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "link_id", r.PathValue("link_id"), &linkId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "link_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateGroupInviteLinkParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateGroupInviteLink(w, r, chatId, linkId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -13511,6 +14521,144 @@ func (siw *ServerInterfaceWrapper) UpdateGroupParticipantRole(w http.ResponseWri
 	handler.ServeHTTP(w, r)
 }
 
+// ClearGroupPublicName operation middleware
+func (siw *ServerInterfaceWrapper) ClearGroupPublicName(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ClearGroupPublicNameParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ClearGroupPublicName(w, r, chatId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetGroupPublicName operation middleware
+func (siw *ServerInterfaceWrapper) SetGroupPublicName(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SetGroupPublicNameParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetGroupPublicName(w, r, chatId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // UnreportGroup operation middleware
 func (siw *ServerInterfaceWrapper) UnreportGroup(w http.ResponseWriter, r *http.Request) {
 
@@ -13778,6 +14926,144 @@ func (siw *ServerInterfaceWrapper) TransferGroupOwnership(w http.ResponseWriter,
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.TransferGroupOwnership(w, r, chatId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetInvite operation middleware
+func (siw *ServerInterfaceWrapper) GetInvite(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "token" -------------
+	var token InviteToken
+
+	err = runtime.BindStyledParameterWithOptions("simple", "token", r.PathValue("token"), &token, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "token", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetInviteParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetInvite(w, r, token, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// JoinByInvite operation middleware
+func (siw *ServerInterfaceWrapper) JoinByInvite(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "token" -------------
+	var token InviteToken
+
+	err = runtime.BindStyledParameterWithOptions("simple", "token", r.PathValue("token"), &token, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "token", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params JoinByInviteParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.JoinByInvite(w, r, token, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -17031,6 +18317,526 @@ func (siw *ServerInterfaceWrapper) MarkNotificationRead(w http.ResponseWriter, r
 	handler.ServeHTTP(w, r)
 }
 
+// GetOpenGraphInvite operation middleware
+func (siw *ServerInterfaceWrapper) GetOpenGraphInvite(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "token" -------------
+	var token InviteToken
+
+	err = runtime.BindStyledParameterWithOptions("simple", "token", r.PathValue("token"), &token, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "token", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetOpenGraphInvite(w, r, token)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetOpenGraphName operation middleware
+func (siw *ServerInterfaceWrapper) GetOpenGraphName(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "public_name" -------------
+	var publicName PublicNameParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "public_name", r.PathValue("public_name"), &publicName, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "public_name", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetOpenGraphName(w, r, publicName)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SearchPublicGroups operation middleware
+func (siw *ServerInterfaceWrapper) SearchPublicGroups(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SearchPublicGroupsParams
+
+	// ------------- Required query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "after" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "after", r.URL.Query(), &params.After, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "after"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after", Err: err})
+		}
+		return
+	}
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SearchPublicGroups(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPublicGroup operation middleware
+func (siw *ServerInterfaceWrapper) GetPublicGroup(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "public_name" -------------
+	var publicName PublicNameParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "public_name", r.PathValue("public_name"), &publicName, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "public_name", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetPublicGroupParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPublicGroup(w, r, publicName, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// JoinPublicGroup operation middleware
+func (siw *ServerInterfaceWrapper) JoinPublicGroup(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "public_name" -------------
+	var publicName PublicNameParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "public_name", r.PathValue("public_name"), &publicName, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "public_name", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params JoinPublicGroupParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.JoinPublicGroup(w, r, publicName, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPublicNameAvailability operation middleware
+func (siw *ServerInterfaceWrapper) GetPublicNameAvailability(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "public_name" -------------
+	var publicName PublicNameParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "public_name", r.PathValue("public_name"), &publicName, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "public_name", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetPublicNameAvailabilityParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPublicNameAvailability(w, r, publicName, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPublicInvite operation middleware
+func (siw *ServerInterfaceWrapper) GetPublicInvite(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "token" -------------
+	var token InviteToken
+
+	err = runtime.BindStyledParameterWithOptions("simple", "token", r.PathValue("token"), &token, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "token", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPublicInvite(w, r, token)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPublicInviteAvatar operation middleware
+func (siw *ServerInterfaceWrapper) GetPublicInviteAvatar(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "token" -------------
+	var token InviteToken
+
+	err = runtime.BindStyledParameterWithOptions("simple", "token", r.PathValue("token"), &token, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "token", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetPublicInviteAvatarParams
+
+	// ------------- Optional query parameter "rev" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "rev", r.URL.Query(), &params.Rev, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "rev"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "rev", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "size" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "size", r.URL.Query(), &params.Size, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "size"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "size", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPublicInviteAvatar(w, r, token, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPublicName operation middleware
+func (siw *ServerInterfaceWrapper) GetPublicName(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "public_name" -------------
+	var publicName PublicNameParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "public_name", r.PathValue("public_name"), &publicName, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "public_name", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPublicName(w, r, publicName)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPublicNameAvatar operation middleware
+func (siw *ServerInterfaceWrapper) GetPublicNameAvatar(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "public_name" -------------
+	var publicName PublicNameParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "public_name", r.PathValue("public_name"), &publicName, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "public_name", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetPublicNameAvatarParams
+
+	// ------------- Optional query parameter "rev" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "rev", r.URL.Query(), &params.Rev, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "rev"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "rev", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "size" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "size", r.URL.Query(), &params.Size, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "size"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "size", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPublicNameAvatar(w, r, publicName, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListApprovalRequests operation middleware
 func (siw *ServerInterfaceWrapper) ListApprovalRequests(w http.ResponseWriter, r *http.Request) {
 
@@ -19911,6 +21717,27 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/groups/{chat_id}/report", wrapper.UnreportGroup)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/groups/{chat_id}/report", wrapper.ReportGroup)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/groups/{chat_id}/role-log", wrapper.GetGroupRoleLog)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/groups/{chat_id}/invite-links", wrapper.ListGroupInviteLinks)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/groups/{chat_id}/invite-links", wrapper.CreateGroupInviteLink)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/groups/{chat_id}/invite-links/{link_id}", wrapper.RevokeGroupInviteLink)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/groups/{chat_id}/invite-links/{link_id}", wrapper.UpdateGroupInviteLink)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/groups/{chat_id}/public-name", wrapper.ClearGroupPublicName)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/groups/{chat_id}/public-name", wrapper.SetGroupPublicName)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/groups/{chat_id}/bans", wrapper.ListGroupBans)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/groups/{chat_id}/bans/{user_id}", wrapper.UnbanGroupUser)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/invites/{token}", wrapper.GetInvite)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/invites/{token}/join", wrapper.JoinByInvite)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/public-groups", wrapper.SearchPublicGroups)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/public-groups/{public_name}", wrapper.GetPublicGroup)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/public-groups/{public_name}/join", wrapper.JoinPublicGroup)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/public-names/{public_name}/availability", wrapper.GetPublicNameAvailability)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/chats/{chat_id}/mentions", wrapper.ListUnreadMentions)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/public/names/{public_name}", wrapper.GetPublicName)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/public/invites/{token}", wrapper.GetPublicInvite)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/public/names/{public_name}/avatar", wrapper.GetPublicNameAvatar)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/public/invites/{token}/avatar", wrapper.GetPublicInviteAvatar)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/og/names/{public_name}", wrapper.GetOpenGraphName)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/og/invites/{token}", wrapper.GetOpenGraphInvite)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/stickers/packs", wrapper.ListStickerPacks)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/stickers/packs", wrapper.CreateStickerPack)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/stickers/packs/{pack_id}", wrapper.DeleteStickerPack)
@@ -26450,6 +28277,93 @@ func (response ListChatMedia426ApplicationProblemPlusJSONResponse) VisitListChat
 	return err
 }
 
+type ListUnreadMentionsRequestObject struct {
+	ChatId ChatId `json:"chat_id"`
+	Params ListUnreadMentionsParams
+}
+
+type ListUnreadMentionsResponseObject interface {
+	VisitListUnreadMentionsResponse(w http.ResponseWriter) error
+}
+
+type ListUnreadMentions200JSONResponse MentionList
+
+func (response ListUnreadMentions200JSONResponse) VisitListUnreadMentionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListUnreadMentions400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response ListUnreadMentions400ApplicationProblemPlusJSONResponse) VisitListUnreadMentionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListUnreadMentions401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ListUnreadMentions401ApplicationProblemPlusJSONResponse) VisitListUnreadMentionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListUnreadMentions404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response ListUnreadMentions404ApplicationProblemPlusJSONResponse) VisitListUnreadMentionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListUnreadMentions426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response ListUnreadMentions426ApplicationProblemPlusJSONResponse) VisitListUnreadMentionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListMessagesRequestObject struct {
 	ChatId ChatId `json:"chat_id"`
 	Params ListMessagesParams
@@ -29980,6 +31894,207 @@ func (response SetGroupBackground426ApplicationProblemPlusJSONResponse) VisitSet
 	return err
 }
 
+type ListGroupBansRequestObject struct {
+	ChatId ChatId `json:"chat_id"`
+	Params ListGroupBansParams
+}
+
+type ListGroupBansResponseObject interface {
+	VisitListGroupBansResponse(w http.ResponseWriter) error
+}
+
+type ListGroupBans200JSONResponse GroupBanPage
+
+func (response ListGroupBans200JSONResponse) VisitListGroupBansResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListGroupBans400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response ListGroupBans400ApplicationProblemPlusJSONResponse) VisitListGroupBansResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListGroupBans401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ListGroupBans401ApplicationProblemPlusJSONResponse) VisitListGroupBansResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListGroupBans403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response ListGroupBans403ApplicationProblemPlusJSONResponse) VisitListGroupBansResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListGroupBans404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response ListGroupBans404ApplicationProblemPlusJSONResponse) VisitListGroupBansResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListGroupBans426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response ListGroupBans426ApplicationProblemPlusJSONResponse) VisitListGroupBansResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnbanGroupUserRequestObject struct {
+	ChatId ChatId `json:"chat_id"`
+	UserId UserId `json:"user_id"`
+	Params UnbanGroupUserParams
+}
+
+type UnbanGroupUserResponseObject interface {
+	VisitUnbanGroupUserResponse(w http.ResponseWriter) error
+}
+
+type UnbanGroupUser204Response struct {
+}
+
+func (response UnbanGroupUser204Response) VisitUnbanGroupUserResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type UnbanGroupUser400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response UnbanGroupUser400ApplicationProblemPlusJSONResponse) VisitUnbanGroupUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnbanGroupUser401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response UnbanGroupUser401ApplicationProblemPlusJSONResponse) VisitUnbanGroupUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnbanGroupUser403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response UnbanGroupUser403ApplicationProblemPlusJSONResponse) VisitUnbanGroupUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnbanGroupUser404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response UnbanGroupUser404ApplicationProblemPlusJSONResponse) VisitUnbanGroupUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnbanGroupUser426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response UnbanGroupUser426ApplicationProblemPlusJSONResponse) VisitUnbanGroupUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetGroupEmojiRequestObject struct {
 	ChatId ChatId `json:"chat_id"`
 	Params GetGroupEmojiParams
@@ -30056,6 +32171,499 @@ type GetGroupEmoji426ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetGroupEmoji426ApplicationProblemPlusJSONResponse) VisitGetGroupEmojiResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListGroupInviteLinksRequestObject struct {
+	ChatId ChatId `json:"chat_id"`
+	Params ListGroupInviteLinksParams
+}
+
+type ListGroupInviteLinksResponseObject interface {
+	VisitListGroupInviteLinksResponse(w http.ResponseWriter) error
+}
+
+type ListGroupInviteLinks200JSONResponse InviteLinkList
+
+func (response ListGroupInviteLinks200JSONResponse) VisitListGroupInviteLinksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListGroupInviteLinks400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response ListGroupInviteLinks400ApplicationProblemPlusJSONResponse) VisitListGroupInviteLinksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListGroupInviteLinks401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ListGroupInviteLinks401ApplicationProblemPlusJSONResponse) VisitListGroupInviteLinksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListGroupInviteLinks403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response ListGroupInviteLinks403ApplicationProblemPlusJSONResponse) VisitListGroupInviteLinksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListGroupInviteLinks404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response ListGroupInviteLinks404ApplicationProblemPlusJSONResponse) VisitListGroupInviteLinksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListGroupInviteLinks426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response ListGroupInviteLinks426ApplicationProblemPlusJSONResponse) VisitListGroupInviteLinksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateGroupInviteLinkRequestObject struct {
+	ChatId ChatId `json:"chat_id"`
+	Params CreateGroupInviteLinkParams
+	Body   *CreateGroupInviteLinkJSONRequestBody
+}
+
+type CreateGroupInviteLinkResponseObject interface {
+	VisitCreateGroupInviteLinkResponse(w http.ResponseWriter) error
+}
+
+type CreateGroupInviteLink201JSONResponse InviteLink
+
+func (response CreateGroupInviteLink201JSONResponse) VisitCreateGroupInviteLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateGroupInviteLink400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response CreateGroupInviteLink400ApplicationProblemPlusJSONResponse) VisitCreateGroupInviteLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateGroupInviteLink401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response CreateGroupInviteLink401ApplicationProblemPlusJSONResponse) VisitCreateGroupInviteLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateGroupInviteLink403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response CreateGroupInviteLink403ApplicationProblemPlusJSONResponse) VisitCreateGroupInviteLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateGroupInviteLink404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response CreateGroupInviteLink404ApplicationProblemPlusJSONResponse) VisitCreateGroupInviteLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateGroupInviteLink409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response CreateGroupInviteLink409ApplicationProblemPlusJSONResponse) VisitCreateGroupInviteLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateGroupInviteLink422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response CreateGroupInviteLink422ApplicationProblemPlusJSONResponse) VisitCreateGroupInviteLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateGroupInviteLink426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response CreateGroupInviteLink426ApplicationProblemPlusJSONResponse) VisitCreateGroupInviteLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateGroupInviteLink429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response CreateGroupInviteLink429ApplicationProblemPlusJSONResponse) VisitCreateGroupInviteLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeGroupInviteLinkRequestObject struct {
+	ChatId ChatId       `json:"chat_id"`
+	LinkId InviteLinkId `json:"link_id"`
+	Params RevokeGroupInviteLinkParams
+}
+
+type RevokeGroupInviteLinkResponseObject interface {
+	VisitRevokeGroupInviteLinkResponse(w http.ResponseWriter) error
+}
+
+type RevokeGroupInviteLink204Response struct {
+}
+
+func (response RevokeGroupInviteLink204Response) VisitRevokeGroupInviteLinkResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type RevokeGroupInviteLink400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response RevokeGroupInviteLink400ApplicationProblemPlusJSONResponse) VisitRevokeGroupInviteLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeGroupInviteLink401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response RevokeGroupInviteLink401ApplicationProblemPlusJSONResponse) VisitRevokeGroupInviteLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeGroupInviteLink403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response RevokeGroupInviteLink403ApplicationProblemPlusJSONResponse) VisitRevokeGroupInviteLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeGroupInviteLink404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response RevokeGroupInviteLink404ApplicationProblemPlusJSONResponse) VisitRevokeGroupInviteLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeGroupInviteLink426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response RevokeGroupInviteLink426ApplicationProblemPlusJSONResponse) VisitRevokeGroupInviteLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateGroupInviteLinkRequestObject struct {
+	ChatId ChatId       `json:"chat_id"`
+	LinkId InviteLinkId `json:"link_id"`
+	Params UpdateGroupInviteLinkParams
+	Body   *UpdateGroupInviteLinkJSONRequestBody
+}
+
+type UpdateGroupInviteLinkResponseObject interface {
+	VisitUpdateGroupInviteLinkResponse(w http.ResponseWriter) error
+}
+
+type UpdateGroupInviteLink200JSONResponse InviteLink
+
+func (response UpdateGroupInviteLink200JSONResponse) VisitUpdateGroupInviteLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateGroupInviteLink400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateGroupInviteLink400ApplicationProblemPlusJSONResponse) VisitUpdateGroupInviteLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateGroupInviteLink401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateGroupInviteLink401ApplicationProblemPlusJSONResponse) VisitUpdateGroupInviteLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateGroupInviteLink403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateGroupInviteLink403ApplicationProblemPlusJSONResponse) VisitUpdateGroupInviteLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateGroupInviteLink404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateGroupInviteLink404ApplicationProblemPlusJSONResponse) VisitUpdateGroupInviteLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateGroupInviteLink409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateGroupInviteLink409ApplicationProblemPlusJSONResponse) VisitUpdateGroupInviteLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateGroupInviteLink422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateGroupInviteLink422ApplicationProblemPlusJSONResponse) VisitUpdateGroupInviteLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateGroupInviteLink426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateGroupInviteLink426ApplicationProblemPlusJSONResponse) VisitUpdateGroupInviteLinkResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -30590,6 +33198,264 @@ func (response UpdateGroupParticipantRole426ApplicationProblemPlusJSONResponse) 
 	return err
 }
 
+type ClearGroupPublicNameRequestObject struct {
+	ChatId ChatId `json:"chat_id"`
+	Params ClearGroupPublicNameParams
+}
+
+type ClearGroupPublicNameResponseObject interface {
+	VisitClearGroupPublicNameResponse(w http.ResponseWriter) error
+}
+
+type ClearGroupPublicName200JSONResponse Group
+
+func (response ClearGroupPublicName200JSONResponse) VisitClearGroupPublicNameResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ClearGroupPublicName400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response ClearGroupPublicName400ApplicationProblemPlusJSONResponse) VisitClearGroupPublicNameResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ClearGroupPublicName401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ClearGroupPublicName401ApplicationProblemPlusJSONResponse) VisitClearGroupPublicNameResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ClearGroupPublicName403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response ClearGroupPublicName403ApplicationProblemPlusJSONResponse) VisitClearGroupPublicNameResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ClearGroupPublicName404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response ClearGroupPublicName404ApplicationProblemPlusJSONResponse) VisitClearGroupPublicNameResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ClearGroupPublicName426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response ClearGroupPublicName426ApplicationProblemPlusJSONResponse) VisitClearGroupPublicNameResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetGroupPublicNameRequestObject struct {
+	ChatId ChatId `json:"chat_id"`
+	Params SetGroupPublicNameParams
+	Body   *SetGroupPublicNameJSONRequestBody
+}
+
+type SetGroupPublicNameResponseObject interface {
+	VisitSetGroupPublicNameResponse(w http.ResponseWriter) error
+}
+
+type SetGroupPublicName200JSONResponse Group
+
+func (response SetGroupPublicName200JSONResponse) VisitSetGroupPublicNameResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetGroupPublicName400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response SetGroupPublicName400ApplicationProblemPlusJSONResponse) VisitSetGroupPublicNameResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetGroupPublicName401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response SetGroupPublicName401ApplicationProblemPlusJSONResponse) VisitSetGroupPublicNameResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetGroupPublicName403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response SetGroupPublicName403ApplicationProblemPlusJSONResponse) VisitSetGroupPublicNameResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetGroupPublicName404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response SetGroupPublicName404ApplicationProblemPlusJSONResponse) VisitSetGroupPublicNameResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetGroupPublicName409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response SetGroupPublicName409ApplicationProblemPlusJSONResponse) VisitSetGroupPublicNameResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetGroupPublicName422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response SetGroupPublicName422ApplicationProblemPlusJSONResponse) VisitSetGroupPublicNameResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetGroupPublicName426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response SetGroupPublicName426ApplicationProblemPlusJSONResponse) VisitSetGroupPublicNameResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetGroupPublicName429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response SetGroupPublicName429ApplicationProblemPlusJSONResponse) VisitSetGroupPublicNameResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type UnreportGroupRequestObject struct {
 	ChatId ChatId `json:"chat_id"`
 	Params UnreportGroupParams
@@ -30975,6 +33841,234 @@ func (response TransferGroupOwnership426ApplicationProblemPlusJSONResponse) Visi
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetInviteRequestObject struct {
+	Token  InviteToken `json:"token"`
+	Params GetInviteParams
+}
+
+type GetInviteResponseObject interface {
+	VisitGetInviteResponse(w http.ResponseWriter) error
+}
+
+type GetInvite200JSONResponse GroupPreview
+
+func (response GetInvite200JSONResponse) VisitGetInviteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetInvite400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response GetInvite400ApplicationProblemPlusJSONResponse) VisitGetInviteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetInvite401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response GetInvite401ApplicationProblemPlusJSONResponse) VisitGetInviteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetInvite404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetInvite404ApplicationProblemPlusJSONResponse) VisitGetInviteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetInvite426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetInvite426ApplicationProblemPlusJSONResponse) VisitGetInviteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetInvite429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response GetInvite429ApplicationProblemPlusJSONResponse) VisitGetInviteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type JoinByInviteRequestObject struct {
+	Token  InviteToken `json:"token"`
+	Params JoinByInviteParams
+}
+
+type JoinByInviteResponseObject interface {
+	VisitJoinByInviteResponse(w http.ResponseWriter) error
+}
+
+type JoinByInvite200JSONResponse Chat
+
+func (response JoinByInvite200JSONResponse) VisitJoinByInviteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type JoinByInvite400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response JoinByInvite400ApplicationProblemPlusJSONResponse) VisitJoinByInviteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type JoinByInvite401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response JoinByInvite401ApplicationProblemPlusJSONResponse) VisitJoinByInviteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type JoinByInvite403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response JoinByInvite403ApplicationProblemPlusJSONResponse) VisitJoinByInviteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type JoinByInvite404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response JoinByInvite404ApplicationProblemPlusJSONResponse) VisitJoinByInviteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type JoinByInvite426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response JoinByInvite426ApplicationProblemPlusJSONResponse) VisitJoinByInviteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type JoinByInvite429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response JoinByInvite429ApplicationProblemPlusJSONResponse) VisitJoinByInviteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -36375,6 +39469,844 @@ func (response MarkNotificationRead404ApplicationProblemPlusJSONResponse) VisitM
 	return err
 }
 
+type GetOpenGraphInviteRequestObject struct {
+	Token InviteToken `json:"token"`
+}
+
+type GetOpenGraphInviteResponseObject interface {
+	VisitGetOpenGraphInviteResponse(w http.ResponseWriter) error
+}
+
+type GetOpenGraphInvite200TexthtmlResponse struct {
+	Body          io.Reader
+	ContentLength int64
+}
+
+func (response GetOpenGraphInvite200TexthtmlResponse) VisitGetOpenGraphInviteResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "text/html")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type GetOpenGraphInvite400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response GetOpenGraphInvite400ApplicationProblemPlusJSONResponse) VisitGetOpenGraphInviteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetOpenGraphInvite429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response GetOpenGraphInvite429ApplicationProblemPlusJSONResponse) VisitGetOpenGraphInviteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetOpenGraphNameRequestObject struct {
+	PublicName PublicNameParam `json:"public_name"`
+}
+
+type GetOpenGraphNameResponseObject interface {
+	VisitGetOpenGraphNameResponse(w http.ResponseWriter) error
+}
+
+type GetOpenGraphName200TexthtmlResponse struct {
+	Body          io.Reader
+	ContentLength int64
+}
+
+func (response GetOpenGraphName200TexthtmlResponse) VisitGetOpenGraphNameResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "text/html")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type GetOpenGraphName400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response GetOpenGraphName400ApplicationProblemPlusJSONResponse) VisitGetOpenGraphNameResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetOpenGraphName429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response GetOpenGraphName429ApplicationProblemPlusJSONResponse) VisitGetOpenGraphNameResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SearchPublicGroupsRequestObject struct {
+	Params SearchPublicGroupsParams
+}
+
+type SearchPublicGroupsResponseObject interface {
+	VisitSearchPublicGroupsResponse(w http.ResponseWriter) error
+}
+
+type SearchPublicGroups200JSONResponse GroupPreviewPage
+
+func (response SearchPublicGroups200JSONResponse) VisitSearchPublicGroupsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SearchPublicGroups400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response SearchPublicGroups400ApplicationProblemPlusJSONResponse) VisitSearchPublicGroupsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SearchPublicGroups401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response SearchPublicGroups401ApplicationProblemPlusJSONResponse) VisitSearchPublicGroupsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SearchPublicGroups422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response SearchPublicGroups422ApplicationProblemPlusJSONResponse) VisitSearchPublicGroupsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SearchPublicGroups426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response SearchPublicGroups426ApplicationProblemPlusJSONResponse) VisitSearchPublicGroupsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicGroupRequestObject struct {
+	PublicName PublicNameParam `json:"public_name"`
+	Params     GetPublicGroupParams
+}
+
+type GetPublicGroupResponseObject interface {
+	VisitGetPublicGroupResponse(w http.ResponseWriter) error
+}
+
+type GetPublicGroup200JSONResponse GroupPreview
+
+func (response GetPublicGroup200JSONResponse) VisitGetPublicGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicGroup400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response GetPublicGroup400ApplicationProblemPlusJSONResponse) VisitGetPublicGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicGroup401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response GetPublicGroup401ApplicationProblemPlusJSONResponse) VisitGetPublicGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicGroup404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetPublicGroup404ApplicationProblemPlusJSONResponse) VisitGetPublicGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicGroup426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetPublicGroup426ApplicationProblemPlusJSONResponse) VisitGetPublicGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicGroup429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response GetPublicGroup429ApplicationProblemPlusJSONResponse) VisitGetPublicGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type JoinPublicGroupRequestObject struct {
+	PublicName PublicNameParam `json:"public_name"`
+	Params     JoinPublicGroupParams
+}
+
+type JoinPublicGroupResponseObject interface {
+	VisitJoinPublicGroupResponse(w http.ResponseWriter) error
+}
+
+type JoinPublicGroup200JSONResponse Chat
+
+func (response JoinPublicGroup200JSONResponse) VisitJoinPublicGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type JoinPublicGroup400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response JoinPublicGroup400ApplicationProblemPlusJSONResponse) VisitJoinPublicGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type JoinPublicGroup401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response JoinPublicGroup401ApplicationProblemPlusJSONResponse) VisitJoinPublicGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type JoinPublicGroup403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response JoinPublicGroup403ApplicationProblemPlusJSONResponse) VisitJoinPublicGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type JoinPublicGroup404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response JoinPublicGroup404ApplicationProblemPlusJSONResponse) VisitJoinPublicGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type JoinPublicGroup426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response JoinPublicGroup426ApplicationProblemPlusJSONResponse) VisitJoinPublicGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type JoinPublicGroup429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response JoinPublicGroup429ApplicationProblemPlusJSONResponse) VisitJoinPublicGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicNameAvailabilityRequestObject struct {
+	PublicName PublicNameParam `json:"public_name"`
+	Params     GetPublicNameAvailabilityParams
+}
+
+type GetPublicNameAvailabilityResponseObject interface {
+	VisitGetPublicNameAvailabilityResponse(w http.ResponseWriter) error
+}
+
+type GetPublicNameAvailability200JSONResponse PublicNameAvailability
+
+func (response GetPublicNameAvailability200JSONResponse) VisitGetPublicNameAvailabilityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicNameAvailability400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response GetPublicNameAvailability400ApplicationProblemPlusJSONResponse) VisitGetPublicNameAvailabilityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicNameAvailability401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response GetPublicNameAvailability401ApplicationProblemPlusJSONResponse) VisitGetPublicNameAvailabilityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicNameAvailability426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetPublicNameAvailability426ApplicationProblemPlusJSONResponse) VisitGetPublicNameAvailabilityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicNameAvailability429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response GetPublicNameAvailability429ApplicationProblemPlusJSONResponse) VisitGetPublicNameAvailabilityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicInviteRequestObject struct {
+	Token InviteToken `json:"token"`
+}
+
+type GetPublicInviteResponseObject interface {
+	VisitGetPublicInviteResponse(w http.ResponseWriter) error
+}
+
+type GetPublicInvite200JSONResponse PublicGroup
+
+func (response GetPublicInvite200JSONResponse) VisitGetPublicInviteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicInvite400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response GetPublicInvite400ApplicationProblemPlusJSONResponse) VisitGetPublicInviteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicInvite404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetPublicInvite404ApplicationProblemPlusJSONResponse) VisitGetPublicInviteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicInvite429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response GetPublicInvite429ApplicationProblemPlusJSONResponse) VisitGetPublicInviteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicInviteAvatarRequestObject struct {
+	Token  InviteToken `json:"token"`
+	Params GetPublicInviteAvatarParams
+}
+
+type GetPublicInviteAvatarResponseObject interface {
+	VisitGetPublicInviteAvatarResponse(w http.ResponseWriter) error
+}
+
+type GetPublicInviteAvatar200ImageResponse struct {
+	Body          io.Reader
+	ContentType   string
+	ContentLength int64
+}
+
+func (response GetPublicInviteAvatar200ImageResponse) VisitGetPublicInviteAvatarResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", response.ContentType)
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type GetPublicInviteAvatar304Response struct {
+}
+
+func (response GetPublicInviteAvatar304Response) VisitGetPublicInviteAvatarResponse(w http.ResponseWriter) error {
+	w.WriteHeader(304)
+	return nil
+}
+
+type GetPublicInviteAvatar400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response GetPublicInviteAvatar400ApplicationProblemPlusJSONResponse) VisitGetPublicInviteAvatarResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicInviteAvatar404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetPublicInviteAvatar404ApplicationProblemPlusJSONResponse) VisitGetPublicInviteAvatarResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicInviteAvatar429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response GetPublicInviteAvatar429ApplicationProblemPlusJSONResponse) VisitGetPublicInviteAvatarResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicNameRequestObject struct {
+	PublicName PublicNameParam `json:"public_name"`
+}
+
+type GetPublicNameResponseObject interface {
+	VisitGetPublicNameResponse(w http.ResponseWriter) error
+}
+
+type GetPublicName200JSONResponse PublicNameLookup
+
+func (response GetPublicName200JSONResponse) VisitGetPublicNameResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicName400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response GetPublicName400ApplicationProblemPlusJSONResponse) VisitGetPublicNameResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicName429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response GetPublicName429ApplicationProblemPlusJSONResponse) VisitGetPublicNameResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicNameAvatarRequestObject struct {
+	PublicName PublicNameParam `json:"public_name"`
+	Params     GetPublicNameAvatarParams
+}
+
+type GetPublicNameAvatarResponseObject interface {
+	VisitGetPublicNameAvatarResponse(w http.ResponseWriter) error
+}
+
+type GetPublicNameAvatar200ImageResponse struct {
+	Body          io.Reader
+	ContentType   string
+	ContentLength int64
+}
+
+func (response GetPublicNameAvatar200ImageResponse) VisitGetPublicNameAvatarResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", response.ContentType)
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type GetPublicNameAvatar304Response struct {
+}
+
+func (response GetPublicNameAvatar304Response) VisitGetPublicNameAvatarResponse(w http.ResponseWriter) error {
+	w.WriteHeader(304)
+	return nil
+}
+
+type GetPublicNameAvatar400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response GetPublicNameAvatar400ApplicationProblemPlusJSONResponse) VisitGetPublicNameAvatarResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicNameAvatar404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetPublicNameAvatar404ApplicationProblemPlusJSONResponse) VisitGetPublicNameAvatarResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicNameAvatar429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response GetPublicNameAvatar429ApplicationProblemPlusJSONResponse) VisitGetPublicNameAvatarResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListApprovalRequestsRequestObject struct {
 	Params ListApprovalRequestsParams
 }
@@ -40146,6 +44078,9 @@ type StrictServerInterface interface {
 	// ListChatMedia Photos, videos, audio, voice messages, files or links of a chat
 	// (GET /chats/{chat_id}/media)
 	ListChatMedia(ctx context.Context, request ListChatMediaRequestObject) (ListChatMediaResponseObject, error)
+	// ListUnreadMentions The caller's unread mentions in a chat
+	// (GET /chats/{chat_id}/mentions)
+	ListUnreadMentions(ctx context.Context, request ListUnreadMentionsRequestObject) (ListUnreadMentionsResponseObject, error)
 	// ListMessages Message history
 	// (GET /chats/{chat_id}/messages)
 	ListMessages(ctx context.Context, request ListMessagesRequestObject) (ListMessagesResponseObject, error)
@@ -40251,9 +44186,27 @@ type StrictServerInterface interface {
 	// SetGroupBackground Set the group background
 	// (PUT /groups/{chat_id}/background)
 	SetGroupBackground(ctx context.Context, request SetGroupBackgroundRequestObject) (SetGroupBackgroundResponseObject, error)
+	// ListGroupBans Users banned from the group
+	// (GET /groups/{chat_id}/bans)
+	ListGroupBans(ctx context.Context, request ListGroupBansRequestObject) (ListGroupBansResponseObject, error)
+	// UnbanGroupUser Lift a ban
+	// (DELETE /groups/{chat_id}/bans/{user_id})
+	UnbanGroupUser(ctx context.Context, request UnbanGroupUserRequestObject) (UnbanGroupUserResponseObject, error)
 	// GetGroupEmoji The group's emoji
 	// (GET /groups/{chat_id}/emoji)
 	GetGroupEmoji(ctx context.Context, request GetGroupEmojiRequestObject) (GetGroupEmojiResponseObject, error)
+	// ListGroupInviteLinks Invite links of the group
+	// (GET /groups/{chat_id}/invite-links)
+	ListGroupInviteLinks(ctx context.Context, request ListGroupInviteLinksRequestObject) (ListGroupInviteLinksResponseObject, error)
+	// CreateGroupInviteLink Create an invite link
+	// (POST /groups/{chat_id}/invite-links)
+	CreateGroupInviteLink(ctx context.Context, request CreateGroupInviteLinkRequestObject) (CreateGroupInviteLinkResponseObject, error)
+	// RevokeGroupInviteLink Revoke an invite link
+	// (DELETE /groups/{chat_id}/invite-links/{link_id})
+	RevokeGroupInviteLink(ctx context.Context, request RevokeGroupInviteLinkRequestObject) (RevokeGroupInviteLinkResponseObject, error)
+	// UpdateGroupInviteLink Rename an invite link or change its expiry or use limit
+	// (PATCH /groups/{chat_id}/invite-links/{link_id})
+	UpdateGroupInviteLink(ctx context.Context, request UpdateGroupInviteLinkRequestObject) (UpdateGroupInviteLinkResponseObject, error)
 	// LeaveGroup Leave the group
 	// (POST /groups/{chat_id}/leave)
 	LeaveGroup(ctx context.Context, request LeaveGroupRequestObject) (LeaveGroupResponseObject, error)
@@ -40269,6 +44222,12 @@ type StrictServerInterface interface {
 	// UpdateGroupParticipantRole Change a participant's role
 	// (PATCH /groups/{chat_id}/participants/{user_id})
 	UpdateGroupParticipantRole(ctx context.Context, request UpdateGroupParticipantRoleRequestObject) (UpdateGroupParticipantRoleResponseObject, error)
+	// ClearGroupPublicName Make the group private again
+	// (DELETE /groups/{chat_id}/public-name)
+	ClearGroupPublicName(ctx context.Context, request ClearGroupPublicNameRequestObject) (ClearGroupPublicNameResponseObject, error)
+	// SetGroupPublicName Make the group public under a name, or change that name
+	// (PUT /groups/{chat_id}/public-name)
+	SetGroupPublicName(ctx context.Context, request SetGroupPublicNameRequestObject) (SetGroupPublicNameResponseObject, error)
 	// UnreportGroup Withdraw a group report
 	// (DELETE /groups/{chat_id}/report)
 	UnreportGroup(ctx context.Context, request UnreportGroupRequestObject) (UnreportGroupResponseObject, error)
@@ -40281,6 +44240,12 @@ type StrictServerInterface interface {
 	// TransferGroupOwnership Make another member the owner
 	// (POST /groups/{chat_id}/transfer-owner)
 	TransferGroupOwnership(ctx context.Context, request TransferGroupOwnershipRequestObject) (TransferGroupOwnershipResponseObject, error)
+	// GetInvite The group behind an invite link
+	// (GET /invites/{token})
+	GetInvite(ctx context.Context, request GetInviteRequestObject) (GetInviteResponseObject, error)
+	// JoinByInvite Join a group through an invite link
+	// (POST /invites/{token}/join)
+	JoinByInvite(ctx context.Context, request JoinByInviteRequestObject) (JoinByInviteResponseObject, error)
 	// GetLinkPreview Preview of a web page for a link in a message
 	// (GET /link-preview)
 	GetLinkPreview(ctx context.Context, request GetLinkPreviewRequestObject) (GetLinkPreviewResponseObject, error)
@@ -40449,6 +44414,36 @@ type StrictServerInterface interface {
 	// MarkNotificationRead Mark a chat read from a push notification
 	// (POST /notifications/read/{token})
 	MarkNotificationRead(ctx context.Context, request MarkNotificationReadRequestObject) (MarkNotificationReadResponseObject, error)
+	// GetOpenGraphInvite Link preview page for `/join/{token}`, for crawlers
+	// (GET /og/invites/{token})
+	GetOpenGraphInvite(ctx context.Context, request GetOpenGraphInviteRequestObject) (GetOpenGraphInviteResponseObject, error)
+	// GetOpenGraphName Link preview page for `/@name`, for crawlers
+	// (GET /og/names/{public_name})
+	GetOpenGraphName(ctx context.Context, request GetOpenGraphNameRequestObject) (GetOpenGraphNameResponseObject, error)
+	// SearchPublicGroups Search public groups by public name or group name
+	// (GET /public-groups)
+	SearchPublicGroups(ctx context.Context, request SearchPublicGroupsRequestObject) (SearchPublicGroupsResponseObject, error)
+	// GetPublicGroup A public group by its public name
+	// (GET /public-groups/{public_name})
+	GetPublicGroup(ctx context.Context, request GetPublicGroupRequestObject) (GetPublicGroupResponseObject, error)
+	// JoinPublicGroup Join a public group
+	// (POST /public-groups/{public_name}/join)
+	JoinPublicGroup(ctx context.Context, request JoinPublicGroupRequestObject) (JoinPublicGroupResponseObject, error)
+	// GetPublicNameAvailability Whether a public name is free for a group
+	// (GET /public-names/{public_name}/availability)
+	GetPublicNameAvailability(ctx context.Context, request GetPublicNameAvailabilityRequestObject) (GetPublicNameAvailabilityResponseObject, error)
+	// GetPublicInvite What an invite link shows to someone without an account
+	// (GET /public/invites/{token})
+	GetPublicInvite(ctx context.Context, request GetPublicInviteRequestObject) (GetPublicInviteResponseObject, error)
+	// GetPublicInviteAvatar Avatar of the group behind an invite link
+	// (GET /public/invites/{token}/avatar)
+	GetPublicInviteAvatar(ctx context.Context, request GetPublicInviteAvatarRequestObject) (GetPublicInviteAvatarResponseObject, error)
+	// GetPublicName What a public link `/@name` shows to someone without an account
+	// (GET /public/names/{public_name})
+	GetPublicName(ctx context.Context, request GetPublicNameRequestObject) (GetPublicNameResponseObject, error)
+	// GetPublicNameAvatar Avatar of a public user or group
+	// (GET /public/names/{public_name}/avatar)
+	GetPublicNameAvatar(ctx context.Context, request GetPublicNameAvatarRequestObject) (GetPublicNameAvatarResponseObject, error)
 	// ListApprovalRequests Inbox of approval requests
 	// (GET /requests)
 	ListApprovalRequests(ctx context.Context, request ListApprovalRequestsRequestObject) (ListApprovalRequestsResponseObject, error)
@@ -42244,6 +46239,33 @@ func (sh *strictHandler) ListChatMedia(w http.ResponseWriter, r *http.Request, c
 	}
 }
 
+// ListUnreadMentions operation middleware
+func (sh *strictHandler) ListUnreadMentions(w http.ResponseWriter, r *http.Request, chatId ChatId, params ListUnreadMentionsParams) {
+	var request ListUnreadMentionsRequestObject
+
+	request.ChatId = chatId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListUnreadMentions(ctx, request.(ListUnreadMentionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListUnreadMentions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListUnreadMentionsResponseObject); ok {
+		if err := validResponse.VisitListUnreadMentionsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListMessages operation middleware
 func (sh *strictHandler) ListMessages(w http.ResponseWriter, r *http.Request, chatId ChatId, params ListMessagesParams) {
 	var request ListMessagesRequestObject
@@ -43287,6 +47309,61 @@ func (sh *strictHandler) SetGroupBackground(w http.ResponseWriter, r *http.Reque
 	}
 }
 
+// ListGroupBans operation middleware
+func (sh *strictHandler) ListGroupBans(w http.ResponseWriter, r *http.Request, chatId ChatId, params ListGroupBansParams) {
+	var request ListGroupBansRequestObject
+
+	request.ChatId = chatId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListGroupBans(ctx, request.(ListGroupBansRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListGroupBans")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListGroupBansResponseObject); ok {
+		if err := validResponse.VisitListGroupBansResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UnbanGroupUser operation middleware
+func (sh *strictHandler) UnbanGroupUser(w http.ResponseWriter, r *http.Request, chatId ChatId, userId UserId, params UnbanGroupUserParams) {
+	var request UnbanGroupUserRequestObject
+
+	request.ChatId = chatId
+	request.UserId = userId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UnbanGroupUser(ctx, request.(UnbanGroupUserRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UnbanGroupUser")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UnbanGroupUserResponseObject); ok {
+		if err := validResponse.VisitUnbanGroupUserResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetGroupEmoji operation middleware
 func (sh *strictHandler) GetGroupEmoji(w http.ResponseWriter, r *http.Request, chatId ChatId, params GetGroupEmojiParams) {
 	var request GetGroupEmojiRequestObject
@@ -43307,6 +47384,130 @@ func (sh *strictHandler) GetGroupEmoji(w http.ResponseWriter, r *http.Request, c
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetGroupEmojiResponseObject); ok {
 		if err := validResponse.VisitGetGroupEmojiResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListGroupInviteLinks operation middleware
+func (sh *strictHandler) ListGroupInviteLinks(w http.ResponseWriter, r *http.Request, chatId ChatId, params ListGroupInviteLinksParams) {
+	var request ListGroupInviteLinksRequestObject
+
+	request.ChatId = chatId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListGroupInviteLinks(ctx, request.(ListGroupInviteLinksRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListGroupInviteLinks")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListGroupInviteLinksResponseObject); ok {
+		if err := validResponse.VisitListGroupInviteLinksResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateGroupInviteLink operation middleware
+func (sh *strictHandler) CreateGroupInviteLink(w http.ResponseWriter, r *http.Request, chatId ChatId, params CreateGroupInviteLinkParams) {
+	var request CreateGroupInviteLinkRequestObject
+
+	request.ChatId = chatId
+	request.Params = params
+
+	var body CreateGroupInviteLinkJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateGroupInviteLink(ctx, request.(CreateGroupInviteLinkRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateGroupInviteLink")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateGroupInviteLinkResponseObject); ok {
+		if err := validResponse.VisitCreateGroupInviteLinkResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RevokeGroupInviteLink operation middleware
+func (sh *strictHandler) RevokeGroupInviteLink(w http.ResponseWriter, r *http.Request, chatId ChatId, linkId InviteLinkId, params RevokeGroupInviteLinkParams) {
+	var request RevokeGroupInviteLinkRequestObject
+
+	request.ChatId = chatId
+	request.LinkId = linkId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RevokeGroupInviteLink(ctx, request.(RevokeGroupInviteLinkRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RevokeGroupInviteLink")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RevokeGroupInviteLinkResponseObject); ok {
+		if err := validResponse.VisitRevokeGroupInviteLinkResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateGroupInviteLink operation middleware
+func (sh *strictHandler) UpdateGroupInviteLink(w http.ResponseWriter, r *http.Request, chatId ChatId, linkId InviteLinkId, params UpdateGroupInviteLinkParams) {
+	var request UpdateGroupInviteLinkRequestObject
+
+	request.ChatId = chatId
+	request.LinkId = linkId
+	request.Params = params
+
+	var body UpdateGroupInviteLinkJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateGroupInviteLink(ctx, request.(UpdateGroupInviteLinkRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateGroupInviteLink")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateGroupInviteLinkResponseObject); ok {
+		if err := validResponse.VisitUpdateGroupInviteLinkResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -43465,6 +47666,67 @@ func (sh *strictHandler) UpdateGroupParticipantRole(w http.ResponseWriter, r *ht
 	}
 }
 
+// ClearGroupPublicName operation middleware
+func (sh *strictHandler) ClearGroupPublicName(w http.ResponseWriter, r *http.Request, chatId ChatId, params ClearGroupPublicNameParams) {
+	var request ClearGroupPublicNameRequestObject
+
+	request.ChatId = chatId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ClearGroupPublicName(ctx, request.(ClearGroupPublicNameRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ClearGroupPublicName")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ClearGroupPublicNameResponseObject); ok {
+		if err := validResponse.VisitClearGroupPublicNameResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SetGroupPublicName operation middleware
+func (sh *strictHandler) SetGroupPublicName(w http.ResponseWriter, r *http.Request, chatId ChatId, params SetGroupPublicNameParams) {
+	var request SetGroupPublicNameRequestObject
+
+	request.ChatId = chatId
+	request.Params = params
+
+	var body SetGroupPublicNameJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SetGroupPublicName(ctx, request.(SetGroupPublicNameRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SetGroupPublicName")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SetGroupPublicNameResponseObject); ok {
+		if err := validResponse.VisitSetGroupPublicNameResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // UnreportGroup operation middleware
 func (sh *strictHandler) UnreportGroup(w http.ResponseWriter, r *http.Request, chatId ChatId, params UnreportGroupParams) {
 	var request UnreportGroupRequestObject
@@ -43580,6 +47842,60 @@ func (sh *strictHandler) TransferGroupOwnership(w http.ResponseWriter, r *http.R
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(TransferGroupOwnershipResponseObject); ok {
 		if err := validResponse.VisitTransferGroupOwnershipResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetInvite operation middleware
+func (sh *strictHandler) GetInvite(w http.ResponseWriter, r *http.Request, token InviteToken, params GetInviteParams) {
+	var request GetInviteRequestObject
+
+	request.Token = token
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetInvite(ctx, request.(GetInviteRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetInvite")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetInviteResponseObject); ok {
+		if err := validResponse.VisitGetInviteResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// JoinByInvite operation middleware
+func (sh *strictHandler) JoinByInvite(w http.ResponseWriter, r *http.Request, token InviteToken, params JoinByInviteParams) {
+	var request JoinByInviteRequestObject
+
+	request.Token = token
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.JoinByInvite(ctx, request.(JoinByInviteRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "JoinByInvite")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(JoinByInviteResponseObject); ok {
+		if err := validResponse.VisitJoinByInviteResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -45210,6 +49526,271 @@ func (sh *strictHandler) MarkNotificationRead(w http.ResponseWriter, r *http.Req
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(MarkNotificationReadResponseObject); ok {
 		if err := validResponse.VisitMarkNotificationReadResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetOpenGraphInvite operation middleware
+func (sh *strictHandler) GetOpenGraphInvite(w http.ResponseWriter, r *http.Request, token InviteToken) {
+	var request GetOpenGraphInviteRequestObject
+
+	request.Token = token
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetOpenGraphInvite(ctx, request.(GetOpenGraphInviteRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetOpenGraphInvite")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetOpenGraphInviteResponseObject); ok {
+		if err := validResponse.VisitGetOpenGraphInviteResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetOpenGraphName operation middleware
+func (sh *strictHandler) GetOpenGraphName(w http.ResponseWriter, r *http.Request, publicName PublicNameParam) {
+	var request GetOpenGraphNameRequestObject
+
+	request.PublicName = publicName
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetOpenGraphName(ctx, request.(GetOpenGraphNameRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetOpenGraphName")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetOpenGraphNameResponseObject); ok {
+		if err := validResponse.VisitGetOpenGraphNameResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SearchPublicGroups operation middleware
+func (sh *strictHandler) SearchPublicGroups(w http.ResponseWriter, r *http.Request, params SearchPublicGroupsParams) {
+	var request SearchPublicGroupsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SearchPublicGroups(ctx, request.(SearchPublicGroupsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SearchPublicGroups")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SearchPublicGroupsResponseObject); ok {
+		if err := validResponse.VisitSearchPublicGroupsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetPublicGroup operation middleware
+func (sh *strictHandler) GetPublicGroup(w http.ResponseWriter, r *http.Request, publicName PublicNameParam, params GetPublicGroupParams) {
+	var request GetPublicGroupRequestObject
+
+	request.PublicName = publicName
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetPublicGroup(ctx, request.(GetPublicGroupRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetPublicGroup")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetPublicGroupResponseObject); ok {
+		if err := validResponse.VisitGetPublicGroupResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// JoinPublicGroup operation middleware
+func (sh *strictHandler) JoinPublicGroup(w http.ResponseWriter, r *http.Request, publicName PublicNameParam, params JoinPublicGroupParams) {
+	var request JoinPublicGroupRequestObject
+
+	request.PublicName = publicName
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.JoinPublicGroup(ctx, request.(JoinPublicGroupRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "JoinPublicGroup")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(JoinPublicGroupResponseObject); ok {
+		if err := validResponse.VisitJoinPublicGroupResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetPublicNameAvailability operation middleware
+func (sh *strictHandler) GetPublicNameAvailability(w http.ResponseWriter, r *http.Request, publicName PublicNameParam, params GetPublicNameAvailabilityParams) {
+	var request GetPublicNameAvailabilityRequestObject
+
+	request.PublicName = publicName
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetPublicNameAvailability(ctx, request.(GetPublicNameAvailabilityRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetPublicNameAvailability")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetPublicNameAvailabilityResponseObject); ok {
+		if err := validResponse.VisitGetPublicNameAvailabilityResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetPublicInvite operation middleware
+func (sh *strictHandler) GetPublicInvite(w http.ResponseWriter, r *http.Request, token InviteToken) {
+	var request GetPublicInviteRequestObject
+
+	request.Token = token
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetPublicInvite(ctx, request.(GetPublicInviteRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetPublicInvite")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetPublicInviteResponseObject); ok {
+		if err := validResponse.VisitGetPublicInviteResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetPublicInviteAvatar operation middleware
+func (sh *strictHandler) GetPublicInviteAvatar(w http.ResponseWriter, r *http.Request, token InviteToken, params GetPublicInviteAvatarParams) {
+	var request GetPublicInviteAvatarRequestObject
+
+	request.Token = token
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetPublicInviteAvatar(ctx, request.(GetPublicInviteAvatarRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetPublicInviteAvatar")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetPublicInviteAvatarResponseObject); ok {
+		if err := validResponse.VisitGetPublicInviteAvatarResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetPublicName operation middleware
+func (sh *strictHandler) GetPublicName(w http.ResponseWriter, r *http.Request, publicName PublicNameParam) {
+	var request GetPublicNameRequestObject
+
+	request.PublicName = publicName
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetPublicName(ctx, request.(GetPublicNameRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetPublicName")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetPublicNameResponseObject); ok {
+		if err := validResponse.VisitGetPublicNameResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetPublicNameAvatar operation middleware
+func (sh *strictHandler) GetPublicNameAvatar(w http.ResponseWriter, r *http.Request, publicName PublicNameParam, params GetPublicNameAvatarParams) {
+	var request GetPublicNameAvatarRequestObject
+
+	request.PublicName = publicName
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetPublicNameAvatar(ctx, request.(GetPublicNameAvatarRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetPublicNameAvatar")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetPublicNameAvatarResponseObject); ok {
+		if err := validResponse.VisitGetPublicNameAvatarResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

@@ -625,6 +625,9 @@ func (s *Service) RemoveMember(ctx context.Context, userID, chatID, target int64
 		}
 		return err
 	}
+	if err := s.d.Store.Sharing().BanAs(context.WithoutCancel(ctx), chatID, userID, target); err != nil {
+		s.d.Log.WarnContext(ctx, "ban removed member", "error", err, "chat_id", chatID)
+	}
 	err := s.membership(ctx, chatID, userID, nil, []int64{target})
 	s.changed(ctx, chatID)
 	s.logMembers(ctx, chatID, messages.SystemMemberRemoved, userID, target)

@@ -25,6 +25,7 @@ type Server struct {
 	emoji         *EmojiServer
 	connections   *ConnectionServer
 	moderation    *ModerationServer
+	public        *PublicServer
 }
 
 // WithMessages adds history, sending, editing, deleting and forwarding over HTTP, and the media lists.

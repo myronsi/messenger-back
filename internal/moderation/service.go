@@ -143,6 +143,8 @@ func (s *Service) Allow(ctx context.Context, actor int64, action Action, target 
 	switch action {
 	case Send, ManageGroup:
 		return nil
+	case ShareGroup:
+		return &ErrRestricted{Action: action}
 	case StartDirect, InviteToGroup, Call:
 		if target == actor {
 			return nil

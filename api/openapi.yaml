@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.40
+  version: 2.1.0-alpha.41
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -64,6 +64,8 @@ tags:
     description: Realtime connection (see `websocket.md`)
   - name: calls
     description: Audio calls (see `docs/calls.md` and `docs/calls-e2ee.md`)
+  - name: public
+    description: Profile and group cards for people without an account, and link previews (see `docs/sharing.md`)
 
 paths:
   /meta:
@@ -2678,6 +2680,9 @@ paths:
       tags: [groups]
       operationId: removeGroupParticipant
       summary: Remove a participant
+      description: |
+        The removed user is also banned from the group (`GET /groups/{chat_id}/bans`): they cannot rejoin by invite
+        link or public name and cannot be added again until an admin lifts the ban.
       responses:
         "426": { $ref: "#/components/responses/ClientOutdated" }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -2791,6 +2796,491 @@ paths:
               schema: { $ref: "#/components/schemas/GroupRoleLog" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+  /groups/{chat_id}/invite-links:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ChatId"
+    get:
+      tags: [groups]
+      operationId: listGroupInviteLinks
+      summary: Invite links of the group
+      description: Owner and admins only (`403` for other members). Newest first, revoked and expired links included.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: The links
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InviteLinkList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [groups]
+      operationId: createGroupInviteLink
+      summary: Create an invite link
+      description: |
+        Owner and admins only. Anyone with the link joins the group directly, unless banned from it. At most 50
+        active links per group (`409` `limit_reached`). Accounts at `limited` or above get `403`
+        `account_restricted` (`share_group`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateInviteLinkRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "201":
+          description: The new link
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InviteLink" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /groups/{chat_id}/invite-links/{link_id}:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ChatId"
+      - $ref: "#/components/parameters/InviteLinkId"
+    patch:
+      tags: [groups]
+      operationId: updateGroupInviteLink
+      summary: Rename an invite link or change its expiry or use limit
+      description: Owner and admins only. A revoked link cannot be changed (`409`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateInviteLinkRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: The updated link
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InviteLink" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+    delete:
+      tags: [groups]
+      operationId: revokeGroupInviteLink
+      summary: Revoke an invite link
+      description: Owner and admins only. The link stops working at once; it stays in the list as revoked. Idempotent.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Revoked
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /groups/{chat_id}/public-name:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ChatId"
+    put:
+      tags: [groups]
+      operationId: setGroupPublicName
+      summary: Make the group public under a name, or change that name
+      description: |
+        Owner and admins only. A public group can be found in `GET /public-groups` and joined by anyone through
+        `/@name`, unless banned. The name shares one name space with usernames, ignoring case: a name in use is
+        `409` `already_exists`, a reserved name `422`. The old name is free at once. Accounts at `limited` or above
+        get `403` `account_restricted` (`share_group`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SetPublicNameRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Updated group
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Group" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+    delete:
+      tags: [groups]
+      operationId: clearGroupPublicName
+      summary: Make the group private again
+      description: Owner and admins only. The name is free at once; members and invite links stay. Idempotent.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Updated group
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Group" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /groups/{chat_id}/bans:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ChatId"
+    get:
+      tags: [groups]
+      operationId: listGroupBans
+      summary: Users banned from the group
+      description: |
+        Owner and admins only. Removing a member (`DELETE /groups/{chat_id}/participants/{user_id}`) bans them: they
+        cannot rejoin by invite link or public name and cannot be added again until an admin lifts the ban. Leaving
+        the group yourself does not ban. Newest first.
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/After"
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: A page of bans
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GroupBanPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /groups/{chat_id}/bans/{user_id}:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ChatId"
+      - $ref: "#/components/parameters/UserId"
+    delete:
+      tags: [groups]
+      operationId: unbanGroupUser
+      summary: Lift a ban
+      description: Owner and admins only. The user is not added back; they can join again by link or be added. Idempotent.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Lifted
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /invites/{token}:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/InviteToken"
+    get:
+      tags: [groups]
+      operationId: getInvite
+      summary: The group behind an invite link
+      description: |
+        `404` when the token is unknown, revoked, expired or used up. `chat_id` is set when the caller is already a
+        member. Rate limited per user.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: The group
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GroupPreview" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /invites/{token}/join:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/InviteToken"
+    post:
+      tags: [groups]
+      operationId: joinByInvite
+      summary: Join a group through an invite link
+      description: |
+        Joins directly and posts a `member_joined` system message. A member gets the chat back without a change.
+        `404` for an unknown, revoked, expired or used-up link; `403` `forbidden` when banned from the group; `403`
+        `account_restricted` (`join_by_link`) at `restricted` or above. At most 20 joins by link or public name per
+        hour (`429`).
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: The group chat
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Chat" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /public-groups:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    get:
+      tags: [groups]
+      operationId: searchPublicGroups
+      summary: Search public groups by public name or group name
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 2, maxLength: 64 }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/After"
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: A page of public groups
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GroupPreviewPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+  /public-groups/{public_name}:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/PublicNameParam"
+    get:
+      tags: [groups]
+      operationId: getPublicGroup
+      summary: A public group by its public name
+      description: "`chat_id` is set when the caller is a member. Rate limited per user."
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: The group
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GroupPreview" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /public-groups/{public_name}/join:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/PublicNameParam"
+    post:
+      tags: [groups]
+      operationId: joinPublicGroup
+      summary: Join a public group
+      description: The same rules as `POST /invites/{token}/join`.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: The group chat
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Chat" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /public-names/{public_name}/availability:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/PublicNameParam"
+    get:
+      tags: [groups]
+      operationId: getPublicNameAvailability
+      summary: Whether a public name is free for a group
+      description: Rate limited per user.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Availability
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicNameAvailability" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /chats/{chat_id}/mentions:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ChatId"
+    get:
+      tags: [chats]
+      operationId: listUnreadMentions
+      summary: The caller's unread mentions in a chat
+      description: |
+        IDs of the messages that mention the caller (by `@username`, or `@all` from an owner or admin) and are newer
+        than the caller's read marker, oldest first, at most 100. `Chat.unread_mentions_count` counts them; reading
+        past a message removes it.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Unread mentions
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MentionList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # -------------------------------------------------------------- public
+  /public/names/{public_name}:
+    parameters:
+      - $ref: "#/components/parameters/PublicNameParam"
+    get:
+      tags: [public]
+      operationId: getPublicName
+      summary: What a public link `/@name` shows to someone without an account
+      description: |
+        No authentication. A user is `user` only when their `web_profile_visibility` is `everyone`, their
+        `search_visibility` is `everyone` and their account is not `restricted` or `suspended`; a group is `group` only
+        when it has this public name. Everything else, including unknown names, is `unavailable`, so the answer does
+        not tell whether a name exists. Rate limited per IP. `X-Robots-Tag: noindex`.
+      security: []
+      responses:
+        "200":
+          description: The public card
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicNameLookup" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /public/invites/{token}:
+    parameters:
+      - $ref: "#/components/parameters/InviteToken"
+    get:
+      tags: [public]
+      operationId: getPublicInvite
+      summary: What an invite link shows to someone without an account
+      description: |
+        No authentication. `404` when the token is unknown, revoked, expired or used up. Rate limited per IP.
+        `X-Robots-Tag: noindex`.
+      security: []
+      responses:
+        "200":
+          description: The group card
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicGroup" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /public/names/{public_name}/avatar:
+    parameters:
+      - $ref: "#/components/parameters/PublicNameParam"
+    get:
+      tags: [public]
+      operationId: getPublicNameAvatar
+      summary: Avatar of a public user or group
+      description: |
+        No authentication. For a user: only while `GET /public/names/{public_name}` shows them and their
+        `avatar_visibility` is `everyone`. For a public group: its avatar. `404` otherwise (no default image).
+        `avatar_url` in `PublicUser` and `PublicGroup` carries `rev`; while it matches, the answer may be cached for
+        a day. Rate limited per IP.
+      security: []
+      parameters:
+        - name: rev
+          in: query
+          schema: { type: string, maxLength: 64 }
+        - name: size
+          in: query
+          description: As in `GET /users/{user_id}/avatar`.
+          schema: { type: integer, minimum: 1, maximum: 4096 }
+      responses:
+        "200":
+          description: Image
+          content:
+            image/*:
+              schema: { type: string, format: binary }
+        "304":
+          description: Not modified (`If-None-Match` with the `ETag` of an earlier answer)
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /public/invites/{token}/avatar:
+    parameters:
+      - $ref: "#/components/parameters/InviteToken"
+    get:
+      tags: [public]
+      operationId: getPublicInviteAvatar
+      summary: Avatar of the group behind an invite link
+      description: No authentication. `404` when the link does not work or the group has no avatar. Rate limited per IP.
+      security: []
+      parameters:
+        - name: rev
+          in: query
+          schema: { type: string, maxLength: 64 }
+        - name: size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 4096 }
+      responses:
+        "200":
+          description: Image
+          content:
+            image/*:
+              schema: { type: string, format: binary }
+        "304":
+          description: Not modified (`If-None-Match` with the `ETag` of an earlier answer)
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /og/names/{public_name}:
+    parameters:
+      - $ref: "#/components/parameters/PublicNameParam"
+    get:
+      tags: [public]
+      operationId: getOpenGraphName
+      summary: Link preview page for `/@name`, for crawlers
+      description: |
+        No authentication. A small HTML page with Open Graph and Twitter tags (`og:title`, `og:description`,
+        `og:image`, `og:url`) built from the same card as `GET /public/names/{public_name}`, and
+        `<meta name="robots" content="noindex">`. The web server sends link-preview crawlers of other apps here;
+        people get the web app. An unavailable name gets a generic Messenger card. Rate limited per IP.
+      security: []
+      responses:
+        "200":
+          description: HTML page
+          content:
+            text/html:
+              schema: { type: string }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /og/invites/{token}:
+    parameters:
+      - $ref: "#/components/parameters/InviteToken"
+    get:
+      tags: [public]
+      operationId: getOpenGraphInvite
+      summary: Link preview page for `/join/{token}`, for crawlers
+      description: Like `GET /og/names/{public_name}`, for an invite link. A link that does not work gets a generic card.
+      security: []
+      responses:
+        "200":
+          description: HTML page
+          content:
+            text/html:
+              schema: { type: string }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
   /stickers/packs:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
@@ -5429,6 +5919,21 @@ components:
       in: path
       required: true
       schema: { $ref: "#/components/schemas/Id" }
+    InviteLinkId:
+      name: link_id
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/Id" }
+    InviteToken:
+      name: token
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/InviteToken" }
+    PublicNameParam:
+      name: public_name
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/PublicName" }
     ReportOutcomeId:
       name: outcome_id
       in: path
@@ -5596,6 +6101,11 @@ components:
           description: |
             A push at 09:00 (in `Me.time_zone`) when someone you have a direct chat with has a birthday. Always sent
             by the server; when a `PUT` leaves it out, it stays as it is. Defaults to `true`.
+        mentions_in_muted:
+          type: boolean
+          description: |
+            A push when someone mentions you (`@username`, or `@all` from an owner or admin) in a chat you muted.
+            Always sent by the server; when a `PUT` leaves it out, it stays as it is. Defaults to `true`.
     NotificationSettings:
       type: object
       required:
@@ -6159,6 +6669,7 @@ components:
         - typing_indicators_enabled
         - voice_video_messages
         - forward_link
+        - web_profile_visibility
         - exceptions
       properties:
         avatar_visibility: { $ref: "#/components/schemas/Visibility" }
@@ -6199,6 +6710,7 @@ components:
             Who sees `ForwardedFrom.sender_id` when this user's messages are forwarded. Others get `null`; the name
             stays.
           allOf: [{ $ref: "#/components/schemas/ForwardLinkPolicy" }]
+        web_profile_visibility: { $ref: "#/components/schemas/WebProfileVisibility" }
         exceptions: { $ref: "#/components/schemas/PrivacyExceptions" }
     UpdatePrivacySettingsRequest:
       type: object
@@ -6221,6 +6733,7 @@ components:
         typing_indicators_enabled: { type: boolean }
         voice_video_messages: { $ref: "#/components/schemas/VoiceVideoPolicy" }
         forward_link: { $ref: "#/components/schemas/ForwardLinkPolicy" }
+        web_profile_visibility: { $ref: "#/components/schemas/WebProfileVisibility" }
     PrivacyExceptionsRequest:
       type: object
       required: [user_ids]
@@ -6346,7 +6859,7 @@ components:
     AccountRestriction:
       type: string
       description: An action the account status blocks. Unknown values must be shown as a generic restriction.
-      enum: [start_direct, invite_to_group, call, create_group, upload, forward, edit_profile, publish_pack, search, send, manage_group]
+      enum: [start_direct, invite_to_group, call, create_group, upload, forward, edit_profile, publish_pack, search, send, manage_group, share_group, join_by_link]
     AccountStatus:
       type: object
       required: [status, since, restrictions, can_appeal, probation_until, review_requested_at, can_request_review]
@@ -7131,6 +7644,17 @@ components:
         system_event:
           $ref: "#/components/schemas/SystemEvent"
         client_temp_id: { $ref: "#/components/schemas/ClientTempId" }
+        mentions:
+          type: array
+          description: |
+            Group members the text mentions by `@username` (ignoring case), found by the server when the message was
+            sent or last edited; at most 20. Absent when there are none and in direct chats. Clients render every
+            `@name` token as a link to `/@name`; these IDs only decide highlighting and notifications.
+          maxItems: 20
+          items: { $ref: "#/components/schemas/Id" }
+        mentions_all:
+          type: boolean
+          description: "`true` when an owner or admin wrote `@all`; it mentions every member. Absent otherwise."
     LinkPreview:
       type: object
       required: [url, title, description, site_name, image]
@@ -7412,6 +7936,7 @@ components:
         - is_archived
         - is_request
         - unread_count
+        - unread_mentions_count
         - first_unread_message_id
         - last_read_message_id
         - last_message
@@ -7441,6 +7966,12 @@ components:
             Whether the chat is in the caller's Requests folder: a stranger opened it, and the caller has not
             replied, accepted, pinned or archived it yet (only for the caller).
         unread_count: { type: integer, minimum: 0 }
+        unread_mentions_count:
+          type: integer
+          minimum: 0
+          description: |
+            Unread messages that mention the caller (`GET /chats/{chat_id}/mentions`). Clients show an `@` badge while
+            it is above 0. Always 0 in direct chats.
         first_unread_message_id:
           description: |
             The oldest message the caller has not read (the same messages `unread_count` counts: not their own,
@@ -7535,7 +8066,7 @@ components:
         joined_at: { $ref: "#/components/schemas/Timestamp" }
     Group:
       type: object
-      required: [id, name, description, avatar_url, background, owner_id, my_role, members, created_at]
+      required: [id, name, description, avatar_url, background, owner_id, my_role, members, created_at, public_name]
       properties:
         id: { $ref: "#/components/schemas/Id" }
         name: { type: string, minLength: 1, maxLength: 64 }
@@ -7552,6 +8083,11 @@ components:
           type: array
           items: { $ref: "#/components/schemas/GroupMember" }
         created_at: { $ref: "#/components/schemas/Timestamp" }
+        public_name:
+          description: The group's public name (`/@name`); `null` for a private group.
+          oneOf:
+            - $ref: "#/components/schemas/PublicName"
+            - type: "null"
     CreateGroupRequest:
       type: object
       required: [name, member_ids]
@@ -7588,6 +8124,197 @@ components:
         user_id: { $ref: "#/components/schemas/Id" }
 
     # -------------------------------------------------------- requests
+    PublicName:
+      type: string
+      description: |
+        A username or a group's public name. One name space for both, unique ignoring case; links are `/@name` on the
+        web app's origin.
+      pattern: "^[A-Za-z0-9_]{3,32}$"
+    InviteToken:
+      type: string
+      description: The secret part of an invite link `/join/{token}`.
+      pattern: "^[A-Za-z0-9]{22}$"
+    WebProfileVisibility:
+      type: string
+      description: |
+        Whether people without an account (and link previews in other apps) see the profile card at `/@username`:
+        display name, username, and the avatar and bio when `avatar_visibility` and `profile_visibility` are
+        `everyone`. Defaults to `everyone`.
+      enum: [everyone, nobody]
+    PublicUser:
+      type: object
+      description: The card of a user for someone without an account. Never carries an ID, presence or other fields.
+      required: [username, display_name, avatar_url, bio]
+      properties:
+        username: { $ref: "#/components/schemas/Username" }
+        display_name: { type: string }
+        avatar_url:
+          description: "`/api/v2/public/names/{username}/avatar?rev=…`; `null` when hidden or unset."
+          type: [string, "null"]
+        bio:
+          description: "`null` when `profile_visibility` is not `everyone` or the bio is empty."
+          type: [string, "null"]
+    PublicGroup:
+      type: object
+      description: The card of a group for someone without an account. No members and no messages.
+      required: [name, public_name, description, avatar_url, member_count]
+      properties:
+        name: { type: string }
+        public_name:
+          description: Set for a public group.
+          oneOf:
+            - $ref: "#/components/schemas/PublicName"
+            - type: "null"
+        description: { type: [string, "null"] }
+        avatar_url:
+          description: "A public avatar URL (`/api/v2/public/names/…/avatar` or `/api/v2/public/invites/…/avatar`), or `null`."
+          type: [string, "null"]
+        member_count: { type: integer, minimum: 0 }
+    PublicNameKind:
+      type: string
+      description: Unknown values must be treated like `unavailable`.
+      enum: [user, group, unavailable]
+    PublicNameLookup:
+      type: object
+      required: [kind]
+      properties:
+        kind: { $ref: "#/components/schemas/PublicNameKind" }
+        user:
+          description: Set when `kind` is `user`.
+          $ref: "#/components/schemas/PublicUser"
+        group:
+          description: Set when `kind` is `group`.
+          $ref: "#/components/schemas/PublicGroup"
+    GroupPreview:
+      type: object
+      description: A group the caller may join, as seen before joining.
+      required: [group, chat_id]
+      properties:
+        group: { $ref: "#/components/schemas/PublicGroup" }
+        chat_id:
+          description: The chat when the caller is already a member; `null` otherwise.
+          oneOf:
+            - $ref: "#/components/schemas/Id"
+            - type: "null"
+    GroupPreviewPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/GroupPreview" }
+        next_cursor: { $ref: "#/components/schemas/Cursor" }
+    PublicNameAvailability:
+      type: object
+      required: [public_name, available]
+      properties:
+        public_name: { $ref: "#/components/schemas/PublicName" }
+        available:
+          type: boolean
+          description: "`false` when a user or another group has the name (ignoring case) or it is reserved."
+    InviteLink:
+      type: object
+      required: [id, token, name, created_by, created_at, expires_at, max_uses, use_count, revoked_at, is_active]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        token: { $ref: "#/components/schemas/InviteToken" }
+        name:
+          type: [string, "null"]
+          maxLength: 64
+        created_by:
+          description: The user who created the link; `null` after that account was deleted.
+          oneOf:
+            - $ref: "#/components/schemas/Id"
+            - type: "null"
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        expires_at:
+          description: "`null`: never expires."
+          oneOf:
+            - $ref: "#/components/schemas/Timestamp"
+            - type: "null"
+        max_uses:
+          description: "`null`: no limit."
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 100000
+        use_count: { type: integer, minimum: 0 }
+        revoked_at:
+          oneOf:
+            - $ref: "#/components/schemas/Timestamp"
+            - type: "null"
+        is_active:
+          type: boolean
+          description: Not revoked, not expired and not used up.
+    InviteLinkList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/InviteLink" }
+    CreateInviteLinkRequest:
+      type: object
+      properties:
+        name:
+          type: [string, "null"]
+          maxLength: 64
+        expires_at:
+          description: In the future, at most 366 days ahead; `null` or absent for a link that never expires.
+          oneOf:
+            - $ref: "#/components/schemas/Timestamp"
+            - type: "null"
+        max_uses:
+          description: "`null` or absent for no limit."
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 100000
+    UpdateInviteLinkRequest:
+      type: object
+      minProperties: 1
+      description: Fields left out stay as they are; `null` clears the expiry or the limit.
+      properties:
+        name:
+          type: [string, "null"]
+          maxLength: 64
+        expires_at:
+          oneOf:
+            - $ref: "#/components/schemas/Timestamp"
+            - type: "null"
+        max_uses:
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 100000
+    SetPublicNameRequest:
+      type: object
+      required: [public_name]
+      properties:
+        public_name: { $ref: "#/components/schemas/PublicName" }
+    GroupBan:
+      type: object
+      required: [user, banned_by, created_at]
+      properties:
+        user: { $ref: "#/components/schemas/User" }
+        banned_by:
+          oneOf:
+            - $ref: "#/components/schemas/Id"
+            - type: "null"
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+    GroupBanPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/GroupBan" }
+        next_cursor: { $ref: "#/components/schemas/Cursor" }
+    MentionList:
+      type: object
+      required: [message_ids]
+      properties:
+        message_ids:
+          type: array
+          maxItems: 100
+          items: { $ref: "#/components/schemas/Id" }
     ApprovalRequestType:
       type: string
       enum: [direct_message, group_invite]

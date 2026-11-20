@@ -184,6 +184,7 @@ type Chat struct {
 	LastActivityAt         time.Time
 	ClearedBeforeMessageID *int64
 	Background             *Background
+	PublicName             *string
 }
 
 // ChatEntry is a chat in one user's list: the chat and the user's own relation to it.

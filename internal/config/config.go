@@ -187,6 +187,9 @@ type HTTP struct {
 	MaxBodyBytes int64         `env:"HTTP_MAX_BODY_BYTES" envDefault:"1048576"`
 	// CORSOrigins lists the allowed origins. Empty means same-origin only; "*" is rejected.
 	CORSOrigins []string `env:"CORS_ORIGINS" envSeparator:","`
+	// PublicWebOrigin is the origin of the web app (https://messenger.example.com). Link preview pages use it for
+	// absolute links and images; empty leaves them out.
+	PublicWebOrigin string `env:"PUBLIC_WEB_ORIGIN"`
 	// ReadinessTimeout bounds every dependency check of /readyz.
 	ReadinessTimeout time.Duration `env:"READINESS_TIMEOUT" envDefault:"2s"`
 }
