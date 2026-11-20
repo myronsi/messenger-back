@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.31.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.30.0-alpha.1...v1.31.0-alpha.1) (2026-11-20)
+
+
+### Features
+
+* **sharing:** profile and group links, public cards and mentions ([#227](https://github.com/myronsi/messenger-back/issues/227)) ([606f26a](https://github.com/myronsi/messenger-back/commit/606f26a7e1789f3b057ee20a8cbcbd1e16b00d09))
+
 ## [1.30.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.29.1-alpha.1...v1.30.0-alpha.1) (2026-11-20)
 
 
