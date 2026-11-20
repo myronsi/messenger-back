@@ -278,6 +278,7 @@ type NotificationDevice struct {
 	P256dh      string
 	Auth        string
 	UpdatedAt   time.Time
+	Failures    int16
 }
 
 type NotificationJob struct {
@@ -287,6 +288,7 @@ type NotificationJob struct {
 	CreatedAt  time.Time
 	NextAt     time.Time
 	Attempts   int32
+	Deferred   bool
 }
 
 type NotificationMute struct {
