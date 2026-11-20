@@ -17,7 +17,7 @@ func (emojiUserFake) Get(context.Context, int64) (postgres.User, error) {
 
 func TestPushPreviewsShowCustomEmojiAsShortcodes(t *testing.T) {
 	w, q, s, j := workerFixture()
-	q.p.Previews = true
+	previews(q)
 	uid := int64(1)
 	content := "party <:party_cat:42>!"
 	w.Users = emojiUserFake{}

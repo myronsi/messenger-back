@@ -107,7 +107,7 @@ func newMediaEnv(t *testing.T) *mediaEnv {
 			NewMediaServer(MediaOptions{Service: msvc, Store: store, Directory: users.NewDirectory(store, nil, apiBase),
 				Limiter: redis.NewRateLimiter(rdb, "t"+uuid.NewString()+":"), Events: emitted, BasePath: apiBase, Log: log,
 				Playback: media.NewPlaybackSigner("playback-test")})).
-			WithNotifications(NotificationOptions{Store: store.Notifications(), Tokens: tokens}),
+			WithNotifications(NotificationOptions{Store: store.Notifications(), Chats: store.Chats(), Tokens: tokens}),
 		Authenticator:  svc,
 		UploadMaxBytes: msvc.Limits().Max(),
 	})
@@ -365,6 +365,42 @@ func TestNotificationAvatarSeesWhatItsRecipientSees(t *testing.T) {
 	}
 	if got := avatar(e.tokens.Avatar(bobID, bobPush.ID, bobPush.SessionID, aliceID)); !bytes.Equal(got.Body.Bytes(), defaultBytes) {
 		t.Fatal("a blocked recipient got the avatar")
+	}
+}
+
+func TestNotificationGroupPictureIsForMembersOnly(t *testing.T) {
+	e := newMediaEnv(t)
+	alice, bob, carol := e.register(t, "alice"), e.register(t, "bob"), e.register(t, "carol")
+	aliceID, bobID, carolID := e.userID(t, alice), e.userID(t, bob), e.userID(t, carol)
+	bobPush, carolPush := pushDevice(t, e.store, bobID), pushDevice(t, e.store, carolID)
+	ctx := context.Background()
+	group, err := e.store.Chats().CreateGroup(ctx, postgres.NewGroup{OwnerID: aliceID, Name: "Family", MemberIDs: []int64{bobID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	picture := func(uid int64, d postgres.NotificationDevice, chat int64) reply {
+		return e.do(t, request{method: http.MethodGet, path: "/notifications/avatar/" + e.tokens.ChatAvatar(uid, d.ID, d.SessionID, chat)})
+	}
+	plain := picture(bobID, bobPush, group.ID)
+	if plain.Code != http.StatusOK || plain.Header().Get("Content-Type") != "image/png" {
+		t.Fatalf("a group without a picture gets the default image: %d", plain.Code)
+	}
+	id := e.upload(t, alice.access, map[string]string{"purpose": "message"}, "group.png", smallPNG(t)).json()["id"].(string)
+	if _, err := e.store.Pool().Exec(ctx, `UPDATE chats SET avatar_attachment_id=$1 WHERE id=$2`, id, group.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := picture(bobID, bobPush, group.ID); got.Code != http.StatusOK || bytes.Equal(got.Body.Bytes(), plain.Body.Bytes()) {
+		t.Fatalf("member did not get the group picture: %d", got.Code)
+	}
+	if got := picture(carolID, carolPush, group.ID); got.Code != http.StatusNotFound {
+		t.Fatalf("a non-member got the group picture: %d", got.Code)
+	}
+	direct, _, err := e.store.Chats().CreateDirect(ctx, aliceID, bobID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := picture(bobID, bobPush, direct.ID); got.Code != http.StatusNotFound {
+		t.Fatalf("a direct chat has no group picture: %d", got.Code)
 	}
 }
 

@@ -90,6 +90,44 @@ func TestBirthdayCandidates(t *testing.T) {
 	if got := receivers(time.Date(2028, 2, 29, 12, 0, 0, 0, time.UTC)); got[anna.ID] != 0 {
 		t.Fatalf("turned off: %v", got)
 	}
+
+	birthday(stranger, 15, 5)
+	request, _, err := s.Chats().CreateDirect(ctx, stranger.ID, leap.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	may := time.Date(2026, 5, 15, 12, 0, 0, 0, time.UTC)
+	reminded := func() bool {
+		t.Helper()
+		got, err := s.Users().BirthdayCandidates(ctx, may, 9, 100)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, c := range got {
+			if c.ReceiverID == leap.ID && c.UserID == stranger.ID {
+				return true
+			}
+		}
+		return false
+	}
+	if !reminded() {
+		t.Fatal("an accepted chat gets the reminder")
+	}
+	if _, err := s.Pool().Exec(ctx, `UPDATE participants SET is_request=true WHERE chat_id=$1 AND user_id=$2`, request.ID, leap.ID); err != nil {
+		t.Fatal(err)
+	}
+	if reminded() {
+		t.Fatal("a message request is no reason to remind")
+	}
+	if _, err := s.Pool().Exec(ctx, `UPDATE participants SET is_request=false WHERE chat_id=$1`, request.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Notifications().Mute(ctx, leap.ID, request.ID, time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if reminded() {
+		t.Fatal("a muted chat stays quiet")
+	}
 }
 
 func TestProfileMediaKeepsAttachmentsAlive(t *testing.T) {

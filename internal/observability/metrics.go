@@ -42,7 +42,7 @@ type Metrics struct {
 func NewMetrics() *Metrics {
 	m := &Metrics{
 		Registry:      prometheus.NewRegistry(),
-		notifications: prometheus.NewCounterVec(prometheus.CounterOpts{Name: "messenger_notifications_total", Help: "Notification outcomes: delivered, retry, expired, unregistered."}, []string{"outcome"}),
+		notifications: prometheus.NewCounterVec(prometheus.CounterOpts{Name: "messenger_notifications_total", Help: "Notification outcomes: delivered, retry, expired, unregistered, rejected."}, []string{"outcome"}),
 		requests: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "messenger_http_requests_total",
 			Help: "HTTP requests by method, route pattern and status code.",

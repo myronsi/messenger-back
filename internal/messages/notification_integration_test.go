@@ -17,9 +17,13 @@ func TestStoredMessageHasDurableNotificationIntent(t *testing.T) {
 	m := f.send(chat.ID, alice, "notification-intent", "hello")
 	var chatID int64
 	var recipients []int64
-	err = f.pg.Pool().QueryRow(ctx, `SELECT chat_id,recipients FROM notification_jobs WHERE message_id=$1`, m.ID).Scan(&chatID, &recipients)
+	var ready bool
+	err = f.pg.Pool().QueryRow(ctx, `SELECT chat_id,recipients,next_at<=now() FROM notification_jobs WHERE message_id=$1`, m.ID).Scan(&chatID, &recipients, &ready)
 	if err != nil || chatID != chat.ID || !slices.Equal(recipients, []int64{bob}) {
 		t.Fatalf("missing or incorrect notification intent: %d %v %v", chatID, recipients, err)
+	}
+	if !ready {
+		t.Fatal("a saved message must make its notification due at once")
 	}
 	duplicate := f.send(chat.ID, alice, "notification-intent", "hello")
 	if duplicate.ID != m.ID {

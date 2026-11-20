@@ -104,6 +104,7 @@ type Deps struct {
 	Events EventLog
 	// QueueNotification commits intent before the message write; nil disables background delivery.
 	QueueNotification func(context.Context, int64, int64, []int64) error
+	NotificationReady func(context.Context, int64) error
 	// Accepted is called for every new message (the messages-per-second metric). Optional.
 	Accepted   func()
 	Emoji      EmojiFilter
@@ -452,6 +453,7 @@ func (s *Service) send(ctx context.Context, r SendRequest) (Sent, error) {
 		s.abandon(ctx, r, id, true)
 		return Sent{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
+	s.notificationReady(ctx, m)
 	s.delivered(ctx, m, members, r.ClientTempID)
 	s.repliedToRequest(ctx, r.ChatID, r.SenderID, holders)
 	if sticker != nil {
