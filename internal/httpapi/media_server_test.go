@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gocql/gocql"
 	"github.com/google/uuid"
 
 	"github.com/myronsi/messenger-back/internal/auth"
@@ -29,6 +30,7 @@ import (
 	"github.com/myronsi/messenger-back/internal/observability"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/redis"
+	"github.com/myronsi/messenger-back/internal/store/scylla"
 	"github.com/myronsi/messenger-back/internal/users"
 )
 
@@ -49,9 +51,39 @@ func (m memberRules) VisibleAttachment(ctx context.Context, viewer, chatID, _ in
 
 type mediaEnv struct {
 	*authEnv
-	store  *postgres.Store
-	tokens *notifications.ActionTokens
-	events *mediaEvents
+	store    *postgres.Store
+	tokens   *notifications.ActionTokens
+	events   *mediaEvents
+	messages *notificationMessages
+}
+
+type notificationMessages struct {
+	scylla.MessageRepository
+	mu     sync.Mutex
+	byID   map[int64]scylla.Message
+	hidden map[int64]bool
+}
+
+func (n *notificationMessages) put(m scylla.Message) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.byID[m.ID] = m
+}
+
+func (n *notificationMessages) Get(_ context.Context, chatID, id int64) (scylla.Message, error) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	m, ok := n.byID[id]
+	if !ok || m.ChatID != chatID {
+		return scylla.Message{}, scylla.ErrNotFound
+	}
+	return m, nil
+}
+
+func (n *notificationMessages) Hidden(_ context.Context, _, _, id int64) (bool, error) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.hidden[id], nil
 }
 
 type mediaEvents struct {
@@ -99,6 +131,7 @@ func newMediaEnv(t *testing.T) *mediaEnv {
 		Sessions: store.UploadSessions(), Jobs: store.MediaJobs()})
 	tokens := notifications.NewActionTokens("test-secret")
 	emitted := &mediaEvents{}
+	msgs := &notificationMessages{byID: map[int64]scylla.Message{}, hidden: map[int64]bool{}}
 	r := NewRouter(Options{
 		HTTP:    config.HTTP{BasePath: apiBase, RequestTimeout: 10 * time.Second, ReadinessTimeout: time.Second, MaxBodyBytes: 4096},
 		Log:     log,
@@ -107,11 +140,13 @@ func newMediaEnv(t *testing.T) *mediaEnv {
 			NewMediaServer(MediaOptions{Service: msvc, Store: store, Directory: users.NewDirectory(store, nil, apiBase),
 				Limiter: redis.NewRateLimiter(rdb, "t"+uuid.NewString()+":"), Events: emitted, BasePath: apiBase, Log: log,
 				Playback: media.NewPlaybackSigner("playback-test")})).
-			WithNotifications(NotificationOptions{Store: store.Notifications(), Chats: store.Chats(), Tokens: tokens}),
+			WithNotifications(NotificationOptions{
+				Store: store.Notifications(), Chats: store.Chats(), Messages: msgs, Attachments: store.Attachments(), Emoji: store.Emoji(), Tokens: tokens,
+			}),
 		Authenticator:  svc,
 		UploadMaxBytes: msvc.Limits().Max(),
 	})
-	return &mediaEnv{authEnv: &authEnv{router: r}, store: store, tokens: tokens, events: emitted}
+	return &mediaEnv{authEnv: &authEnv{router: r}, store: store, tokens: tokens, events: emitted, messages: msgs}
 }
 
 func (e *mediaEnv) userID(t *testing.T, s session) int64 {
@@ -401,6 +436,47 @@ func TestNotificationGroupPictureIsForMembersOnly(t *testing.T) {
 	}
 	if got := picture(bobID, bobPush, direct.ID); got.Code != http.StatusNotFound {
 		t.Fatalf("a direct chat has no group picture: %d", got.Code)
+	}
+}
+
+func TestNotificationPictureFollowsTheMessage(t *testing.T) {
+	e := newMediaEnv(t)
+	alice, bob, carol := e.register(t, "alice"), e.register(t, "bob"), e.register(t, "carol")
+	aliceID, bobID, carolID := e.userID(t, alice), e.userID(t, bob), e.userID(t, carol)
+	bobPush, carolPush := pushDevice(t, e.store, bobID), pushDevice(t, e.store, carolID)
+	ctx := context.Background()
+	chat, _, err := e.store.Chats().CreateDirect(ctx, aliceID, bobID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	photo, err := gocql.ParseUUID(e.upload(t, alice.access, map[string]string{"purpose": "message"}, "sea.png", smallPNG(t)).json()["id"].(string))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := "hello"
+	e.messages.put(scylla.Message{ChatID: chat.ID, ID: 10, Type: scylla.TypeFile, AttachmentID: &photo, CreatedAt: time.Now()})
+	e.messages.put(scylla.Message{ChatID: chat.ID, ID: 11, Type: scylla.TypeText, Content: &text, CreatedAt: time.Now()})
+	picture := func(uid int64, d postgres.NotificationDevice, message int64) reply {
+		return e.do(t, request{method: http.MethodGet, path: "/notifications/avatar/" + e.tokens.MessageImage(uid, d.ID, d.SessionID, chat.ID, message)})
+	}
+	if got := picture(bobID, bobPush, 10); got.Code != http.StatusOK || got.Header().Get("Content-Type") == "" || got.Body.Len() == 0 {
+		t.Fatalf("the recipient did not get the photo: %d", got.Code)
+	}
+	if got := picture(carolID, carolPush, 10); got.Code != http.StatusNotFound {
+		t.Fatalf("someone outside the chat got the photo: %d", got.Code)
+	}
+	if got := picture(bobID, bobPush, 11); got.Code != http.StatusNotFound {
+		t.Fatalf("a text message has no picture: %d", got.Code)
+	}
+	e.messages.mu.Lock()
+	e.messages.hidden[10] = true
+	e.messages.mu.Unlock()
+	if got := picture(bobID, bobPush, 10); got.Code != http.StatusNotFound {
+		t.Fatalf("a message deleted for the recipient still showed its photo: %d", got.Code)
+	}
+	e.messages.put(scylla.Message{ChatID: chat.ID, ID: 12, Type: scylla.TypeFile, AttachmentID: &photo, CreatedAt: time.Now(), Deleted: true})
+	if got := picture(bobID, bobPush, 12); got.Code != http.StatusNotFound {
+		t.Fatalf("a deleted message still showed its photo: %d", got.Code)
 	}
 }
 

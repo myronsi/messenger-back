@@ -212,6 +212,7 @@ type jobContent struct {
 	chatID   int64
 	message  int64
 	groupPic bool
+	image    bool
 }
 
 func (w *Worker) content(ctx context.Context, j postgres.NotificationJob, m scylla.Message, devices []postgres.NotificationDevice,
@@ -265,6 +266,7 @@ func (w *Worker) content(ctx context.Context, j postgres.NotificationJob, m scyl
 		}
 	}
 	out.groupPic = chat.Type == postgres.ChatGroup && chat.AvatarAttachmentID != nil
+	out.image = HasImage(m, kind)
 	for uid := range out.payloads {
 		r := eligible[uid]
 		p := base
@@ -327,6 +329,9 @@ func (w *Worker) sign(p Payload, d postgres.NotificationDevice, c jobContent) Pa
 			p.AvatarToken = w.Tokens.ChatAvatar(uid, d.ID, d.SessionID, c.chatID)
 		} else {
 			p.AvatarToken = w.Tokens.Avatar(uid, d.ID, d.SessionID, c.senderID)
+		}
+		if c.image {
+			p.ImageToken = w.Tokens.MessageImage(uid, d.ID, d.SessionID, c.chatID, c.message)
 		}
 	}
 	return p

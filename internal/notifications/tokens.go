@@ -51,6 +51,14 @@ func (t *ActionTokens) ParseChatAvatar(token string) (ActionToken, error) {
 	return t.parse("c", 1, token)
 }
 
+func (t *ActionTokens) MessageImage(recipient int64, device, session uuid.UUID, chat, message int64) string {
+	return t.sign("m", t.now().Add(AvatarTokenTTL), recipient, device, session, chat, message)
+}
+
+func (t *ActionTokens) ParseMessageImage(token string) (ActionToken, error) {
+	return t.parse("m", 2, token)
+}
+
 func (t *ActionTokens) Read(recipient int64, device, session uuid.UUID, chat, message int64) string {
 	return t.sign("r", t.now().Add(ReadTokenTTL), recipient, device, session, chat, message)
 }

@@ -132,7 +132,11 @@ text or caption (at most 160 characters, for a sticker its emoji), and a group a
 characters). `read_token` comes always (valid seven days) and, only with previews on, `avatar_token`
 (valid one hour). In a group with a picture `avatar_token` is a group-picture token (`c.` prefix) for the same
 `/notifications/avatar/{token}` route, which answers only while the recipient is still a member; otherwise it is the
-sender's. Birthday reminders carry `kind: "birthday"`, the birthday user's avatar token with previews, and their own
+sender's. With previews on, a photo, video, album, sticker or a message that is a single custom emoji also
+carries `image_token` (`m.` prefix, valid one hour) for the same route. It answers with the picture the
+notification shows: the display copy of a photo, the thumbnail of a video, the first item of an album, the sticker
+image or the custom emoji image. It answers 404 once the recipient left the chat, joined after the message, or the
+message was deleted for everyone or for the recipient, and for messages without a picture (text, voice, documents). Birthday reminders carry `kind: "birthday"`, the birthday user's avatar token with previews, and their own
 web push topic (`birthday-<chat_id>`) so they do not replace a pending message push. Each token is an HMAC bound to one purpose, recipient, push device and chat or sender, keyed from
 `PUSH_VAPID_PRIVATE_KEY`, so API and worker need no extra secret. Rotating that key invalidates all tokens. A token names its device and that device's session, and works only while both
 still match and the session is active. Logging out, revoking the session or registering the browser again under

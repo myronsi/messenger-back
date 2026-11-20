@@ -454,3 +454,43 @@ func TestWakeUpClaimsWithoutWaitingForThePoll(t *testing.T) {
 	cancel()
 	<-done
 }
+
+func TestPreviewCarriesAPictureTokenOnlyForPictures(t *testing.T) {
+	photo := gocql.TimeUUID()
+	party := "<:party_cat:42>"
+	plain := "hello"
+	for _, tc := range []struct {
+		name     string
+		msg      scylla.Message
+		mime     string
+		previews bool
+		want     bool
+	}{
+		{"photo", scylla.Message{Type: scylla.TypeFile, AttachmentID: &photo}, "image/png", true, true},
+		{"photo without previews", scylla.Message{Type: scylla.TypeFile, AttachmentID: &photo}, "image/png", false, false},
+		{"single custom emoji", scylla.Message{Type: scylla.TypeText, Content: &party}, "", true, true},
+		{"text", scylla.Message{Type: scylla.TypeText, Content: &plain}, "", true, false},
+		{"document", scylla.Message{Type: scylla.TypeFile, AttachmentID: &photo}, "application/pdf", true, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w, q, s, j := workerFixture()
+			q.recipients[0].Preferences.Previews = tc.previews
+			w.Attachments = attachmentFake{mime: tc.mime}
+			sender := int64(1)
+			tc.msg.ID, tc.msg.ChatID, tc.msg.SenderID, tc.msg.CreatedAt = 9, 3, &sender, time.Now()
+			m := w.Messages.(messageFake)
+			m.m = tc.msg
+			w.Messages = m
+			if err := w.Handle(context.Background(), j); err != nil {
+				t.Fatal(err)
+			}
+			token := s.sent[0].ImageToken
+			if (token != "") != tc.want {
+				t.Fatalf("image token %q, want present=%v", token, tc.want)
+			}
+			if got, err := w.Tokens.ParseMessageImage(token); tc.want && (err != nil || got.IDs[0] != 3 || got.IDs[1] != 9 || got.Recipient != 2) {
+				t.Fatalf("token does not name this message for this recipient: %+v %v", got, err)
+			}
+		})
+	}
+}

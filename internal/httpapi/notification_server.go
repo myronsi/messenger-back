@@ -15,13 +15,17 @@ import (
 	"github.com/myronsi/messenger-back/internal/config"
 	"github.com/myronsi/messenger-back/internal/notifications"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
+	"github.com/myronsi/messenger-back/internal/store/scylla"
 )
 
 type NotificationOptions struct {
-	Store  postgres.NotificationRepository
-	Chats  postgres.ChatRepository
-	Config config.Notifications
-	Tokens *notifications.ActionTokens
+	Store       postgres.NotificationRepository
+	Chats       postgres.ChatRepository
+	Messages    scylla.MessageRepository
+	Attachments notifications.AttachmentGetter
+	Emoji       notifications.EmojiGetter
+	Config      config.Notifications
+	Tokens      *notifications.ActionTokens
 }
 
 const notificationAvatarSize = 256
@@ -244,6 +248,10 @@ func (s *Server) GetNotificationAvatar(w http.ResponseWriter, r *http.Request, t
 		s.notificationChatAvatar(w, r, token)
 		return
 	}
+	if strings.HasPrefix(token, "m.") {
+		s.notificationMessageImage(w, r, token)
+		return
+	}
 	t, ok := s.actionToken(w, r, s.notifications.tokens().ParseAvatar, token)
 	if !ok {
 		return
@@ -251,6 +259,56 @@ func (s *Server) GetNotificationAvatar(w http.ResponseWriter, r *http.Request, t
 	ctx := context.WithValue(r.Context(), principalKey{}, auth.Principal{UserID: t.Recipient})
 	size := notificationAvatarSize
 	s.media.GetUserAvatar(w, r.WithContext(ctx), strconv.FormatInt(t.IDs[0], 10), GetUserAvatarParams{Size: &size})
+}
+
+func (s *Server) notificationMessageImage(w http.ResponseWriter, r *http.Request, token string) {
+	o := s.notifications
+	if o == nil || o.Chats == nil || o.Messages == nil || o.Attachments == nil || o.Emoji == nil {
+		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
+		return
+	}
+	t, ok := s.actionToken(w, r, o.tokens().ParseMessageImage, token)
+	if !ok {
+		return
+	}
+	chatID, messageID := t.IDs[0], t.IDs[1]
+	part, err := o.Chats.Participant(r.Context(), chatID, t.Recipient)
+	if errors.Is(err, postgres.ErrNotFound) {
+		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
+		return
+	}
+	if err != nil {
+		WriteProblem(w, http.StatusServiceUnavailable, ErrorCodeInternalError)
+		return
+	}
+	m, err := o.Messages.Get(r.Context(), chatID, messageID)
+	if errors.Is(err, scylla.ErrNotFound) || err == nil && part.JoinedAt.After(m.CreatedAt) {
+		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
+		return
+	}
+	if err != nil {
+		WriteProblem(w, http.StatusServiceUnavailable, ErrorCodeInternalError)
+		return
+	}
+	hidden, err := o.Messages.Hidden(r.Context(), t.Recipient, chatID, messageID)
+	if err != nil {
+		WriteProblem(w, http.StatusServiceUnavailable, ErrorCodeInternalError)
+		return
+	}
+	if hidden {
+		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
+		return
+	}
+	src, err := notifications.FindImage(r.Context(), m, o.Attachments, o.Emoji)
+	if errors.Is(err, notifications.ErrNoImage) {
+		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
+		return
+	}
+	if err != nil {
+		WriteProblem(w, http.StatusServiceUnavailable, ErrorCodeInternalError)
+		return
+	}
+	s.media.ServeNotificationImage(w, r, src)
 }
 
 func (s *Server) notificationChatAvatar(w http.ResponseWriter, r *http.Request, token string) {
