@@ -2,6 +2,29 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.41
+
+- Public cards without an account (tag `public`, `security: []`, rate limited per IP, `X-Robots-Tag: noindex`):
+  `GET /public/names/{public_name}` (`PublicNameLookup`: `PublicNameKind` `user`, `group`, `unavailable`, with
+  `PublicUser` or `PublicGroup`), `GET /public/invites/{token}` (`PublicGroup`), their avatars
+  `GET /public/names/{public_name}/avatar` and `GET /public/invites/{token}/avatar`, and link preview pages for
+  crawlers `GET /og/names/{public_name}` and `GET /og/invites/{token}` (`text/html`).
+- `PrivacySettings.web_profile_visibility` (`WebProfileVisibility`: `everyone`, `nobody`; default `everyone`);
+  `UpdatePrivacySettingsRequest` accepts it.
+- Group invite links: `GET/POST /groups/{chat_id}/invite-links`, `PATCH/DELETE /groups/{chat_id}/invite-links/{link_id}`
+  (`InviteLink`, `InviteLinkList`, `CreateInviteLinkRequest`, `UpdateInviteLinkRequest`), `GET /invites/{token}`
+  (`GroupPreview`) and `POST /invites/{token}/join` (`Chat`).
+- Public groups: `PUT/DELETE /groups/{chat_id}/public-name` (`SetPublicNameRequest`), `Group.public_name`
+  (`PublicName`, one name space with usernames), `GET /public-groups` (`GroupPreviewPage`),
+  `GET /public-groups/{public_name}`, `POST /public-groups/{public_name}/join` and
+  `GET /public-names/{public_name}/availability` (`PublicNameAvailability`).
+- Bans: removing a member bans them; `GET /groups/{chat_id}/bans` (`GroupBanPage` of `GroupBan`) and
+  `DELETE /groups/{chat_id}/bans/{user_id}`.
+- `AccountRestriction` gains `share_group` and `join_by_link`.
+- Mentions: `Message.mentions` (member IDs) and `Message.mentions_all` (`@all` from an owner or admin);
+  `Chat.unread_mentions_count`; `GET /chats/{chat_id}/mentions` (`MentionList`);
+  `NotificationPreferences.mentions_in_muted` (default `true`).
+
 ## 2.1.0-alpha.40
 
 - `RegisterRequest` gains the optional `terms_version` (the date of the accepted Terms of Use, such as `2026-11-19`)
