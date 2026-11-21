@@ -72,6 +72,7 @@ The sender also receives the broadcast `message` event with the stored message (
 | `typing` | A user is typing, recording a voice message, choosing a sticker or sending a photo, video or file (`action`); hide it after 6 s without a repeat |
 | `chat_created`, `chat_deleted`, `chat_list_update` | Chat list changes |
 | `history_cleared` | Messages up to `before_message_id` were cleared for you (`scope: me`) or everyone |
+| `pin_update` | A message was pinned or unpinned for everyone (to all members) or only for you (`scope: me`, to your own sessions); carries `pinned_message_count` for you |
 | `group_created`, `group_updated` | Group changes (members, roles, name, avatar) |
 | `approval_request_created` | New request in the inbox |
 | `presence` | A user came online or went offline |

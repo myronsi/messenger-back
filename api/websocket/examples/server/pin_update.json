@@ -1,0 +1,12 @@
+{
+  "type": "pin_update",
+  "event_id": "7217400317439950012",
+  "chat_id": "42",
+  "data": {
+    "message_id": "7217400317439950002",
+    "action": "pinned",
+    "scope": "everyone",
+    "actor_id": "7",
+    "at": "2026-11-21T10:15:00Z"
+  }
+}

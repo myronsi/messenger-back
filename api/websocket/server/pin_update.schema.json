@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ServerPinUpdateEvent",
+  "description": "A message was pinned or unpinned. Scope everyone goes to every member; scope me (an own pin, or a pin for everyone hidden or shown again for you) only to your own sessions. Load GET /chats/{chat_id}/pins again, or apply the change: pinned adds the message to your pins, unpinned removes it. For scope everyone, unpinned may leave your own pin of the message, so reload in that case.",
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "pin_update"
+    },
+    "event_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "chat_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "message_id": {
+          "$ref": "../../openapi.yaml#/components/schemas/Id"
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "pinned",
+            "unpinned"
+          ]
+        },
+        "scope": {
+          "$ref": "../../openapi.yaml#/components/schemas/PinScope"
+        },
+        "actor_id": {
+          "$ref": "../../openapi.yaml#/components/schemas/Id"
+        },
+        "at": {
+          "$ref": "../../openapi.yaml#/components/schemas/Timestamp"
+        },
+        "pinned_message_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Chat.pinned_message_count for the recipient after the change."
+        }
+      },
+      "required": [
+        "message_id",
+        "action",
+        "scope",
+        "actor_id",
+        "at"
+      ]
+    }
+  },
+  "required": [
+    "type",
+    "event_id",
+    "chat_id",
+    "data"
+  ]
+}

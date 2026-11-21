@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.41
+  version: 2.1.0-alpha.42
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -2240,6 +2240,94 @@ paths:
         "204":
           description: Withdrawn
         "401": { $ref: "#/components/responses/Unauthorized" }
+  /chats/{chat_id}/messages/{message_id}/pin:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ChatId"
+      - $ref: "#/components/parameters/MessageId"
+    put:
+      tags: [messages]
+      operationId: pinMessage
+      summary: Pin a message
+      description: |
+        `me` pins the message only for the caller. `everyone` pins it for every member: in a direct chat either
+        user may, in a group only a moderator, admin or owner (`403` otherwise). Saved Messages, a chat in the
+        caller's Requests folder and a direct chat with a block allow only `me` (`403` for `everyone`). System and
+        call messages cannot be pinned (`422`); a message the caller cannot see is `404`. A chat holds at most 500
+        pins for everyone, and each member at most 500 own pins in it (`409` `limit_reached`).
+
+        Pinning a pinned message changes nothing, except that `me` shows a pin for everyone again that the caller
+        hid. Pinning for everyone a message the caller pinned for themselves keeps their own pin underneath: it
+        shows again when the pin for everyone is removed. Pinning or unpinning for everyone posts a system message
+        (`message_pinned`, `message_unpinned`) without a push notification. Every change sends `pin_update`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PinMessageRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: The pin as the caller sees it
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PinnedMessage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+    delete:
+      tags: [messages]
+      operationId: unpinMessage
+      summary: Unpin a message
+      description: |
+        `me` removes the caller's own pin, or hides a pin for everyone only for the caller (it stays pinned for the
+        others). `everyone` removes the pin for everyone: in a direct chat either user may; in a group a moderator,
+        admin or owner whose role is at least the role the pinner has now (owner > admin > moderator; a pinner who
+        left or is a member counts as member), otherwise `403`. `PinnedMessage.can_unpin_for_everyone` tells the
+        client in advance. Unpinning a message that is not pinned changes nothing.
+      parameters:
+        - name: scope
+          in: query
+          required: true
+          schema: { $ref: "#/components/schemas/PinScope" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "204":
+          description: Unpinned
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /chats/{chat_id}/pins:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ChatId"
+    get:
+      tags: [messages]
+      operationId: listPinnedMessages
+      summary: The pinned messages of a chat as the caller sees them
+      description: |
+        Pins for everyone the caller did not hide, and the caller's own pins, newest pin first. A message pinned
+        both ways appears once, as `everyone`. Messages the caller cannot see (deleted, deleted for them, cleared
+        from their history) are left out. `Chat.pinned_message_count` counts the same pins.
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/After"
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Pinned messages, newest pin first
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PinnedMessagePage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /chats/{chat_id}/messages/forward:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
@@ -7680,14 +7768,14 @@ components:
         height: { type: [integer, "null"], minimum: 1 }
     SystemEventKind:
       type: string
-      enum: [group_created, member_added, member_joined, member_removed, member_left, call]
+      enum: [group_created, member_added, member_joined, member_removed, member_left, call, message_pinned, message_unpinned]
     SystemEvent:
       type: object
       description: |
         What a `system` message records; set on system messages only, whose `content` is then `null`. The names
         are the display names at the time of the event. `target` fields are set for `member_added` and
         `member_removed`. `call` is set for `call` messages: one per call, posted when the call ends, `actor` is the
-        initiator.
+        initiator. `message_id` and `snippet` are set for `message_pinned` and `message_unpinned`.
       required: [kind, actor_id, actor_name]
       properties:
         kind: { $ref: "#/components/schemas/SystemEventKind" }
@@ -7699,6 +7787,16 @@ components:
         target_id: { $ref: "#/components/schemas/Id" }
         target_name: { type: string }
         call: { $ref: "#/components/schemas/CallSummary" }
+        message_id:
+          description: The pinned or unpinned message.
+          allOf: [{ $ref: "#/components/schemas/Id" }]
+        snippet:
+          type: string
+          maxLength: 64
+          description: |
+            Start of the pinned message's text at the time of the event (at most 60 characters plus `…`); empty for a
+            message without text, which clients name by its `message_type`.
+        message_type: { $ref: "#/components/schemas/MessageType" }
     MessagePage:
       type: object
       required: [items, next_cursor, prev_cursor]
@@ -7940,6 +8038,7 @@ components:
         - first_unread_message_id
         - last_read_message_id
         - last_message
+        - pinned_message_count
         - created_at
       properties:
         id: { $ref: "#/components/schemas/Id" }
@@ -7994,6 +8093,10 @@ components:
           oneOf:
             - $ref: "#/components/schemas/GroupRole"
             - type: "null"
+        pinned_message_count:
+          type: integer
+          minimum: 0
+          description: Pinned messages the caller sees (`GET /chats/{chat_id}/pins`); clients show the pinned bar above 0.
         created_at: { $ref: "#/components/schemas/Timestamp" }
     ChatRequestCount:
       type: object
@@ -8024,6 +8127,37 @@ components:
           maxItems: 10
           uniqueItems: true
           items: { $ref: "#/components/schemas/Id" }
+    PinScope:
+      type: string
+      description: "`me`: only for the caller. `everyone`: for every member of the chat."
+      enum: [me, everyone]
+    PinMessageRequest:
+      type: object
+      required: [scope]
+      properties:
+        scope: { $ref: "#/components/schemas/PinScope" }
+    PinnedMessage:
+      type: object
+      required: [message, scope, pinned_by, pinned_at, can_unpin_for_everyone]
+      properties:
+        message: { $ref: "#/components/schemas/Message" }
+        scope: { $ref: "#/components/schemas/PinScope" }
+        pinned_by:
+          description: Who pinned it; the caller for `me`.
+          allOf: [{ $ref: "#/components/schemas/Id" }]
+        pinned_at: { $ref: "#/components/schemas/Timestamp" }
+        can_unpin_for_everyone:
+          type: boolean
+          description: Whether `DELETE …/pin?scope=everyone` is allowed for the caller; always `false` for `me`.
+    PinnedMessagePage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          description: Newest pin first
+          items: { $ref: "#/components/schemas/PinnedMessage" }
+        next_cursor: { $ref: "#/components/schemas/Cursor" }
     CreateChatRequest:
       type: object
       required: [user_id]

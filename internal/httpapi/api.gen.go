@@ -917,6 +917,24 @@ func (e NotificationMuteRequestDuration) Valid() bool {
 	}
 }
 
+// Defines values for PinScope.
+const (
+	PinScopeEveryone PinScope = "everyone"
+	PinScopeMe       PinScope = "me"
+)
+
+// Valid indicates whether the value is a known member of the PinScope enum.
+func (e PinScope) Valid() bool {
+	switch e {
+	case PinScopeEveryone:
+		return true
+	case PinScopeMe:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ProfileBackgroundKind.
 const (
 	Color  ProfileBackgroundKind = "color"
@@ -1219,12 +1237,14 @@ func (e StickerPackReportReason) Valid() bool {
 
 // Defines values for SystemEventKind.
 const (
-	SystemEventKindCall          SystemEventKind = "call"
-	SystemEventKindGroupCreated  SystemEventKind = "group_created"
-	SystemEventKindMemberAdded   SystemEventKind = "member_added"
-	SystemEventKindMemberJoined  SystemEventKind = "member_joined"
-	SystemEventKindMemberLeft    SystemEventKind = "member_left"
-	SystemEventKindMemberRemoved SystemEventKind = "member_removed"
+	SystemEventKindCall            SystemEventKind = "call"
+	SystemEventKindGroupCreated    SystemEventKind = "group_created"
+	SystemEventKindMemberAdded     SystemEventKind = "member_added"
+	SystemEventKindMemberJoined    SystemEventKind = "member_joined"
+	SystemEventKindMemberLeft      SystemEventKind = "member_left"
+	SystemEventKindMemberRemoved   SystemEventKind = "member_removed"
+	SystemEventKindMessagePinned   SystemEventKind = "message_pinned"
+	SystemEventKindMessageUnpinned SystemEventKind = "message_unpinned"
 )
 
 // Valid indicates whether the value is a known member of the SystemEventKind enum.
@@ -1241,6 +1261,10 @@ func (e SystemEventKind) Valid() bool {
 	case SystemEventKindMemberLeft:
 		return true
 	case SystemEventKindMemberRemoved:
+		return true
+	case SystemEventKindMessagePinned:
+		return true
+	case SystemEventKindMessageUnpinned:
 		return true
 	default:
 		return false
@@ -2005,9 +2029,12 @@ type Chat struct {
 	Peer *User `json:"peer"`
 
 	// PinPosition Order of a pinned chat among the caller's pinned chats, lowest first; `null` when not pinned.
-	PinPosition *int     `json:"pin_position"`
-	Type        ChatType `json:"type"`
-	UnreadCount int      `json:"unread_count"`
+	PinPosition *int `json:"pin_position"`
+
+	// PinnedMessageCount Pinned messages the caller sees (`GET /chats/{chat_id}/pins`); clients show the pinned bar above 0.
+	PinnedMessageCount int      `json:"pinned_message_count"`
+	Type               ChatType `json:"type"`
+	UnreadCount        int      `json:"unread_count"`
 
 	// UnreadMentionsCount Unread messages that mention the caller (`GET /chats/{chat_id}/mentions`). Clients show an `@` badge while
 	// it is above 0. Always 0 in direct chats.
@@ -2767,7 +2794,7 @@ type Message struct {
 	// SystemEvent What a `system` message records; set on system messages only, whose `content` is then `null`. The names
 	// are the display names at the time of the event. `target` fields are set for `member_added` and
 	// `member_removed`. `call` is set for `call` messages: one per call, posted when the call ends, `actor` is the
-	// initiator.
+	// initiator. `message_id` and `snippet` are set for `message_pinned` and `message_unpinned`.
 	SystemEvent *SystemEvent `json:"system_event,omitempty"`
 	Type        MessageType  `json:"type"`
 }
@@ -2946,9 +2973,41 @@ type PasswordConfirmation struct {
 	Password *string `json:"password,omitempty"`
 }
 
+// PinMessageRequest defines model for PinMessageRequest.
+type PinMessageRequest struct {
+	// Scope `me`: only for the caller. `everyone`: for every member of the chat.
+	Scope PinScope `json:"scope"`
+}
+
 // PinOrderRequest defines model for PinOrderRequest.
 type PinOrderRequest struct {
 	ChatIds []Id `json:"chat_ids"`
+}
+
+// PinScope `me`: only for the caller. `everyone`: for every member of the chat.
+type PinScope string
+
+// PinnedMessage defines model for PinnedMessage.
+type PinnedMessage struct {
+	// CanUnpinForEveryone Whether `DELETE …/pin?scope=everyone` is allowed for the caller; always `false` for `me`.
+	CanUnpinForEveryone bool      `json:"can_unpin_for_everyone"`
+	Message             Message   `json:"message"`
+	PinnedAt            Timestamp `json:"pinned_at"`
+
+	// PinnedBy Who pinned it; the caller for `me`.
+	PinnedBy Id `json:"pinned_by"`
+
+	// Scope `me`: only for the caller. `everyone`: for every member of the chat.
+	Scope PinScope `json:"scope"`
+}
+
+// PinnedMessagePage defines model for PinnedMessagePage.
+type PinnedMessagePage struct {
+	// Items Newest pin first
+	Items []PinnedMessage `json:"items"`
+
+	// NextCursor Opaque cursor; `null` when there are no more results.
+	NextCursor *Cursor `json:"next_cursor"`
 }
 
 // PlaybackUrl defines model for PlaybackUrl.
@@ -3628,7 +3687,7 @@ type StickerPackSlug = string
 // SystemEvent What a `system` message records; set on system messages only, whose `content` is then `null`. The names
 // are the display names at the time of the event. `target` fields are set for `member_added` and
 // `member_removed`. `call` is set for `call` messages: one per call, posted when the call ends, `actor` is the
-// initiator.
+// initiator. `message_id` and `snippet` are set for `message_pinned` and `message_unpinned`.
 type SystemEvent struct {
 	ActorId   *Id    `json:"actor_id"`
 	ActorName string `json:"actor_name"`
@@ -3636,6 +3695,14 @@ type SystemEvent struct {
 	// Call The call a `call` system message records.
 	Call *CallSummary    `json:"call,omitempty"`
 	Kind SystemEventKind `json:"kind"`
+
+	// MessageId The pinned or unpinned message.
+	MessageId   *Id          `json:"message_id,omitempty"`
+	MessageType *MessageType `json:"message_type,omitempty"`
+
+	// Snippet Start of the pinned message's text at the time of the event (at most 60 characters plus `…`); empty for a
+	// message without text, which clients name by its `message_type`.
+	Snippet *string `json:"snippet,omitempty"`
 
 	// TargetId Decimal ID as a string (Snowflake IDs exceed 2^53).
 	//
@@ -4755,6 +4822,26 @@ type SearchMessagesParams struct {
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
 }
 
+// UnpinMessageParams defines parameters for UnpinMessage.
+type UnpinMessageParams struct {
+	Scope PinScope `form:"scope" json:"scope"`
+
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// PinMessageParams defines parameters for PinMessage.
+type PinMessageParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
 // UnreportMessageParams defines parameters for UnreportMessage.
 type UnreportMessageParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
@@ -4784,6 +4871,21 @@ type UnpinChatParams struct {
 
 // PinChatParams defines parameters for PinChat.
 type PinChatParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// ListPinnedMessagesParams defines parameters for ListPinnedMessages.
+type ListPinnedMessagesParams struct {
+	// Limit Page size
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// After Opaque `next_cursor` of the previous page
+	After *After `form:"after,omitempty" json:"after,omitempty"`
+
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
@@ -6194,6 +6296,9 @@ type DeleteMessagesJSONRequestBody = DeleteMessagesRequest
 // ForwardMessagesJSONRequestBody defines body for ForwardMessages for application/json ContentType.
 type ForwardMessagesJSONRequestBody = ForwardMessagesRequest
 
+// PinMessageJSONRequestBody defines body for PinMessage for application/json ContentType.
+type PinMessageJSONRequestBody = PinMessageRequest
+
 // ReportMessageJSONRequestBody defines body for ReportMessage for application/json ContentType.
 type ReportMessageJSONRequestBody = ContentReportRequest
 
@@ -6851,6 +6956,12 @@ type ServerInterface interface {
 	// SearchMessages Search messages in a chat
 	// (GET /chats/{chat_id}/messages/search)
 	SearchMessages(w http.ResponseWriter, r *http.Request, chatId ChatId, params SearchMessagesParams)
+	// UnpinMessage Unpin a message
+	// (DELETE /chats/{chat_id}/messages/{message_id}/pin)
+	UnpinMessage(w http.ResponseWriter, r *http.Request, chatId ChatId, messageId MessageId, params UnpinMessageParams)
+	// PinMessage Pin a message
+	// (PUT /chats/{chat_id}/messages/{message_id}/pin)
+	PinMessage(w http.ResponseWriter, r *http.Request, chatId ChatId, messageId MessageId, params PinMessageParams)
 	// UnreportMessage Withdraw a message report
 	// (DELETE /chats/{chat_id}/messages/{message_id}/report)
 	UnreportMessage(w http.ResponseWriter, r *http.Request, chatId ChatId, messageId MessageId, params UnreportMessageParams)
@@ -6863,6 +6974,9 @@ type ServerInterface interface {
 	// PinChat Pin a chat
 	// (PUT /chats/{chat_id}/pin)
 	PinChat(w http.ResponseWriter, r *http.Request, chatId ChatId, params PinChatParams)
+	// ListPinnedMessages The pinned messages of a chat as the caller sees them
+	// (GET /chats/{chat_id}/pins)
+	ListPinnedMessages(w http.ResponseWriter, r *http.Request, chatId ChatId, params ListPinnedMessagesParams)
 	// MarkChatRead Mark messages as read up to a message
 	// (POST /chats/{chat_id}/read)
 	MarkChatRead(w http.ResponseWriter, r *http.Request, chatId ChatId, params MarkChatReadParams)
@@ -11508,6 +11622,175 @@ func (siw *ServerInterfaceWrapper) SearchMessages(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// UnpinMessage operation middleware
+func (siw *ServerInterfaceWrapper) UnpinMessage(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "message_id" -------------
+	var messageId MessageId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "message_id", r.PathValue("message_id"), &messageId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "message_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UnpinMessageParams
+
+	// ------------- Required query parameter "scope" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "scope", r.URL.Query(), &params.Scope, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "scope"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "scope", Err: err})
+		}
+		return
+	}
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UnpinMessage(w, r, chatId, messageId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PinMessage operation middleware
+func (siw *ServerInterfaceWrapper) PinMessage(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "message_id" -------------
+	var messageId MessageId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "message_id", r.PathValue("message_id"), &messageId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "message_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PinMessageParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PinMessage(w, r, chatId, messageId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // UnreportMessage operation middleware
 func (siw *ServerInterfaceWrapper) UnreportMessage(w http.ResponseWriter, r *http.Request) {
 
@@ -11793,6 +12076,101 @@ func (siw *ServerInterfaceWrapper) PinChat(w http.ResponseWriter, r *http.Reques
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PinChat(w, r, chatId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListPinnedMessages operation middleware
+func (siw *ServerInterfaceWrapper) ListPinnedMessages(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListPinnedMessagesParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "after" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "after", r.URL.Query(), &params.After, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "after"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after", Err: err})
+		}
+		return
+	}
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListPinnedMessages(w, r, chatId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -21694,6 +22072,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/messages/{message_id}/forward", wrapper.ForwardMessage)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/chats/{chat_id}/messages/{message_id}/report", wrapper.UnreportMessage)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/chats/{chat_id}/messages/{message_id}/report", wrapper.ReportMessage)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/chats/{chat_id}/messages/{message_id}/pin", wrapper.UnpinMessage)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/chats/{chat_id}/messages/{message_id}/pin", wrapper.PinMessage)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/chats/{chat_id}/pins", wrapper.ListPinnedMessages)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/chats/{chat_id}/messages/forward", wrapper.ForwardMessages)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/chats/{chat_id}/messages/delete", wrapper.DeleteMessages)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/search/messages", wrapper.SearchAllMessages)
@@ -28997,6 +29378,241 @@ func (response SearchMessages429ApplicationProblemPlusJSONResponse) VisitSearchM
 	return err
 }
 
+type UnpinMessageRequestObject struct {
+	ChatId    ChatId    `json:"chat_id"`
+	MessageId MessageId `json:"message_id"`
+	Params    UnpinMessageParams
+}
+
+type UnpinMessageResponseObject interface {
+	VisitUnpinMessageResponse(w http.ResponseWriter) error
+}
+
+type UnpinMessage204Response struct {
+}
+
+func (response UnpinMessage204Response) VisitUnpinMessageResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type UnpinMessage400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response UnpinMessage400ApplicationProblemPlusJSONResponse) VisitUnpinMessageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnpinMessage401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response UnpinMessage401ApplicationProblemPlusJSONResponse) VisitUnpinMessageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnpinMessage403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response UnpinMessage403ApplicationProblemPlusJSONResponse) VisitUnpinMessageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnpinMessage404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response UnpinMessage404ApplicationProblemPlusJSONResponse) VisitUnpinMessageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnpinMessage426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response UnpinMessage426ApplicationProblemPlusJSONResponse) VisitUnpinMessageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PinMessageRequestObject struct {
+	ChatId    ChatId    `json:"chat_id"`
+	MessageId MessageId `json:"message_id"`
+	Params    PinMessageParams
+	Body      *PinMessageJSONRequestBody
+}
+
+type PinMessageResponseObject interface {
+	VisitPinMessageResponse(w http.ResponseWriter) error
+}
+
+type PinMessage200JSONResponse PinnedMessage
+
+func (response PinMessage200JSONResponse) VisitPinMessageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PinMessage400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response PinMessage400ApplicationProblemPlusJSONResponse) VisitPinMessageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PinMessage401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response PinMessage401ApplicationProblemPlusJSONResponse) VisitPinMessageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PinMessage403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response PinMessage403ApplicationProblemPlusJSONResponse) VisitPinMessageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PinMessage404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response PinMessage404ApplicationProblemPlusJSONResponse) VisitPinMessageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PinMessage409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response PinMessage409ApplicationProblemPlusJSONResponse) VisitPinMessageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PinMessage422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response PinMessage422ApplicationProblemPlusJSONResponse) VisitPinMessageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PinMessage426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response PinMessage426ApplicationProblemPlusJSONResponse) VisitPinMessageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type UnreportMessageRequestObject struct {
 	ChatId    ChatId    `json:"chat_id"`
 	MessageId MessageId `json:"message_id"`
@@ -29348,6 +29964,93 @@ type PinChat426ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response PinChat426ApplicationProblemPlusJSONResponse) VisitPinChatResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPinnedMessagesRequestObject struct {
+	ChatId ChatId `json:"chat_id"`
+	Params ListPinnedMessagesParams
+}
+
+type ListPinnedMessagesResponseObject interface {
+	VisitListPinnedMessagesResponse(w http.ResponseWriter) error
+}
+
+type ListPinnedMessages200JSONResponse PinnedMessagePage
+
+func (response ListPinnedMessages200JSONResponse) VisitListPinnedMessagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPinnedMessages400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response ListPinnedMessages400ApplicationProblemPlusJSONResponse) VisitListPinnedMessagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPinnedMessages401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ListPinnedMessages401ApplicationProblemPlusJSONResponse) VisitListPinnedMessagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPinnedMessages404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response ListPinnedMessages404ApplicationProblemPlusJSONResponse) VisitListPinnedMessagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPinnedMessages426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response ListPinnedMessages426ApplicationProblemPlusJSONResponse) VisitListPinnedMessagesResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -44096,6 +44799,12 @@ type StrictServerInterface interface {
 	// SearchMessages Search messages in a chat
 	// (GET /chats/{chat_id}/messages/search)
 	SearchMessages(ctx context.Context, request SearchMessagesRequestObject) (SearchMessagesResponseObject, error)
+	// UnpinMessage Unpin a message
+	// (DELETE /chats/{chat_id}/messages/{message_id}/pin)
+	UnpinMessage(ctx context.Context, request UnpinMessageRequestObject) (UnpinMessageResponseObject, error)
+	// PinMessage Pin a message
+	// (PUT /chats/{chat_id}/messages/{message_id}/pin)
+	PinMessage(ctx context.Context, request PinMessageRequestObject) (PinMessageResponseObject, error)
 	// UnreportMessage Withdraw a message report
 	// (DELETE /chats/{chat_id}/messages/{message_id}/report)
 	UnreportMessage(ctx context.Context, request UnreportMessageRequestObject) (UnreportMessageResponseObject, error)
@@ -44108,6 +44817,9 @@ type StrictServerInterface interface {
 	// PinChat Pin a chat
 	// (PUT /chats/{chat_id}/pin)
 	PinChat(ctx context.Context, request PinChatRequestObject) (PinChatResponseObject, error)
+	// ListPinnedMessages The pinned messages of a chat as the caller sees them
+	// (GET /chats/{chat_id}/pins)
+	ListPinnedMessages(ctx context.Context, request ListPinnedMessagesRequestObject) (ListPinnedMessagesResponseObject, error)
 	// MarkChatRead Mark messages as read up to a message
 	// (POST /chats/{chat_id}/read)
 	MarkChatRead(ctx context.Context, request MarkChatReadRequestObject) (MarkChatReadResponseObject, error)
@@ -46422,6 +47134,69 @@ func (sh *strictHandler) SearchMessages(w http.ResponseWriter, r *http.Request, 
 	}
 }
 
+// UnpinMessage operation middleware
+func (sh *strictHandler) UnpinMessage(w http.ResponseWriter, r *http.Request, chatId ChatId, messageId MessageId, params UnpinMessageParams) {
+	var request UnpinMessageRequestObject
+
+	request.ChatId = chatId
+	request.MessageId = messageId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UnpinMessage(ctx, request.(UnpinMessageRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UnpinMessage")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UnpinMessageResponseObject); ok {
+		if err := validResponse.VisitUnpinMessageResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PinMessage operation middleware
+func (sh *strictHandler) PinMessage(w http.ResponseWriter, r *http.Request, chatId ChatId, messageId MessageId, params PinMessageParams) {
+	var request PinMessageRequestObject
+
+	request.ChatId = chatId
+	request.MessageId = messageId
+	request.Params = params
+
+	var body PinMessageJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PinMessage(ctx, request.(PinMessageRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PinMessage")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PinMessageResponseObject); ok {
+		if err := validResponse.VisitPinMessageResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // UnreportMessage operation middleware
 func (sh *strictHandler) UnreportMessage(w http.ResponseWriter, r *http.Request, chatId ChatId, messageId MessageId, params UnreportMessageParams) {
 	var request UnreportMessageRequestObject
@@ -46532,6 +47307,33 @@ func (sh *strictHandler) PinChat(w http.ResponseWriter, r *http.Request, chatId 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(PinChatResponseObject); ok {
 		if err := validResponse.VisitPinChatResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListPinnedMessages operation middleware
+func (sh *strictHandler) ListPinnedMessages(w http.ResponseWriter, r *http.Request, chatId ChatId, params ListPinnedMessagesParams) {
+	var request ListPinnedMessagesRequestObject
+
+	request.ChatId = chatId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListPinnedMessages(ctx, request.(ListPinnedMessagesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListPinnedMessages")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListPinnedMessagesResponseObject); ok {
+		if err := validResponse.VisitListPinnedMessagesResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

@@ -2,6 +2,17 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.42
+
+- Pinned messages: `PUT /chats/{chat_id}/messages/{message_id}/pin` (`PinMessageRequest` with `PinScope` `me` or
+  `everyone`, returns `PinnedMessage`), `DELETE /chats/{chat_id}/messages/{message_id}/pin?scope=` and
+  `GET /chats/{chat_id}/pins` (`PinnedMessagePage`). At most 500 pins for everyone per chat and 500 own pins per member
+  and chat (`409` `limit_reached`).
+- `Chat.pinned_message_count`.
+- `SystemEventKind` gains `message_pinned` and `message_unpinned`; `SystemEvent` gains `message_id`, `snippet` and
+  `message_type`.
+- WebSocket server event `pin_update`.
+
 ## 2.1.0-alpha.41
 
 - Public cards without an account (tag `public`, `security: []`, rate limited per IP, `X-Robots-Tag: noindex`):
