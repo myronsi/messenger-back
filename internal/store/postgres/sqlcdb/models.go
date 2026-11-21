@@ -278,6 +278,26 @@ type MessageDayCount struct {
 	Attachments int64
 }
 
+type MessagePin struct {
+	ChatID    int64
+	MessageID int64
+	PinnedBy  int64
+	PinnedAt  time.Time
+}
+
+type MessagePinHide struct {
+	UserID    int64
+	ChatID    int64
+	MessageID int64
+}
+
+type MessagePinsPersonal struct {
+	UserID    int64
+	ChatID    int64
+	MessageID int64
+	PinnedAt  time.Time
+}
+
 type NotificationActivity struct {
 	DeviceID    uuid.UUID
 	SessionID   uuid.UUID

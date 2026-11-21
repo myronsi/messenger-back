@@ -20,6 +20,7 @@ type Notifier interface {
 	ReactionChanged(ctx context.Context, chatID, messageID int64, r scylla.Reaction, added bool, recipients []int64)
 	Read(ctx context.Context, chatID, userID, messageID int64, at time.Time, recipients []int64)
 	Typing(ctx context.Context, chatID, userID int64, typing bool, action string, recipients []int64)
+	PinChanged(ctx context.Context, c PinChange, recipients []int64)
 }
 
 const (
@@ -51,3 +52,4 @@ func (NopNotifier) MessageRemoved(context.Context, scylla.Message, []int64)     
 func (NopNotifier) ReactionChanged(context.Context, int64, int64, scylla.Reaction, bool, []int64) {}
 func (NopNotifier) Read(context.Context, int64, int64, int64, time.Time, []int64)                 {}
 func (NopNotifier) Typing(context.Context, int64, int64, bool, string, []int64)                   {}
+func (NopNotifier) PinChanged(context.Context, PinChange, []int64)                                {}

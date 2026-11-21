@@ -696,3 +696,12 @@ func (Unimplemented) GetOpenGraphName(w http.ResponseWriter, r *http.Request, _ 
 func (Unimplemented) GetOpenGraphInvite(w http.ResponseWriter, r *http.Request, _ InviteToken) {
 	notImplemented(w, r)
 }
+func (Unimplemented) PinMessage(w http.ResponseWriter, r *http.Request, _ ChatId, _ MessageId, _ PinMessageParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) UnpinMessage(w http.ResponseWriter, r *http.Request, _ ChatId, _ MessageId, _ UnpinMessageParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) ListPinnedMessages(w http.ResponseWriter, r *http.Request, _ ChatId, _ ListPinnedMessagesParams) {
+	notImplemented(w, r)
+}

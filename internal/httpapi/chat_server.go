@@ -55,7 +55,7 @@ func PresentChat(v chats.View, basePath string) Chat {
 	c := v.Entry.Chat
 	out := Chat{
 		Id: FormatID(c.ID), Type: ChatType(c.Type), IsPinned: v.Entry.PinnedAt != nil,
-		IsArchived: v.Entry.ArchivedAt != nil, IsRequest: v.Entry.IsRequest, UnreadCount: int(v.Unread), UnreadMentionsCount: v.UnreadMentions, CreatedAt: utc(c.CreatedAt),
+		IsArchived: v.Entry.ArchivedAt != nil, IsRequest: v.Entry.IsRequest, UnreadCount: int(v.Unread), UnreadMentionsCount: v.UnreadMentions, PinnedMessageCount: v.PinnedMessages, CreatedAt: utc(c.CreatedAt),
 	}
 	if v.Entry.PinnedAt != nil && v.Entry.PinPosition != nil {
 		position := int(*v.Entry.PinPosition)
@@ -144,7 +144,7 @@ func serviceError(w http.ResponseWriter, r *http.Request, log *slog.Logger, what
 		WriteProblem(w, http.StatusForbidden, ErrorCodeForbidden)
 	case errors.Is(err, chats.ErrNameTaken):
 		WriteProblem(w, http.StatusConflict, ErrorCodeAlreadyExists, details()...)
-	case errors.Is(err, chats.ErrLimit):
+	case errors.Is(err, chats.ErrLimit), errors.Is(err, messages.ErrLimit):
 		WriteProblem(w, http.StatusConflict, ErrorCodeLimitReached, details()...)
 	case errors.Is(err, chats.ErrConflict):
 		WriteProblem(w, http.StatusConflict, ErrorCodeConflict, details()...)

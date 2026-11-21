@@ -338,6 +338,17 @@ func (f *Fanout) Typing(ctx context.Context, chatID, userID int64, typing bool, 
 	f.same(ctx, "typing", chatID, map[string]any{"user_id": idString(userID), "is_typing": typing, "action": action}, recipients)
 }
 
+func (f *Fanout) PinChanged(ctx context.Context, c messages.PinChange, recipients []int64) {
+	data := map[string]any{
+		"message_id": idString(c.MessageID), "action": c.Action, "scope": c.Scope,
+		"actor_id": idString(c.ActorID), "at": c.At.UTC(),
+	}
+	if c.Count != nil {
+		data["pinned_message_count"] = *c.Count
+	}
+	f.same(ctx, "pin_update", c.ChatID, data, recipients)
+}
+
 // Removed tells users that they are no longer in the chat (it was deleted, they left or were removed).
 // Their gateways stop delivering the chat's events from this moment, even ones published by a send that
 // loaded the members just before the change.
