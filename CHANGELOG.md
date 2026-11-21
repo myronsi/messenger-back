@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.32.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.31.0-alpha.1...v1.32.0-alpha.1) (2026-11-21)
+
+
+### Features
+
+* **pins:** pin messages for yourself or for everyone ([#229](https://github.com/myronsi/messenger-back/issues/229)) ([7dffcf9](https://github.com/myronsi/messenger-back/commit/7dffcf9aac3a5f8409bb89d7e61d929c61ab89c5))
+
 ## [1.31.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.30.0-alpha.1...v1.31.0-alpha.1) (2026-11-20)
 
 
