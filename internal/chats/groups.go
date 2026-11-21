@@ -628,6 +628,7 @@ func (s *Service) RemoveMember(ctx context.Context, userID, chatID, target int64
 	if err := s.d.Store.Sharing().BanAs(context.WithoutCancel(ctx), chatID, userID, target); err != nil {
 		s.d.Log.WarnContext(ctx, "ban removed member", "error", err, "chat_id", chatID)
 	}
+	s.forgetMemberPins(ctx, target, chatID)
 	err := s.membership(ctx, chatID, userID, nil, []int64{target})
 	s.changed(ctx, chatID)
 	s.logMembers(ctx, chatID, messages.SystemMemberRemoved, userID, target)
@@ -643,10 +644,17 @@ func (s *Service) Leave(ctx context.Context, userID, chatID int64) error {
 		}
 		return err
 	}
+	s.forgetMemberPins(ctx, userID, chatID)
 	err := s.membership(ctx, chatID, userID, nil, []int64{userID})
 	s.changed(ctx, chatID)
 	s.logMembers(ctx, chatID, messages.SystemMemberLeft, userID)
 	return err
+}
+
+func (s *Service) forgetMemberPins(ctx context.Context, userID, chatID int64) {
+	if err := s.d.Store.MessagePins().RemoveUserPins(context.WithoutCancel(ctx), userID, chatID); err != nil {
+		s.d.Log.WarnContext(ctx, "remove member pins", "error", err, "chat_id", chatID)
+	}
 }
 
 // SetRole makes a member an admin, a moderator or a member again.

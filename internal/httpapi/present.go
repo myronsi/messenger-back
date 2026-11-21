@@ -367,5 +367,10 @@ func presentSystemEvent(e messages.SystemEvent) *SystemEvent {
 	if c := e.Call; c != nil {
 		out.Call = &CallSummary{CallId: FormatID(c.CallID), Kind: CallSummaryKind(c.Kind), Outcome: CallEndReason(c.Outcome), DurationSeconds: c.DurationSeconds}
 	}
+	if e.MessageID != nil {
+		out.MessageId = formatIDPtr(e.MessageID)
+		snippet, kind := e.Snippet, MessageType(e.MessageType)
+		out.Snippet, out.MessageType = &snippet, &kind
+	}
 	return out
 }

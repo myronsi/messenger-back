@@ -20,12 +20,15 @@ const (
 )
 
 type SystemEvent struct {
-	Kind       string       `json:"kind"`
-	ActorID    *int64       `json:"actor_id,omitempty"`
-	ActorName  string       `json:"actor_name,omitempty"`
-	TargetID   *int64       `json:"target_id,omitempty"`
-	TargetName string       `json:"target_name,omitempty"`
-	Call       *CallSummary `json:"call,omitempty"`
+	Kind        string       `json:"kind"`
+	ActorID     *int64       `json:"actor_id,omitempty"`
+	ActorName   string       `json:"actor_name,omitempty"`
+	TargetID    *int64       `json:"target_id,omitempty"`
+	TargetName  string       `json:"target_name,omitempty"`
+	Call        *CallSummary `json:"call,omitempty"`
+	MessageID   *int64       `json:"message_id,omitempty"`
+	Snippet     string       `json:"snippet,omitempty"`
+	MessageType string       `json:"message_type,omitempty"`
 }
 
 type CallSummary struct {

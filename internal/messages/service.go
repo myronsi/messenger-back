@@ -90,6 +90,7 @@ type Store interface {
 	Stickers() postgres.StickerRepository
 	Unsent() postgres.UnsentRepository
 	Sharing() postgres.SharingRepository
+	MessagePins() postgres.MessagePinRepository
 }
 
 // Deps are the collaborators of the service.
@@ -889,6 +890,7 @@ func (s *Service) requireNotHidden(ctx context.Context, userID int64, m scylla.M
 }
 
 func (s *Service) unlink(ctx context.Context, m scylla.Message) error {
+	s.forgetPins(ctx, m.ChatID, []int64{m.ID})
 	if err := s.d.Store.Sharing().RemoveUnreadMentions(context.WithoutCancel(ctx), m.ChatID, []int64{m.ID}); err != nil {
 		s.d.Log.WarnContext(ctx, "remove unread mentions", "error", err, "chat_id", m.ChatID)
 	}
@@ -904,6 +906,7 @@ func (s *Service) deleteChecked(ctx context.Context, userID int64, m scylla.Mess
 		if err := s.d.Messages.Hide(ctx, userID, chatID, messageID, scylla.HiddenDeletedForMe); err != nil {
 			return fmt.Errorf("%w: %w", ErrUnavailable, err)
 		}
+		s.hidePins(ctx, userID, chatID, []int64{messageID})
 		s.d.Notifier.MessageDeleted(ctx, chatID, messageID, ScopeMe, []int64{userID})
 		s.emit(ctx, events.Event{Type: events.MessageHidden, ChatID: chatID, MessageID: messageID, UserID: userID, ActorID: userID})
 		return nil

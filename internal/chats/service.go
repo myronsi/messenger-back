@@ -57,6 +57,7 @@ type Store interface {
 	Attachments() postgres.AttachmentRepository
 	Stickers() postgres.StickerRepository
 	Sharing() postgres.SharingRepository
+	MessagePins() postgres.MessagePinRepository
 }
 
 // MessageStore is the part of the message store the chat list reads.
@@ -191,6 +192,7 @@ type View struct {
 	PeerVoice      bool
 	Unread         int64
 	UnreadMentions int
+	PinnedMessages int
 	FirstUnread    *int64
 	Last           *LastMessage
 }
@@ -424,7 +426,9 @@ func (s *Service) render(ctx context.Context, viewer int64, entries []postgres.C
 		}
 	}
 	var groupIDs []int64
+	allIDs := make([]int64, 0, len(views))
 	for _, v := range views {
+		allIDs = append(allIDs, v.Entry.Chat.ID)
 		if v.Entry.Chat.Type == postgres.ChatGroup {
 			groupIDs = append(groupIDs, v.Entry.Chat.ID)
 		}
@@ -432,6 +436,10 @@ func (s *Service) render(ctx context.Context, viewer int64, entries []postgres.C
 	mentions, err := s.d.Store.Sharing().UnreadMentionCounts(ctx, viewer, groupIDs)
 	if err != nil {
 		s.d.Log.WarnContext(ctx, "unread mentions", "error", err)
+	}
+	pinned, err := s.d.Store.MessagePins().VisiblePinCounts(ctx, viewer, allIDs)
+	if err != nil {
+		s.d.Log.WarnContext(ctx, "pinned message counts", "error", err)
 	}
 	for i := range views {
 		e := views[i].Entry
@@ -445,6 +453,7 @@ func (s *Service) render(ctx context.Context, viewer int64, entries []postgres.C
 		// The counters only count up between reads; the contract stops at 999.
 		views[i].Unread = min(counts[e.Chat.ID], unreadCap)
 		views[i].UnreadMentions = mentions[e.Chat.ID]
+		views[i].PinnedMessages = pinned[e.Chat.ID]
 		if views[i].Unread > 0 {
 			views[i].FirstUnread = firstUnread[i]
 		}
@@ -948,8 +957,16 @@ func (s *Service) ClearHistory(ctx context.Context, userID, chatID int64, scope 
 		if err := s.d.Store.Chats().ClearForEveryone(ctx, chatID, bound); err != nil {
 			return unavailable(err)
 		}
-	} else if err := s.d.Store.Chats().ClearForUser(ctx, chatID, userID, bound, false); err != nil {
-		return notFoundOr(err)
+		if err := s.d.Store.MessagePins().ClearPins(context.WithoutCancel(ctx), chatID, bound); err != nil {
+			s.d.Log.WarnContext(ctx, "clear pins", "error", err, "chat_id", chatID)
+		}
+	} else {
+		if err := s.d.Store.Chats().ClearForUser(ctx, chatID, userID, bound, false); err != nil {
+			return notFoundOr(err)
+		}
+		if err := s.d.Store.MessagePins().ClearUserPins(context.WithoutCancel(ctx), userID, chatID, bound); err != nil {
+			s.d.Log.WarnContext(ctx, "clear own pins", "error", err, "chat_id", chatID)
+		}
 	}
 	if err := s.d.Unread.Forget(ctx, chatID, recipients...); err != nil {
 		s.d.Log.WarnContext(ctx, "forget unread", "error", err)

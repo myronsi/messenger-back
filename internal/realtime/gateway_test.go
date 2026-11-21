@@ -916,6 +916,41 @@ func TestHiddenChatKeepsDeliveringAndHistoryClearedFollowsTheContract(t *testing
 	}
 }
 
+func TestPinUpdateReachesTheRecipientsOnly(t *testing.T) {
+	e := newEnv(t)
+	a := e.instance("a")
+	ctx := context.Background()
+	alice, bob := e.user("alice"), e.user("bob")
+	chat, _, err := e.pg.Chats().CreateDirect(ctx, alice, bob)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ca := e.online(a, alice)
+	cb := e.online(a, bob)
+	waitDelivery(t, ca, cb, chat.ID)
+
+	at := time.Date(2026, 11, 21, 10, 0, 0, 0, time.UTC)
+	a.fanout.PinChanged(ctx, messages.PinChange{ChatID: chat.ID, MessageID: 42, Action: messages.PinActionPinned, Scope: messages.ScopeEveryone, ActorID: alice, At: at}, []int64{alice, bob})
+	for _, c := range []*client{ca, cb} {
+		d := data(c.next("pin_update"))
+		if d["message_id"] != "42" || d["action"] != "pinned" || d["scope"] != "everyone" || d["actor_id"] != fmt.Sprint(alice) || d["at"] != "2026-11-21T10:00:00Z" {
+			t.Fatalf("pin_update: %v", d)
+		}
+	}
+	n := 3
+	a.fanout.PinChanged(ctx, messages.PinChange{ChatID: chat.ID, MessageID: 43, Action: messages.PinActionUnpinned, Scope: messages.ScopeMe, ActorID: bob, At: at, Count: &n}, []int64{bob})
+	if d := data(cb.next("pin_update")); d["pinned_message_count"] != float64(3) || d["scope"] != "me" {
+		t.Fatalf("own pin_update: %v", d)
+	}
+	ca.send(text("after-pin", chat.ID, "ping"))
+	ca.next("ack")
+	for _, ev := range ca.pending {
+		if ev["type"] == "pin_update" {
+			t.Fatalf("alice got bob's own pin_update: %v", ev)
+		}
+	}
+}
+
 func TestProfileChangeReachesChatPartnersAndOwnDevices(t *testing.T) {
 	e := newEnv(t)
 	a, b := e.instance("a"), e.instance("b")

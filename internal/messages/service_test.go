@@ -38,6 +38,7 @@ type recorder struct {
 	removed    map[int64]scylla.Message
 	reads      [][]int64
 	typing     []typingCall
+	pins       []pinCall
 }
 
 type typingCall struct {

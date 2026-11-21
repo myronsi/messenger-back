@@ -553,6 +553,30 @@ func (s *Server) SendMessage(w http.ResponseWriter, r *http.Request, chatID Chat
 	s.messages.SendMessage(w, r, chatID, params)
 }
 
+func (s *Server) PinMessage(w http.ResponseWriter, r *http.Request, chatID ChatId, messageID MessageId, params PinMessageParams) {
+	if s.messages == nil {
+		s.AuthServer.PinMessage(w, r, chatID, messageID, params)
+		return
+	}
+	s.messages.PinMessage(w, r, chatID, messageID, params)
+}
+
+func (s *Server) UnpinMessage(w http.ResponseWriter, r *http.Request, chatID ChatId, messageID MessageId, params UnpinMessageParams) {
+	if s.messages == nil {
+		s.AuthServer.UnpinMessage(w, r, chatID, messageID, params)
+		return
+	}
+	s.messages.UnpinMessage(w, r, chatID, messageID, params)
+}
+
+func (s *Server) ListPinnedMessages(w http.ResponseWriter, r *http.Request, chatID ChatId, params ListPinnedMessagesParams) {
+	if s.messages == nil {
+		s.AuthServer.ListPinnedMessages(w, r, chatID, params)
+		return
+	}
+	s.messages.ListPinnedMessages(w, r, chatID, params)
+}
+
 // ListChatMedia delegates to the message endpoints (GET /chats/{id}/media).
 func (s *Server) ListChatMedia(w http.ResponseWriter, r *http.Request, chatID ChatId, params ListChatMediaParams) {
 	if s.messages == nil {
