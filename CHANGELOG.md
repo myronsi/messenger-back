@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.33.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.32.0-alpha.1...v1.33.0-alpha.1) (2026-11-22)
+
+
+### Features
+
+* **auth:** bind sessions to a device key ([#231](https://github.com/myronsi/messenger-back/issues/231)) ([c0d65d2](https://github.com/myronsi/messenger-back/commit/c0d65d25dcf3d1317aad13098b028436e247c139))
+
 ## [1.32.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.31.0-alpha.1...v1.32.0-alpha.1) (2026-11-21)
 
 
