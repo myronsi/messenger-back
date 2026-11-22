@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.42
+  version: 2.1.0-alpha.43
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -92,6 +92,7 @@ paths:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
       - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/DeviceProof"
     post:
       tags: [auth]
       operationId: register
@@ -119,6 +120,7 @@ paths:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
       - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/DeviceProof"
     post:
       tags: [auth]
       operationId: login
@@ -146,6 +148,7 @@ paths:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
       - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/DeviceProof"
     post:
       tags: [auth]
       operationId: loginTwoFactor
@@ -172,6 +175,7 @@ paths:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
       - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/DeviceProof"
     post:
       tags: [auth]
       operationId: refreshToken
@@ -214,6 +218,7 @@ paths:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
       - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/DeviceProof"
     post:
       tags: [auth]
       operationId: recoverWithKey
@@ -4485,6 +4490,7 @@ paths:
       - *a1
       - *a2
       - *a3
+      - $ref: "#/components/parameters/DeviceProof"
     post:
       tags:
         - auth
@@ -4605,6 +4611,7 @@ paths:
       - $ref: "#/components/parameters/ClientVersion"
       - $ref: "#/components/parameters/ClientApiVersion"
       - $ref: "#/components/parameters/QrLoginRequestId"
+      - $ref: "#/components/parameters/DeviceProof"
     post:
       tags: [auth]
       operationId: pollQrLogin
@@ -5125,7 +5132,10 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
   /auth/passkeys/login/verify:
-    parameters: *a1
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/DeviceProof"
     post:
       tags:
         - auth
@@ -6084,6 +6094,20 @@ components:
       required: false
       description: Version of the client app, for logs and the per-client metric.
       schema: { type: string }
+    DeviceProof:
+      name: Device-Proof
+      in: header
+      required: false
+      description: |
+        Proof that the request comes from the device the session is bound to: a compact JWS (`typ` `dpop+jwt`,
+        `alg` `ES256`, the public P-256 key as `jwk` in the protected header) over `htm` (HTTP method), `htu`
+        (absolute request URL without query and fragment), `iat` (Unix seconds) and `jti` (unique per proof).
+        A session created with a proof is bound to its key; an unbound session is bound at its first refresh
+        with a proof. Refreshing a bound session without a proof of its key ends the session (`401`). Bad
+        proofs are answered `400` (`invalid_request`), an `iat` more than 5 minutes off with `401`
+        (`device_proof_stale`); the session survives, and the client may retry with its clock corrected by the
+        `Date` response header.
+      schema: { type: string, maxLength: 2048 }
     ClientApiVersion:
       name: X-Client-Api-Version
       in: header
@@ -6328,6 +6352,7 @@ components:
         - unsupported_media_type
         - rate_limited
         - client_outdated
+        - device_proof_stale
         - invalid_client_version
         - blocked_by_user
         - approval_required

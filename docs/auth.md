@@ -25,6 +25,41 @@ Every refresh rotates the token. Every replaced hash is kept in `user_session_ro
 - presenting it again within `REFRESH_REUSE_GRACE` (10 s) of its replacement is treated as a lost response or parallel tab: the request fails with `401` but the session survives and the response does **not** clear the refresh cookie, so the cookie set by the winning request stays;
 - otherwise it is treated as theft: **the session is revoked** and the event is recorded.
 
+## Device-bound sessions
+
+A copied refresh cookie must not work on another device. The web client creates a non-extractable ECDSA P-256 key
+(WebCrypto, kept in IndexedDB) and sends a `Device-Proof` header on every `POST` under `/auth/`: a compact JWS with
+`typ` `dpop+jwt`, `alg` `ES256` and the public key as `jwk` in the protected header, over `htm` (method), `htu`
+(absolute URL without query and fragment), `iat` (Unix seconds) and `jti`. It is the DPoP proof format (RFC 9449),
+used only to bind the session, not the access token.
+
+`verifyDeviceProof` in `internal/httpapi/device_proof.go` checks the proof before the handler runs, so nothing
+single-use is consumed by a bad one: signature, `htm`, the path of `htu` (it must end with the route below the base
+path, so a proxy prefix is fine), `iat` within 5 minutes, and `jti` once per key (Redis, 11 minutes). The session
+stores the RFC 7638 thumbprint of the key in `user_sessions.device_key_thumbprint`.
+
+| Request | Result |
+| --- | --- |
+| Sign-in (register, login, 2FA, passkey, recovery key, device recovery, QR poll) with a proof | the new session is bound to the key |
+| Refresh of a bound session with a proof of its key | rotated as usual |
+| Refresh of a bound session without a proof, or with another key | `401` `unauthenticated`, cookie cleared, **session revoked**, security event `device_key_mismatch` |
+| Refresh of an unbound session with a proof | the session is bound, then rotated (silent upgrade of sessions from before the key) |
+| Refresh of an unbound session without a proof | rotated as before; with `AUTH_REQUIRE_DEVICE_KEY=true` revoked instead (`device_key_required`) |
+| Malformed, wrongly signed, wrong-route or replayed proof | `400` `invalid_request`, session untouched |
+| `iat` more than 5 minutes off | `401` `device_proof_stale`, session untouched; the client may retry once with its clock corrected by `Date` (exposed to CORS) |
+
+A refresh that loses the race inside `REFRESH_REUSE_GRACE` is answered as before, whatever proof it carries.
+
+Turn `AUTH_REQUIRE_DEVICE_KEY` on once the released clients send proofs and almost every active session is bound:
+
+```sql
+SELECT count(*) FILTER (WHERE device_key_thumbprint IS NULL) AS unbound, count(*) AS active
+FROM user_sessions WHERE revoked_at IS NULL AND expires_at > now();
+```
+
+A client that loses its key (site data cleared, Safari removing storage of a site not visited for 7 days) ends its
+session at the next refresh and signs in again.
+
 The worker (`cmd/worker`) runs a maintenance job every hour: it deletes sessions that expired or were revoked more than 30 days ago (the rotation history goes with them), prunes rotation history rows older than 30 days (an older replayed token is then just unknown, not recognised as reuse), and removes expired recovery capabilities (device recovery requests, WebAuthn challenges, email tokens and abandoned recovery mail jobs).
 
 ### Migration from the Python backend (MSGC-77)
@@ -131,4 +166,4 @@ Migration 000012 is additive. Apply it before deploying the updated API. Keep re
 
 ## Configuration
 
-`JWT_SECRET`, `ENCRYPTION_KEY`, `RECOVERY_PEPPER` (required), `COOKIE_SECURE`, `REFRESH_COOKIE_PATH`, `SESSION_CACHE_TTL`, `REFRESH_REUSE_GRACE`, `PASSWORD_HASH_CONCURRENCY`, `TRUSTED_PROXIES`, `REQUIRE_TERMS_ACCEPTANCE`; see `.env.example`.
+`JWT_SECRET`, `ENCRYPTION_KEY`, `RECOVERY_PEPPER` (required), `COOKIE_SECURE`, `REFRESH_COOKIE_PATH`, `SESSION_CACHE_TTL`, `REFRESH_REUSE_GRACE`, `PASSWORD_HASH_CONCURRENCY`, `TRUSTED_PROXIES`, `REQUIRE_TERMS_ACCEPTANCE`, `AUTH_REQUIRE_DEVICE_KEY`; see `.env.example`.

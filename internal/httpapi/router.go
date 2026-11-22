@@ -29,6 +29,7 @@ type Options struct {
 	// Authenticator verifies access tokens. Every operation that the contract does not list as public is
 	// answered 401 without one.
 	Authenticator Authenticator
+	DeviceProofs  DeviceProofVerifier
 	// WebSocket serves <base path>/ws (the realtime gateway). It authenticates with a ticket, not a bearer
 	// token, so it is mounted outside the contract's routes. Optional.
 	WebSocket   http.Handler
@@ -67,7 +68,7 @@ func NewRouter(o Options) *Router {
 	HandlerWithOptions(api, StdHTTPServerOptions{
 		BaseURL:          o.HTTP.BasePath,
 		BaseRouter:       mux,
-		Middlewares:      []MiddlewareFunc{authenticate(o.Authenticator, o.HTTP.BasePath, o.Log)},
+		Middlewares:      []MiddlewareFunc{authenticate(o.Authenticator, o.HTTP.BasePath, o.Log), verifyDeviceProof(o.DeviceProofs, o.HTTP.BasePath, o.Log)},
 		ErrorHandlerFunc: requestErrorHandler,
 	})
 

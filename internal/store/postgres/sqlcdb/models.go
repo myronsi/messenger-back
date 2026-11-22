@@ -691,16 +691,18 @@ type UserSecuritySetting struct {
 }
 
 type UserSession struct {
-	ID               uuid.UUID
-	UserID           int64
-	RefreshTokenHash string
-	UserAgent        *string
-	IpAddress        *netip.Addr
-	CreatedAt        time.Time
-	LastActiveAt     time.Time
-	ExpiresAt        time.Time
-	RevokedAt        *time.Time
-	Location         []byte
+	ID                  uuid.UUID
+	UserID              int64
+	RefreshTokenHash    string
+	UserAgent           *string
+	IpAddress           *netip.Addr
+	CreatedAt           time.Time
+	LastActiveAt        time.Time
+	ExpiresAt           time.Time
+	RevokedAt           *time.Time
+	Location            []byte
+	DeviceKeyThumbprint *string
+	DeviceKeyBoundAt    *time.Time
 }
 
 type UserSessionRotatedToken struct {

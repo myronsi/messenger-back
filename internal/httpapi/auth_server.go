@@ -151,7 +151,7 @@ func (a *AuthServer) fail(w http.ResponseWriter, r *http.Request, err error, wit
 		WriteProblem(w, credStatus, ErrorCodeInvalidTwoFactorCode)
 	case withSession && errors.Is(err, auth.ErrInvalidChallenge):
 		WriteProblem(w, http.StatusBadRequest, ErrorCodeInvalidRequest)
-	case errors.Is(err, auth.ErrInvalidChallenge), errors.Is(err, auth.ErrInvalidRefreshToken), errors.Is(err, auth.ErrRefreshSuperseded),
+	case errors.Is(err, auth.ErrInvalidChallenge), errors.Is(err, auth.ErrInvalidRefreshToken), errors.Is(err, auth.ErrRefreshSuperseded), errors.Is(err, auth.ErrDeviceKeyMismatch),
 		errors.Is(err, auth.ErrInvalidRecovery), errors.Is(err, auth.ErrUnauthenticated), errors.Is(err, auth.ErrInvalidToken):
 		WriteProblem(w, http.StatusUnauthorized, ErrorCodeUnauthenticated)
 	case errors.Is(err, auth.ErrSessionNotFound):
@@ -305,7 +305,7 @@ func (a *AuthServer) RefreshToken(w http.ResponseWriter, r *http.Request, _ Refr
 	}
 	ts, err := a.svc.Refresh(r.Context(), a.clientOf(r), cookie.Value)
 	if err != nil {
-		if errors.Is(err, auth.ErrInvalidRefreshToken) || errors.Is(err, auth.ErrRevocationIncomplete) {
+		if errors.Is(err, auth.ErrInvalidRefreshToken) || errors.Is(err, auth.ErrRevocationIncomplete) || errors.Is(err, auth.ErrDeviceKeyMismatch) {
 			a.clearRefreshCookie(w)
 		}
 		a.fail(w, r, err, false)

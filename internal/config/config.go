@@ -217,6 +217,7 @@ type Auth struct {
 	// are believed when working out the client address (rate limits, session records).
 	TrustedProxies         []string `env:"TRUSTED_PROXIES" envSeparator:","`
 	RequireTermsAcceptance bool     `env:"REQUIRE_TERMS_ACCEPTANCE" envDefault:"false"`
+	RequireDeviceKey       bool     `env:"AUTH_REQUIRE_DEVICE_KEY" envDefault:"false"`
 }
 
 var loopbackProxies = []netip.Prefix{netip.MustParsePrefix("127.0.0.0/8"), netip.MustParsePrefix("::1/128")}

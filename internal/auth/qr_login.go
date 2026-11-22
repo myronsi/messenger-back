@@ -93,6 +93,7 @@ func (s *Service) PollQRLogin(ctx context.Context, c Client, id, pollToken strin
 	}
 	sess, err := s.store.QRLogins().Complete(ctx, r.IDHash, pollHash, postgres.NewSession{
 		RefreshTokenHash: refreshHash, UserAgent: c.agentPtr(), IP: c.ipPtr(), Location: s.geo.Lookup(c.IP),
+		DeviceKeyThumbprint: c.deviceKeyThumbprint(),
 	}, s.recoveryApprovalMaxAge, s.now())
 	if errors.Is(err, postgres.ErrNotFound) {
 		return expired, nil
