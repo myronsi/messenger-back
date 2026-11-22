@@ -2,6 +2,16 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.43
+
+- Device-bound sessions: optional header parameter `DeviceProof` (`Device-Proof`, a DPoP-style ES256 proof) on
+  `POST /auth/register`, `/auth/login`, `/auth/login/2fa`, `/auth/refresh`, `/auth/recover/key`,
+  `/auth/recovery-requests/{requestId}/complete`, `/auth/qr-login/{requestId}/poll` and
+  `/auth/passkeys/login/verify`. A refresh of a bound session without a proof of its key answers `401` and ends the
+  session.
+- `ErrorCode` gains `device_proof_stale`.
+- `Date` is exposed to cross-origin clients.
+
 ## 2.1.0-alpha.42
 
 - Pinned messages: `PUT /chats/{chat_id}/messages/{message_id}/pin` (`PinMessageRequest` with `PinScope` `me` or

@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"errors"
 	"time"
@@ -17,7 +18,15 @@ func sessionFrom(s sqlcdb.UserSession) Session {
 	return Session{
 		ID: s.ID, UserID: s.UserID, UserAgent: s.UserAgent, IP: s.IpAddress, Location: decodeLocation(s.Location),
 		CreatedAt: s.CreatedAt, LastActiveAt: s.LastActiveAt, ExpiresAt: s.ExpiresAt, RevokedAt: s.RevokedAt,
+		DeviceKeyThumbprint: s.DeviceKeyThumbprint, DeviceKeyBoundAt: s.DeviceKeyBoundAt,
 	}
+}
+
+func optionalText(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }
 
 type sessionRepo struct{ s *Store }
@@ -53,7 +62,7 @@ func (r sessionRepo) Create(ctx context.Context, n NewSession) (Session, error) 
 				return ErrConflict
 			}
 		}
-		row, err := q.CreateSession(ctx, sqlcdb.CreateSessionParams{UserID: n.UserID, RefreshTokenHash: n.RefreshTokenHash, UserAgent: n.UserAgent, IpAddress: n.IP, Location: encodeLocation(n.Location), ExpiresAt: n.ExpiresAt})
+		row, err := q.CreateSession(ctx, sqlcdb.CreateSessionParams{UserID: n.UserID, RefreshTokenHash: n.RefreshTokenHash, UserAgent: n.UserAgent, IpAddress: n.IP, Location: encodeLocation(n.Location), ExpiresAt: n.ExpiresAt, DeviceKeyThumbprint: optionalText(n.DeviceKeyThumbprint)})
 		out = sessionFrom(row)
 		return err
 	})
@@ -71,6 +80,17 @@ func (r sessionRepo) Rotate(ctx context.Context, req RotateRequest) (RotateResul
 			if cur.RevokedAt != nil || !cur.ExpiresAt.After(now) {
 				return nil
 			}
+			if outcome, refused := deviceKeyRefusal(cur.DeviceKeyThumbprint, req); refused {
+				revoked, err := q.RevokeSessionByID(ctx, cur.ID)
+				if err != nil {
+					return err
+				}
+				if len(revoked) == 0 {
+					return nil
+				}
+				out = RotateResult{Outcome: outcome, Session: sessionFrom(cur)}
+				return nil
+			}
 			days := DefaultSessionDays
 			if st, err := q.GetSecuritySettings(ctx, cur.UserID); err == nil {
 				days = int(st.SessionDurationDays)
@@ -79,6 +99,7 @@ func (r sessionRepo) Rotate(ctx context.Context, req RotateRequest) (RotateResul
 			}
 			next, err := q.RotateSession(ctx, sqlcdb.RotateSessionParams{
 				ID: cur.ID, NewHash: req.NewHash, ExpiresAt: req.NewExpiresAt(days), UserAgent: req.UserAgent, IpAddress: req.IP, Location: encodeLocation(req.Location),
+				DeviceKeyThumbprint: optionalText(req.DeviceKeyThumbprint),
 			})
 			if err != nil {
 				return err
@@ -87,7 +108,7 @@ func (r sessionRepo) Rotate(ctx context.Context, req RotateRequest) (RotateResul
 			if err := q.RecordRotatedToken(ctx, sqlcdb.RecordRotatedTokenParams{TokenHash: req.PresentedHash, SessionID: cur.ID}); err != nil {
 				return err
 			}
-			out = RotateResult{Outcome: RotateOK, Session: sessionFrom(next)}
+			out = RotateResult{Outcome: RotateOK, Session: sessionFrom(next), Bound: cur.DeviceKeyThumbprint == nil && next.DeviceKeyThumbprint != nil}
 			return nil
 		}
 		if !errors.Is(err, pgx.ErrNoRows) {
@@ -352,4 +373,17 @@ func (r settingsRepo) CountRecoveryCodes(ctx context.Context, userID int64) (int
 	defer cancel()
 	n, err := r.s.q.CountUnusedRecoveryCodes(ctx, userID)
 	return int(n), mapError(err)
+}
+
+func deviceKeyRefusal(bound *string, req RotateRequest) (RotateOutcome, bool) {
+	if bound != nil {
+		if subtle.ConstantTimeCompare([]byte(*bound), []byte(req.DeviceKeyThumbprint)) != 1 {
+			return RotateDeviceKeyMismatch, true
+		}
+		return RotateOK, false
+	}
+	if req.DeviceKeyThumbprint == "" && req.RequireDeviceKey {
+		return RotateDeviceKeyRequired, true
+	}
+	return RotateOK, false
 }

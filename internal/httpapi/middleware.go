@@ -19,6 +19,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/myronsi/messenger-back/internal/auth"
 	"github.com/myronsi/messenger-back/internal/observability"
 )
 
@@ -216,9 +217,9 @@ func securityHeaders(hsts bool) middleware {
 }
 
 var (
-	corsAllowedHeaders = strings.Join([]string{"Authorization", "Content-Type", "X-Client-Version", "X-Client-Api-Version", RequestIDHeader}, ", ")
+	corsAllowedHeaders = strings.Join([]string{"Authorization", "Content-Type", "X-Client-Version", "X-Client-Api-Version", RequestIDHeader, auth.DeviceProofHeader}, ", ")
 	corsAllowedMethods = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-	corsExposedHeaders = strings.Join([]string{RequestIDHeader, "Retry-After"}, ", ")
+	corsExposedHeaders = strings.Join([]string{RequestIDHeader, "Retry-After", "Date"}, ", ")
 )
 
 // cors allows cross-origin requests from the configured origins only (with credentials, because

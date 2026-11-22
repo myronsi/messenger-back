@@ -14,18 +14,21 @@ import (
 )
 
 const createSession = `-- name: CreateSession :one
-INSERT INTO user_sessions (user_id, refresh_token_hash, user_agent, ip_address, location, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at, location
+INSERT INTO user_sessions (user_id, refresh_token_hash, user_agent, ip_address, location, expires_at, device_key_thumbprint, device_key_bound_at)
+VALUES ($1, $2, $3, $4, $5, $6,
+        $7::text,
+        CASE WHEN $7::text IS NULL THEN NULL ELSE now() END)
+RETURNING id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at, location, device_key_thumbprint, device_key_bound_at
 `
 
 type CreateSessionParams struct {
-	UserID           int64
-	RefreshTokenHash string
-	UserAgent        *string
-	IpAddress        *netip.Addr
-	Location         []byte
-	ExpiresAt        time.Time
+	UserID              int64
+	RefreshTokenHash    string
+	UserAgent           *string
+	IpAddress           *netip.Addr
+	Location            []byte
+	ExpiresAt           time.Time
+	DeviceKeyThumbprint *string
 }
 
 func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (UserSession, error) {
@@ -36,6 +39,7 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (U
 		arg.IpAddress,
 		arg.Location,
 		arg.ExpiresAt,
+		arg.DeviceKeyThumbprint,
 	)
 	var i UserSession
 	err := row.Scan(
@@ -49,6 +53,8 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (U
 		&i.ExpiresAt,
 		&i.RevokedAt,
 		&i.Location,
+		&i.DeviceKeyThumbprint,
+		&i.DeviceKeyBoundAt,
 	)
 	return i, err
 }
@@ -113,7 +119,7 @@ func (q *Queries) GetRotatedToken(ctx context.Context, hash string) (GetRotatedT
 }
 
 const getSession = `-- name: GetSession :one
-SELECT id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at, location FROM user_sessions WHERE id = $1
+SELECT id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at, location, device_key_thumbprint, device_key_bound_at FROM user_sessions WHERE id = $1
 `
 
 func (q *Queries) GetSession(ctx context.Context, id uuid.UUID) (UserSession, error) {
@@ -130,12 +136,14 @@ func (q *Queries) GetSession(ctx context.Context, id uuid.UUID) (UserSession, er
 		&i.ExpiresAt,
 		&i.RevokedAt,
 		&i.Location,
+		&i.DeviceKeyThumbprint,
+		&i.DeviceKeyBoundAt,
 	)
 	return i, err
 }
 
 const getSessionByRefreshHash = `-- name: GetSessionByRefreshHash :one
-SELECT id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at, location FROM user_sessions WHERE refresh_token_hash = $1
+SELECT id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at, location, device_key_thumbprint, device_key_bound_at FROM user_sessions WHERE refresh_token_hash = $1
 `
 
 func (q *Queries) GetSessionByRefreshHash(ctx context.Context, hash string) (UserSession, error) {
@@ -152,12 +160,14 @@ func (q *Queries) GetSessionByRefreshHash(ctx context.Context, hash string) (Use
 		&i.ExpiresAt,
 		&i.RevokedAt,
 		&i.Location,
+		&i.DeviceKeyThumbprint,
+		&i.DeviceKeyBoundAt,
 	)
 	return i, err
 }
 
 const listActiveSessions = `-- name: ListActiveSessions :many
-SELECT id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at, location FROM user_sessions
+SELECT id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at, location, device_key_thumbprint, device_key_bound_at FROM user_sessions
 WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > now()
 ORDER BY last_active_at DESC, created_at DESC
 `
@@ -182,6 +192,8 @@ func (q *Queries) ListActiveSessions(ctx context.Context, userID int64) ([]UserS
 			&i.ExpiresAt,
 			&i.RevokedAt,
 			&i.Location,
+			&i.DeviceKeyThumbprint,
+			&i.DeviceKeyBoundAt,
 		); err != nil {
 			return nil, err
 		}
@@ -194,7 +206,7 @@ func (q *Queries) ListActiveSessions(ctx context.Context, userID int64) ([]UserS
 }
 
 const lockSession = `-- name: LockSession :one
-SELECT id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at, location FROM user_sessions WHERE id = $1 FOR UPDATE
+SELECT id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at, location, device_key_thumbprint, device_key_bound_at FROM user_sessions WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) LockSession(ctx context.Context, id uuid.UUID) (UserSession, error) {
@@ -211,12 +223,14 @@ func (q *Queries) LockSession(ctx context.Context, id uuid.UUID) (UserSession, e
 		&i.ExpiresAt,
 		&i.RevokedAt,
 		&i.Location,
+		&i.DeviceKeyThumbprint,
+		&i.DeviceKeyBoundAt,
 	)
 	return i, err
 }
 
 const lockSessionByRefreshHash = `-- name: LockSessionByRefreshHash :one
-SELECT id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at, location FROM user_sessions WHERE refresh_token_hash = $1 FOR UPDATE
+SELECT id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at, location, device_key_thumbprint, device_key_bound_at FROM user_sessions WHERE refresh_token_hash = $1 FOR UPDATE
 `
 
 func (q *Queries) LockSessionByRefreshHash(ctx context.Context, hash string) (UserSession, error) {
@@ -233,6 +247,8 @@ func (q *Queries) LockSessionByRefreshHash(ctx context.Context, hash string) (Us
 		&i.ExpiresAt,
 		&i.RevokedAt,
 		&i.Location,
+		&i.DeviceKeyThumbprint,
+		&i.DeviceKeyBoundAt,
 	)
 	return i, err
 }
@@ -368,18 +384,24 @@ SET refresh_token_hash = $1,
     expires_at         = $2,
     user_agent         = COALESCE($3::text, user_agent),
     ip_address         = COALESCE($4::inet, ip_address),
-    location           = CASE WHEN $4::inet IS NULL THEN location ELSE $5::jsonb END
-WHERE id = $6
-RETURNING id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at, location
+    location           = CASE WHEN $4::inet IS NULL THEN location ELSE $5::jsonb END,
+    device_key_thumbprint = COALESCE(device_key_thumbprint, $6::text),
+    device_key_bound_at   = CASE
+        WHEN device_key_thumbprint IS NULL AND $6::text IS NOT NULL THEN now()
+        ELSE device_key_bound_at
+    END
+WHERE id = $7
+RETURNING id, user_id, refresh_token_hash, user_agent, ip_address, created_at, last_active_at, expires_at, revoked_at, location, device_key_thumbprint, device_key_bound_at
 `
 
 type RotateSessionParams struct {
-	NewHash   string
-	ExpiresAt time.Time
-	UserAgent *string
-	IpAddress *netip.Addr
-	Location  []byte
-	ID        uuid.UUID
+	NewHash             string
+	ExpiresAt           time.Time
+	UserAgent           *string
+	IpAddress           *netip.Addr
+	Location            []byte
+	DeviceKeyThumbprint *string
+	ID                  uuid.UUID
 }
 
 func (q *Queries) RotateSession(ctx context.Context, arg RotateSessionParams) (UserSession, error) {
@@ -389,6 +411,7 @@ func (q *Queries) RotateSession(ctx context.Context, arg RotateSessionParams) (U
 		arg.UserAgent,
 		arg.IpAddress,
 		arg.Location,
+		arg.DeviceKeyThumbprint,
 		arg.ID,
 	)
 	var i UserSession
@@ -403,6 +426,8 @@ func (q *Queries) RotateSession(ctx context.Context, arg RotateSessionParams) (U
 		&i.ExpiresAt,
 		&i.RevokedAt,
 		&i.Location,
+		&i.DeviceKeyThumbprint,
+		&i.DeviceKeyBoundAt,
 	)
 	return i, err
 }

@@ -15,15 +15,17 @@ const DefaultSessionDays = 90
 
 // Session is a login of a user on one device. The refresh token itself is never stored, only its hash.
 type Session struct {
-	ID           uuid.UUID
-	UserID       int64
-	UserAgent    *string
-	IP           *netip.Addr
-	Location     *geoip.Location
-	CreatedAt    time.Time
-	LastActiveAt time.Time
-	ExpiresAt    time.Time
-	RevokedAt    *time.Time
+	ID                  uuid.UUID
+	UserID              int64
+	UserAgent           *string
+	IP                  *netip.Addr
+	Location            *geoip.Location
+	CreatedAt           time.Time
+	LastActiveAt        time.Time
+	ExpiresAt           time.Time
+	RevokedAt           *time.Time
+	DeviceKeyThumbprint *string
+	DeviceKeyBoundAt    *time.Time
 }
 
 // Active reports whether the session can still be used at the given time.
@@ -42,6 +44,7 @@ type NewSession struct {
 	IP                  *netip.Addr
 	Location            *geoip.Location
 	ExpiresAt           time.Time
+	DeviceKeyThumbprint string
 }
 
 // RotateOutcome is the result of presenting a refresh token.
@@ -58,6 +61,8 @@ const (
 	// RotateStale: the token was rotated out a moment ago (a second tab racing the first), within ReuseGrace.
 	// Nothing changed; the winner of the race holds the valid token.
 	RotateStale
+	RotateDeviceKeyMismatch
+	RotateDeviceKeyRequired
 )
 
 // RotateRequest is a refresh. NewExpiresAt is used when the rotation succeeds.
@@ -70,13 +75,16 @@ type RotateRequest struct {
 	Location      *geoip.Location
 	// ReuseGrace is how long after a rotation the previous token is answered with RotateStale instead
 	// of being treated as theft.
-	ReuseGrace time.Duration
+	ReuseGrace          time.Duration
+	DeviceKeyThumbprint string
+	RequireDeviceKey    bool
 }
 
 // RotateResult carries the session for RotateOK and RotateReuse.
 type RotateResult struct {
 	Outcome RotateOutcome
 	Session Session
+	Bound   bool
 }
 
 // SessionRepository stores sessions and their refresh token hashes.

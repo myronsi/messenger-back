@@ -68,6 +68,7 @@ type Config struct {
 	RecoveryApprovalMinSessionAge time.Duration
 	GeoIP                         *geoip.Locator
 	RequireTermsAcceptance        bool
+	RequireDeviceKey              bool
 }
 
 type Consent struct {
@@ -79,6 +80,14 @@ type Consent struct {
 type Client struct {
 	IP        netip.Addr
 	UserAgent string
+	DeviceKey *DeviceKey
+}
+
+func (c Client) deviceKeyThumbprint() string {
+	if c.DeviceKey == nil {
+		return ""
+	}
+	return c.DeviceKey.Thumbprint
 }
 
 func (c Client) ipString() string {
@@ -237,6 +246,9 @@ type Service struct {
 	dummy                         func() (string, error)
 	geo                           *geoip.Locator
 	requireTerms                  bool
+	requireDeviceKey              bool
+	proofs                        Redis
+	ns                            string
 }
 
 // NewService wires the service.
@@ -296,6 +308,9 @@ func NewService(store Store, rdb Redis, cfg Config, log *slog.Logger) (*Service,
 		recoveryApprovalMinSessionAge: cfg.RecoveryApprovalMinSessionAge,
 		geo:                           cfg.GeoIP,
 		requireTerms:                  cfg.RequireTermsAcceptance,
+		requireDeviceKey:              cfg.RequireDeviceKey,
+		proofs:                        rdb,
+		ns:                            cfg.Namespace,
 	}
 	s.dummy = sync.OnceValues(func() (string, error) { return s.hasher.dummyHash(context.Background()) })
 	return s, nil
@@ -498,7 +513,8 @@ func (s *Service) startSessionWithRecoveryCode(ctx context.Context, u postgres.U
 	sess, err := s.store.Sessions().Create(ctx, postgres.NewSession{
 		Passkey:             passkey,
 		PasswordFingerprint: proof, RecoveryCodeHash: recoveryCodeHash, UserID: u.ID, RefreshTokenHash: hash, UserAgent: c.agentPtr(), IP: c.ipPtr(), Location: s.geo.Lookup(c.IP),
-		ExpiresAt: s.now().Add(time.Duration(settings.SessionDurationDays) * 24 * time.Hour),
+		DeviceKeyThumbprint: c.deviceKeyThumbprint(),
+		ExpiresAt:           s.now().Add(time.Duration(settings.SessionDurationDays) * 24 * time.Hour),
 	})
 	if errors.Is(err, postgres.ErrConflict) {
 		return nil, ErrInvalidCredentials
@@ -851,12 +867,30 @@ func (s *Service) Refresh(ctx context.Context, c Client, refreshToken string) (*
 		IP:            c.ipPtr(),
 		Location:      s.geo.Lookup(c.IP),
 		ReuseGrace:    s.grace,
+
+		DeviceKeyThumbprint: c.deviceKeyThumbprint(),
+		RequireDeviceKey:    s.requireDeviceKey,
 	})
 	if err != nil {
 		return nil, err
 	}
 	switch res.Outcome {
 	case postgres.RotateOK:
+		if res.Bound {
+			s.log.InfoContext(ctx, "session bound to a device key", "session_id", res.Session.ID)
+		}
+	case postgres.RotateDeviceKeyMismatch, postgres.RotateDeviceKeyRequired:
+		cacheErr := s.revokeInCache(ctx, res.Session.ID)
+		typ := "device_key_mismatch"
+		if res.Outcome == postgres.RotateDeviceKeyRequired {
+			typ = "device_key_required"
+		}
+		s.log.WarnContext(ctx, "refresh without the device key of the session, session revoked", "user_id", res.Session.UserID, "session_id", res.Session.ID, "reason", typ)
+		s.event(ctx, res.Session.UserID, typ, c, map[string]any{"session_id": res.Session.ID})
+		if cacheErr != nil {
+			return nil, cacheErr
+		}
+		return nil, ErrDeviceKeyMismatch
 	case postgres.RotateReuse:
 		cacheErr := s.revokeInCache(ctx, res.Session.ID)
 		s.log.WarnContext(ctx, "refresh token reuse detected, session revoked", "user_id", res.Session.UserID, "session_id", res.Session.ID)

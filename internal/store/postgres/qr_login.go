@@ -218,7 +218,7 @@ func (r qrLoginRepo) Complete(ctx context.Context, hash, pollHash string, n NewS
 		if _, err = tx.Exec(ctx, `UPDATE qr_login_requests SET used_at=now() WHERE id_hash=$1`, hash); err != nil {
 			return err
 		}
-		created, err := q.CreateSession(ctx, sqlcdb.CreateSessionParams{UserID: uid, RefreshTokenHash: n.RefreshTokenHash, UserAgent: n.UserAgent, IpAddress: n.IP, Location: encodeLocation(n.Location), ExpiresAt: now.Add(time.Duration(days) * 24 * time.Hour)})
+		created, err := q.CreateSession(ctx, sqlcdb.CreateSessionParams{UserID: uid, RefreshTokenHash: n.RefreshTokenHash, UserAgent: n.UserAgent, IpAddress: n.IP, Location: encodeLocation(n.Location), ExpiresAt: now.Add(time.Duration(days) * 24 * time.Hour), DeviceKeyThumbprint: optionalText(n.DeviceKeyThumbprint)})
 		if err != nil {
 			return err
 		}

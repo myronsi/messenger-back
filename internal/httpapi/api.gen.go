@@ -595,6 +595,7 @@ const (
 	ErrorCodeCallsUnavailable         ErrorCode = "calls_unavailable"
 	ErrorCodeClientOutdated           ErrorCode = "client_outdated"
 	ErrorCodeConflict                 ErrorCode = "conflict"
+	ErrorCodeDeviceProofStale         ErrorCode = "device_proof_stale"
 	ErrorCodeForbidden                ErrorCode = "forbidden"
 	ErrorCodeInternalError            ErrorCode = "internal_error"
 	ErrorCodeInvalidClientVersion     ErrorCode = "invalid_client_version"
@@ -641,6 +642,8 @@ func (e ErrorCode) Valid() bool {
 	case ErrorCodeClientOutdated:
 		return true
 	case ErrorCodeConflict:
+		return true
+	case ErrorCodeDeviceProofStale:
 		return true
 	case ErrorCodeForbidden:
 		return true
@@ -4116,6 +4119,9 @@ type ClientVersion = string
 // icon for a provider they do not know.
 type ConnectionProviderPath = ConnectionProvider
 
+// DeviceProof defines model for DeviceProof.
+type DeviceProof = string
+
 // EmojiId Decimal ID as a string (Snowflake IDs exceed 2^53).
 //
 // Examples: 7217400317439950848
@@ -4277,6 +4283,16 @@ type LoginParams struct {
 
 	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+
+	// DeviceProof Proof that the request comes from the device the session is bound to: a compact JWS (`typ` `dpop+jwt`,
+	// `alg` `ES256`, the public P-256 key as `jwk` in the protected header) over `htm` (HTTP method), `htu`
+	// (absolute request URL without query and fragment), `iat` (Unix seconds) and `jti` (unique per proof).
+	// A session created with a proof is bound to its key; an unbound session is bound at its first refresh
+	// with a proof. Refreshing a bound session without a proof of its key ends the session (`401`). Bad
+	// proofs are answered `400` (`invalid_request`), an `iat` more than 5 minutes off with `401`
+	// (`device_proof_stale`); the session survives, and the client may retry with its clock corrected by the
+	// `Date` response header.
+	DeviceProof *DeviceProof `json:"Device-Proof,omitempty"`
 }
 
 // LoginTwoFactorParams defines parameters for LoginTwoFactor.
@@ -4286,6 +4302,16 @@ type LoginTwoFactorParams struct {
 
 	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+
+	// DeviceProof Proof that the request comes from the device the session is bound to: a compact JWS (`typ` `dpop+jwt`,
+	// `alg` `ES256`, the public P-256 key as `jwk` in the protected header) over `htm` (HTTP method), `htu`
+	// (absolute request URL without query and fragment), `iat` (Unix seconds) and `jti` (unique per proof).
+	// A session created with a proof is bound to its key; an unbound session is bound at its first refresh
+	// with a proof. Refreshing a bound session without a proof of its key ends the session (`401`). Bad
+	// proofs are answered `400` (`invalid_request`), an `iat` more than 5 minutes off with `401`
+	// (`device_proof_stale`); the session survives, and the client may retry with its clock corrected by the
+	// `Date` response header.
+	DeviceProof *DeviceProof `json:"Device-Proof,omitempty"`
 }
 
 // LogoutParams defines parameters for Logout.
@@ -4322,6 +4348,16 @@ type VerifyPasskeyLoginParams struct {
 
 	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+
+	// DeviceProof Proof that the request comes from the device the session is bound to: a compact JWS (`typ` `dpop+jwt`,
+	// `alg` `ES256`, the public P-256 key as `jwk` in the protected header) over `htm` (HTTP method), `htu`
+	// (absolute request URL without query and fragment), `iat` (Unix seconds) and `jti` (unique per proof).
+	// A session created with a proof is bound to its key; an unbound session is bound at its first refresh
+	// with a proof. Refreshing a bound session without a proof of its key ends the session (`401`). Bad
+	// proofs are answered `400` (`invalid_request`), an `iat` more than 5 minutes off with `401`
+	// (`device_proof_stale`); the session survives, and the client may retry with its clock corrected by the
+	// `Date` response header.
+	DeviceProof *DeviceProof `json:"Device-Proof,omitempty"`
 }
 
 // PasskeyRegistrationOptionsParams defines parameters for PasskeyRegistrationOptions.
@@ -4421,6 +4457,16 @@ type PollQrLoginParams struct {
 
 	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+
+	// DeviceProof Proof that the request comes from the device the session is bound to: a compact JWS (`typ` `dpop+jwt`,
+	// `alg` `ES256`, the public P-256 key as `jwk` in the protected header) over `htm` (HTTP method), `htu`
+	// (absolute request URL without query and fragment), `iat` (Unix seconds) and `jti` (unique per proof).
+	// A session created with a proof is bound to its key; an unbound session is bound at its first refresh
+	// with a proof. Refreshing a bound session without a proof of its key ends the session (`401`). Bad
+	// proofs are answered `400` (`invalid_request`), an `iat` more than 5 minutes off with `401`
+	// (`device_proof_stale`); the session survives, and the client may retry with its clock corrected by the
+	// `Date` response header.
+	DeviceProof *DeviceProof `json:"Device-Proof,omitempty"`
 }
 
 // RecoverWithKeyParams defines parameters for RecoverWithKey.
@@ -4430,6 +4476,16 @@ type RecoverWithKeyParams struct {
 
 	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+
+	// DeviceProof Proof that the request comes from the device the session is bound to: a compact JWS (`typ` `dpop+jwt`,
+	// `alg` `ES256`, the public P-256 key as `jwk` in the protected header) over `htm` (HTTP method), `htu`
+	// (absolute request URL without query and fragment), `iat` (Unix seconds) and `jti` (unique per proof).
+	// A session created with a proof is bound to its key; an unbound session is bound at its first refresh
+	// with a proof. Refreshing a bound session without a proof of its key ends the session (`401`). Bad
+	// proofs are answered `400` (`invalid_request`), an `iat` more than 5 minutes off with `401`
+	// (`device_proof_stale`); the session survives, and the client may retry with its clock corrected by the
+	// `Date` response header.
+	DeviceProof *DeviceProof `json:"Device-Proof,omitempty"`
 }
 
 // StartDeviceRecoveryParams defines parameters for StartDeviceRecovery.
@@ -4484,6 +4540,16 @@ type CompleteDeviceRecoveryParams struct {
 
 	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+
+	// DeviceProof Proof that the request comes from the device the session is bound to: a compact JWS (`typ` `dpop+jwt`,
+	// `alg` `ES256`, the public P-256 key as `jwk` in the protected header) over `htm` (HTTP method), `htu`
+	// (absolute request URL without query and fragment), `iat` (Unix seconds) and `jti` (unique per proof).
+	// A session created with a proof is bound to its key; an unbound session is bound at its first refresh
+	// with a proof. Refreshing a bound session without a proof of its key ends the session (`401`). Bad
+	// proofs are answered `400` (`invalid_request`), an `iat` more than 5 minutes off with `401`
+	// (`device_proof_stale`); the session survives, and the client may retry with its clock corrected by the
+	// `Date` response header.
+	DeviceProof *DeviceProof `json:"Device-Proof,omitempty"`
 }
 
 // DenyDeviceRecoveryParams defines parameters for DenyDeviceRecovery.
@@ -4502,6 +4568,16 @@ type RefreshTokenParams struct {
 
 	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+
+	// DeviceProof Proof that the request comes from the device the session is bound to: a compact JWS (`typ` `dpop+jwt`,
+	// `alg` `ES256`, the public P-256 key as `jwk` in the protected header) over `htm` (HTTP method), `htu`
+	// (absolute request URL without query and fragment), `iat` (Unix seconds) and `jti` (unique per proof).
+	// A session created with a proof is bound to its key; an unbound session is bound at its first refresh
+	// with a proof. Refreshing a bound session without a proof of its key ends the session (`401`). Bad
+	// proofs are answered `400` (`invalid_request`), an `iat` more than 5 minutes off with `401`
+	// (`device_proof_stale`); the session survives, and the client may retry with its clock corrected by the
+	// `Date` response header.
+	DeviceProof *DeviceProof `json:"Device-Proof,omitempty"`
 }
 
 // RegisterParams defines parameters for Register.
@@ -4511,6 +4587,16 @@ type RegisterParams struct {
 
 	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+
+	// DeviceProof Proof that the request comes from the device the session is bound to: a compact JWS (`typ` `dpop+jwt`,
+	// `alg` `ES256`, the public P-256 key as `jwk` in the protected header) over `htm` (HTTP method), `htu`
+	// (absolute request URL without query and fragment), `iat` (Unix seconds) and `jti` (unique per proof).
+	// A session created with a proof is bound to its key; an unbound session is bound at its first refresh
+	// with a proof. Refreshing a bound session without a proof of its key ends the session (`401`). Bad
+	// proofs are answered `400` (`invalid_request`), an `iat` more than 5 minutes off with `401`
+	// (`device_proof_stale`); the session survives, and the client may retry with its clock corrected by the
+	// `Date` response header.
+	DeviceProof *DeviceProof `json:"Device-Proof,omitempty"`
 }
 
 // ListMyCallsParams defines parameters for ListMyCalls.
@@ -7775,6 +7861,25 @@ func (siw *ServerInterfaceWrapper) Login(w http.ResponseWriter, r *http.Request)
 
 	}
 
+	// ------------- Optional header parameter "Device-Proof" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Device-Proof")]; found {
+		var DeviceProof DeviceProof
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Device-Proof", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Device-Proof", valueList[0], &DeviceProof, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Device-Proof", Err: err})
+			return
+		}
+
+		params.DeviceProof = &DeviceProof
+
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.Login(w, r, params)
 	}))
@@ -7832,6 +7937,25 @@ func (siw *ServerInterfaceWrapper) LoginTwoFactor(w http.ResponseWriter, r *http
 		}
 
 		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	// ------------- Optional header parameter "Device-Proof" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Device-Proof")]; found {
+		var DeviceProof DeviceProof
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Device-Proof", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Device-Proof", valueList[0], &DeviceProof, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Device-Proof", Err: err})
+			return
+		}
+
+		params.DeviceProof = &DeviceProof
 
 	}
 
@@ -8072,6 +8196,25 @@ func (siw *ServerInterfaceWrapper) VerifyPasskeyLogin(w http.ResponseWriter, r *
 		}
 
 		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	// ------------- Optional header parameter "Device-Proof" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Device-Proof")]; found {
+		var DeviceProof DeviceProof
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Device-Proof", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Device-Proof", valueList[0], &DeviceProof, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Device-Proof", Err: err})
+			return
+		}
+
+		params.DeviceProof = &DeviceProof
 
 	}
 
@@ -8789,6 +8932,25 @@ func (siw *ServerInterfaceWrapper) PollQrLogin(w http.ResponseWriter, r *http.Re
 
 	}
 
+	// ------------- Optional header parameter "Device-Proof" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Device-Proof")]; found {
+		var DeviceProof DeviceProof
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Device-Proof", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Device-Proof", valueList[0], &DeviceProof, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Device-Proof", Err: err})
+			return
+		}
+
+		params.DeviceProof = &DeviceProof
+
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PollQrLogin(w, r, requestId, params)
 	}))
@@ -8846,6 +9008,25 @@ func (siw *ServerInterfaceWrapper) RecoverWithKey(w http.ResponseWriter, r *http
 		}
 
 		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	// ------------- Optional header parameter "Device-Proof" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Device-Proof")]; found {
+		var DeviceProof DeviceProof
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Device-Proof", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Device-Proof", valueList[0], &DeviceProof, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Device-Proof", Err: err})
+			return
+		}
+
+		params.DeviceProof = &DeviceProof
 
 	}
 
@@ -9254,6 +9435,25 @@ func (siw *ServerInterfaceWrapper) CompleteDeviceRecovery(w http.ResponseWriter,
 
 	}
 
+	// ------------- Optional header parameter "Device-Proof" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Device-Proof")]; found {
+		var DeviceProof DeviceProof
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Device-Proof", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Device-Proof", valueList[0], &DeviceProof, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Device-Proof", Err: err})
+			return
+		}
+
+		params.DeviceProof = &DeviceProof
+
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CompleteDeviceRecovery(w, r, requestId, params)
 	}))
@@ -9383,6 +9583,25 @@ func (siw *ServerInterfaceWrapper) RefreshToken(w http.ResponseWriter, r *http.R
 
 	}
 
+	// ------------- Optional header parameter "Device-Proof" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Device-Proof")]; found {
+		var DeviceProof DeviceProof
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Device-Proof", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Device-Proof", valueList[0], &DeviceProof, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Device-Proof", Err: err})
+			return
+		}
+
+		params.DeviceProof = &DeviceProof
+
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RefreshToken(w, r, params)
 	}))
@@ -9440,6 +9659,25 @@ func (siw *ServerInterfaceWrapper) Register(w http.ResponseWriter, r *http.Reque
 		}
 
 		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	// ------------- Optional header parameter "Device-Proof" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Device-Proof")]; found {
+		var DeviceProof DeviceProof
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Device-Proof", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Device-Proof", valueList[0], &DeviceProof, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Device-Proof", Err: err})
+			return
+		}
+
+		params.DeviceProof = &DeviceProof
 
 	}
 

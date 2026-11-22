@@ -174,5 +174,5 @@ func isTrusted(ip netip.Addr, trusted []netip.Prefix) bool {
 }
 
 func (a *AuthServer) clientOf(r *http.Request) auth.Client {
-	return auth.Client{IP: clientIP(r, a.trustedProxies), UserAgent: r.UserAgent()}
+	return auth.Client{IP: clientIP(r, a.trustedProxies), UserAgent: r.UserAgent(), DeviceKey: deviceKeyFrom(r.Context())}
 }

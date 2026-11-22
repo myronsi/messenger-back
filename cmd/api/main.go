@@ -124,6 +124,7 @@ func run() error {
 		RecoveryApprovalMaxAge:        cfg.Auth.RecoveryApprovalMaxAge,
 		RecoveryApprovalMinSessionAge: cfg.Auth.RecoveryApprovalMinSessionAge,
 		RequireTermsAcceptance:        cfg.Auth.RequireTermsAcceptance,
+		RequireDeviceKey:              cfg.Auth.RequireDeviceKey,
 		GeoIP:                         geo,
 		OnRecoveryRequest: func(ctx context.Context, uid int64, notice auth.RecoveryRequestNotice) {
 			if rt != nil && rt.fanout != nil {
@@ -270,6 +271,7 @@ func run() error {
 			BackendVersion: version.Backend, Commit: os.Getenv("APP_COMMIT"), MinClientAPIVersion: cfg.Realtime.MinClientAPIVersion,
 		}),
 		Authenticator:       authSvc,
+		DeviceProofs:        authSvc,
 		WebSocket:           rt.gateway,
 		CallWebhook:         callWebhook,
 		UploadMaxBytes:      mediaSvc.Limits().Max(),
