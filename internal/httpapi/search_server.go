@@ -34,7 +34,17 @@ func (m *MessageServer) SearchMessages(w http.ResponseWriter, r *http.Request, c
 
 // SearchAllMessages implements GET /search/messages.
 func (m *MessageServer) SearchAllMessages(w http.ResponseWriter, r *http.Request, params SearchAllMessagesParams) {
-	q := search.Query{Text: params.Q, Limit: pageLimit(params.Limit), After: cursorParam(params.After)}
+	q := search.Query{Limit: pageLimit(params.Limit), After: cursorParam(params.After)}
+	if params.Q != nil {
+		q.Text = *params.Q
+	}
+	if params.Kind != nil {
+		if !params.Kind.Valid() {
+			WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "kind", Message: "image, visual, audio, voice, file or link"})
+			return
+		}
+		q.Kind = string(*params.Kind)
+	}
 	var ok bool
 	if params.ChatId != nil {
 		if q.ChatID, ok = parseID(w, "chat_id", *params.ChatId); !ok {

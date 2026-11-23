@@ -6075,7 +6075,11 @@ type RejectRequestParams struct {
 
 // SearchAllMessagesParams defines parameters for SearchAllMessages.
 type SearchAllMessagesParams struct {
-	Q string `form:"q" json:"q"`
+	// Q Words to find; optional with `kind`
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
+
+	// Kind Only messages with this kind of attachment, or with a web link (`link`)
+	Kind *MediaKind `form:"kind,omitempty" json:"kind,omitempty"`
 
 	// ChatId Only this chat
 	ChatId *Id `form:"chat_id,omitempty" json:"chat_id,omitempty"`
@@ -19891,15 +19895,28 @@ func (siw *ServerInterfaceWrapper) SearchAllMessages(w http.ResponseWriter, r *h
 	// Parameter object where we will unmarshal all parameters from the context
 	var params SearchAllMessagesParams
 
-	// ------------- Required query parameter "q" -------------
+	// ------------- Optional query parameter "q" -------------
 
-	err = runtime.BindQueryParameterWithOptions("form", true, true, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
 	if err != nil {
 		var requiredError *runtime.RequiredParameterError
 		if errors.As(err, &requiredError) {
 			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
 		} else {
 			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "kind" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "kind", r.URL.Query(), &params.Kind, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "kind"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
 		}
 		return
 	}
