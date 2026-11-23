@@ -2,6 +2,14 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.44
+
+- `GET /sync/changes` (`listSyncChanges`): edits, reaction changes, deletions, pin changes, cleared histories and
+  chats deleted for the caller since a cursor, for clients that keep messages offline. New schemas
+  `SyncChangesPage` and `SyncChange`.
+- `POST /me/storage-key` (`getStorageKey`): the key of the current session for encrypting offline data, new schema
+  `StorageKey`.
+
 ## 2.1.0-alpha.43
 
 - Device-bound sessions: optional header parameter `DeviceProof` (`Device-Proof`, a DPoP-style ES256 proof) on

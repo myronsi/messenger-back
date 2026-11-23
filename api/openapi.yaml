@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.43
+  version: 2.1.0-alpha.44
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -570,6 +570,27 @@ paths:
               schema: { $ref: "#/components/schemas/SecuritySettings" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
+  /me/storage-key:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    post:
+      tags: [me]
+      operationId: getStorageKey
+      summary: The key this device encrypts its offline data with
+      description: |
+        Returns the key of the current session, creating it on the first call; later calls return the same
+        key. It is deleted with the session, so data a device stored can no longer be read once it signs out
+        or is signed out from another device.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Key of this session
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StorageKey" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
   /me/sessions:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
@@ -2454,6 +2475,44 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /sync/changes:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    get:
+      tags: [messages]
+      operationId: listSyncChanges
+      summary: What changed in my chats since a cursor
+      description: |
+        For clients that keep messages offline. Returns edits, reaction changes, deletions (for everyone or
+        only for the caller), pin changes, cleared histories and chats the caller deleted for themselves,
+        oldest first. New messages are not listed: load them with `after` from each chat's last stored message.
+        Chats the caller left, was removed from or that were deleted are not listed either; they are missing
+        from `GET /chats`.
+
+        Call without `cursor` once to get the current position, then keep `next_cursor`. Several changes of one
+        message come as one entry with its current state. Entries are kept for 30 days; an older cursor answers
+        `reset_required: true` with a fresh `next_cursor`, and the client drops what it stored and loads again.
+      parameters:
+        - name: cursor
+          in: query
+          description: "`next_cursor` of the previous answer"
+          schema: { type: string, pattern: "^[0-9]{1,19}$" }
+        - name: limit
+          in: query
+          description: Page size
+          schema: { type: integer, minimum: 1, maximum: 500, default: 500 }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Changes after the cursor
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SyncChangesPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
 
   # ------------------------------------------------------------ requests
   /requests:
@@ -7680,6 +7739,52 @@ components:
         removed_by_moderation:
           type: boolean
           description: "`true` when moderation removed the answered message. Absent otherwise."
+    SyncChangesPage:
+      type: object
+      required: [changes, next_cursor, has_more, reset_required]
+      properties:
+        changes:
+          type: array
+          items: { $ref: "#/components/schemas/SyncChange" }
+        next_cursor:
+          type: string
+          description: Send as `cursor` next time
+        has_more:
+          type: boolean
+          description: More changes are waiting; ask again at once
+        reset_required:
+          type: boolean
+          description: The cursor is too old; drop the stored messages and load them again
+    SyncChange:
+      type: object
+      required: [type, chat_id]
+      description: |
+        `message_updated` carries the message as the caller sees it now (`message`). `message_deleted` names the
+        message and its `scope`. `pins_changed`: load the pins of the chat again. `history_cleared`: drop the
+        messages up to and including `before_message_id` (`scope` says for whom). `chat_hidden`: the caller
+        deleted the chat for themselves up to `before_message_id`.
+      properties:
+        type:
+          type: string
+          enum: [message_updated, message_deleted, pins_changed, history_cleared, chat_hidden]
+        chat_id: { $ref: "#/components/schemas/Id" }
+        message_id: { $ref: "#/components/schemas/Id" }
+        scope:
+          type: string
+          enum: [me, everyone]
+        before_message_id: { $ref: "#/components/schemas/Id" }
+        message: { $ref: "#/components/schemas/Message" }
+    StorageKey:
+      type: object
+      required: [key, algorithm]
+      properties:
+        key:
+          type: string
+          description: 32 random bytes, base64url without padding
+          pattern: "^[A-Za-z0-9_-]{43}$"
+        algorithm:
+          type: string
+          enum: [A256GCM]
     Message:
       type: object
       required:

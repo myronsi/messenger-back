@@ -300,6 +300,11 @@ func (s *Service) pinChanged(ctx context.Context, c PinChange, recipients []int6
 		}
 	}
 	s.d.Notifier.PinChanged(ctx, c, recipients)
+	change := postgres.SyncChange{ChatID: c.ChatID, Kind: postgres.SyncPins, MessageID: c.MessageID}
+	if c.Scope == ScopeMe && len(recipients) == 1 {
+		change.UserID = recipients[0]
+	}
+	s.recordChange(ctx, change)
 }
 
 func (s *Service) logPin(ctx context.Context, chatID, actorID int64, kind string, m scylla.Message) {

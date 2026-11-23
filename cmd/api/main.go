@@ -81,6 +81,10 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("decode ENCRYPTION_KEY: %w", err)
 	}
+	storageSealer, err := auth.NewSealer(key)
+	if err != nil {
+		return fmt.Errorf("storage key sealer: %w", err)
+	}
 	trustedProxies, err := cfg.Auth.TrustedProxyPrefixes()
 	if err != nil {
 		return err
@@ -209,7 +213,7 @@ func run() error {
 	})
 	chatSvc := chats.New(chats.Deps{
 		Store: pg, Messages: rt.store, Unread: rt.unread, Members: rt.members, Sender: rt.messages,
-		Directory: rt.directory, Notifier: rt.fanout, Events: rt.events, DeleteFile: storage.Delete, Calls: callHooks,
+		Directory: rt.directory, Notifier: rt.fanout, Events: rt.events, Changes: pg.Sync(), DeleteFile: storage.Delete, Calls: callHooks,
 		Moderation: modSvc, Log: log,
 	})
 	rt.messages.SetRequestAccepted(chatSvc.RequestAccepted)
@@ -250,6 +254,7 @@ func run() error {
 			Limiter: rt.limiter, BasePath: cfg.HTTP.BasePath, Log: log,
 		})).WithMessages(httpapi.NewMessageServer(httpapi.MessageOptions{
 			Service: rt.messages, Store: pg, Directory: rt.directory, Limiter: rt.limiter, BasePath: cfg.HTTP.BasePath, Log: log,
+			Sync: pg.Sync(), Sealer: storageSealer,
 			Searcher: search.NewSearcher(search.NewIndex(es, cfg.Search.Alias, cfg.Search.Replicas), searchAccess{rt.messages, pg}, rt.store),
 		})).WithLinkPreviews(httpapi.NewLinkPreviewServer(httpapi.LinkPreviewOptions{
 			Service: linkpreview.New(linkpreview.Options{

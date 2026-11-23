@@ -13,6 +13,7 @@ import (
 	"github.com/gocql/gocql"
 	"github.com/google/uuid"
 
+	"github.com/myronsi/messenger-back/internal/auth"
 	"github.com/myronsi/messenger-back/internal/messages"
 	"github.com/myronsi/messenger-back/internal/search"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
@@ -40,10 +41,13 @@ type MessageOptions struct {
 	Store     MessageStore
 	Directory *users.Directory
 	// Searcher answers message searches. Optional (searches then answer 501).
-	Searcher *search.Searcher
-	Limiter  RateAllower
-	BasePath string
-	Log      *slog.Logger
+	Searcher   *search.Searcher
+	Limiter    RateAllower
+	BasePath   string
+	Log        *slog.Logger
+	Sync       SyncStore
+	Sealer     *auth.Sealer
+	SyncSettle time.Duration
 }
 
 // MessageServer implements history, sending, editing, deleting and forwarding over HTTP, and the media lists.
