@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.44
+  version: 2.1.0-alpha.45
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -2435,11 +2435,18 @@ paths:
         hit is checked against the message store before it is returned (a deleted message never
         shows, even when the index lags behind). Edits and deletions reach the results within a
         few seconds.
+
+        With `kind`, only messages with that kind of attachment or with a web link are found, and `q` may be
+        left out to list them newest first. Without `kind`, `q` is required (`422` otherwise).
       parameters:
         - name: q
           in: query
-          required: true
+          description: Words to find; optional with `kind`
           schema: { type: string, minLength: 2, maxLength: 256 }
+        - name: kind
+          in: query
+          description: Only messages with this kind of attachment, or with a web link (`link`)
+          schema: { $ref: "#/components/schemas/MediaKind" }
         - name: chat_id
           in: query
           description: Only this chat

@@ -53,7 +53,7 @@ const (
 	MarkEnd   = ""
 )
 
-const MappingVersion = 2
+const MappingVersion = 3
 
 const (
 	PrefixMin = 2
@@ -115,8 +115,10 @@ func (ix *Index) template() map[string]any {
 						"raw":    map[string]any{"type": "keyword", "ignore_above": 256},
 						"prefix": prefixField(),
 					}},
-					"hidden_for": map[string]any{"type": "keyword"},
-					"created_at": map[string]any{"type": "date"},
+					"media_kinds": map[string]any{"type": "keyword"},
+					"has_link":    map[string]any{"type": "boolean"},
+					"hidden_for":  map[string]any{"type": "keyword"},
+					"created_at":  map[string]any{"type": "date"},
 				},
 			},
 		},

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/myronsi/messenger-back/internal/emoji"
 	"github.com/myronsi/messenger-back/internal/events"
 	"github.com/myronsi/messenger-back/internal/ids"
+	"github.com/myronsi/messenger-back/internal/linkpreview"
 	"github.com/myronsi/messenger-back/internal/store/elastic"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/redis"
@@ -33,6 +35,8 @@ type Doc struct {
 	Type      string    `json:"type"`
 	Content   string    `json:"content,omitempty"`
 	FileName  string    `json:"file_name,omitempty"`
+	Kinds     []string  `json:"media_kinds,omitempty"`
+	HasLink   bool      `json:"has_link,omitempty"`
 	HiddenFor []string  `json:"hidden_for,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 }
@@ -115,10 +119,16 @@ func (in *Indexer) doc(ctx context.Context, m scylla.Message) Doc {
 	}
 	if m.Content != nil {
 		d.Content = emoji.Plain(*m.Content)
+		d.HasLink = len(linkpreview.FindURLs(*m.Content, 1)) > 0
 	}
 	if m.AttachmentID != nil {
 		if a, err := in.files.Get(ctx, uuid.UUID(*m.AttachmentID)); err == nil {
 			d.FileName = a.Filename
+		}
+	}
+	for _, attachmentID := range m.AttachmentIDs() {
+		if a, err := in.files.Get(ctx, uuid.UUID(attachmentID)); err == nil && !slices.Contains(d.Kinds, a.Kind) {
+			d.Kinds = append(d.Kinds, a.Kind)
 		}
 	}
 	return d
@@ -270,9 +280,14 @@ func (in *Indexer) bulk(ctx context.Context, index string, docs []Doc, deletes [
 		if hidden == nil {
 			hidden = []string{}
 		}
+		kinds := d.Kinds
+		if kinds == nil {
+			kinds = []string{}
+		}
 		params := map[string]any{
 			"message_id": d.MessageID, "chat_id": d.ChatID, "sender_id": d.SenderID, "type": d.Type,
 			"content": d.Content, "file_name": d.FileName, "hidden_for": hidden, "created_at": d.CreatedAt,
+			"media_kinds": kinds, "has_link": d.HasLink,
 		}
 		_ = enc.Encode(map[string]any{"update": meta})
 		_ = enc.Encode(map[string]any{
