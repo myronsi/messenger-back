@@ -26,12 +26,23 @@ var (
 )
 
 // Query is a message search.
+const KindLink = "link"
+
+var MediaKinds = map[string][]string{
+	"image":  {"image"},
+	"visual": {"image", "video"},
+	"audio":  {"audio", "voice"},
+	"voice":  {"voice"},
+	"file":   {"file"},
+}
+
 type Query struct {
 	Text string
 	// ChatID limits the search to one chat (0: every chat of the user).
 	ChatID   int64
 	SenderID int64
 	Type     string
+	Kind     string
 	From, To time.Time
 	After    string
 	Limit    int
@@ -141,6 +152,11 @@ func request(userID int64, text string, chats []string, q Query) map[string]any 
 	if q.Type != "" {
 		filter = append(filter, map[string]any{"term": map[string]any{"type": q.Type}})
 	}
+	if q.Kind == KindLink {
+		filter = append(filter, map[string]any{"term": map[string]any{"has_link": true}})
+	} else if kinds, ok := MediaKinds[q.Kind]; ok {
+		filter = append(filter, map[string]any{"terms": map[string]any{"media_kinds": kinds}})
+	}
 	if !q.From.IsZero() || !q.To.IsZero() {
 		r := map[string]any{}
 		if !q.From.IsZero() {
@@ -150,6 +166,10 @@ func request(userID int64, text string, chats []string, q Query) map[string]any 
 			r["lt"] = q.To.UTC().Format(time.RFC3339Nano)
 		}
 		filter = append(filter, map[string]any{"range": map[string]any{"created_at": r}})
+	}
+	must := any(map[string]any{"match_all": map[string]any{}})
+	if text != "" {
+		must = textQuery(text)
 	}
 	highlights := map[string]any{}
 	for _, f := range contentHighlights {
@@ -162,7 +182,7 @@ func request(userID int64, text string, chats []string, q Query) map[string]any 
 		"track_total_hits": false,
 		"_source":          []string{"chat_id"},
 		"query": map[string]any{"bool": map[string]any{
-			"must":     []any{textQuery(text)},
+			"must":     []any{must},
 			"filter":   filter,
 			"must_not": []any{map[string]any{"term": map[string]any{"hidden_for": id(userID)}}},
 		}},
@@ -177,7 +197,10 @@ func request(userID int64, text string, chats []string, q Query) map[string]any 
 // that check are made up for from further results (up to maxRounds queries), so a page is short only at the end.
 func (s *Searcher) Search(ctx context.Context, userID int64, q Query) ([]Hit, string, error) {
 	text := strings.TrimSpace(q.Text)
-	if n := utf8.RuneCountInString(text); n < MinQuery || n > MaxQuery {
+	if _, known := MediaKinds[q.Kind]; q.Kind != "" && q.Kind != KindLink && !known {
+		return nil, "", invalid("kind must be image, visual, audio, voice, file or link")
+	}
+	if n := utf8.RuneCountInString(text); (n > 0 || q.Kind == "") && (n < MinQuery || n > MaxQuery) {
 		return nil, "", invalid(fmt.Sprintf("q must be %d to %d characters", MinQuery, MaxQuery))
 	}
 	if q.Limit <= 0 {

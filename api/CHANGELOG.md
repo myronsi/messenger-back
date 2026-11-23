@@ -2,6 +2,12 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.45
+
+- `GET /search/messages` gains the query parameter `kind` (`MediaKind`: `image`, `visual`, `audio`, `voice`, `file`,
+  `link`) to find only messages with that kind of attachment or with a web link. `q` is now optional when `kind` is
+  given, which lists those messages newest first.
+
 ## 2.1.0-alpha.44
 
 - `GET /sync/changes` (`listSyncChanges`): edits, reaction changes, deletions, pin changes, cleared histories and
