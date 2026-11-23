@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.34.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.33.0-alpha.1...v1.34.0-alpha.1) (2026-11-23)
+
+
+### Features
+
+* **search:** filter message search by attachment kind and links ([#235](https://github.com/myronsi/messenger-back/issues/235)) ([1144c26](https://github.com/myronsi/messenger-back/commit/1144c26ee276869608d219fa01da41f861c6b42e))
+* **sync:** change log for offline clients and per-session storage keys ([#233](https://github.com/myronsi/messenger-back/issues/233)) ([fbbb4f9](https://github.com/myronsi/messenger-back/commit/fbbb4f9a77f73cf13b32c564381961e271fa9cc6))
+
+
+### Bug Fixes
+
+* resolve SonarCloud findings and a timing race in call tests ([#236](https://github.com/myronsi/messenger-back/issues/236)) ([e4268a9](https://github.com/myronsi/messenger-back/commit/e4268a91662520a5f103535b68bd364aa973c8d7))
+
 ## [1.33.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.32.0-alpha.1...v1.33.0-alpha.1) (2026-11-22)
 
 
