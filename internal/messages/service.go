@@ -103,7 +103,8 @@ type Deps struct {
 	IDs      IDSource
 	Notifier Notifier
 	// Events records the changes for the worker (search indexing, cleanup). Optional.
-	Events EventLog
+	Events  EventLog
+	Changes ChangeLog
 	// QueueNotification commits intent before the message write; nil disables background delivery.
 	QueueNotification func(context.Context, int64, int64, []int64) error
 	NotificationReady func(context.Context, int64) error
@@ -113,6 +114,19 @@ type Deps struct {
 	Moderation Moderation
 	Counter    Counter
 	Log        *slog.Logger
+}
+
+type ChangeLog interface {
+	Record(ctx context.Context, c postgres.SyncChange) error
+}
+
+func (s *Service) recordChange(ctx context.Context, c postgres.SyncChange) {
+	if s.d.Changes == nil {
+		return
+	}
+	if err := s.d.Changes.Record(context.WithoutCancel(ctx), c); err != nil {
+		s.d.Log.WarnContext(ctx, "record change", "kind", c.Kind, "error", err, "chat_id", c.ChatID)
+	}
 }
 
 type Counter interface {
@@ -776,6 +790,7 @@ func (s *Service) Edit(ctx context.Context, userID, chatID, messageID int64, con
 		s.d.Notifier.MessageEdited(ctx, m, s.withoutHidden(ctx, chatID, messageID, members))
 	}
 	s.emit(ctx, events.Event{Type: events.MessageEdited, ChatID: chatID, MessageID: messageID, ActorID: userID, At: at})
+	s.recordChange(ctx, postgres.SyncChange{ChatID: chatID, Kind: postgres.SyncMessageEdited, MessageID: messageID})
 	return m, nil
 }
 
@@ -909,6 +924,7 @@ func (s *Service) deleteChecked(ctx context.Context, userID int64, m scylla.Mess
 		s.hidePins(ctx, userID, chatID, []int64{messageID})
 		s.d.Notifier.MessageDeleted(ctx, chatID, messageID, ScopeMe, []int64{userID})
 		s.emit(ctx, events.Event{Type: events.MessageHidden, ChatID: chatID, MessageID: messageID, UserID: userID, ActorID: userID})
+		s.recordChange(ctx, postgres.SyncChange{ChatID: chatID, UserID: userID, Kind: postgres.SyncMessageHidden, MessageID: messageID})
 		return nil
 	}
 	if err := s.d.Messages.Delete(ctx, chatID, messageID); errors.Is(err, scylla.ErrNotFound) {
@@ -920,6 +936,7 @@ func (s *Service) deleteChecked(ctx context.Context, userID int64, m scylla.Mess
 		s.d.Notifier.MessageDeleted(ctx, chatID, messageID, ScopeEveryone, members)
 	}
 	s.emit(ctx, events.Event{Type: events.MessageDeleted, ChatID: chatID, MessageID: messageID, ActorID: userID})
+	s.recordChange(ctx, postgres.SyncChange{ChatID: chatID, Kind: postgres.SyncMessageDeleted, MessageID: messageID})
 	return s.unlink(ctx, m)
 }
 
@@ -1025,6 +1042,7 @@ func (s *Service) React(ctx context.Context, userID, chatID, messageID int64, em
 		s.d.Notifier.ReactionChanged(ctx, chatID, messageID, scylla.Reaction{Emoji: emoji, UserID: userID, CreatedAt: at}, add, members)
 	}
 	s.emit(ctx, events.Event{Type: events.ReactionChanged, ChatID: chatID, MessageID: messageID, ActorID: userID, At: at})
+	s.recordChange(ctx, postgres.SyncChange{ChatID: chatID, Kind: postgres.SyncReactions, MessageID: messageID})
 	return nil
 }
 

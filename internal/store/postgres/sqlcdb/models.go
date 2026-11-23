@@ -430,6 +430,12 @@ type ReportOutcome struct {
 	ReadAt      *time.Time
 }
 
+type SessionStorageKey struct {
+	SessionID uuid.UUID
+	SealedKey string
+	CreatedAt time.Time
+}
+
 type Sticker struct {
 	ID           int64
 	PackID       int64
@@ -461,6 +467,15 @@ type StickerPackReport struct {
 	ReporterID int64
 	Reason     string
 	CreatedAt  time.Time
+}
+
+type SyncChange struct {
+	Seq       int64
+	ChatID    int64
+	UserID    *int64
+	Kind      string
+	MessageID *int64
+	CreatedAt time.Time
 }
 
 type UnreadMention struct {

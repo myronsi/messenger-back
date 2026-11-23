@@ -46,6 +46,11 @@ func maintain(ctx context.Context, log *slog.Logger, store *postgres.Store, ever
 		} else if n > 0 {
 			log.InfoContext(ctx, "purged old security events", "count", n)
 		}
+		if n, err := store.Sync().Purge(ctx, postgres.SyncChangeRetention); err != nil {
+			log.ErrorContext(ctx, "purging old sync changes failed", "err", err)
+		} else if n > 0 {
+			log.InfoContext(ctx, "purged old sync changes", "count", n)
+		}
 		purged, err := store.Calls().Purge(ctx, calls.Retention)
 		if err != nil {
 			log.ErrorContext(ctx, "purging old calls failed", "err", err)

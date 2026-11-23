@@ -115,6 +115,7 @@ type Deps struct {
 	Directory *users.Directory
 	Notifier  Notifier
 	Events    EventLog
+	Changes   ChangeLog
 	// Storage deletes the files of deleted chats (keys from the chat repository). Optional.
 	DeleteFile func(ctx context.Context, key string) error
 	Calls      CallHooks
@@ -926,6 +927,7 @@ func (s *Service) DeleteForMe(ctx context.Context, userID, chatID int64) error {
 		s.d.Log.WarnContext(ctx, "forget unread", "error", err)
 	}
 	s.d.Notifier.ChatHidden(ctx, chatID, []int64{userID})
+	s.recordChange(ctx, postgres.SyncChange{ChatID: chatID, UserID: userID, Kind: postgres.SyncChatHidden, MessageID: bound})
 	return nil
 }
 
@@ -973,9 +975,12 @@ func (s *Service) ClearHistory(ctx context.Context, userID, chatID int64, scope 
 	}
 	s.d.Notifier.HistoryCleared(ctx, chatID, bound, scope, userID, recipients)
 	s.d.Notifier.ChatUpdated(ctx, chatID, s.viewsFor(ctx, chatID, recipients))
+	change := postgres.SyncChange{ChatID: chatID, UserID: userID, Kind: postgres.SyncHistoryCleared, MessageID: bound}
 	if scope == ClearForEveryone {
 		s.emit(ctx, events.Event{Type: events.HistoryCleared, ChatID: chatID, MessageID: bound, ActorID: userID, At: time.Now()})
+		change.UserID = 0
 	}
+	s.recordChange(ctx, change)
 	return nil
 }
 
@@ -1155,6 +1160,19 @@ func (s *Service) Reject(ctx context.Context, userID, requestID int64) error {
 		return requestError(err)
 	}
 	return nil
+}
+
+type ChangeLog interface {
+	Record(ctx context.Context, c postgres.SyncChange) error
+}
+
+func (s *Service) recordChange(ctx context.Context, c postgres.SyncChange) {
+	if s.d.Changes == nil {
+		return
+	}
+	if err := s.d.Changes.Record(context.WithoutCancel(ctx), c); err != nil {
+		s.d.Log.WarnContext(ctx, "record change", "kind", c.Kind, "error", err, "chat_id", c.ChatID)
+	}
 }
 
 func (s *Service) emit(ctx context.Context, e events.Event) {

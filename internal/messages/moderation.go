@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/myronsi/messenger-back/internal/events"
+	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/scylla"
 )
 
@@ -87,5 +88,6 @@ func (s *Service) RemoveByModeration(ctx context.Context, chatID, messageID int6
 		s.d.Notifier.MessageRemoved(ctx, removed, members)
 	}
 	s.emit(ctx, events.Event{Type: events.MessageDeleted, ChatID: chatID, MessageID: messageID})
+	s.recordChange(ctx, postgres.SyncChange{ChatID: chatID, Kind: postgres.SyncMessageDeleted, MessageID: messageID})
 	return removed, true, s.unlink(ctx, m)
 }

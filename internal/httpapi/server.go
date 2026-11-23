@@ -996,3 +996,19 @@ func (s *Server) CountChatRequests(w http.ResponseWriter, r *http.Request, param
 	}
 	s.chats.CountChatRequests(w, r, params)
 }
+
+func (s *Server) ListSyncChanges(w http.ResponseWriter, r *http.Request, params ListSyncChangesParams) {
+	if s.messages == nil {
+		s.AuthServer.ListSyncChanges(w, r, params)
+		return
+	}
+	s.messages.ListSyncChanges(w, r, params)
+}
+
+func (s *Server) GetStorageKey(w http.ResponseWriter, r *http.Request, params GetStorageKeyParams) {
+	if s.messages == nil {
+		s.AuthServer.GetStorageKey(w, r, params)
+		return
+	}
+	s.messages.GetStorageKey(w, r, params)
+}

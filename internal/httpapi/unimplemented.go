@@ -705,3 +705,9 @@ func (Unimplemented) UnpinMessage(w http.ResponseWriter, r *http.Request, _ Chat
 func (Unimplemented) ListPinnedMessages(w http.ResponseWriter, r *http.Request, _ ChatId, _ ListPinnedMessagesParams) {
 	notImplemented(w, r)
 }
+func (Unimplemented) ListSyncChanges(w http.ResponseWriter, r *http.Request, _ ListSyncChangesParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) GetStorageKey(w http.ResponseWriter, r *http.Request, _ GetStorageKeyParams) {
+	notImplemented(w, r)
+}

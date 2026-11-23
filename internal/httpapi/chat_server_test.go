@@ -193,6 +193,7 @@ func newChatEnvWith(t *testing.T, withSearch bool) *chatEnv {
 	modSvc := moderation.New(moderation.Deps{Store: store, Cache: modCache})
 	deps := messages.Deps{
 		Messages: repo, Store: store, Members: members, Unread: unread, Dedup: redis.NewDedup(rdb, prefix, 0), IDs: gen, Moderation: modSvc,
+		Changes: store.Sync(),
 	}
 	var index *search.Index
 	if withSearch {
@@ -210,7 +211,7 @@ func newChatEnvWith(t *testing.T, withSearch bool) *chatEnv {
 	tokens := notifications.NewActionTokens("test-secret")
 	cacheDown, cleared := new(atomic.Bool), new(atomic.Int32)
 	svc := chats.New(chats.Deps{Store: store, Messages: repo, Unread: unread, Members: flakyMembers{members, cacheDown, cleared}, Sender: msgs, Directory: dir, Notifier: ev,
-		Moderation: modSvc})
+		Moderation: modSvc, Changes: store.Sync()})
 	msgs.SetRequestAccepted(svc.RequestAccepted)
 	peersDone := make(chan int64, 8)
 	peersChanged := func(ctx context.Context, userID int64) {
@@ -221,7 +222,8 @@ func newChatEnvWith(t *testing.T, withSearch bool) *chatEnv {
 		WithAccount(NewAccountServer(AccountOptions{Store: store, Directory: dir, Deleter: authSvc, Moderation: modSvc, BasePath: apiBase, Log: log, PeersChanged: peersChanged})).
 		WithModeration(NewModerationServer(ModerationOptions{Service: modSvc, Log: log, Content: contentreports.New(contentreports.Deps{Store: store, Messages: msgs})})).
 		WithChats(NewChatServer(ChatOptions{Service: svc, BasePath: apiBase, Log: log})).
-		WithMessages(NewMessageServer(MessageOptions{Service: msgs, Store: store, Directory: dir, BasePath: apiBase, Log: log, Searcher: searcher(index, msgs, store, repo)})).
+		WithMessages(NewMessageServer(MessageOptions{Service: msgs, Store: store, Directory: dir, BasePath: apiBase, Log: log, Searcher: searcher(index, msgs, store, repo),
+			Sync: store.Sync(), Sealer: testSealer(t), SyncSettle: time.Nanosecond})).
 		WithNotifications(NotificationOptions{Store: store.Notifications(), Tokens: tokens}).
 		WithLinkPreviews(NewLinkPreviewServer(LinkPreviewOptions{
 			Service:  linkpreview.New(linkpreview.Options{SignKey: []byte("test-key"), AllowAddr: func(netip.Addr) bool { return true }, AnyPort: true}),

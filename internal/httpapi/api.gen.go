@@ -1238,6 +1238,66 @@ func (e StickerPackReportReason) Valid() bool {
 	}
 }
 
+// Defines values for StorageKeyAlgorithm.
+const (
+	A256GCM StorageKeyAlgorithm = "A256GCM"
+)
+
+// Valid indicates whether the value is a known member of the StorageKeyAlgorithm enum.
+func (e StorageKeyAlgorithm) Valid() bool {
+	switch e {
+	case A256GCM:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SyncChangeScope.
+const (
+	SyncChangeScopeEveryone SyncChangeScope = "everyone"
+	SyncChangeScopeMe       SyncChangeScope = "me"
+)
+
+// Valid indicates whether the value is a known member of the SyncChangeScope enum.
+func (e SyncChangeScope) Valid() bool {
+	switch e {
+	case SyncChangeScopeEveryone:
+		return true
+	case SyncChangeScopeMe:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SyncChangeType.
+const (
+	ChatHidden     SyncChangeType = "chat_hidden"
+	HistoryCleared SyncChangeType = "history_cleared"
+	MessageDeleted SyncChangeType = "message_deleted"
+	MessageUpdated SyncChangeType = "message_updated"
+	PinsChanged    SyncChangeType = "pins_changed"
+)
+
+// Valid indicates whether the value is a known member of the SyncChangeType enum.
+func (e SyncChangeType) Valid() bool {
+	switch e {
+	case ChatHidden:
+		return true
+	case HistoryCleared:
+		return true
+	case MessageDeleted:
+		return true
+	case MessageUpdated:
+		return true
+	case PinsChanged:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SystemEventKind.
 const (
 	SystemEventKindCall            SystemEventKind = "call"
@@ -3687,6 +3747,61 @@ type StickerPackReportReason string
 // StickerPackSlug defines model for StickerPackSlug.
 type StickerPackSlug = string
 
+// StorageKey defines model for StorageKey.
+type StorageKey struct {
+	Algorithm StorageKeyAlgorithm `json:"algorithm"`
+
+	// Key 32 random bytes, base64url without padding
+	Key string `json:"key"`
+}
+
+// StorageKeyAlgorithm defines model for StorageKey.Algorithm.
+type StorageKeyAlgorithm string
+
+// SyncChange `message_updated` carries the message as the caller sees it now (`message`). `message_deleted` names the
+// message and its `scope`. `pins_changed`: load the pins of the chat again. `history_cleared`: drop the
+// messages up to and including `before_message_id` (`scope` says for whom). `chat_hidden`: the caller
+// deleted the chat for themselves up to `before_message_id`.
+type SyncChange struct {
+	// BeforeMessageId Decimal ID as a string (Snowflake IDs exceed 2^53).
+	//
+	// Examples: 7217400317439950848
+	BeforeMessageId *Id `json:"before_message_id,omitempty"`
+
+	// ChatId Decimal ID as a string (Snowflake IDs exceed 2^53).
+	//
+	// Examples: 7217400317439950848
+	ChatId  Id       `json:"chat_id"`
+	Message *Message `json:"message,omitempty"`
+
+	// MessageId Decimal ID as a string (Snowflake IDs exceed 2^53).
+	//
+	// Examples: 7217400317439950848
+	MessageId *Id              `json:"message_id,omitempty"`
+	Scope     *SyncChangeScope `json:"scope,omitempty"`
+	Type      SyncChangeType   `json:"type"`
+}
+
+// SyncChangeScope defines model for SyncChange.Scope.
+type SyncChangeScope string
+
+// SyncChangeType defines model for SyncChange.Type.
+type SyncChangeType string
+
+// SyncChangesPage defines model for SyncChangesPage.
+type SyncChangesPage struct {
+	Changes []SyncChange `json:"changes"`
+
+	// HasMore More changes are waiting; ask again at once
+	HasMore bool `json:"has_more"`
+
+	// NextCursor Send as `cursor` next time
+	NextCursor string `json:"next_cursor"`
+
+	// ResetRequired The cursor is too old; drop the stored messages and load them again
+	ResetRequired bool `json:"reset_required"`
+}
+
 // SystemEvent What a `system` message records; set on system messages only, whose `content` is then `null`. The names
 // are the display names at the time of the event. `target` fields are set for `member_added` and
 // `member_removed`. `call` is set for `call` messages: one per call, posted when the call ends, `actor` is the
@@ -5826,6 +5941,15 @@ type RevokeSessionParams struct {
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
 }
 
+// GetStorageKeyParams defines parameters for GetStorageKey.
+type GetStorageKeyParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
 // DeleteMessageParams defines parameters for DeleteMessage.
 type DeleteMessageParams struct {
 	Scope DeleteMessageParamsScope `form:"scope" json:"scope"`
@@ -6103,6 +6227,21 @@ type UpdateStickerParams struct {
 
 // ListRecentStickersParams defines parameters for ListRecentStickers.
 type ListRecentStickersParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// ListSyncChangesParams defines parameters for ListSyncChanges.
+type ListSyncChangesParams struct {
+	// Cursor `next_cursor` of the previous answer
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// Limit Page size
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
@@ -7351,6 +7490,9 @@ type ServerInterface interface {
 	// RevokeSession Sign out one device
 	// (DELETE /me/sessions/{session_id})
 	RevokeSession(w http.ResponseWriter, r *http.Request, sessionId SessionId, params RevokeSessionParams)
+	// GetStorageKey The key this device encrypts its offline data with
+	// (POST /me/storage-key)
+	GetStorageKey(w http.ResponseWriter, r *http.Request, params GetStorageKeyParams)
 	// DeleteMessage Delete a message
 	// (DELETE /messages/{message_id})
 	DeleteMessage(w http.ResponseWriter, r *http.Request, messageId MessageId, params DeleteMessageParams)
@@ -7453,6 +7595,9 @@ type ServerInterface interface {
 	// ListRecentStickers Stickers the user sent recently
 	// (GET /stickers/recent)
 	ListRecentStickers(w http.ResponseWriter, r *http.Request, params ListRecentStickersParams)
+	// ListSyncChanges What changed in my chats since a cursor
+	// (GET /sync/changes)
+	ListSyncChanges(w http.ResponseWriter, r *http.Request, params ListSyncChangesParams)
 	// CreateUploadSession Start a resumable upload
 	// (POST /upload-sessions)
 	CreateUploadSession(w http.ResponseWriter, r *http.Request, params CreateUploadSessionParams)
@@ -18647,6 +18792,66 @@ func (siw *ServerInterfaceWrapper) RevokeSession(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
+// GetStorageKey operation middleware
+func (siw *ServerInterfaceWrapper) GetStorageKey(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetStorageKeyParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetStorageKey(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // DeleteMessage operation middleware
 func (siw *ServerInterfaceWrapper) DeleteMessage(w http.ResponseWriter, r *http.Request) {
 
@@ -20811,6 +21016,92 @@ func (siw *ServerInterfaceWrapper) ListRecentStickers(w http.ResponseWriter, r *
 	handler.ServeHTTP(w, r)
 }
 
+// ListSyncChanges operation middleware
+func (siw *ServerInterfaceWrapper) ListSyncChanges(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListSyncChangesParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListSyncChanges(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // CreateUploadSession operation middleware
 func (siw *ServerInterfaceWrapper) CreateUploadSession(w http.ResponseWriter, r *http.Request) {
 
@@ -22243,6 +22534,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/me/password", wrapper.ChangePassword)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/security", wrapper.GetSecuritySettings)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/me/security", wrapper.UpdateSecuritySettings)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/me/storage-key", wrapper.GetStorageKey)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/me/sessions", wrapper.RevokeOtherSessions)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/sessions", wrapper.ListSessions)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/me/sessions/{session_id}", wrapper.RevokeSession)
@@ -22316,6 +22608,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/chats/{chat_id}/messages/forward", wrapper.ForwardMessages)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/chats/{chat_id}/messages/delete", wrapper.DeleteMessages)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/search/messages", wrapper.SearchAllMessages)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/sync/changes", wrapper.ListSyncChanges)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/requests", wrapper.ListApprovalRequests)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/requests/{request_id}/approve", wrapper.ApproveRequest)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/requests/{request_id}/reject", wrapper.RejectRequest)
@@ -39864,6 +40157,76 @@ func (response RevokeSession426ApplicationProblemPlusJSONResponse) VisitRevokeSe
 	return err
 }
 
+type GetStorageKeyRequestObject struct {
+	Params GetStorageKeyParams
+}
+
+type GetStorageKeyResponseObject interface {
+	VisitGetStorageKeyResponse(w http.ResponseWriter) error
+}
+
+type GetStorageKey200JSONResponse StorageKey
+
+func (response GetStorageKey200JSONResponse) VisitGetStorageKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetStorageKey400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response GetStorageKey400ApplicationProblemPlusJSONResponse) VisitGetStorageKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetStorageKey401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response GetStorageKey401ApplicationProblemPlusJSONResponse) VisitGetStorageKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetStorageKey426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetStorageKey426ApplicationProblemPlusJSONResponse) VisitGetStorageKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type DeleteMessageRequestObject struct {
 	MessageId MessageId `json:"message_id"`
 	Params    DeleteMessageParams
@@ -43106,6 +43469,92 @@ func (response ListRecentStickers426ApplicationProblemPlusJSONResponse) VisitLis
 	return err
 }
 
+type ListSyncChangesRequestObject struct {
+	Params ListSyncChangesParams
+}
+
+type ListSyncChangesResponseObject interface {
+	VisitListSyncChangesResponse(w http.ResponseWriter) error
+}
+
+type ListSyncChanges200JSONResponse SyncChangesPage
+
+func (response ListSyncChanges200JSONResponse) VisitListSyncChangesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSyncChanges400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response ListSyncChanges400ApplicationProblemPlusJSONResponse) VisitListSyncChangesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSyncChanges401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ListSyncChanges401ApplicationProblemPlusJSONResponse) VisitListSyncChangesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSyncChanges422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response ListSyncChanges422ApplicationProblemPlusJSONResponse) VisitListSyncChangesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSyncChanges426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response ListSyncChanges426ApplicationProblemPlusJSONResponse) VisitListSyncChangesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type CreateUploadSessionRequestObject struct {
 	Params CreateUploadSessionParams
 	Body   *CreateUploadSessionJSONRequestBody
@@ -45346,6 +45795,9 @@ type StrictServerInterface interface {
 	// RevokeSession Sign out one device
 	// (DELETE /me/sessions/{session_id})
 	RevokeSession(ctx context.Context, request RevokeSessionRequestObject) (RevokeSessionResponseObject, error)
+	// GetStorageKey The key this device encrypts its offline data with
+	// (POST /me/storage-key)
+	GetStorageKey(ctx context.Context, request GetStorageKeyRequestObject) (GetStorageKeyResponseObject, error)
 	// DeleteMessage Delete a message
 	// (DELETE /messages/{message_id})
 	DeleteMessage(ctx context.Context, request DeleteMessageRequestObject) (DeleteMessageResponseObject, error)
@@ -45448,6 +45900,9 @@ type StrictServerInterface interface {
 	// ListRecentStickers Stickers the user sent recently
 	// (GET /stickers/recent)
 	ListRecentStickers(ctx context.Context, request ListRecentStickersRequestObject) (ListRecentStickersResponseObject, error)
+	// ListSyncChanges What changed in my chats since a cursor
+	// (GET /sync/changes)
+	ListSyncChanges(ctx context.Context, request ListSyncChangesRequestObject) (ListSyncChangesResponseObject, error)
 	// CreateUploadSession Start a resumable upload
 	// (POST /upload-sessions)
 	CreateUploadSession(ctx context.Context, request CreateUploadSessionRequestObject) (CreateUploadSessionResponseObject, error)
@@ -50402,6 +50857,32 @@ func (sh *strictHandler) RevokeSession(w http.ResponseWriter, r *http.Request, s
 	}
 }
 
+// GetStorageKey operation middleware
+func (sh *strictHandler) GetStorageKey(w http.ResponseWriter, r *http.Request, params GetStorageKeyParams) {
+	var request GetStorageKeyRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetStorageKey(ctx, request.(GetStorageKeyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetStorageKey")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetStorageKeyResponseObject); ok {
+		if err := validResponse.VisitGetStorageKeyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // DeleteMessage operation middleware
 func (sh *strictHandler) DeleteMessage(w http.ResponseWriter, r *http.Request, messageId MessageId, params DeleteMessageParams) {
 	var request DeleteMessageRequestObject
@@ -51356,6 +51837,32 @@ func (sh *strictHandler) ListRecentStickers(w http.ResponseWriter, r *http.Reque
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListRecentStickersResponseObject); ok {
 		if err := validResponse.VisitListRecentStickersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListSyncChanges operation middleware
+func (sh *strictHandler) ListSyncChanges(w http.ResponseWriter, r *http.Request, params ListSyncChangesParams) {
+	var request ListSyncChangesRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListSyncChanges(ctx, request.(ListSyncChangesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListSyncChanges")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListSyncChangesResponseObject); ok {
+		if err := validResponse.VisitListSyncChangesResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
