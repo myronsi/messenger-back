@@ -94,7 +94,7 @@ func Postgres(t testing.TB) *postgres.Store {
 	}
 	_ = db.Close(ctx)
 
-	s, err := postgres.New(context.Background(), u.String(), postgres.Options{MaxConns: 8, QueryTimeout: 10 * time.Second})
+	s, err := postgres.New(t.Context(), u.String(), postgres.Options{MaxConns: 8, QueryTimeout: 10 * time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}

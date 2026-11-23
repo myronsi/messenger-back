@@ -19,7 +19,7 @@ case "$MIN_FREE_MB" in
 esac
 
 cd "$APP_DIR"
-if [ ! -f .env ]; then
+if [[ ! -f .env ]]; then
   echo "$APP_DIR/.env is missing: create it from env.example (docs/deploy-go.md). Nothing was changed." >&2
   exit 1
 fi
@@ -31,7 +31,7 @@ mkdir -p backups
 value() {
   local v q
   v="$(grep -E "^[[:space:]]*(export[[:space:]]+)?$1[[:space:]]*=" .env | tail -n1 || true)"
-  [ -n "$v" ] || return 0
+  [[ -n "$v" ]] || return 0
   v="${v#*=}"
   v="${v%$'\r'}"
   v="${v#"${v%%[![:space:]]*}"}"
@@ -70,7 +70,7 @@ if $calls_enabled; then
   problems=()
   for name in CALLS_PUBLIC_URL CALLS_API_URL CALLS_API_KEY CALLS_API_SECRET CALLS_NODE_IP CALLS_TURN_DOMAIN \
     CALLS_TURN_CERT_FILE CALLS_TURN_KEY_FILE; do
-    [ -n "$(value "$name")" ] || problems+=("$name is empty")
+    [[ -n "$(value "$name")" ]] || problems+=("$name is empty")
   done
   case "$(value CALLS_PUBLIC_URL)" in
     '') ;;
@@ -87,20 +87,20 @@ if $calls_enabled; then
     *[!A-Za-z0-9_-]*) problems+=("CALLS_API_KEY may contain only letters, digits, _ and -") ;;
   esac
   secret="$(value CALLS_API_SECRET)"
-  if [ -n "$secret" ]; then
-    [ "${#secret}" -ge 32 ] || problems+=("CALLS_API_SECRET is shorter than 32 characters")
+  if [[ -n "$secret" ]]; then
+    [[ "${#secret}" -ge 32 ]] || problems+=("CALLS_API_SECRET is shorter than 32 characters")
     case "$secret" in
       *[!A-Za-z0-9+/=_-]*) problems+=("CALLS_API_SECRET may contain only letters, digits and + / = _ -") ;;
       *dev-only*) problems+=("CALLS_API_SECRET is the development value") ;;
     esac
   fi
   unset secret
-  if [ -n "$(value CALLS_NODE_IP)" ] && ! [[ "$(value CALLS_NODE_IP)" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]; then
+  if [[ -n "$(value CALLS_NODE_IP)" ]] && ! [[ "$(value CALLS_NODE_IP)" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]; then
     problems+=("CALLS_NODE_IP must be the host's public IPv4 address (the Elastic IP)")
   fi
   for name in CALLS_TURN_CERT_FILE CALLS_TURN_KEY_FILE; do
     file="$(value "$name")"
-    if [ -n "$file" ] && { [ ! -r "$file" ] || [ ! -s "$file" ]; }; then
+    if [[ -n "$file" ]] && { [[ ! -r "$file" ]] || [[ ! -s "$file" ]]; }; then
       problems+=("$name does not name a file the deploy user can read")
     fi
   done
@@ -110,7 +110,7 @@ if $calls_enabled; then
       *[!0-9]*) problems+=("$name must be a port number") ;;
     esac
   done
-  if [ "${#problems[@]}" -gt 0 ]; then
+  if [[ "${#problems[@]}" -gt 0 ]]; then
     echo "calls: enabled, but the settings are incomplete (docs/calls.md#deployment):" >&2
     printf '  - %s\n' "${problems[@]}" >&2
     echo "Complete them or set CALLS_ENABLED=false. Nothing was changed." >&2
@@ -124,16 +124,16 @@ fi
 # Roll back to what is actually running; .env may name an image that was never pulled.
 previous_image=""
 running="$(docker compose ps -q api 2>/dev/null || true)"
-if [ -n "$running" ]; then
+if [[ -n "$running" ]]; then
   previous_image="$(docker inspect --format '{{.Config.Image}}' "$running" 2>/dev/null || true)"
 fi
-if [ -z "$previous_image" ]; then
+if [[ -z "$previous_image" ]]; then
   previous_image="$(value BACKEND_IMAGE)"
 fi
 
 set_image() {
   # grep exits 1 when nothing is left, which is fine; 2 (a read error) must not truncate .env.
-  grep -v '^BACKEND_IMAGE=' .env > .env.tmp || [ $? -eq 1 ]
+  grep -v '^BACKEND_IMAGE=' .env > .env.tmp || [[ $? -eq 1 ]]
   printf 'BACKEND_IMAGE=%s\n' "$1" >> .env.tmp
   mv .env.tmp .env
 }
@@ -158,11 +158,11 @@ check_livekit_ports() {
     logs="$(docker compose logs --no-color livekit 2>/dev/null || true)"
     server="$(printf '%s\n' "$logs" | grep -F '"starting LiveKit server"' | tail -n1 || true)"
     turn="$(printf '%s\n' "$logs" | grep -F '"Starting TURN server"' | tail -n1 || true)"
-    [ -n "$server" ] && [ -n "$turn" ] && break
+    [[ -n "$server" ]] && [[ -n "$turn" ]] && break
     sleep 2
   done
-  if [ -z "$server" ] || [ -z "$turn" ]; then
-    if [ -n "$before" ] && [ "$before" = "$(docker compose ps -q livekit 2>/dev/null || true)" ]; then
+  if [[ -z "$server" ]] || [[ -z "$turn" ]]; then
+    if [[ -n "$before" ]] && [[ "$before" = "$(docker compose ps -q livekit 2>/dev/null || true)" ]]; then
       echo "calls: the media server was not recreated and its log no longer holds the startup lines; its ports were checked when it started"
       return 0
     fi
@@ -195,17 +195,17 @@ wait_livekit() {
 free_mb() {
   local dirs=() dir
   dir="$(docker info --format '{{.DockerRootDir}}' 2>/dev/null || true)"
-  [ -n "$dir" ] && [ -d "$dir" ] && dirs+=("$dir")
-  [ -d /var/lib/containerd ] && dirs+=(/var/lib/containerd)
-  [ "${#dirs[@]}" -gt 0 ] || dirs=(.)
+  [[ -n "$dir" ]] && [[ -d "$dir" ]] && dirs+=("$dir")
+  [[ -d /var/lib/containerd ]] && dirs+=(/var/lib/containerd)
+  [[ "${#dirs[@]}" -gt 0 ]] || dirs=(.)
   df -Pm "${dirs[@]}" | awk 'NR > 1 && (min == "" || $4 < min) { min = $4 } END { print min }'
 }
 
 # Images used by a container (the running one, the rollback target) are kept.
-prune() { [ "$PRUNE_IMAGES" = false ] || docker image prune -af > /dev/null; }
+prune() { [[ "$PRUNE_IMAGES" = false ]] || docker image prune -af > /dev/null; }
 prune
 available="$(free_mb)"
-if [ -n "$available" ] && [ "$available" -lt "$MIN_FREE_MB" ]; then
+if [[ -n "$available" ]] && [[ "$available" -lt "$MIN_FREE_MB" ]]; then
   echo "Only ${available} MB free on the Docker disk (need ${MIN_FREE_MB} MB). Nothing was changed." >&2
   exit 1
 fi
@@ -253,7 +253,7 @@ if $calls_enabled; then
     exit 1
   fi
   echo "calls: media server healthy"
-elif [ -n "$(docker compose ps -aq livekit 2>/dev/null || true)" ]; then
+elif [[ -n "$(docker compose ps -aq livekit 2>/dev/null || true)" ]]; then
   docker compose rm -sf livekit
   echo "calls: media server stopped and removed"
 fi
@@ -269,7 +269,7 @@ fi
 echo "Readiness check failed for $IMAGE" >&2
 docker compose logs --no-color --tail 80 api worker >&2 || true
 
-if [ -n "$previous_image" ] && [ "$previous_image" != "$IMAGE" ] && [ "$previous_image" != "unset" ]; then
+if [[ -n "$previous_image" ]] && [[ "$previous_image" != "$IMAGE" ]] && [[ "$previous_image" != "unset" ]]; then
   echo "Rolling back to $previous_image" >&2
   set_image "$previous_image"
   docker compose up -d --no-deps api worker
