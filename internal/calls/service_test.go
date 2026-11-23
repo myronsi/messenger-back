@@ -940,6 +940,26 @@ func (e *env) holdInTx(query string, args ...any) func() {
 	}
 }
 
+func (e *env) waitForLockWaiter() {
+	e.t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		var waiting int
+		err := e.pg.Pool().QueryRow(context.Background(),
+			`SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`).Scan(&waiting)
+		if err != nil {
+			e.t.Fatal(err)
+		}
+		if waiting > 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			e.t.Fatal("no query is waiting for the held lock")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 func (e *env) joinAsync(uid int64, sid uuid.UUID, callID int64) <-chan error {
 	done := make(chan error, 1)
 	go func() {
@@ -959,7 +979,7 @@ func TestJoinRechecksMembershipAndIdentityInsideTheTransaction(t *testing.T) {
 
 	commit := e.holdInTx(`DELETE FROM participants WHERE chat_id = $1 AND user_id = $2`, chat, b)
 	done := e.joinAsync(b, sb, call.ID)
-	time.Sleep(300 * time.Millisecond)
+	e.waitForLockWaiter()
 	commit()
 	if err := <-done; !errors.Is(err, ErrNotFound) {
 		t.Fatalf("join of a member removed meanwhile: %v", err)
@@ -967,7 +987,7 @@ func TestJoinRechecksMembershipAndIdentityInsideTheTransaction(t *testing.T) {
 
 	commit = e.holdInTx(`DELETE FROM call_identities WHERE session_id = $1`, sc)
 	done = e.joinAsync(c3, sc, call.ID)
-	time.Sleep(300 * time.Millisecond)
+	e.waitForLockWaiter()
 	commit()
 	if err := <-done; !errors.Is(err, ErrIdentityRequired) {
 		t.Fatalf("join of a session ended meanwhile: %v", err)
@@ -992,7 +1012,7 @@ func TestStartRingsOnlyCurrentMembers(t *testing.T) {
 		c, _, err := e.svc.Start(context.Background(), a, chat, uuid.New())
 		done <- result{c, err}
 	}()
-	time.Sleep(300 * time.Millisecond)
+	e.waitForLockWaiter()
 	commit()
 	r := <-done
 	if r.err != nil || find(&r.c, b) == nil || find(&r.c, c3) != nil {

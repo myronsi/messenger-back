@@ -91,7 +91,7 @@ func TestBlockDuringStartIsCaughtBySweep(t *testing.T) {
 		c, _, err := e.svc.Start(context.Background(), a, chat, uuid.New())
 		done <- result{c, err}
 	}()
-	time.Sleep(300 * time.Millisecond)
+	e.waitForLockWaiter()
 	if err := e.pg.Social().Block(ctx, b, a); err != nil {
 		t.Fatal(err)
 	}
@@ -256,7 +256,7 @@ func TestStartTakesTheChatLockFirst(t *testing.T) {
 		_, _, err := e.svc.Start(context.Background(), a, chat, uuid.New())
 		done <- err
 	}()
-	time.Sleep(300 * time.Millisecond)
+	e.waitForLockWaiter()
 	if _, err := tx.Exec(ctx, `SET LOCAL lock_timeout = '500ms'`); err != nil {
 		t.Fatal(err)
 	}

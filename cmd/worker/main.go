@@ -207,7 +207,7 @@ func run() error {
 	}
 
 	log.Info("worker shutting down")
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.HTTP.ShutdownTimeout)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(bg), cfg.HTTP.ShutdownTimeout)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
 		return fmt.Errorf("shutdown: %w", err)
