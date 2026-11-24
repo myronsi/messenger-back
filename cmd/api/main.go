@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gocql/gocql"
 	"github.com/google/uuid"
 
 	"github.com/myronsi/messenger-back/internal/app"
@@ -34,9 +33,7 @@ import (
 	"github.com/myronsi/messenger-back/internal/search"
 	"github.com/myronsi/messenger-back/internal/stickers"
 	"github.com/myronsi/messenger-back/internal/store/elastic"
-	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/redis"
-	"github.com/myronsi/messenger-back/internal/store/scylla"
 	"github.com/myronsi/messenger-back/internal/version"
 )
 
@@ -50,34 +47,17 @@ func run() error {
 	defer p.Close()
 	cfg, log := p.Cfg, p.Log
 
-	pg, err := postgres.New(p.Ctx, cfg.DatabaseURL.Reveal(), postgres.Options{
-		MaxConns:     cfg.Postgres.MaxConns,
-		QueryTimeout: cfg.Postgres.QueryTimeout,
-		Observe: func(op string, d time.Duration, err error) {
-			p.Metrics.StoreOperation("postgres", op, d, err)
-		},
-	})
+	pg, err := p.OpenPostgres()
 	if err != nil {
 		return err
 	}
 	defer pg.Close()
-	p.Metrics.RegisterPostgresPool(pg.Pool().Stat)
-	rd, err := redis.New(cfg.RedisURL.Reveal(), redis.Options{
-		Timeout: cfg.Redis.Timeout,
-		OnError: func() { p.Metrics.StoreError("redis") },
-		Observe: func(op string, d time.Duration) { p.Metrics.StoreOperation("redis", op, d, nil) },
-	})
+	rd, err := p.OpenRedis()
 	if err != nil {
 		return err
 	}
 	defer func() { _ = rd.Close() }()
-	sc := scylla.New(cfg.ScyllaHosts, cfg.ScyllaKeyspace, scylla.Options{
-		Consistency:    gocql.ParseConsistency(cfg.Scylla.Consistency),
-		RequestTimeout: cfg.Scylla.Timeout,
-		Observe: func(op string, d time.Duration, err error) {
-			p.Metrics.StoreOperation("scylla", op, d, err)
-		},
-	})
+	sc := p.OpenScylla()
 	defer func() { _ = sc.Close() }()
 	es, err := elastic.New(cfg.ElasticsearchURL.Reveal())
 	if err != nil {
