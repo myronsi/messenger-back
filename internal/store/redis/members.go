@@ -55,7 +55,9 @@ var (
 local v = redis.call('GET', KEYS[2]) or ''
 if v ~= ARGV[1] then return 0 end
 redis.call('DEL', KEYS[1])
-redis.call('SADD', KEYS[1], unpack(ARGV, 3))
+for i = 3, #ARGV, 1000 do
+  redis.call('SADD', KEYS[1], unpack(ARGV, i, math.min(i + 999, #ARGV)))
+end
 redis.call('PEXPIRE', KEYS[1], ARGV[2])
 return 1`)
 

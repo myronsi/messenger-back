@@ -224,6 +224,39 @@ func TestMembersCache(t *testing.T) {
 	}
 }
 
+func TestMembersCacheLargeGroup(t *testing.T) {
+	s, prefix := testStore(t)
+	ctx := context.Background()
+	m := NewMembers(s.Client(), prefix, time.Minute)
+
+	const size = 20_000
+	members := make([]int64, size)
+	for i := range members {
+		members[i] = int64(i + 1)
+	}
+	var loads atomic.Int32
+	load := func(context.Context, int64) ([]int64, error) {
+		loads.Add(1)
+		return slices.Clone(members), nil
+	}
+	for _, c := range []struct {
+		uid  int64
+		want bool
+	}{{1, true}, {size, true}, {size + 1, false}} {
+		ok, err := m.IsMember(ctx, 12, c.uid, load)
+		if err != nil || ok != c.want {
+			t.Fatalf("is %d a member: %v %v", c.uid, ok, err)
+		}
+	}
+	got, err := m.Get(ctx, 12, load)
+	if err != nil || len(got) != size {
+		t.Fatalf("get: %d members, %v", len(got), err)
+	}
+	if n := loads.Load(); n != 1 {
+		t.Fatalf("loaded %d times, want 1", n)
+	}
+}
+
 // A fill that read the members before a change must not cache or return them: it loads again.
 func TestMembersStaleFillIsReloaded(t *testing.T) {
 	s, prefix := testStore(t)
