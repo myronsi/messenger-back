@@ -22,17 +22,18 @@ import (
 
 // generators maps a variable to a function that produces its value.
 var generators = map[string]func() string{
-	"JWT_SECRET":        hexBytes(32),
-	"RECOVERY_PEPPER":   hexBytes(32),
-	"ENCRYPTION_KEY":    base64Bytes(32),
-	"POSTGRES_PASSWORD": hexBytes(16),
-	"REDIS_PASSWORD":    hexBytes(16),
-	"ELASTIC_PASSWORD":  hexBytes(16),
-	"KIBANA_PASSWORD":   hexBytes(16),
-	"S3_ACCESS_KEY":     hexBytes(8),
-	"S3_SECRET_KEY":     hexBytes(20),
-	"CALLS_API_KEY":     hexBytes(8),
-	"CALLS_API_SECRET":  hexBytes(32),
+	"JWT_SECRET":             hexBytes(32),
+	"RECOVERY_PEPPER":        hexBytes(32),
+	"ENCRYPTION_KEY":         base64Bytes(32),
+	"POSTGRES_PASSWORD":      hexBytes(16),
+	"REDIS_PASSWORD":         hexBytes(16),
+	"ELASTIC_PASSWORD":       hexBytes(16),
+	"KIBANA_PASSWORD":        hexBytes(16),
+	"S3_ACCESS_KEY":          hexBytes(8),
+	"S3_SECRET_KEY":          hexBytes(20),
+	"CALLS_API_KEY":          hexBytes(8),
+	"CALLS_API_SECRET":       hexBytes(32),
+	"GRAFANA_ADMIN_PASSWORD": hexBytes(16),
 }
 
 var ref = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)

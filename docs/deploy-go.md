@@ -98,6 +98,16 @@ An upload replaces the bundle's files and `migrations/` as a whole: after a roll
     -c 'pg_restore --clean --if-exists --no-owner -d "$DATABASE_URL"' < backups/messenger-YYYYmmdd-HHMMSS.dump
   ```
 
+## Monitoring
+
+The `monitoring` profile adds Prometheus (15 days of data in the `prometheus-data` volume), node-exporter (CPU, memory and disk of the host) and Grafana with the provisioned dashboard **Messenger overview**. Prometheus scrapes `api:8080/metrics`, `worker:8081/metrics`, node-exporter and `livekit:6789`; nothing of it is published except Grafana on `127.0.0.1:${GRAFANA_PORT}`. The metrics are described in [metrics.md](metrics.md).
+
+1. In `.env`: `GRAFANA_ADMIN_PASSWORD` (`openssl rand -hex 16`; genenv fills it for new hosts). On a 4 GiB host also `PROMETHEUS_MEM_LIMIT=384m` and `GRAFANA_MEM_LIMIT=256m`.
+2. Start it once in the stack folder: `docker compose --profile monitoring up -d --wait prometheus node-exporter grafana`. Deployments leave it running; after a release that changes `monitoring/`, run the same command again.
+3. From your PC: `ssh -L 3000:127.0.0.1:3000 <user>@<host>`, then open `http://localhost:3000`, sign in as `admin` and open **Dashboards → Messenger → Messenger overview**.
+
+Stop it with `docker compose --profile monitoring stop prometheus node-exporter grafana`; the data stays in its volumes.
+
 ## Audio calls
 
 Calls are off until `CALLS_ENABLED=true` in `.env`. Off, nothing of them runs and messaging is unaffected. The design, ports, AWS checklist and budgets are in [calls.md](calls.md#deployment).
