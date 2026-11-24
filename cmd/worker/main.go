@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/gocql/gocql"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/myronsi/messenger-back/internal/media"
 	"github.com/myronsi/messenger-back/internal/moderation"
 	"github.com/myronsi/messenger-back/internal/notifications"
+	"github.com/myronsi/messenger-back/internal/observability"
 	"github.com/myronsi/messenger-back/internal/realtime"
 	"github.com/myronsi/messenger-back/internal/search"
 	"github.com/myronsi/messenger-back/internal/store/elastic"
@@ -41,11 +43,15 @@ func run() error {
 	pg, err := postgres.New(p.Ctx, cfg.DatabaseURL.Reveal(), postgres.Options{
 		MaxConns:     cfg.Postgres.MaxConns,
 		QueryTimeout: cfg.Postgres.QueryTimeout,
+		Observe: func(op string, d time.Duration, err error) {
+			p.Metrics.StoreOperation("postgres", op, d, err)
+		},
 	})
 	if err != nil {
 		return err
 	}
 	defer pg.Close()
+	p.Metrics.RegisterPostgresPool(pg.Pool().Stat)
 	if len(os.Args) > 1 && os.Args[1] == "unhide-sticker-pack" {
 		return unhideStickerPack(p.Ctx, log, pg, os.Args[2:])
 	}
@@ -55,6 +61,7 @@ func run() error {
 	rd, err := redis.New(cfg.RedisURL.Reveal(), redis.Options{
 		Timeout: cfg.Redis.Timeout,
 		OnError: func() { p.Metrics.StoreError("redis") },
+		Observe: func(op string, d time.Duration) { p.Metrics.StoreOperation("redis", op, d, nil) },
 	})
 	if err != nil {
 		return err
@@ -63,6 +70,9 @@ func run() error {
 	sc := scylla.New(cfg.ScyllaHosts, cfg.ScyllaKeyspace, scylla.Options{
 		Consistency:    gocql.ParseConsistency(cfg.Scylla.Consistency),
 		RequestTimeout: cfg.Scylla.Timeout,
+		Observe: func(op string, d time.Duration, err error) {
+			p.Metrics.StoreOperation("scylla", op, d, err)
+		},
 	})
 	defer func() { _ = sc.Close() }()
 	es, err := elastic.New(cfg.ElasticsearchURL.Reveal())
@@ -120,14 +130,23 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	fanout := realtime.NewFanout(realtime.FanoutDeps{Bus: attachmentBus, Log: log})
+	fanout := realtime.NewFanout(realtime.FanoutDeps{Bus: attachmentBus, Log: log, Metrics: p.Metrics})
 	authSvc, err := workerAuth(cfg, pg, rd.Client(), log, fanout.CloseSessions)
 	if err != nil {
 		return err
 	}
 	mailWorker := recoveryMailWorker(cfg, authSvc)
 	wg.Go(func() { mailWorker(bg) })
-	evlog := events.NewLog(redis.NewStreams(rd.Client(), "", 0))
+	streams := redis.NewStreams(rd.Client(), "", 0)
+	p.Metrics.RegisterStreamBacklog(func(ctx context.Context) ([]observability.StreamGroupStat, error) {
+		groups, err := streams.Backlog(ctx)
+		out := make([]observability.StreamGroupStat, 0, len(groups))
+		for _, g := range groups {
+			out = append(out, observability.StreamGroupStat{Stream: g.Stream, Group: g.Group, Lag: g.Lag, Pending: g.Pending})
+		}
+		return out, err
+	})
+	evlog := events.NewLog(streams)
 	if cfg.Inactive.Deletion {
 		job := inactiveAccounts(inactiveAccountsDeps{
 			cfg: cfg, pg: pg, accounts: authSvc, fanout: fanout, rdb: rd.Client(), storage: storage, events: evlog, log: log,

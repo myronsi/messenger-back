@@ -20,6 +20,7 @@ type Options struct {
 	// context as well; this keeps the driver from giving up earlier, which a lightweight transaction under
 	// load can need.
 	RequestTimeout time.Duration
+	Observe        Observer
 }
 
 // DefaultRequestTimeout is the driver's per-request timeout unless Options says otherwise.
@@ -32,6 +33,7 @@ type Store struct {
 	keyspace    string
 	consistency gocql.Consistency
 	timeout     time.Duration
+	observe     Observer
 
 	mu         sync.Mutex
 	session    *gocql.Session
@@ -53,7 +55,7 @@ func New(hosts []string, keyspace string, o Options) *Store {
 	if o.RequestTimeout <= 0 {
 		o.RequestTimeout = DefaultRequestTimeout
 	}
-	return &Store{hosts: hosts, keyspace: keyspace, consistency: o.Consistency, timeout: o.RequestTimeout}
+	return &Store{hosts: hosts, keyspace: keyspace, consistency: o.Consistency, timeout: o.RequestTimeout, observe: o.Observe}
 }
 
 // Session returns the open session, connecting first when needed. gocql cannot cancel a connection
@@ -100,6 +102,10 @@ func (s *Store) connect(a *attempt) {
 	cluster.SerialConsistency = gocql.LocalSerial
 	cluster.ConnectTimeout = connectTimeout
 	cluster.Timeout = s.timeout
+	if s.observe != nil {
+		cluster.QueryObserver = observer{observe: s.observe}
+		cluster.BatchObserver = observer{observe: s.observe}
+	}
 	session, err := cluster.CreateSession()
 
 	s.mu.Lock()

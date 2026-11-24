@@ -69,6 +69,7 @@ type Fanout struct {
 	ids      messages.IDSource
 	basePath string
 	log      *slog.Logger
+	metrics  FanoutMetrics
 }
 
 var _ messages.Notifier = (*Fanout)(nil)
@@ -92,14 +93,28 @@ type FanoutDeps struct {
 	IDs      messages.IDSource
 	BasePath string
 	Log      *slog.Logger
+	Metrics  FanoutMetrics
 }
+
+type FanoutMetrics interface {
+	FanoutPublished(recipients int, d time.Duration)
+	FanoutRendered(event string, d time.Duration)
+}
+
+type noFanoutMetrics struct{}
+
+func (noFanoutMetrics) FanoutPublished(int, time.Duration)   {}
+func (noFanoutMetrics) FanoutRendered(string, time.Duration) {}
 
 // NewFanout returns the fan-out.
 func NewFanout(d FanoutDeps) *Fanout {
 	if d.Log == nil {
 		d.Log = slog.New(slog.DiscardHandler)
 	}
-	return &Fanout{bus: d.Bus, dir: d.Directory, store: d.Store, members: d.Members, reacts: d.Reactions, replies: d.Replies, ids: d.IDs, basePath: d.BasePath, log: d.Log}
+	if d.Metrics == nil {
+		d.Metrics = noFanoutMetrics{}
+	}
+	return &Fanout{bus: d.Bus, dir: d.Directory, store: d.Store, members: d.Members, reacts: d.Reactions, replies: d.Replies, ids: d.IDs, basePath: d.BasePath, log: d.Log, metrics: d.Metrics}
 }
 
 // eventID numbers an event; without an id source (Redis lost the node lease) the event still goes out.
@@ -135,9 +150,11 @@ func (f *Fanout) publish(ctx context.Context, frames map[int64]frame) {
 	// Delivery outlives the request that caused it.
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
+	start := time.Now()
 	if err := f.bus.PublishEach(ctx, payloads); err != nil {
 		f.log.WarnContext(ctx, "publish events", "error", err, "recipients", len(payloads))
 	}
+	f.metrics.FanoutPublished(len(payloads), time.Since(start))
 }
 
 // same sends one event to all recipients.
@@ -264,7 +281,9 @@ func (f *Fanout) replyOrigins(ctx context.Context, m scylla.Message, recipients 
 }
 
 func (f *Fanout) messageEvent(ctx context.Context, typ string, m scylla.Message, recipients []int64, reactions []scylla.Reaction, clientTempID string) {
+	start := time.Now()
 	rendered := f.renderMessage(ctx, m, recipients, reactions, clientTempID)
+	f.metrics.FanoutRendered(typ, time.Since(start))
 	frames := make(map[int64]frame, len(rendered))
 	for uid, msg := range rendered {
 		ctid := ""

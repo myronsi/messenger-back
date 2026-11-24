@@ -545,3 +545,25 @@ func stringFields(v map[string]any) map[string]string {
 	}
 	return out
 }
+
+type GroupBacklog struct {
+	Stream, Group string
+	Lag, Pending  int64
+}
+
+func (s *Streams) Backlog(ctx context.Context) ([]GroupBacklog, error) {
+	var out []GroupBacklog
+	for _, stream := range []string{StreamMessages, StreamChats, StreamUsers} {
+		groups, err := s.rdb.XInfoGroups(ctx, s.prefix+stream).Result()
+		if err != nil {
+			if strings.Contains(strings.ToLower(err.Error()), "no such key") {
+				continue
+			}
+			return out, fmt.Errorf("stream backlog %s: %w", stream, err)
+		}
+		for _, g := range groups {
+			out = append(out, GroupBacklog{Stream: stream, Group: g.Name, Lag: g.Lag, Pending: g.Pending})
+		}
+	}
+	return out, nil
+}

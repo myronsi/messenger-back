@@ -37,6 +37,7 @@ type Options struct {
 	Timeout time.Duration
 	// OnError is called for every failed command except a missing key (redis.Nil), for the error metric.
 	OnError func()
+	Observe func(op string, d time.Duration)
 }
 
 // Store wraps a Redis client. The client connects lazily.
@@ -56,7 +57,7 @@ func New(url string, o Options) (*Store, error) {
 	// Socket reads and writes follow the context deadline, which the hook below always sets.
 	opts.ContextTimeoutEnabled = true
 	c := goredis.NewClient(opts)
-	c.AddHook(hook{timeout: o.Timeout, onError: o.OnError})
+	c.AddHook(hook{timeout: o.Timeout, onError: o.OnError, observe: o.Observe})
 	return &Store{client: c}, nil
 }
 
@@ -73,6 +74,7 @@ func (s *Store) Close() error { return s.client.Close() }
 type hook struct {
 	timeout time.Duration
 	onError func()
+	observe func(op string, d time.Duration)
 }
 
 // alwaysBlocking lists the commands that wait on the server on purpose; their wait is bounded by the caller.
@@ -124,13 +126,18 @@ func (h hook) DialHook(next goredis.DialHook) goredis.DialHook {
 
 func (h hook) ProcessHook(next goredis.ProcessHook) goredis.ProcessHook {
 	return func(ctx context.Context, cmd goredis.Cmder) error {
-		if !isBlocking(cmd) {
+		blocking := isBlocking(cmd)
+		if !blocking {
 			var cancel context.CancelFunc
 			ctx, cancel = h.withTimeout(ctx)
 			defer cancel()
 		}
+		start := time.Now()
 		err := next(ctx, cmd)
 		h.failed(err)
+		if h.observe != nil && !blocking {
+			h.observe(strings.ToLower(cmd.Name()), time.Since(start))
+		}
 		return err
 	}
 }
@@ -139,8 +146,12 @@ func (h hook) ProcessPipelineHook(next goredis.ProcessPipelineHook) goredis.Proc
 	return func(ctx context.Context, cmds []goredis.Cmder) error {
 		ctx, cancel := h.withTimeout(ctx)
 		defer cancel()
+		start := time.Now()
 		err := next(ctx, cmds)
 		h.failed(err)
+		if h.observe != nil {
+			h.observe("pipeline", time.Since(start))
+		}
 		return err
 	}
 }

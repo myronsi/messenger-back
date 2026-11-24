@@ -83,7 +83,18 @@ type Options struct {
 	PingInterval        time.Duration
 	MaxUserConns        int
 	Log                 *slog.Logger
+	Metrics             EventMetrics
 }
+
+type EventMetrics interface {
+	WebSocketEvent(typ, outcome string, d time.Duration)
+	WebSocketSlowClose()
+}
+
+type noEventMetrics struct{}
+
+func (noEventMetrics) WebSocketEvent(string, string, time.Duration) {}
+func (noEventMetrics) WebSocketSlowClose()                          {}
 
 // Gateway serves /ws: one connection per browser tab, carrying the events of all chats of the user.
 type Gateway struct {
@@ -127,6 +138,9 @@ func New(o Options) (*Gateway, error) {
 	}
 	if o.Log == nil {
 		o.Log = slog.New(slog.DiscardHandler)
+	}
+	if o.Metrics == nil {
+		o.Metrics = noEventMetrics{}
 	}
 	if o.MinClientAPIVersion == "" {
 		o.MinClientAPIVersion = version.API

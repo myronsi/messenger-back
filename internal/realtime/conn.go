@@ -65,6 +65,7 @@ func (c *conn) enqueue(b []byte) {
 	case c.send <- b:
 	default:
 		if c.overflowed.CompareAndSwap(false, true) {
+			c.gw.o.Metrics.WebSocketSlowClose()
 			go c.Close(int(websocket.StatusTryAgainLater), "too slow") //nolint:errcheck // best effort
 		}
 	}
@@ -284,17 +285,22 @@ func rate(typ string) redis.Rate {
 
 // handle runs one client event. Events of one connection are handled in order.
 func (c *conn) handle(ev clientEvent) {
+	start, outcome := time.Now(), "ack"
+	defer func() { c.gw.o.Metrics.WebSocketEvent(ev.Type, outcome, time.Since(start)) }()
 	ctx, cancel := context.WithTimeout(c.gw.ctx, eventTimeout)
 	defer cancel()
 	subject := strconv.FormatInt(c.userID, 10)
 	// The limiter fails closed: without Redis no event is handled.
 	res, err := c.gw.o.Limiter.Allow(ctx, rate(ev.Type), subject)
 	if err != nil || !res.Allowed {
+		outcome = "rate_limited"
 		if ev.Type == "typing" { // typing is not acknowledged; excess indicators are simply dropped
+			outcome = "dropped"
 			return
 		}
 		cause := messages.ErrRateLimited
 		if err != nil {
+			outcome = "error"
 			cause = messages.ErrUnavailable
 			c.gw.o.Log.WarnContext(ctx, "rate limiter unavailable", "error", err)
 			c.reply(c.errorEvent(ev.ClientTempID, ev.ChatID, "internal_error", "something went wrong, try again"))
@@ -326,11 +332,14 @@ func (c *conn) handle(ev clientEvent) {
 	case "reaction_add", "reaction_remove":
 		err = svc.React(ctx, c.userID, ev.ChatID, ev.Reaction.MessageID, ev.Reaction.Emoji, ev.Type == "reaction_add")
 	case "typing":
+		outcome = "handled"
 		_ = svc.Typing(ctx, c.userID, ev.ChatID, ev.Typing.IsTyping, ev.Typing.Action)
 		return
 	}
 	if err != nil {
+		outcome = "error"
 		if action, ok := moderation.Restriction(err); ok {
+			outcome = "restricted"
 			raw, _ := c.gw.o.Fanout.encode("error", ev.ChatID, map[string]any{"code": "account_restricted", "message": "your account status does not allow this", "restriction": action}, ev.ClientTempID)
 			c.reply(raw)
 			return

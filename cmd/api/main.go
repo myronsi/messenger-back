@@ -53,14 +53,19 @@ func run() error {
 	pg, err := postgres.New(p.Ctx, cfg.DatabaseURL.Reveal(), postgres.Options{
 		MaxConns:     cfg.Postgres.MaxConns,
 		QueryTimeout: cfg.Postgres.QueryTimeout,
+		Observe: func(op string, d time.Duration, err error) {
+			p.Metrics.StoreOperation("postgres", op, d, err)
+		},
 	})
 	if err != nil {
 		return err
 	}
 	defer pg.Close()
+	p.Metrics.RegisterPostgresPool(pg.Pool().Stat)
 	rd, err := redis.New(cfg.RedisURL.Reveal(), redis.Options{
 		Timeout: cfg.Redis.Timeout,
 		OnError: func() { p.Metrics.StoreError("redis") },
+		Observe: func(op string, d time.Duration) { p.Metrics.StoreOperation("redis", op, d, nil) },
 	})
 	if err != nil {
 		return err
@@ -69,6 +74,9 @@ func run() error {
 	sc := scylla.New(cfg.ScyllaHosts, cfg.ScyllaKeyspace, scylla.Options{
 		Consistency:    gocql.ParseConsistency(cfg.Scylla.Consistency),
 		RequestTimeout: cfg.Scylla.Timeout,
+		Observe: func(op string, d time.Duration, err error) {
+			p.Metrics.StoreOperation("scylla", op, d, err)
+		},
 	})
 	defer func() { _ = sc.Close() }()
 	es, err := elastic.New(cfg.ElasticsearchURL.Reveal())
