@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.34.1-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.34.0-alpha.1...v1.34.1-alpha.1) (2026-11-24)
+
+
+### Bug Fixes
+
+* **redis:** fill the members cache in chunks so large groups keep working ([#239](https://github.com/myronsi/messenger-back/issues/239)) ([a22c38c](https://github.com/myronsi/messenger-back/commit/a22c38c61739b348575cd8faa8c2160bd9423f4d))
+
 ## [1.34.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.33.0-alpha.1...v1.34.0-alpha.1) (2026-11-23)
 
 
