@@ -109,14 +109,33 @@ memory cap is killed and restarted by Docker. Set caps from measurements:
 1. Run `docker stats --no-stream` several times over a normal day (and during a load test) and note each
    container's peak memory.
 2. Set each memory cap to about 1.5 to 2 times that peak, and never below these floors:
-   - `SCYLLA_MEM_LIMIT`: `SCYLLA_MEMORY` plus 512 MiB (ScyllaDB uses memory outside its `--memory` share);
    - `ELASTICSEARCH_MEM_LIMIT`: twice `ELASTICSEARCH_HEAP` (Lucene uses memory outside the heap);
    - `REDIS_MEM_LIMIT`: twice `REDIS_MAXMEMORY` (the AOF rewrite forks Redis).
+   - **Leave `SCYLLA_MEM_LIMIT` at `0`.** `SCYLLA_MEMORY` (`--memory`) already caps ScyllaDB. Under a container
+     cap, Seastar subtracts its default reserve (at least 1.5 GiB) from the cap before it checks `--memory`, falls
+     back to 500 MB when less is left, and refuses to start: `insufficient physical memory: needed 734003200
+     available 500000000` with `SCYLLA_MEMORY=750M` and `SCYLLA_MEM_LIMIT=1280m`. A cap only works at
+     `SCYLLA_MEMORY` plus 1.5 GiB plus the overhead, which on these hosts is more than the cap saves.
 3. Keep the sum of the memory caps below the host's memory minus about 1 GiB for the OS, Docker and nginx.
 4. CPU caps are optional on a 2-vCPU host; use them for a container known to spike, for example
    `ELASTICSEARCH_CPUS=1.0`.
 5. For a few days after a change, look for restarts: `docker inspect -f '{{.State.OOMKilled}}' <container>`
-   prints `true` after a container was killed at its cap.
+   prints `true` after a container was killed at its cap. A container can also fail before it uses any memory, as
+   ScyllaDB does under a cap: check `docker compose ps` and the logs right after applying caps.
+
+Starting points measured on 2026-11-24 (idle use: API, worker and Redis under 40 MiB each, PostgreSQL 100-140 MiB,
+object storage 120-180 MiB, Elasticsearch 0.86 GiB at a 512m heap and 1.4 GiB at a 1g heap):
+
+| Setting | 4 GiB staging host | 8 GiB host |
+| --- | --- | --- |
+| `ELASTICSEARCH_MEM_LIMIT`, `ELASTICSEARCH_CPUS` | `1280m`, `1.0` | `2g`, `1.0` |
+| `SCYLLA_MEM_LIMIT` | `0` | `0` |
+| `POSTGRES_MEM_LIMIT` | `384m` | `512m` |
+| `REDIS_MAXMEMORY`, `REDIS_MEM_LIMIT` | `64mb`, `192m` | `128mb`, `256m` |
+| `OBJECT_STORAGE_MEM_LIMIT` | `320m` | `512m` |
+| `API_MEM_LIMIT` | `512m` | `768m` |
+| `WORKER_MEM_LIMIT` | `512m` | `640m` |
+| `CALLS_MEM_LIMIT` | `512m` | `768m` |
 
 `REDIS_MAXMEMORY` caps Redis itself, with the `noeviction` policy that [redis.md](redis.md#operating-redis)
 requires: above it Redis refuses writes, which shows up in `messenger_store_errors_total{store="redis"}`. Alert
