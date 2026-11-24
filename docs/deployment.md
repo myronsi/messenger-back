@@ -98,6 +98,30 @@ messaging slows down too. The media server's limits keep it from taking more tha
 calls still drain credits: watch the balance during the load test. With "unlimited" credit mode the host is
 not throttled, and every hour above the baseline is billed instead.
 
+### Container limits
+
+Every long-running container takes a memory and a CPU cap from `.env`: `API_MEM_LIMIT` and `API_CPUS`,
+`WORKER_*`, and for the bundled stores `POSTGRES_*`, `REDIS_*`, `SCYLLA_*`, `ELASTICSEARCH_*` and
+`OBJECT_STORAGE_*` (`livekit` has `CALLS_MEM_LIMIT` and `CALLS_CPUS`). `0`, the default, means no cap, which is
+how every host ran before. A cap keeps one container from starving the others, but a container that reaches its
+memory cap is killed and restarted by Docker. Set caps from measurements:
+
+1. Run `docker stats --no-stream` several times over a normal day (and during a load test) and note each
+   container's peak memory.
+2. Set each memory cap to about 1.5 to 2 times that peak, and never below these floors:
+   - `SCYLLA_MEM_LIMIT`: `SCYLLA_MEMORY` plus 512 MiB (ScyllaDB uses memory outside its `--memory` share);
+   - `ELASTICSEARCH_MEM_LIMIT`: twice `ELASTICSEARCH_HEAP` (Lucene uses memory outside the heap);
+   - `REDIS_MEM_LIMIT`: twice `REDIS_MAXMEMORY` (the AOF rewrite forks Redis).
+3. Keep the sum of the memory caps below the host's memory minus about 1 GiB for the OS, Docker and nginx.
+4. CPU caps are optional on a 2-vCPU host; use them for a container known to spike, for example
+   `ELASTICSEARCH_CPUS=1.0`.
+5. For a few days after a change, look for restarts: `docker inspect -f '{{.State.OOMKilled}}' <container>`
+   prints `true` after a container was killed at its cap.
+
+`REDIS_MAXMEMORY` caps Redis itself, with the `noeviction` policy that [redis.md](redis.md#operating-redis)
+requires: above it Redis refuses writes, which shows up in `messenger_store_errors_total{store="redis"}`. Alert
+on Redis memory at 80 % of it.
+
 `CALLS_MAX_ACTIVE_PARTICIPANTS` (admission control in the API) and `limit.bytes_per_sec` in
 `deploy/go/livekit/livekit.yaml` (LiveKit refuses new participants above about 160 Mbit/s) are the brakes.
 Set the first from the load test, below the point where CPU, packets/s or credits run out.
