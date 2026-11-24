@@ -4,11 +4,12 @@
 set -euo pipefail
 
 out="$1"
-mkdir -p "$out/object-storage" "$out/migrations" "$out/geoip" "$out/livekit"
+mkdir -p "$out/object-storage" "$out/migrations" "$out/geoip" "$out/livekit" "$out/monitoring"
 cp deploy/go/compose.yaml deploy/go/env.example "$out/"
 cp deploy/go/deploy.sh deploy/go/migrate.sh "$out/"
 cp deploy/dev/object-storage/create-buckets.sh "$out/object-storage/"
 cp deploy/geoip/update-dbip.sh "$out/geoip/"
 cp deploy/go/livekit/livekit.yaml "$out/livekit/"
+cp -R deploy/go/monitoring/. "$out/monitoring/"
 cp -R migrations/postgres migrations/scylla "$out/migrations/"
 chmod +x "$out/deploy.sh" "$out/migrate.sh" "$out/geoip/update-dbip.sh"
