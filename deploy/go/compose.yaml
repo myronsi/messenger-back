@@ -195,7 +195,7 @@ services:
   scylla:
     image: scylladb/scylla:2026.1
     profiles: ["stores"]
-    command: ["--smp", "1", "--memory", "1G", "--overprovisioned", "1", "--developer-mode", "1"]
+    command: ["--smp", "1", "--memory", "${SCYLLA_MEMORY:-1G}", "--overprovisioned", "1", "--developer-mode", "1"]
     volumes:
       - scylla-data:/var/lib/scylla
     healthcheck:
@@ -224,7 +224,7 @@ services:
       # Plain HTTP inside the compose network, which has no published port.
       xpack.security.http.ssl.enabled: "false"
       xpack.ml.enabled: "false"
-      ES_JAVA_OPTS: -Xms1g -Xmx1g
+      ES_JAVA_OPTS: -Xms${ELASTICSEARCH_HEAP:-1g} -Xmx${ELASTICSEARCH_HEAP:-1g}
       ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:-}
     volumes:
       - elasticsearch-data:/usr/share/elasticsearch/data
