@@ -30,7 +30,7 @@ Every merge publishes Go snapshot images `go-master` and `go-sha-<sha>`. Release
 
 An upload replaces the bundle's files and `migrations/` as a whole: after a rollback, no later release's migrations are left on disk. It never touches what only the server has: `.env`, `.env.notifications`, `backups/` and `reports/`.
 
-**Stores.** Staging can run single-node stores on its host (`COMPOSE_PROFILES=stores`). Their ports are not published, and they hold data that is staging's alone. `SCYLLA_MEMORY` (default `1G`) and `ELASTICSEARCH_HEAP` (default `1g`) size ScyllaDB and the Elasticsearch heap; a 4 GiB host runs with `750M` and `512m`. Production leaves the profile out and points `.env` at its own clusters ([deployment.md](deployment.md)).
+**Stores.** Staging can run single-node stores on its host (`COMPOSE_PROFILES=stores`). Their ports are not published, and they hold data that is staging's alone. `SCYLLA_MEMORY` (default `1G`) and `ELASTICSEARCH_HEAP` (default `1g`) size ScyllaDB and the Elasticsearch heap; a 4 GiB host runs with `750M` and `512m`. Memory and CPU caps per container and the Redis memory cap: [deployment.md](deployment.md#container-limits). Production leaves the profile out and points `.env` at its own clusters ([deployment.md](deployment.md)).
 
 **Scaling.** The stack runs one `api` and one `worker` per host, behind the host's reverse proxy (`API_PORT`). More API instances means more hosts with the same stack and `.env`, behind the load balancer. Snowflake node ids are leased from Redis, so they need no setting.
 

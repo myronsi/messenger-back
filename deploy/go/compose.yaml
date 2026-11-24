@@ -33,12 +33,16 @@ x-migrate: &migrate
 services:
   api:
     <<: *app
+    mem_limit: ${API_MEM_LIMIT:-0}
+    cpus: ${API_CPUS:-0}
     ports:
       - "${API_BIND:-127.0.0.1}:${API_PORT:-8080}:8080"
 
   worker:
     <<: *app
     command: ["/app/worker"]
+    mem_limit: ${WORKER_MEM_LIMIT:-0}
+    cpus: ${WORKER_CPUS:-0}
     ports:
       - "127.0.0.1:${WORKER_PORT:-8081}:8081"
 
@@ -165,6 +169,8 @@ services:
       POSTGRES_DB: messenger
       POSTGRES_USER: messenger
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+    mem_limit: ${POSTGRES_MEM_LIMIT:-0}
+    cpus: ${POSTGRES_CPUS:-0}
     volumes:
       - postgres-data:/var/lib/postgresql
     healthcheck:
@@ -178,10 +184,12 @@ services:
   redis:
     image: redis:8-alpine
     profiles: ["stores"]
-    command: ["sh", "-c", "exec redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\""]
+    command: ["sh", "-c", "exec redis-server --appendonly yes --maxmemory ${REDIS_MAXMEMORY:-0} --maxmemory-policy noeviction --requirepass \"$$REDIS_PASSWORD\""]
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       REDISCLI_AUTH: ${REDIS_PASSWORD:-}
+    mem_limit: ${REDIS_MEM_LIMIT:-0}
+    cpus: ${REDIS_CPUS:-0}
     volumes:
       - redis-data:/data
     healthcheck:
@@ -196,6 +204,8 @@ services:
     image: scylladb/scylla:2026.1
     profiles: ["stores"]
     command: ["--smp", "1", "--memory", "${SCYLLA_MEMORY:-1G}", "--overprovisioned", "1", "--developer-mode", "1"]
+    mem_limit: ${SCYLLA_MEM_LIMIT:-0}
+    cpus: ${SCYLLA_CPUS:-0}
     volumes:
       - scylla-data:/var/lib/scylla
     healthcheck:
@@ -226,6 +236,8 @@ services:
       xpack.ml.enabled: "false"
       ES_JAVA_OPTS: -Xms${ELASTICSEARCH_HEAP:-1g} -Xmx${ELASTICSEARCH_HEAP:-1g}
       ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:-}
+    mem_limit: ${ELASTICSEARCH_MEM_LIMIT:-0}
+    cpus: ${ELASTICSEARCH_CPUS:-0}
     volumes:
       - elasticsearch-data:/usr/share/elasticsearch/data
     ulimits:
@@ -247,6 +259,8 @@ services:
     environment:
       RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY:-}
       RUSTFS_SECRET_KEY: ${S3_SECRET_KEY:-}
+    mem_limit: ${OBJECT_STORAGE_MEM_LIMIT:-0}
+    cpus: ${OBJECT_STORAGE_CPUS:-0}
     volumes:
       - object-storage-data:/data
     healthcheck:

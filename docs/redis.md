@@ -109,7 +109,8 @@ commands are counted in `messenger_store_errors_total{store="redis"}` (a missing
   supported: some scripts touch two keys of one chat that are not in the same hash slot.
 - **Persistence:** AOF on (`appendonly yes`, `appendfsync everysec`), so counters and rate limits survive a
   restart. The development stack runs with AOF.
-- **Memory:** set `maxmemory` with headroom and keep the default policy **`noeviction`**. Evicting keys with an
+- **Memory:** set `maxmemory` with headroom and keep the default policy **`noeviction`** (the bundled Redis of
+  `deploy/go`: `REDIS_MAXMEMORY`, see [deployment.md](deployment.md#container-limits)). Evicting keys with an
   expiry (`volatile-*`) would drop rate limits and tickets first, and `allkeys-*` would also drop unread
   counters. With `noeviction` a full Redis rejects writes, which shows up as errors in the metric above;
   alert on memory use at 80 % instead. Rough sizing: about 200 bytes per online user (presence, subscription),
