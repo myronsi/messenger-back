@@ -175,7 +175,7 @@ func startRealtime(p *app.Process, pg *postgres.Store, rd *redis.Store, sc *scyl
 	var svc *messages.Service
 	counter := stats.NewDayCounter(pg.MessageCounts(), log)
 	fan := realtime.NewFanout(realtime.FanoutDeps{
-		Bus: bus, Directory: dir, Store: pg, IDs: idsrc, BasePath: cfg.HTTP.BasePath, Log: log,
+		Bus: bus, Directory: dir, Store: pg, IDs: idsrc, BasePath: cfg.HTTP.BasePath, Log: log, Metrics: p.Metrics,
 		Members:   func(ctx context.Context, chatID int64) ([]int64, error) { return svc.Members(ctx, chatID) },
 		Reactions: repo.Reactions,
 		Replies:   repo,
@@ -190,7 +190,7 @@ func startRealtime(p *app.Process, pg *postgres.Store, rd *redis.Store, sc *scyl
 		Auth: ticketAuth, Messages: svc, Fanout: fan, Bus: bus, Presence: presence,
 		Limiter: redis.NewRateLimiter(rdb, ""), LastSeen: pg.Users(), Hub: st.hub,
 		AllowedOrigins: cfg.HTTP.CORSOrigins, MinClientAPIVersion: cfg.Realtime.MinClientAPIVersion,
-		SendBuffer: cfg.Realtime.SendBuffer, PingInterval: cfg.Realtime.PingInterval, Log: log,
+		SendBuffer: cfg.Realtime.SendBuffer, PingInterval: cfg.Realtime.PingInterval, Log: log, Metrics: p.Metrics,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("realtime: %w", err)

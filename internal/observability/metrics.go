@@ -1,10 +1,12 @@
 package observability
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -36,7 +38,15 @@ type Metrics struct {
 	statusChanges  *prometheus.CounterVec
 	userReports    *prometheus.CounterVec
 	contentReports *prometheus.CounterVec
+	wsEvents       *prometheus.HistogramVec
+	wsSlowCloses   prometheus.Counter
+	fanoutSize     prometheus.Histogram
+	fanoutPublish  prometheus.Histogram
+	fanoutRender   *prometheus.HistogramVec
+	storeOps       *prometheus.HistogramVec
 }
+
+var fastBuckets = []float64{.0005, .001, .0025, .005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10}
 
 // NewMetrics registers the collectors together with the Go runtime and process collectors.
 func NewMetrics() *Metrics {
@@ -126,6 +136,35 @@ func NewMetrics() *Metrics {
 			Help:    "Duration of the readiness check per data store.",
 			Buckets: []float64{.001, .005, .01, .05, .1, .25, .5, 1, 2},
 		}, []string{"store"}),
+		wsEvents: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "messenger_websocket_event_duration_seconds",
+			Help:    "Time from taking a client event off a connection's queue to its ack or error, by event type and outcome (ack, handled for typing, error, rate_limited, restricted, dropped).",
+			Buckets: fastBuckets,
+		}, []string{"type", "outcome"}),
+		wsSlowCloses: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "messenger_websocket_slow_closes_total",
+			Help: "Connections closed with 1013 because the client could not keep up with its send buffer.",
+		}),
+		fanoutSize: prometheus.NewHistogram(prometheus.HistogramOpts{
+			Name:    "messenger_fanout_recipients",
+			Help:    "Recipients per published realtime event.",
+			Buckets: []float64{1, 2, 5, 10, 25, 50, 100, 250, 500, 1000, 5000},
+		}),
+		fanoutPublish: prometheus.NewHistogram(prometheus.HistogramOpts{
+			Name:    "messenger_fanout_publish_duration_seconds",
+			Help:    "Time to publish one realtime event to all its recipients on Redis.",
+			Buckets: fastBuckets,
+		}),
+		fanoutRender: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "messenger_fanout_render_duration_seconds",
+			Help:    "Time to render a message event for every recipient (sender views, attachments, replies), by event type.",
+			Buckets: fastBuckets,
+		}, []string{"event"}),
+		storeOps: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "messenger_store_operation_duration_seconds",
+			Help:    "Duration of store operations: PostgreSQL by sqlc query name, Redis by command, ScyllaDB by statement and table.",
+			Buckets: fastBuckets,
+		}, []string{"store", "op"}),
 	}
 	m.Registry.MustRegister(
 		collectors.NewGoCollector(),
@@ -133,8 +172,96 @@ func NewMetrics() *Metrics {
 		m.requests, m.duration, m.inFlight, m.webSockets, m.messages, m.storeErrors, m.storeCheckTime, m.events, m.clientAPI, m.notifications,
 		m.callsStarted, m.callsEnded, m.callJoined, m.callJoinFailed, m.callWebhooks, m.mediaJobs, m.mediaJobTime, m.mediaSaved,
 		m.statusChanges, m.userReports, m.contentReports,
+		m.wsEvents, m.wsSlowCloses, m.fanoutSize, m.fanoutPublish, m.fanoutRender, m.storeOps,
 	)
 	return m
+}
+
+func (m *Metrics) WebSocketEvent(typ, outcome string, d time.Duration) {
+	m.wsEvents.WithLabelValues(typ, outcome).Observe(d.Seconds())
+}
+
+func (m *Metrics) WebSocketSlowClose() { m.wsSlowCloses.Inc() }
+
+func (m *Metrics) FanoutPublished(recipients int, d time.Duration) {
+	m.fanoutSize.Observe(float64(recipients))
+	m.fanoutPublish.Observe(d.Seconds())
+}
+
+func (m *Metrics) FanoutRendered(event string, d time.Duration) {
+	m.fanoutRender.WithLabelValues(event).Observe(d.Seconds())
+}
+
+func (m *Metrics) StoreOperation(store, op string, d time.Duration, err error) {
+	m.storeOps.WithLabelValues(store, op).Observe(d.Seconds())
+	if err != nil {
+		m.StoreError(store)
+	}
+}
+
+func (m *Metrics) RegisterPostgresPool(stat func() *pgxpool.Stat) {
+	gauge := func(name, help string, v func(*pgxpool.Stat) float64) prometheus.Collector {
+		return prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: name, Help: help}, func() float64 { return v(stat()) })
+	}
+	counter := func(name, help string, v func(*pgxpool.Stat) float64) prometheus.Collector {
+		return prometheus.NewCounterFunc(prometheus.CounterOpts{Name: name, Help: help}, func() float64 { return v(stat()) })
+	}
+	m.Registry.MustRegister(
+		gauge("messenger_postgres_pool_max_connections", "Maximum size of the PostgreSQL pool (POSTGRES_MAX_CONNS).",
+			func(s *pgxpool.Stat) float64 { return float64(s.MaxConns()) }),
+		gauge("messenger_postgres_pool_acquired_connections", "PostgreSQL connections in use.",
+			func(s *pgxpool.Stat) float64 { return float64(s.AcquiredConns()) }),
+		gauge("messenger_postgres_pool_idle_connections", "Idle PostgreSQL connections.",
+			func(s *pgxpool.Stat) float64 { return float64(s.IdleConns()) }),
+		counter("messenger_postgres_pool_acquires_total", "Connections taken from the pool.",
+			func(s *pgxpool.Stat) float64 { return float64(s.AcquireCount()) }),
+		counter("messenger_postgres_pool_empty_acquires_total", "Acquires that had to wait because no connection was free; a rising rate means the pool is too small.",
+			func(s *pgxpool.Stat) float64 { return float64(s.EmptyAcquireCount()) }),
+		counter("messenger_postgres_pool_canceled_acquires_total", "Acquires given up before a connection was free.",
+			func(s *pgxpool.Stat) float64 { return float64(s.CanceledAcquireCount()) }),
+		counter("messenger_postgres_pool_acquire_seconds_total", "Total time spent acquiring connections, waiting included.",
+			func(s *pgxpool.Stat) float64 { return s.AcquireDuration().Seconds() }),
+	)
+}
+
+type StreamGroupStat struct {
+	Stream, Group string
+	Lag, Pending  int64
+}
+
+func (m *Metrics) RegisterStreamBacklog(read func(ctx context.Context) ([]StreamGroupStat, error)) {
+	m.Registry.MustRegister(&streamBacklog{
+		read:    read,
+		lag:     prometheus.NewDesc("messenger_stream_lag", "Entries of a stream not yet delivered to the consumer group.", []string{"stream", "group"}, nil),
+		pending: prometheus.NewDesc("messenger_stream_pending", "Entries delivered to the consumer group but not acknowledged.", []string{"stream", "group"}, nil),
+		failed:  prometheus.NewDesc("messenger_stream_backlog_read_failed", "1 when the last scrape could not read the stream backlog.", nil, nil),
+	})
+}
+
+type streamBacklog struct {
+	read                 func(ctx context.Context) ([]StreamGroupStat, error)
+	lag, pending, failed *prometheus.Desc
+}
+
+func (s *streamBacklog) Describe(ch chan<- *prometheus.Desc) {
+	ch <- s.lag
+	ch <- s.pending
+	ch <- s.failed
+}
+
+func (s *streamBacklog) Collect(ch chan<- prometheus.Metric) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	stats, err := s.read(ctx)
+	failed := 0.0
+	if err != nil {
+		failed = 1
+	}
+	ch <- prometheus.MustNewConstMetric(s.failed, prometheus.GaugeValue, failed)
+	for _, st := range stats {
+		ch <- prometheus.MustNewConstMetric(s.lag, prometheus.GaugeValue, float64(st.Lag), st.Stream, st.Group)
+		ch <- prometheus.MustNewConstMetric(s.pending, prometheus.GaugeValue, float64(st.Pending), st.Stream, st.Group)
+	}
 }
 
 func (m *Metrics) Notification(outcome string) { m.notifications.WithLabelValues(outcome).Inc() }

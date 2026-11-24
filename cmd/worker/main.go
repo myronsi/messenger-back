@@ -10,8 +10,6 @@ import (
 	"os"
 	"sync"
 
-	"github.com/gocql/gocql"
-
 	"github.com/myronsi/messenger-back/internal/app"
 	"github.com/myronsi/messenger-back/internal/contentreports"
 	"github.com/myronsi/messenger-back/internal/events"
@@ -20,10 +18,10 @@ import (
 	"github.com/myronsi/messenger-back/internal/media"
 	"github.com/myronsi/messenger-back/internal/moderation"
 	"github.com/myronsi/messenger-back/internal/notifications"
+	"github.com/myronsi/messenger-back/internal/observability"
 	"github.com/myronsi/messenger-back/internal/realtime"
 	"github.com/myronsi/messenger-back/internal/search"
 	"github.com/myronsi/messenger-back/internal/store/elastic"
-	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/redis"
 	"github.com/myronsi/messenger-back/internal/store/scylla"
 )
@@ -38,10 +36,7 @@ func run() error {
 	defer p.Close()
 	cfg, log := p.Cfg, p.Log
 
-	pg, err := postgres.New(p.Ctx, cfg.DatabaseURL.Reveal(), postgres.Options{
-		MaxConns:     cfg.Postgres.MaxConns,
-		QueryTimeout: cfg.Postgres.QueryTimeout,
-	})
+	pg, err := p.OpenPostgres()
 	if err != nil {
 		return err
 	}
@@ -52,18 +47,12 @@ func run() error {
 	if len(os.Args) > 1 && os.Args[1] == "inactive-accounts" {
 		return inactiveAccountsReport(p.Ctx, cfg, pg, os.Stdout)
 	}
-	rd, err := redis.New(cfg.RedisURL.Reveal(), redis.Options{
-		Timeout: cfg.Redis.Timeout,
-		OnError: func() { p.Metrics.StoreError("redis") },
-	})
+	rd, err := p.OpenRedis()
 	if err != nil {
 		return err
 	}
 	defer func() { _ = rd.Close() }()
-	sc := scylla.New(cfg.ScyllaHosts, cfg.ScyllaKeyspace, scylla.Options{
-		Consistency:    gocql.ParseConsistency(cfg.Scylla.Consistency),
-		RequestTimeout: cfg.Scylla.Timeout,
-	})
+	sc := p.OpenScylla()
 	defer func() { _ = sc.Close() }()
 	es, err := elastic.New(cfg.ElasticsearchURL.Reveal())
 	if err != nil {
@@ -120,14 +109,23 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	fanout := realtime.NewFanout(realtime.FanoutDeps{Bus: attachmentBus, Log: log})
+	fanout := realtime.NewFanout(realtime.FanoutDeps{Bus: attachmentBus, Log: log, Metrics: p.Metrics})
 	authSvc, err := workerAuth(cfg, pg, rd.Client(), log, fanout.CloseSessions)
 	if err != nil {
 		return err
 	}
 	mailWorker := recoveryMailWorker(cfg, authSvc)
 	wg.Go(func() { mailWorker(bg) })
-	evlog := events.NewLog(redis.NewStreams(rd.Client(), "", 0))
+	streams := redis.NewStreams(rd.Client(), "", 0)
+	p.Metrics.RegisterStreamBacklog(func(ctx context.Context) ([]observability.StreamGroupStat, error) {
+		groups, err := streams.Backlog(ctx)
+		out := make([]observability.StreamGroupStat, 0, len(groups))
+		for _, g := range groups {
+			out = append(out, observability.StreamGroupStat{Stream: g.Stream, Group: g.Group, Lag: g.Lag, Pending: g.Pending})
+		}
+		return out, err
+	})
+	evlog := events.NewLog(streams)
 	if cfg.Inactive.Deletion {
 		job := inactiveAccounts(inactiveAccountsDeps{
 			cfg: cfg, pg: pg, accounts: authSvc, fanout: fanout, rdb: rd.Client(), storage: storage, events: evlog, log: log,

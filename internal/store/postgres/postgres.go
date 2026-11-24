@@ -27,6 +27,7 @@ type Options struct {
 	MaxConns int32
 	// QueryTimeout bounds every repository call; a transaction counts as one call.
 	QueryTimeout time.Duration
+	Observe      Observer
 }
 
 // Store wraps the process-wide connection pool. The pool connects lazily, so the process starts while
@@ -46,6 +47,9 @@ func New(ctx context.Context, url string, opts Options) (*Store, error) {
 	}
 	if opts.MaxConns > 0 {
 		cfg.MaxConns = opts.MaxConns
+	}
+	if opts.Observe != nil {
+		cfg.ConnConfig.Tracer = queryTracer{observe: opts.Observe}
 	}
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
