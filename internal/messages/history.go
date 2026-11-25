@@ -97,9 +97,8 @@ type Decorations struct {
 	Replies map[int64]scylla.Message
 }
 
-// Decorate loads the reactions of the messages and, in a direct chat, the read marker of the other user when
-// they share read receipts and did not block the viewer. Groups carry no read_by: their member lists can be
-// long, and every page would load all of them.
+// Decorate loads the reactions of the messages and the read markers of the other members who read into the
+// page, share read receipts and did not block the viewer.
 func (s *Service) Decorate(ctx context.Context, userID, chatID int64, msgs []scylla.Message) (Decorations, error) {
 	idList := make([]int64, 0, len(msgs))
 	for _, m := range msgs {
@@ -115,22 +114,27 @@ func (s *Service) Decorate(ctx context.Context, userID, chatID int64, msgs []scy
 		}
 		d.Reactions = r
 	}
-	chat, err := s.d.Store.Chats().Get(ctx, chatID)
-	if err != nil {
-		return Decorations{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
-	}
-	if chat.Type != postgres.ChatDirect {
+	if len(msgs) == 0 {
 		return d, nil
+	}
+	oldest := msgs[0].ID
+	for _, m := range msgs {
+		oldest = min(oldest, m.ID)
 	}
 	markers, err := s.d.Store.Chats().OtherMembers(ctx, userID, []int64{chatID})
 	if err != nil {
 		return Decorations{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
+	reached := make([]postgres.ReadMarker, 0, len(markers))
 	readers := make([]int64, 0, len(markers))
 	for _, m := range markers {
-		if m.MessageID != nil && m.At != nil {
+		if m.MessageID != nil && m.At != nil && *m.MessageID >= oldest {
+			reached = append(reached, m)
 			readers = append(readers, m.UserID)
 		}
+	}
+	if len(readers) == 0 {
+		return d, nil
 	}
 	settings, err := s.d.Store.Social().Privacy(ctx, readers)
 	if err != nil {
@@ -140,8 +144,8 @@ func (s *Service) Decorate(ctx context.Context, userID, chatID int64, msgs []scy
 	if err != nil {
 		return Decorations{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
-	for _, m := range markers {
-		if m.MessageID != nil && m.At != nil && settings[m.UserID].ReadReceiptsEnabled && !blocks[[2]int64{m.UserID, userID}] {
+	for _, m := range reached {
+		if settings[m.UserID].ReadReceiptsEnabled && !blocks[[2]int64{m.UserID, userID}] {
 			d.Readers = append(d.Readers, m)
 		}
 	}
