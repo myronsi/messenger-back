@@ -114,7 +114,7 @@ func (s *Service) read(ctx context.Context, key string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer obj.Body.Close()
+	defer func() { _ = obj.Body.Close() }()
 	return io.ReadAll(io.LimitReader(obj.Body, maxTileBytes+1))
 }
 
@@ -176,7 +176,7 @@ func (s *Service) refresh(ctx context.Context, z, x, y int, stale []byte, meta t
 	if err != nil {
 		return staleOr(stale, have, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	expires := s.expiry(resp.Header)
 	switch {
 	case resp.StatusCode == http.StatusNotModified && have:

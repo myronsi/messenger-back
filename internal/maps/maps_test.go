@@ -3,6 +3,7 @@ package maps
 import (
 	"bytes"
 	"context"
+	"errors"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -97,7 +98,7 @@ func TestTilesAreCachedRevalidatedAndServedStale(t *testing.T) {
 	s := New(Options{TileURL: srv.URL + "/{z}/{x}/{y}.png", UserAgent: "MessengerMaps/test", Store: &memStore{data: map[string][]byte{}}, Now: func() time.Time { return *clock }})
 	ctx := context.Background()
 
-	if _, err := s.Tile(ctx, 3, 8, 1); err != ErrBadTile {
+	if _, err := s.Tile(ctx, 3, 8, 1); !errors.Is(err, ErrBadTile) {
 		t.Fatalf("tile outside the grid: %v", err)
 	}
 	for range 3 {
@@ -131,7 +132,7 @@ func TestStaticMapNeedsASignatureAndIsCached(t *testing.T) {
 	ctx := context.Background()
 	lat, lon := 52.520008, 13.404954
 
-	if _, err := s.Static(ctx, lat, lon, "forged"); err != ErrBadSignature {
+	if _, err := s.Static(ctx, lat, lon, "forged"); !errors.Is(err, ErrBadSignature) {
 		t.Fatalf("forged signature: %v", err)
 	}
 	signer := NewSigner(DeriveKey("secret"))

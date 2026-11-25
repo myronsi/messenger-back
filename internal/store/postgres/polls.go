@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"math"
 	"slices"
 	"time"
 
@@ -34,6 +35,20 @@ type Poll struct {
 }
 
 func (p Poll) Quiz() bool { return p.CorrectOption != nil }
+
+func smallInt(v int) int16 {
+	if v < math.MinInt16 || v > math.MaxInt16 {
+		return -1
+	}
+	return int16(v)
+}
+
+func rowLimit(v int) int32 {
+	if v < 0 || v > math.MaxInt32 {
+		return 0
+	}
+	return int32(v)
+}
 
 func (p Poll) IsClosed(now time.Time) bool {
 	return p.ClosedAt != nil || (p.CloseAt != nil && !now.Before(*p.CloseAt))
@@ -85,7 +100,7 @@ func (r pollRepo) CreatePoll(ctx context.Context, p Poll) error {
 		MultipleAnswers: p.MultipleAnswers, Anonymous: p.Anonymous, Explanation: p.Explanation, CloseAt: p.CloseAt,
 	}
 	if p.CorrectOption != nil {
-		c := int16(*p.CorrectOption)
+		c := smallInt(*p.CorrectOption)
 		params.CorrectOption = &c
 	}
 	return mapError(r.s.q.InsertPoll(ctx, params))
@@ -213,7 +228,7 @@ func (r pollRepo) Vote(ctx context.Context, messageID, userID int64, options []i
 		if len(want) > 0 {
 			opts := make([]int16, len(want))
 			for i, o := range want {
-				opts[i] = int16(o)
+				opts[i] = smallInt(o)
 			}
 			if err := q.InsertPollVotes(ctx, sqlcdb.InsertPollVotesParams{MessageID: messageID, UserID: userID, Options: opts, VotedAt: now}); err != nil {
 				return err
@@ -265,7 +280,7 @@ func (r pollRepo) CloseDuePolls(ctx context.Context, now time.Time, limit int) (
 	var out []Poll
 	err := r.s.inTx(ctx, func(ctx context.Context, q *sqlcdb.Queries) error {
 		out = nil
-		rows, err := q.CloseDuePolls(ctx, sqlcdb.CloseDuePollsParams{Now: &now, MaxRows: int32(limit)})
+		rows, err := q.CloseDuePolls(ctx, sqlcdb.CloseDuePollsParams{Now: &now, MaxRows: rowLimit(limit)})
 		if err != nil || len(rows) == 0 {
 			return err
 		}
@@ -287,7 +302,7 @@ func (r pollRepo) CloseDuePolls(ctx context.Context, now time.Time, limit int) (
 func (r pollRepo) PollVoters(ctx context.Context, messageID int64, option int, after *PollVoter, limit int) ([]PollVoter, error) {
 	ctx, cancel := r.s.call(ctx)
 	defer cancel()
-	params := sqlcdb.PollVotersParams{MessageID: messageID, Option: int16(option), MaxRows: int32(limit)}
+	params := sqlcdb.PollVotersParams{MessageID: messageID, Option: smallInt(option), MaxRows: rowLimit(limit)}
 	if after != nil {
 		params.AfterVotedAt, params.AfterUserID = &after.VotedAt, &after.UserID
 	}
