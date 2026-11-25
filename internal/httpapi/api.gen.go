@@ -2781,8 +2781,8 @@ type Location struct {
 type LocationCreate struct {
 	// AccuracyM Accuracy of a measured position in metres; omit for a point picked on the map.
 	AccuracyM *int    `json:"accuracy_m,omitempty"`
-	Latitude  float32 `json:"latitude"`
-	Longitude float32 `json:"longitude"`
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
 
 	// Title A name for the place, typed by the sender.
 	Title *string `json:"title,omitempty"`
@@ -2967,8 +2967,8 @@ type Message struct {
 // MessageLocation Coordinates are rounded to 6 decimals (about 10 cm).
 type MessageLocation struct {
 	AccuracyM *int     `json:"accuracy_m"`
-	Latitude  float32  `json:"latitude"`
-	Longitude float32  `json:"longitude"`
+	Latitude  float64  `json:"latitude"`
+	Longitude float64  `json:"longitude"`
 	Map       MapImage `json:"map"`
 	Title     *string  `json:"title"`
 }
@@ -5830,8 +5830,8 @@ type GetLinkPreviewImageParams struct {
 
 // GetStaticMapParams defines parameters for GetStaticMap.
 type GetStaticMapParams struct {
-	Lat float32 `form:"lat" json:"lat"`
-	Lon float32 `form:"lon" json:"lon"`
+	Lat float64 `form:"lat" json:"lat"`
+	Lon float64 `form:"lon" json:"lon"`
 	Sig string  `form:"sig" json:"sig"`
 
 	// XClientVersion Version of the client app, for logs and the per-client metric.
@@ -16673,7 +16673,7 @@ func (siw *ServerInterfaceWrapper) GetStaticMap(w http.ResponseWriter, r *http.R
 
 	// ------------- Required query parameter "lat" -------------
 
-	err = runtime.BindQueryParameterWithOptions("form", true, true, "lat", r.URL.Query(), &params.Lat, runtime.BindQueryParameterOptions{Type: "number", Format: ""})
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "lat", r.URL.Query(), &params.Lat, runtime.BindQueryParameterOptions{Type: "number", Format: "double"})
 	if err != nil {
 		var requiredError *runtime.RequiredParameterError
 		if errors.As(err, &requiredError) {
@@ -16686,7 +16686,7 @@ func (siw *ServerInterfaceWrapper) GetStaticMap(w http.ResponseWriter, r *http.R
 
 	// ------------- Required query parameter "lon" -------------
 
-	err = runtime.BindQueryParameterWithOptions("form", true, true, "lon", r.URL.Query(), &params.Lon, runtime.BindQueryParameterOptions{Type: "number", Format: ""})
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "lon", r.URL.Query(), &params.Lon, runtime.BindQueryParameterOptions{Type: "number", Format: "double"})
 	if err != nil {
 		var requiredError *runtime.RequiredParameterError
 		if errors.As(err, &requiredError) {

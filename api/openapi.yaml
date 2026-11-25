@@ -4301,11 +4301,11 @@ paths:
         - name: lat
           in: query
           required: true
-          schema: { type: number, minimum: -90, maximum: 90 }
+          schema: { type: number, format: double, minimum: -90, maximum: 90 }
         - name: lon
           in: query
           required: true
-          schema: { type: number, minimum: -180, maximum: 180 }
+          schema: { type: number, format: double, minimum: -180, maximum: 180 }
         - name: sig
           in: query
           required: true
@@ -8105,10 +8105,10 @@ components:
           type: boolean
           description: "`true` when an owner or admin wrote `@all`; it mentions every member. Absent otherwise."
         poll:
-          description: The poll of a `poll` message as the requesting user sees it; absent for other types and when deleted.
+          description: The poll of a `poll` message as the requesting user sees it; absent for other types, when deleted and in chat-list previews.
           $ref: "#/components/schemas/Poll"
         contact:
-          description: The shared user of a `contact` message; absent for other types and when deleted.
+          description: The shared user of a `contact` message; absent for other types, when deleted and in chat-list previews.
           $ref: "#/components/schemas/ContactCard"
         location:
           description: The place of a `location` message; absent for other types and when deleted.
@@ -8234,8 +8234,8 @@ components:
       required: [latitude, longitude]
       additionalProperties: false
       properties:
-        latitude: { type: number, minimum: -90, maximum: 90 }
-        longitude: { type: number, minimum: -180, maximum: 180 }
+        latitude: { type: number, format: double, minimum: -90, maximum: 90 }
+        longitude: { type: number, format: double, minimum: -180, maximum: 180 }
         accuracy_m:
           type: integer
           minimum: 0
@@ -8251,8 +8251,8 @@ components:
       description: Coordinates are rounded to 6 decimals (about 10 cm).
       required: [latitude, longitude, accuracy_m, title, map]
       properties:
-        latitude: { type: number, minimum: -90, maximum: 90 }
-        longitude: { type: number, minimum: -180, maximum: 180 }
+        latitude: { type: number, format: double, minimum: -90, maximum: 90 }
+        longitude: { type: number, format: double, minimum: -180, maximum: 180 }
         accuracy_m: { type: [integer, "null"], minimum: 0 }
         title: { type: [string, "null"], maxLength: 100 }
         map: { $ref: "#/components/schemas/MapImage" }
