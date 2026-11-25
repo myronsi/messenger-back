@@ -9,7 +9,7 @@ ALTER TABLE unsent_messages ADD COLUMN payload JSONB;
 
 ALTER TABLE sync_changes DROP CONSTRAINT sync_changes_kind_check;
 ALTER TABLE sync_changes ADD CONSTRAINT sync_changes_kind_check
-    CHECK (kind IN ('message_edited', 'message_deleted', 'message_hidden', 'reactions', 'pins', 'history_cleared', 'chat_hidden', 'poll'));
+    CHECK (kind IN ('message_edited', 'message_deleted', 'message_hidden', 'reactions', 'pins', 'history_cleared', 'chat_hidden', 'history_imported', 'poll'));
 
 CREATE TABLE polls (
     message_id       BIGINT      PRIMARY KEY,

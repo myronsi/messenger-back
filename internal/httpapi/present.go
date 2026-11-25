@@ -358,6 +358,14 @@ func PresentMessage(m scylla.Message, p MessageParts) Message {
 		out.SystemEvent = presentSystemEvent(e)
 	}
 	presentKind(&out, m, p)
+	if im := m.Import; im != nil {
+		out.CreatedAt = utc(im.OriginalAt)
+		out.Import = &MessageImport{ImportId: FormatID(im.ID), Source: ImportSource(im.Source), OriginalAt: utc(im.OriginalAt)}
+		if m.Type != scylla.TypeSystem {
+			name, state := im.SenderName, MessageImportSenderState(im.SenderState)
+			out.Import.SenderName, out.Import.SenderState = &name, &state
+		}
+	}
 	return out
 }
 
@@ -381,5 +389,12 @@ func presentSystemEvent(e messages.SystemEvent) *SystemEvent {
 		out.OldName, out.NewName = &oldName, &newName
 	}
 	out.AvatarRemoved = e.AvatarRemoved
+	if im := e.Import; im != nil {
+		out.Import = &ImportSummary{ImportId: FormatID(im.ImportID), Source: ImportSource(im.Source), MessageCount: im.MessageCount, FirstAt: utc(im.FirstAt), LastAt: utc(im.LastAt)}
+	}
+	if e.Text != "" {
+		text := e.Text
+		out.Text = &text
+	}
 	return out
 }

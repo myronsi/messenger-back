@@ -217,6 +217,10 @@ func (in *Indexer) Handle(ctx context.Context, entry redis.Entry) error {
 			err = in.dropChat(ctx, target, e.ChatID)
 		case events.HistoryCleared:
 			err = in.dropHistory(ctx, target, e.ChatID, e.MessageID)
+		case events.HistoryImported:
+			err = in.indexRange(ctx, target, e.ChatID, e.MessageID, e.UpTo)
+		case events.ImportRemoved:
+			err = in.dropRange(ctx, target, e.ChatID, e.MessageID, e.UpTo)
 		}
 		if err != nil {
 			return err
@@ -361,4 +365,19 @@ func (in *Indexer) bulk(ctx context.Context, index string, docs []Doc, deletes [
 		}
 	}
 	return nil
+}
+
+func (in *Indexer) dropRange(ctx context.Context, target string, chatID, from, to int64) error {
+	if chatID == 0 || from == 0 || to < from {
+		return nil
+	}
+	query := map[string]any{"bool": map[string]any{"filter": []any{
+		map[string]any{"term": map[string]any{"chat_id": id(chatID)}},
+		map[string]any{"range": map[string]any{"created_at": map[string]any{"gte": ids.Time(from).UTC(), "lte": ids.Time(to).UTC()}}},
+	}}}
+	err := in.ix.es.Do(ctx, "POST", "/"+target+"/_delete_by_query?conflicts=proceed&refresh=false", map[string]any{"query": query}, nil)
+	if errors.Is(err, elastic.ErrNotFound) {
+		return nil
+	}
+	return err
 }

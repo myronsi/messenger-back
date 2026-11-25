@@ -49,6 +49,12 @@
       "$ref": "server/poll_updated.schema.json"
     },
     {
+      "$ref": "server/import_update.schema.json"
+    },
+    {
+      "$ref": "server/import_sender_update.schema.json"
+    },
+    {
       "$ref": "server/user_updated.schema.json"
     },
     {

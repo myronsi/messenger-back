@@ -74,6 +74,8 @@ The sender also receives the broadcast `message` event with the stored message (
 | `history_cleared` | Messages up to `before_message_id` were cleared for you (`scope: me`) or everyone |
 | `pin_update` | A message was pinned or unpinned for everyone (to all members) or only for you (`scope: me`, to your own sessions); carries `pinned_message_count` for you |
 | `poll_updated` | A vote changed or a poll closed; carries the whole `Poll` as you see it (results only once you voted, for the creator, or after closing). Keep the highest `version` |
+| `import_update` | An imported history of the chat started, finished or is being removed (to all members); reload the chat on `done` and `removing` |
+| `import_sender_update` | A name of an imported history was suggested for a member, declined, confirmed or withdrawn; suggestions and declines go only to the importer and that member |
 | `group_created`, `group_updated` | Group changes (members, roles, name, avatar) |
 | `approval_request_created` | New request in the inbox |
 | `presence` | A user came online or went offline |

@@ -22,6 +22,8 @@ type Notifier interface {
 	Typing(ctx context.Context, chatID, userID int64, typing bool, action string, recipients []int64)
 	PinChanged(ctx context.Context, c PinChange, recipients []int64)
 	PollChanged(ctx context.Context, chatID, messageID int64, recipients []int64)
+	ImportChanged(ctx context.Context, c ImportChange, recipients []int64)
+	ImportSenderChanged(ctx context.Context, c ImportSenderChange, recipients []int64)
 }
 
 const (
@@ -55,3 +57,5 @@ func (NopNotifier) Read(context.Context, int64, int64, int64, time.Time, []int64
 func (NopNotifier) Typing(context.Context, int64, int64, bool, string, []int64)                   {}
 func (NopNotifier) PinChanged(context.Context, PinChange, []int64)                                {}
 func (NopNotifier) PollChanged(context.Context, int64, int64, []int64)                            {}
+func (NopNotifier) ImportChanged(context.Context, ImportChange, []int64)                          {}
+func (NopNotifier) ImportSenderChanged(context.Context, ImportSenderChange, []int64)              {}

@@ -1063,3 +1063,67 @@ func (s *Server) ListPollVoters(w http.ResponseWriter, r *http.Request, chatID C
 	}
 	s.messages.ListPollVoters(w, r, chatID, messageID, params)
 }
+
+func (s *Server) ListChatImports(w http.ResponseWriter, r *http.Request, chatID ChatId, params ListChatImportsParams) {
+	if s.messages == nil {
+		s.AuthServer.ListChatImports(w, r, chatID, params)
+		return
+	}
+	s.messages.ListChatImports(w, r, chatID, params)
+}
+
+func (s *Server) StartChatImport(w http.ResponseWriter, r *http.Request, chatID ChatId, params StartChatImportParams) {
+	if s.messages == nil {
+		s.AuthServer.StartChatImport(w, r, chatID, params)
+		return
+	}
+	s.messages.StartChatImport(w, r, chatID, params)
+}
+
+func (s *Server) GetChatImport(w http.ResponseWriter, r *http.Request, importID ImportId, params GetChatImportParams) {
+	if s.messages == nil {
+		s.AuthServer.GetChatImport(w, r, importID, params)
+		return
+	}
+	s.messages.GetChatImport(w, r, importID, params)
+}
+
+func (s *Server) RemoveChatImport(w http.ResponseWriter, r *http.Request, importID ImportId, params RemoveChatImportParams) {
+	if s.messages == nil {
+		s.AuthServer.RemoveChatImport(w, r, importID, params)
+		return
+	}
+	s.messages.RemoveChatImport(w, r, importID, params)
+}
+
+func (s *Server) AddImportedMessages(w http.ResponseWriter, r *http.Request, importID ImportId, params AddImportedMessagesParams) {
+	if s.messages == nil {
+		s.AuthServer.AddImportedMessages(w, r, importID, params)
+		return
+	}
+	s.messages.AddImportedMessages(w, r, importID, params)
+}
+
+func (s *Server) FinishChatImport(w http.ResponseWriter, r *http.Request, importID ImportId, params FinishChatImportParams) {
+	if s.messages == nil {
+		s.AuthServer.FinishChatImport(w, r, importID, params)
+		return
+	}
+	s.messages.FinishChatImport(w, r, importID, params)
+}
+
+func (s *Server) AssignImportSender(w http.ResponseWriter, r *http.Request, importID ImportId, senderKey ImportSenderKey, params AssignImportSenderParams) {
+	if s.messages == nil {
+		s.AuthServer.AssignImportSender(w, r, importID, senderKey, params)
+		return
+	}
+	s.messages.AssignImportSender(w, r, importID, senderKey, params)
+}
+
+func (s *Server) DecideImportSender(w http.ResponseWriter, r *http.Request, importID ImportId, senderKey ImportSenderKey, params DecideImportSenderParams) {
+	if s.messages == nil {
+		s.AuthServer.DecideImportSender(w, r, importID, senderKey, params)
+		return
+	}
+	s.messages.DecideImportSender(w, r, importID, senderKey, params)
+}

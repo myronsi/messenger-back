@@ -66,7 +66,18 @@ type Message struct {
 	Moderation   *ModerationRemoval
 	Mentions     []int64
 	MentionsAll  bool
+	Import       *Import
 	Payload      *string
+}
+
+type Import struct {
+	ID          int64
+	SenderKey   string
+	OriginalAt  time.Time
+	Source      string
+	ImportedBy  *int64
+	SenderName  string
+	SenderState string
 }
 
 type ModerationRemoval struct {
@@ -193,7 +204,8 @@ func (r *Messages) session(ctx context.Context) (context.Context, context.Cancel
 }
 
 const messageColumns = `message_id, sender_id, type, content, attachment_id, reply_to, forwarded_from_message_id,
-forwarded_from_sender_id, forwarded_from_sender_name, edited_at, deleted, created_at, album_ids, sticker_id, mentions, mentions_all, payload`
+forwarded_from_sender_id, forwarded_from_sender_name, edited_at, deleted, created_at, album_ids, sticker_id, mentions, mentions_all,
+import_id, import_sender, original_at, payload`
 
 const selectColumns = messageColumns + `, removed_by_moderation, moderation_reason_code, moderation_reason_text`
 
@@ -212,9 +224,16 @@ func scanMessage(chatID int64, scan func(dest ...any) bool) (Message, bool) {
 		modCode    *string
 		modText    *string
 		all        *bool
+		importID   *int64
+		importKey  *string
+		originalAt *time.Time
 	)
-	if !scan(&m.ID, &sender, &m.Type, &content, &attachment, &m.ReplyTo, &fwdID, &fwdSender, &fwdName, &edited, &deleted, &m.CreatedAt, &m.AlbumIDs, &m.StickerID, &m.Mentions, &all, &m.Payload, &removed, &modCode, &modText) {
+	if !scan(&m.ID, &sender, &m.Type, &content, &attachment, &m.ReplyTo, &fwdID, &fwdSender, &fwdName, &edited, &deleted, &m.CreatedAt, &m.AlbumIDs, &m.StickerID, &m.Mentions, &all,
+		&importID, &importKey, &originalAt, &m.Payload, &removed, &modCode, &modText) {
 		return Message{}, false
+	}
+	if importID != nil && importKey != nil && originalAt != nil {
+		m.Import = &Import{ID: *importID, SenderKey: *importKey, OriginalAt: *originalAt}
 	}
 	if removed != nil && *removed {
 		m.Moderation = &ModerationRemoval{}
@@ -312,15 +331,7 @@ func (r *Messages) Insert(ctx context.Context, m Message) error {
 		return fmt.Errorf("insert message: %w", err)
 	}
 
-	var fwdID, fwdSender *int64
-	var fwdName *string
-	if f := m.Forwarded; f != nil {
-		fwdID, fwdSender, fwdName = &f.MessageID, f.SenderID, &f.SenderName
-	}
-	err = sess.Query(`INSERT INTO messages (chat_id, bucket, `+messageColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) USING TIMESTAMP ?`,
-		m.ChatID, bucket, m.ID, m.SenderID, m.Type, m.Content, m.AttachmentID, m.ReplyTo,
-		fwdID, fwdSender, fwdName, m.EditedAt, m.Deleted, m.CreatedAt, m.AlbumIDs, m.StickerID, mentionSet(m.Mentions), mentionsAll(m.MentionsAll), m.Payload, ts,
-	).WithContext(ctx).Idempotent(true).Exec()
+	err = sess.Query(insertMessage+` USING TIMESTAMP ?`, append(insertValues(m, bucket), ts)...).WithContext(ctx).Idempotent(true).Exec()
 	if err != nil {
 		return fmt.Errorf("insert message: %w", err)
 	}
@@ -330,6 +341,27 @@ func (r *Messages) Insert(ctx context.Context, m Message) error {
 		return fmt.Errorf("insert message: %w", err)
 	}
 	return nil
+}
+
+const insertMessage = `INSERT INTO messages (chat_id, bucket, ` + messageColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+
+func insertValues(m Message, bucket int) []any {
+	var fwdID, fwdSender *int64
+	var fwdName *string
+	if f := m.Forwarded; f != nil {
+		fwdID, fwdSender, fwdName = &f.MessageID, f.SenderID, &f.SenderName
+	}
+	var importID *int64
+	var importKey *string
+	var originalAt *time.Time
+	if im := m.Import; im != nil {
+		importID, importKey, originalAt = &im.ID, &im.SenderKey, &im.OriginalAt
+	}
+	return []any{
+		m.ChatID, bucket, m.ID, m.SenderID, m.Type, m.Content, m.AttachmentID, m.ReplyTo,
+		fwdID, fwdSender, fwdName, m.EditedAt, m.Deleted, m.CreatedAt, m.AlbumIDs, m.StickerID, mentionSet(m.Mentions), mentionsAll(m.MentionsAll),
+		importID, importKey, originalAt, m.Payload,
+	}
 }
 
 // provisionalLocationTTL is how long the location of an insert that did not complete survives.

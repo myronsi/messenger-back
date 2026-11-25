@@ -72,3 +72,21 @@ func TestEmitRoutesByType(t *testing.T) {
 		t.Fatal("emitted an unknown type")
 	}
 }
+
+func TestImportEventsRoundTrip(t *testing.T) {
+	at := time.UnixMilli(1_760_000_000_123).UTC()
+	for _, typ := range []string{HistoryImported, ImportRemoved} {
+		e := Event{Type: typ, ChatID: 7, ImportID: 3, MessageID: 1 << 58, UpTo: 1<<58 + 99, ActorID: 5, At: at}
+		fields := map[string]string{}
+		for k, v := range e.Fields() {
+			fields[k] = toString(v)
+		}
+		got, err := Parse(fields)
+		if err != nil || got != e {
+			t.Fatalf("%s round trip: %+v %v", typ, got, err)
+		}
+		if stream, err := Stream(typ); err != nil || stream != "events:chats" {
+			t.Fatalf("%s goes to %q: %v", typ, stream, err)
+		}
+	}
+}

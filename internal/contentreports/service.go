@@ -295,7 +295,11 @@ func (s *Service) save(ctx context.Context, r postgres.ContentReport, c Copy) er
 func (s *Service) copyMessages(ctx context.Context, msgs []scylla.Message, reported int64) ([]CopyMessage, error) {
 	var senderIDs []int64
 	var files []uuid.UUID
-	for _, m := range msgs {
+	for i, m := range msgs {
+		if m.SenderID == nil && m.Import != nil && m.Type != scylla.TypeSystem {
+			msgs[i].SenderID = m.Import.ImportedBy
+			m = msgs[i]
+		}
 		if m.SenderID != nil {
 			senderIDs = append(senderIDs, *m.SenderID)
 		}

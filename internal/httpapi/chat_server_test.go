@@ -193,8 +193,8 @@ func newChatEnvWith(t *testing.T, withSearch bool) *chatEnv {
 	modCache := redis.NewModerationCache(rdb, prefix, time.Minute)
 	modSvc := moderation.New(moderation.Deps{Store: store, Cache: modCache})
 	deps := messages.Deps{
-		Messages: repo, Store: store, Members: members, Unread: unread, Dedup: redis.NewDedup(rdb, prefix, 0), IDs: gen, Moderation: modSvc,
-		Changes: store.Sync(),
+		Messages: messages.NewImportResolver(repo, store.Imports()), Store: store, Members: members, Unread: unread, Dedup: redis.NewDedup(rdb, prefix, 0), IDs: gen, Moderation: modSvc,
+		Changes: store.Sync(), Imports: repo,
 	}
 	var index *search.Index
 	if withSearch {
