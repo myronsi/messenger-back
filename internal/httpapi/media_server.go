@@ -530,6 +530,8 @@ func (m *MediaServer) ServeNotificationImage(w http.ResponseWriter, r *http.Requ
 		variant, suffix = media.VariantDisplay, "-display"
 	case notifications.ImageThumbnail:
 		variant, suffix = media.VariantThumbnail, "-thumbnail"
+	case notifications.ImageStill:
+		variant, suffix = media.VariantPanel, "-panel"
 	}
 	d, err := m.o.Service.OpenUnchecked(r.Context(), src.Attachment, variant)
 	if errors.Is(err, media.ErrNoAccess) {

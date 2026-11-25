@@ -18,6 +18,7 @@ const (
 	ImageOriginal ImageSize = iota
 	ImageDisplay
 	ImageThumbnail
+	ImageStill
 )
 
 type ImageSource struct {
@@ -77,10 +78,13 @@ func FindImage(ctx context.Context, m scylla.Message, attachments AttachmentGett
 	if len(ids) == 0 || m.Type == scylla.TypeVoice {
 		return ImageSource{}, ErrNoImage
 	}
+	a, err := attachments.Get(ctx, uuid.UUID(ids[0]))
 	if m.Type == scylla.TypeSticker {
+		if err == nil && a.Duration != nil {
+			return ImageSource{Attachment: a.ID, Size: ImageStill}, nil
+		}
 		return ImageSource{Attachment: uuid.UUID(ids[0])}, nil
 	}
-	a, err := attachments.Get(ctx, uuid.UUID(ids[0]))
 	if errors.Is(err, postgres.ErrNotFound) {
 		return ImageSource{}, ErrNoImage
 	}

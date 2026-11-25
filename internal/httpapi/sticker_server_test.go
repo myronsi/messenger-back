@@ -270,3 +270,31 @@ func TestOwnStickerPacksOverHTTP(t *testing.T) {
 		t.Fatalf("link of a deleted pack: %d", r.Code)
 	}
 }
+
+func TestStickersFromClipsAreAnimated(t *testing.T) {
+	e := newChatEnv(t)
+	alice := e.register(t, "alice")
+	uid, err := strconv.ParseInt(e.uid(t, alice), 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	side, secs := int32(512), 2.0
+	clip, err := e.store.Attachments().Create(t.Context(), postgres.NewAttachment{
+		UploaderID: &uid, Purpose: postgres.PurposeSticker, Kind: "image", Filename: "sticker.webp",
+		StorageKey: "stickers/" + uuid.NewString(), MimeType: "image/webp", Size: 100, Width: &side, Height: &side, Duration: &secs,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	packID := e.do(t, request{method: http.MethodPost, path: "/stickers/packs", token: alice.access, body: map[string]any{"title": "Clips"}}).json()["id"].(string)
+	add := func(image string) reply {
+		return e.do(t, request{method: http.MethodPost, path: "/stickers/packs/" + packID + "/stickers", token: alice.access,
+			body: map[string]any{"attachment_id": image, "emoji": "🎬"}})
+	}
+	if r := add(clip.ID.String()); r.Code != http.StatusCreated || r.json()["is_animated"] != true {
+		t.Fatalf("sticker from a clip: %d %s", r.Code, r.Body)
+	}
+	if r := add(e.stickerImage(t, alice)); r.Code != http.StatusCreated || r.json()["is_animated"] != false {
+		t.Fatalf("still sticker: %d %s", r.Code, r.Body)
+	}
+}
