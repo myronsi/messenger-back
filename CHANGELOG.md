@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.36.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.35.0-alpha.1...v1.36.0-alpha.1) (2026-11-25)
+
+
+### Features
+
+* **imports:** import chat histories from Telegram and WhatsApp ([#245](https://github.com/myronsi/messenger-back/issues/245)) ([78253c7](https://github.com/myronsi/messenger-back/commit/78253c76bd4d1f5b3093d5afba7d86d94ba41d63))
+* **messages:** polls, contacts, locations, video stickers and group system lines ([#248](https://github.com/myronsi/messenger-back/issues/248)) ([5207e85](https://github.com/myronsi/messenger-back/commit/5207e859018cd8148de06e7d45dbf6795c104e1a))
+
+
+### Bug Fixes
+
+* **messages:** fill read_by in group chat history ([#247](https://github.com/myronsi/messenger-back/issues/247)) ([2f9bf9b](https://github.com/myronsi/messenger-back/commit/2f9bf9bdaf2680fa184a87c8230942fb9df6795c))
+
 ## [1.35.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.34.1-alpha.1...v1.35.0-alpha.1) (2026-11-24)
 
 
