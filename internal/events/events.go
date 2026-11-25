@@ -27,6 +27,8 @@ const (
 	ChatMemberRemoved = "chat.member_removed"
 	ChatDeleted       = "chat.deleted"
 	HistoryCleared    = "chat.history_cleared"
+	HistoryImported   = "chat.history_imported"
+	ImportRemoved     = "chat.import_removed"
 	UserUpdated       = "user.updated"
 	UserDeleted       = "user.deleted"
 	UserReported      = "user.reported"
@@ -41,8 +43,10 @@ type Event struct {
 	// who changed or deleted the account.
 	UserID int64
 	// ActorID is who caused it (sender, editor, the admin who removed a member).
-	ActorID int64
-	At      time.Time
+	ActorID  int64
+	ImportID int64
+	UpTo     int64
+	At       time.Time
 }
 
 // Stream returns the stream an event type belongs to.
@@ -50,7 +54,7 @@ func Stream(eventType string) (string, error) {
 	switch eventType {
 	case MessageCreated, MessageEdited, MessageDeleted, MessageHidden, ReactionChanged:
 		return redis.StreamMessages, nil
-	case ChatMemberAdded, ChatMemberRemoved, ChatDeleted, HistoryCleared:
+	case ChatMemberAdded, ChatMemberRemoved, ChatDeleted, HistoryCleared, HistoryImported, ImportRemoved:
 		return redis.StreamChats, nil
 	case UserUpdated, UserDeleted, UserReported:
 		return redis.StreamUsers, nil
@@ -61,7 +65,7 @@ func Stream(eventType string) (string, error) {
 // Fields encodes the event as stream entry fields.
 func (e Event) Fields() map[string]any {
 	f := map[string]any{"type": e.Type, "at": e.At.UnixMilli()}
-	for k, v := range map[string]int64{"chat_id": e.ChatID, "message_id": e.MessageID, "user_id": e.UserID, "actor_id": e.ActorID} {
+	for k, v := range map[string]int64{"chat_id": e.ChatID, "message_id": e.MessageID, "user_id": e.UserID, "actor_id": e.ActorID, "import_id": e.ImportID, "up_to": e.UpTo} {
 		if v != 0 {
 			f[k] = v
 		}
@@ -100,6 +104,12 @@ func Parse(fields map[string]string) (Event, error) {
 		return Event{}, err
 	}
 	if e.ActorID, err = num("actor_id"); err != nil {
+		return Event{}, err
+	}
+	if e.ImportID, err = num("import_id"); err != nil {
+		return Event{}, err
+	}
+	if e.UpTo, err = num("up_to"); err != nil {
 		return Event{}, err
 	}
 	at, err := num("at")

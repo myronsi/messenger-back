@@ -711,3 +711,27 @@ func (Unimplemented) ListSyncChanges(w http.ResponseWriter, r *http.Request, _ L
 func (Unimplemented) GetStorageKey(w http.ResponseWriter, r *http.Request, _ GetStorageKeyParams) {
 	notImplemented(w, r)
 }
+func (Unimplemented) ListChatImports(w http.ResponseWriter, r *http.Request, _ ChatId, _ ListChatImportsParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) StartChatImport(w http.ResponseWriter, r *http.Request, _ ChatId, _ StartChatImportParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) GetChatImport(w http.ResponseWriter, r *http.Request, _ ImportId, _ GetChatImportParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) RemoveChatImport(w http.ResponseWriter, r *http.Request, _ ImportId, _ RemoveChatImportParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) AddImportedMessages(w http.ResponseWriter, r *http.Request, _ ImportId, _ AddImportedMessagesParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) FinishChatImport(w http.ResponseWriter, r *http.Request, _ ImportId, _ FinishChatImportParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) AssignImportSender(w http.ResponseWriter, r *http.Request, _ ImportId, _ ImportSenderKey, _ AssignImportSenderParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) DecideImportSender(w http.ResponseWriter, r *http.Request, _ ImportId, _ ImportSenderKey, _ DecideImportSenderParams) {
+	notImplemented(w, r)
+}

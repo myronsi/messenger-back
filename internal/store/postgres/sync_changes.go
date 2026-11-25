@@ -12,13 +12,14 @@ import (
 type SyncKind string
 
 const (
-	SyncMessageEdited  SyncKind = "message_edited"
-	SyncMessageDeleted SyncKind = "message_deleted"
-	SyncMessageHidden  SyncKind = "message_hidden"
-	SyncReactions      SyncKind = "reactions"
-	SyncPins           SyncKind = "pins"
-	SyncHistoryCleared SyncKind = "history_cleared"
-	SyncChatHidden     SyncKind = "chat_hidden"
+	SyncMessageEdited   SyncKind = "message_edited"
+	SyncMessageDeleted  SyncKind = "message_deleted"
+	SyncMessageHidden   SyncKind = "message_hidden"
+	SyncReactions       SyncKind = "reactions"
+	SyncPins            SyncKind = "pins"
+	SyncHistoryCleared  SyncKind = "history_cleared"
+	SyncChatHidden      SyncKind = "chat_hidden"
+	SyncHistoryImported SyncKind = "history_imported"
 )
 
 const SyncChangeRetention = 30 * 24 * time.Hour

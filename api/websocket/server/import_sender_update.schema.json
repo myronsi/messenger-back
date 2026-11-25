@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ServerImportSenderUpdateEvent",
+  "description": "A name of an imported history changed. A suggestion (pending) and a decline go only to the importer and the suggested member; that member shows the confirm banner for pending. A confirmation or its withdrawal goes to every member: render the messages of that name again (or load the chat again).",
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "import_sender_update"
+    },
+    "event_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "chat_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "import_id": {
+          "$ref": "../../openapi.yaml#/components/schemas/Id"
+        },
+        "sender": {
+          "type": "object",
+          "properties": {
+            "key": {
+              "$ref": "../../openapi.yaml#/components/schemas/ImportSenderKey"
+            },
+            "name": {
+              "type": "string"
+            },
+            "message_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "state": {
+              "$ref": "../../openapi.yaml#/components/schemas/ImportSenderState"
+            },
+            "user_id": {
+              "$ref": "../../openapi.yaml#/components/schemas/Id"
+            }
+          },
+          "required": [
+            "key",
+            "name",
+            "message_count",
+            "state"
+          ]
+        }
+      },
+      "required": [
+        "import_id",
+        "sender"
+      ]
+    }
+  },
+  "required": [
+    "type",
+    "event_id",
+    "chat_id",
+    "data"
+  ]
+}

@@ -329,6 +329,27 @@ func (e CallSummaryKind) Valid() bool {
 	}
 }
 
+// Defines values for ChatImportState.
+const (
+	ChatImportStateDone     ChatImportState = "done"
+	ChatImportStateRemoving ChatImportState = "removing"
+	ChatImportStateRunning  ChatImportState = "running"
+)
+
+// Valid indicates whether the value is a known member of the ChatImportState enum.
+func (e ChatImportState) Valid() bool {
+	switch e {
+	case ChatImportStateDone:
+		return true
+	case ChatImportStateRemoving:
+		return true
+	case ChatImportStateRunning:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ChatType.
 const (
 	ChatTypeDirect ChatType = "direct"
@@ -467,6 +488,27 @@ func (e CreateUploadSessionRequestKind) Valid() bool {
 	case CreateUploadSessionRequestKindImage:
 		return true
 	case CreateUploadSessionRequestKindVideo:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DecideImportSenderRequestDecision.
+const (
+	Confirm  DecideImportSenderRequestDecision = "confirm"
+	Decline  DecideImportSenderRequestDecision = "decline"
+	Withdraw DecideImportSenderRequestDecision = "withdraw"
+)
+
+// Valid indicates whether the value is a known member of the DecideImportSenderRequestDecision enum.
+func (e DecideImportSenderRequestDecision) Valid() bool {
+	switch e {
+	case Confirm:
+		return true
+	case Decline:
+		return true
+	case Withdraw:
 		return true
 	default:
 		return false
@@ -761,6 +803,75 @@ func (e GroupRole) Valid() bool {
 	}
 }
 
+// Defines values for ImportSenderState.
+const (
+	ImportSenderStateConfirmed  ImportSenderState = "confirmed"
+	ImportSenderStateDeclined   ImportSenderState = "declined"
+	ImportSenderStateMe         ImportSenderState = "me"
+	ImportSenderStatePending    ImportSenderState = "pending"
+	ImportSenderStateUnassigned ImportSenderState = "unassigned"
+)
+
+// Valid indicates whether the value is a known member of the ImportSenderState enum.
+func (e ImportSenderState) Valid() bool {
+	switch e {
+	case ImportSenderStateConfirmed:
+		return true
+	case ImportSenderStateDeclined:
+		return true
+	case ImportSenderStateMe:
+		return true
+	case ImportSenderStatePending:
+		return true
+	case ImportSenderStateUnassigned:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ImportSource.
+const (
+	Telegram ImportSource = "telegram"
+	Whatsapp ImportSource = "whatsapp"
+)
+
+// Valid indicates whether the value is a known member of the ImportSource enum.
+func (e ImportSource) Valid() bool {
+	switch e {
+	case Telegram:
+		return true
+	case Whatsapp:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ImportedMessageType.
+const (
+	ImportedMessageTypeFile  ImportedMessageType = "file"
+	ImportedMessageTypeNote  ImportedMessageType = "note"
+	ImportedMessageTypeText  ImportedMessageType = "text"
+	ImportedMessageTypeVoice ImportedMessageType = "voice"
+)
+
+// Valid indicates whether the value is a known member of the ImportedMessageType enum.
+func (e ImportedMessageType) Valid() bool {
+	switch e {
+	case ImportedMessageTypeFile:
+		return true
+	case ImportedMessageTypeNote:
+		return true
+	case ImportedMessageTypeText:
+		return true
+	case ImportedMessageTypeVoice:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for MediaKind.
 const (
 	MediaKindAudio  MediaKind = "audio"
@@ -809,6 +920,27 @@ func (e MediaProcessing) Valid() bool {
 	case MediaProcessingQueued:
 		return true
 	case MediaProcessingRunning:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MessageImportSenderState.
+const (
+	MessageImportSenderStateConfirmed   MessageImportSenderState = "confirmed"
+	MessageImportSenderStateMe          MessageImportSenderState = "me"
+	MessageImportSenderStateUnconfirmed MessageImportSenderState = "unconfirmed"
+)
+
+// Valid indicates whether the value is a known member of the MessageImportSenderState enum.
+func (e MessageImportSenderState) Valid() bool {
+	switch e {
+	case MessageImportSenderStateConfirmed:
+		return true
+	case MessageImportSenderStateMe:
+		return true
+	case MessageImportSenderStateUnconfirmed:
 		return true
 	default:
 		return false
@@ -1273,25 +1405,28 @@ func (e SyncChangeScope) Valid() bool {
 
 // Defines values for SyncChangeType.
 const (
-	ChatHidden     SyncChangeType = "chat_hidden"
-	HistoryCleared SyncChangeType = "history_cleared"
-	MessageDeleted SyncChangeType = "message_deleted"
-	MessageUpdated SyncChangeType = "message_updated"
-	PinsChanged    SyncChangeType = "pins_changed"
+	SyncChangeTypeChatHidden      SyncChangeType = "chat_hidden"
+	SyncChangeTypeHistoryCleared  SyncChangeType = "history_cleared"
+	SyncChangeTypeHistoryImported SyncChangeType = "history_imported"
+	SyncChangeTypeMessageDeleted  SyncChangeType = "message_deleted"
+	SyncChangeTypeMessageUpdated  SyncChangeType = "message_updated"
+	SyncChangeTypePinsChanged     SyncChangeType = "pins_changed"
 )
 
 // Valid indicates whether the value is a known member of the SyncChangeType enum.
 func (e SyncChangeType) Valid() bool {
 	switch e {
-	case ChatHidden:
+	case SyncChangeTypeChatHidden:
 		return true
-	case HistoryCleared:
+	case SyncChangeTypeHistoryCleared:
 		return true
-	case MessageDeleted:
+	case SyncChangeTypeHistoryImported:
 		return true
-	case MessageUpdated:
+	case SyncChangeTypeMessageDeleted:
 		return true
-	case PinsChanged:
+	case SyncChangeTypeMessageUpdated:
+		return true
+	case SyncChangeTypePinsChanged:
 		return true
 	default:
 		return false
@@ -1300,14 +1435,17 @@ func (e SyncChangeType) Valid() bool {
 
 // Defines values for SystemEventKind.
 const (
-	SystemEventKindCall            SystemEventKind = "call"
-	SystemEventKindGroupCreated    SystemEventKind = "group_created"
-	SystemEventKindMemberAdded     SystemEventKind = "member_added"
-	SystemEventKindMemberJoined    SystemEventKind = "member_joined"
-	SystemEventKindMemberLeft      SystemEventKind = "member_left"
-	SystemEventKindMemberRemoved   SystemEventKind = "member_removed"
-	SystemEventKindMessagePinned   SystemEventKind = "message_pinned"
-	SystemEventKindMessageUnpinned SystemEventKind = "message_unpinned"
+	SystemEventKindCall               SystemEventKind = "call"
+	SystemEventKindGroupCreated       SystemEventKind = "group_created"
+	SystemEventKindHistoryImportEnded SystemEventKind = "history_import_ended"
+	SystemEventKindHistoryImported    SystemEventKind = "history_imported"
+	SystemEventKindImportedNote       SystemEventKind = "imported_note"
+	SystemEventKindMemberAdded        SystemEventKind = "member_added"
+	SystemEventKindMemberJoined       SystemEventKind = "member_joined"
+	SystemEventKindMemberLeft         SystemEventKind = "member_left"
+	SystemEventKindMemberRemoved      SystemEventKind = "member_removed"
+	SystemEventKindMessagePinned      SystemEventKind = "message_pinned"
+	SystemEventKindMessageUnpinned    SystemEventKind = "message_unpinned"
 )
 
 // Valid indicates whether the value is a known member of the SystemEventKind enum.
@@ -1316,6 +1454,12 @@ func (e SystemEventKind) Valid() bool {
 	case SystemEventKindCall:
 		return true
 	case SystemEventKindGroupCreated:
+		return true
+	case SystemEventKindHistoryImportEnded:
+		return true
+	case SystemEventKindHistoryImported:
+		return true
+	case SystemEventKindImportedNote:
 		return true
 	case SystemEventKindMemberAdded:
 		return true
@@ -1725,6 +1869,12 @@ type AddCustomEmojiRequest struct {
 	Shortcode    EmojiShortcode `json:"shortcode"`
 }
 
+// AddImportedMessagesRequest defines model for AddImportedMessagesRequest.
+type AddImportedMessagesRequest struct {
+	FromIndex int               `json:"from_index"`
+	Messages  []ImportedMessage `json:"messages"`
+}
+
 // AddParticipantRequest defines model for AddParticipantRequest.
 type AddParticipantRequest struct {
 	// UserId Decimal ID as a string (Snowflake IDs exceed 2^53).
@@ -1768,6 +1918,11 @@ type ApprovalRequestStatus string
 
 // ApprovalRequestType defines model for ApprovalRequestType.
 type ApprovalRequestType string
+
+// AssignImportSenderRequest defines model for AssignImportSenderRequest.
+type AssignImportSenderRequest struct {
+	UserId *Id `json:"user_id"`
+}
 
 // Attachment defines model for Attachment.
 type Attachment struct {
@@ -2104,6 +2259,56 @@ type Chat struct {
 	UnreadMentionsCount int `json:"unread_mentions_count"`
 }
 
+// ChatImport defines model for ChatImport.
+type ChatImport struct {
+	// ChatId Decimal ID as a string (Snowflake IDs exceed 2^53).
+	//
+	// Examples: 7217400317439950848
+	ChatId     Id         `json:"chat_id"`
+	CreatedAt  Timestamp  `json:"created_at"`
+	FileCount  int        `json:"file_count"`
+	FinishedAt *Timestamp `json:"finished_at"`
+	FirstAt    Timestamp  `json:"first_at"`
+
+	// Id Decimal ID as a string (Snowflake IDs exceed 2^53).
+	//
+	// Examples: 7217400317439950848
+	Id           Id        `json:"id"`
+	ImportedBy   *Id       `json:"imported_by"`
+	LastAt       Timestamp `json:"last_at"`
+	MessageCount int       `json:"message_count"`
+
+	// NextIndex How many messages are stored; the `from_index` of the next batch.
+	NextIndex int                `json:"next_index"`
+	Senders   []ChatImportSender `json:"senders"`
+	Source    ImportSource       `json:"source"`
+
+	// State `running`: messages are being added. `done`: finished. `removing`: being removed.
+	State ChatImportState `json:"state"`
+}
+
+// ChatImportList defines model for ChatImportList.
+type ChatImportList struct {
+	Items []ChatImport `json:"items"`
+}
+
+// ChatImportSender defines model for ChatImportSender.
+type ChatImportSender struct {
+	// Key The client's key for one name of the export.
+	Key          ImportSenderKey `json:"key"`
+	MessageCount int             `json:"message_count"`
+	Name         string          `json:"name"`
+
+	// State `me`: the importer's own messages. `unassigned`: shown as text. `pending`: suggested for `user_id`, who has
+	// not answered. `confirmed`: `user_id` confirmed; the messages show their account. `declined`: the suggested
+	// member said no; shown as text.
+	State  ImportSenderState `json:"state"`
+	UserId *Id               `json:"user_id"`
+}
+
+// ChatImportState `running`: messages are being added. `done`: finished. `removing`: being removed.
+type ChatImportState string
+
 // ChatPage defines model for ChatPage.
 type ChatPage struct {
 	Items []Chat `json:"items"`
@@ -2308,6 +2513,14 @@ type CustomEmoji struct {
 	// Url Same-origin path of the image (`/api/v2/emoji/items/{id}/image`).
 	Url string `json:"url"`
 }
+
+// DecideImportSenderRequest defines model for DecideImportSenderRequest.
+type DecideImportSenderRequest struct {
+	Decision DecideImportSenderRequestDecision `json:"decision"`
+}
+
+// DecideImportSenderRequestDecision defines model for DecideImportSenderRequest.Decision.
+type DecideImportSenderRequestDecision string
 
 // DeleteMessagesRequest defines model for DeleteMessagesRequest.
 type DeleteMessagesRequest struct {
@@ -2635,6 +2848,60 @@ type GroupRoleLog struct {
 // Examples: 7217400317439950848
 type Id = string
 
+// ImportProgress defines model for ImportProgress.
+type ImportProgress struct {
+	NextIndex int `json:"next_index"`
+}
+
+// ImportSenderKey The client's key for one name of the export.
+type ImportSenderKey = string
+
+// ImportSenderState `me`: the importer's own messages. `unassigned`: shown as text. `pending`: suggested for `user_id`, who has
+// not answered. `confirmed`: `user_id` confirmed; the messages show their account. `declined`: the suggested
+// member said no; shown as text.
+type ImportSenderState string
+
+// ImportSource defines model for ImportSource.
+type ImportSource string
+
+// ImportSummary defines model for ImportSummary.
+type ImportSummary struct {
+	FirstAt Timestamp `json:"first_at"`
+
+	// ImportId Decimal ID as a string (Snowflake IDs exceed 2^53).
+	//
+	// Examples: 7217400317439950848
+	ImportId     Id           `json:"import_id"`
+	LastAt       Timestamp    `json:"last_at"`
+	MessageCount int          `json:"message_count"`
+	Source       ImportSource `json:"source"`
+}
+
+// ImportedMessage defines model for ImportedMessage.
+type ImportedMessage struct {
+	// AttachmentIds The importer's uploads; two to ten images or videos make an album.
+	AttachmentIds *[]AttachmentRef `json:"attachment_ids,omitempty"`
+	Content       *string          `json:"content,omitempty"`
+
+	// Index Position in the import, counting from 0 without gaps.
+	Index int `json:"index"`
+
+	// OriginalAt When the message was sent in the other messenger; between the import's `first_at` and `last_at`.
+	OriginalAt Timestamp `json:"original_at"`
+
+	// ReplyToIndex `index` of an earlier message of the import that this one answers.
+	ReplyToIndex *int `json:"reply_to_index,omitempty"`
+
+	// SenderKey Required except for `note`.
+	SenderKey *ImportSenderKey `json:"sender_key,omitempty"`
+
+	// Type `note`: a line of the export that is not a message (for example that someone joined), shown as a system message.
+	Type ImportedMessageType `json:"type"`
+}
+
+// ImportedMessageType `note`: a line of the export that is not a message (for example that someone joined), shown as a system message.
+type ImportedMessageType string
+
 // InviteLink defines model for InviteLink.
 type InviteLink struct {
 	CreatedAt Timestamp `json:"created_at"`
@@ -2813,7 +3080,9 @@ type Message struct {
 	ClientTempId *ClientTempId `json:"client_temp_id,omitempty"`
 
 	// Content Text, the caption of a file, or the emoji of a sticker; `null` when deleted.
-	Content       *string        `json:"content"`
+	Content *string `json:"content"`
+
+	// CreatedAt When the message was sent; for an imported message, when it was sent in the other messenger.
 	CreatedAt     Timestamp      `json:"created_at"`
 	EditedAt      *Timestamp     `json:"edited_at"`
 	ForwardedFrom *ForwardedFrom `json:"forwarded_from"`
@@ -2821,8 +3090,11 @@ type Message struct {
 	// Id Decimal ID as a string (Snowflake IDs exceed 2^53).
 	//
 	// Examples: 7217400317439950848
-	Id        Id   `json:"id"`
-	IsDeleted bool `json:"is_deleted"`
+	Id Id `json:"id"`
+
+	// Import Set on messages that came from an import.
+	Import    *MessageImport `json:"import,omitempty"`
+	IsDeleted bool           `json:"is_deleted"`
 
 	// Mentions Group members the text mentions by `@username` (ignoring case), found by the server when the message was
 	// sent or last edited; at most 20. Absent when there are none and in direct chats. Clients render every
@@ -2858,9 +3130,34 @@ type Message struct {
 	// are the display names at the time of the event. `target` fields are set for `member_added` and
 	// `member_removed`. `call` is set for `call` messages: one per call, posted when the call ends, `actor` is the
 	// initiator. `message_id` and `snippet` are set for `message_pinned` and `message_unpinned`.
+	// `history_imported` opens and `history_import_ended` closes an imported history; both carry `import`, and
+	// `actor` is the importer. `imported_note` is a line of the export that is not a message; its text is `text`.
 	SystemEvent *SystemEvent `json:"system_event,omitempty"`
 	Type        MessageType  `json:"type"`
 }
+
+// MessageImport Set on messages that came from an import.
+type MessageImport struct {
+	// ImportId Decimal ID as a string (Snowflake IDs exceed 2^53).
+	//
+	// Examples: 7217400317439950848
+	ImportId   Id        `json:"import_id"`
+	OriginalAt Timestamp `json:"original_at"`
+
+	// SenderName The name in the export; absent on system messages.
+	SenderName *string `json:"sender_name,omitempty"`
+
+	// SenderState `me`: the importer's own message, `sender` is the importer. `confirmed`: the member confirmed the name,
+	// `sender` is that member. `unconfirmed`: `sender` is `null`; show `sender_name` as text. Absent on system
+	// messages.
+	SenderState *MessageImportSenderState `json:"sender_state,omitempty"`
+	Source      ImportSource              `json:"source"`
+}
+
+// MessageImportSenderState `me`: the importer's own message, `sender` is the importer. `confirmed`: the member confirmed the name,
+// `sender` is that member. `unconfirmed`: `sender` is `null`; show `sender_name` as text. Absent on system
+// messages.
+type MessageImportSenderState string
 
 // MessagePage defines model for MessagePage.
 type MessagePage struct {
@@ -3675,6 +3972,30 @@ type StartCallRequest struct {
 	ClientRequestId openapi_types.UUID `json:"client_request_id"`
 }
 
+// StartChatImportRequest defines model for StartChatImportRequest.
+type StartChatImportRequest struct {
+	FileCount    int                     `json:"file_count"`
+	FirstAt      Timestamp               `json:"first_at"`
+	LastAt       Timestamp               `json:"last_at"`
+	MessageCount int                     `json:"message_count"`
+	Senders      []StartChatImportSender `json:"senders"`
+	Source       ImportSource            `json:"source"`
+}
+
+// StartChatImportSender defines model for StartChatImportSender.
+type StartChatImportSender struct {
+	// Key The client's key for one name of the export.
+	Key ImportSenderKey `json:"key"`
+
+	// Me The caller's own messages; at most one sender.
+	Me           *bool  `json:"me,omitempty"`
+	MessageCount int    `json:"message_count"`
+	Name         string `json:"name"`
+
+	// UserId A member of the chat suggested for this name; not with `me`.
+	UserId *Id `json:"user_id,omitempty"`
+}
+
 // Sticker One sticker of a pack. `image` is a WebP or PNG of at most 512 x 512 px with transparency, animated when
 // `is_animated` is true; any signed-in user can load it. Clients show it without a bubble.
 type Sticker struct {
@@ -3762,6 +4083,7 @@ type StorageKeyAlgorithm string
 // message and its `scope`. `pins_changed`: load the pins of the chat again. `history_cleared`: drop the
 // messages up to and including `before_message_id` (`scope` says for whom). `chat_hidden`: the caller
 // deleted the chat for themselves up to `before_message_id`.
+// `history_imported`: an imported history was added, removed or a sender confirmed; load the chat again.
 type SyncChange struct {
 	// BeforeMessageId Decimal ID as a string (Snowflake IDs exceed 2^53).
 	//
@@ -3806,13 +4128,16 @@ type SyncChangesPage struct {
 // are the display names at the time of the event. `target` fields are set for `member_added` and
 // `member_removed`. `call` is set for `call` messages: one per call, posted when the call ends, `actor` is the
 // initiator. `message_id` and `snippet` are set for `message_pinned` and `message_unpinned`.
+// `history_imported` opens and `history_import_ended` closes an imported history; both carry `import`, and
+// `actor` is the importer. `imported_note` is a line of the export that is not a message; its text is `text`.
 type SystemEvent struct {
 	ActorId   *Id    `json:"actor_id"`
 	ActorName string `json:"actor_name"`
 
 	// Call The call a `call` system message records.
-	Call *CallSummary    `json:"call,omitempty"`
-	Kind SystemEventKind `json:"kind"`
+	Call   *CallSummary    `json:"call,omitempty"`
+	Import *ImportSummary  `json:"import,omitempty"`
+	Kind   SystemEventKind `json:"kind"`
 
 	// MessageId The pinned or unpinned message.
 	MessageId   *Id          `json:"message_id,omitempty"`
@@ -3827,6 +4152,9 @@ type SystemEvent struct {
 	// Examples: 7217400317439950848
 	TargetId   *Id     `json:"target_id,omitempty"`
 	TargetName *string `json:"target_name,omitempty"`
+
+	// Text The line of the export, for `imported_note`.
+	Text *string `json:"text,omitempty"`
 }
 
 // SystemEventKind defines model for SystemEventKind.
@@ -4246,6 +4574,11 @@ type EmojiId = Id
 //
 // Examples: 7217400317439950848
 type EmojiPackId = Id
+
+// ImportId Decimal ID as a string (Snowflake IDs exceed 2^53).
+//
+// Examples: 7217400317439950848
+type ImportId = Id
 
 // InviteLinkId Decimal ID as a string (Snowflake IDs exceed 2^53).
 //
@@ -4932,6 +5265,24 @@ type ClearChatHistoryParams struct {
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
 }
 
+// ListChatImportsParams defines parameters for ListChatImports.
+type ListChatImportsParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// StartChatImportParams defines parameters for StartChatImport.
+type StartChatImportParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
 // ListChatMediaParams defines parameters for ListChatMedia.
 type ListChatMediaParams struct {
 	Kind MediaKind `form:"kind" json:"kind"`
@@ -5500,6 +5851,60 @@ type GetGroupRoleLogParams struct {
 
 // TransferGroupOwnershipParams defines parameters for TransferGroupOwnership.
 type TransferGroupOwnershipParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// RemoveChatImportParams defines parameters for RemoveChatImport.
+type RemoveChatImportParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// GetChatImportParams defines parameters for GetChatImport.
+type GetChatImportParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// FinishChatImportParams defines parameters for FinishChatImport.
+type FinishChatImportParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// AddImportedMessagesParams defines parameters for AddImportedMessages.
+type AddImportedMessagesParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// AssignImportSenderParams defines parameters for AssignImportSender.
+type AssignImportSenderParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// DecideImportSenderParams defines parameters for DecideImportSender.
+type DecideImportSenderParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
@@ -6516,6 +6921,9 @@ type StartChatCallJSONRequestBody = StartCallRequest
 // ClearChatHistoryJSONRequestBody defines body for ClearChatHistory for application/json ContentType.
 type ClearChatHistoryJSONRequestBody = ClearHistoryRequest
 
+// StartChatImportJSONRequestBody defines body for StartChatImport for application/json ContentType.
+type StartChatImportJSONRequestBody = StartChatImportRequest
+
 // SendMessageJSONRequestBody defines body for SendMessage for application/json ContentType.
 type SendMessageJSONRequestBody = SendMessageRequest
 
@@ -6581,6 +6989,15 @@ type ReportGroupJSONRequestBody = ContentReportRequest
 
 // TransferGroupOwnershipJSONRequestBody defines body for TransferGroupOwnership for application/json ContentType.
 type TransferGroupOwnershipJSONRequestBody = TransferOwnerRequest
+
+// AddImportedMessagesJSONRequestBody defines body for AddImportedMessages for application/json ContentType.
+type AddImportedMessagesJSONRequestBody = AddImportedMessagesRequest
+
+// AssignImportSenderJSONRequestBody defines body for AssignImportSender for application/json ContentType.
+type AssignImportSenderJSONRequestBody = AssignImportSenderRequest
+
+// DecideImportSenderJSONRequestBody defines body for DecideImportSender for application/json ContentType.
+type DecideImportSenderJSONRequestBody = DecideImportSenderRequest
 
 // DeleteMeJSONRequestBody defines body for DeleteMe for application/json ContentType.
 type DeleteMeJSONRequestBody = PasswordConfirmation
@@ -7164,6 +7581,12 @@ type ServerInterface interface {
 	// ClearChatHistory Clear the history of a chat
 	// (POST /chats/{chat_id}/clear)
 	ClearChatHistory(w http.ResponseWriter, r *http.Request, chatId ChatId, params ClearChatHistoryParams)
+	// ListChatImports The imported histories of a chat
+	// (GET /chats/{chat_id}/imports)
+	ListChatImports(w http.ResponseWriter, r *http.Request, chatId ChatId, params ListChatImportsParams)
+	// StartChatImport Start importing a history from another messenger
+	// (POST /chats/{chat_id}/imports)
+	StartChatImport(w http.ResponseWriter, r *http.Request, chatId ChatId, params StartChatImportParams)
 	// ListChatMedia Photos, videos, audio, voice messages, files or links of a chat
 	// (GET /chats/{chat_id}/media)
 	ListChatMedia(w http.ResponseWriter, r *http.Request, chatId ChatId, params ListChatMediaParams)
@@ -7338,6 +7761,24 @@ type ServerInterface interface {
 	// TransferGroupOwnership Make another member the owner
 	// (POST /groups/{chat_id}/transfer-owner)
 	TransferGroupOwnership(w http.ResponseWriter, r *http.Request, chatId ChatId, params TransferGroupOwnershipParams)
+	// RemoveChatImport Remove an imported history
+	// (DELETE /imports/{import_id})
+	RemoveChatImport(w http.ResponseWriter, r *http.Request, importId ImportId, params RemoveChatImportParams)
+	// GetChatImport One import, for resuming it or showing its senders
+	// (GET /imports/{import_id})
+	GetChatImport(w http.ResponseWriter, r *http.Request, importId ImportId, params GetChatImportParams)
+	// FinishChatImport Finish an import once every message is stored
+	// (POST /imports/{import_id}/finish)
+	FinishChatImport(w http.ResponseWriter, r *http.Request, importId ImportId, params FinishChatImportParams)
+	// AddImportedMessages Add the next batch of messages to a running import
+	// (PUT /imports/{import_id}/messages)
+	AddImportedMessages(w http.ResponseWriter, r *http.Request, importId ImportId, params AddImportedMessagesParams)
+	// AssignImportSender Suggest a member for a name of the export, or take the suggestion back
+	// (PUT /imports/{import_id}/senders/{sender_key})
+	AssignImportSender(w http.ResponseWriter, r *http.Request, importId ImportId, senderKey ImportSenderKey, params AssignImportSenderParams)
+	// DecideImportSender Confirm or decline that a name of the export is you, or withdraw a confirmation
+	// (POST /imports/{import_id}/senders/{sender_key}/decision)
+	DecideImportSender(w http.ResponseWriter, r *http.Request, importId ImportId, senderKey ImportSenderKey, params DecideImportSenderParams)
 	// GetInvite The group behind an invite link
 	// (GET /invites/{token})
 	GetInvite(w http.ResponseWriter, r *http.Request, token InviteToken, params GetInviteParams)
@@ -11387,6 +11828,144 @@ func (siw *ServerInterfaceWrapper) ClearChatHistory(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ClearChatHistory(w, r, chatId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListChatImports operation middleware
+func (siw *ServerInterfaceWrapper) ListChatImports(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListChatImportsParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListChatImports(w, r, chatId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// StartChatImport operation middleware
+func (siw *ServerInterfaceWrapper) StartChatImport(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params StartChatImportParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StartChatImport(w, r, chatId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -15691,6 +16270,438 @@ func (siw *ServerInterfaceWrapper) TransferGroupOwnership(w http.ResponseWriter,
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.TransferGroupOwnership(w, r, chatId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RemoveChatImport operation middleware
+func (siw *ServerInterfaceWrapper) RemoveChatImport(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "import_id" -------------
+	var importId ImportId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "import_id", r.PathValue("import_id"), &importId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "import_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RemoveChatImportParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RemoveChatImport(w, r, importId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetChatImport operation middleware
+func (siw *ServerInterfaceWrapper) GetChatImport(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "import_id" -------------
+	var importId ImportId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "import_id", r.PathValue("import_id"), &importId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "import_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetChatImportParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetChatImport(w, r, importId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// FinishChatImport operation middleware
+func (siw *ServerInterfaceWrapper) FinishChatImport(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "import_id" -------------
+	var importId ImportId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "import_id", r.PathValue("import_id"), &importId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "import_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params FinishChatImportParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.FinishChatImport(w, r, importId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AddImportedMessages operation middleware
+func (siw *ServerInterfaceWrapper) AddImportedMessages(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "import_id" -------------
+	var importId ImportId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "import_id", r.PathValue("import_id"), &importId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "import_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params AddImportedMessagesParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddImportedMessages(w, r, importId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AssignImportSender operation middleware
+func (siw *ServerInterfaceWrapper) AssignImportSender(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "import_id" -------------
+	var importId ImportId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "import_id", r.PathValue("import_id"), &importId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "import_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "sender_key" -------------
+	var senderKey ImportSenderKey
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sender_key", r.PathValue("sender_key"), &senderKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sender_key", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params AssignImportSenderParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AssignImportSender(w, r, importId, senderKey, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DecideImportSender operation middleware
+func (siw *ServerInterfaceWrapper) DecideImportSender(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "import_id" -------------
+	var importId ImportId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "import_id", r.PathValue("import_id"), &importId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "import_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "sender_key" -------------
+	var senderKey ImportSenderKey
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sender_key", r.PathValue("sender_key"), &senderKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sender_key", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DecideImportSenderParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DecideImportSender(w, r, importId, senderKey, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -22622,6 +23633,14 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/chats/{chat_id}/messages/{message_id}/pin", wrapper.UnpinMessage)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/chats/{chat_id}/messages/{message_id}/pin", wrapper.PinMessage)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/chats/{chat_id}/pins", wrapper.ListPinnedMessages)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/chats/{chat_id}/imports", wrapper.ListChatImports)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/chats/{chat_id}/imports", wrapper.StartChatImport)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/imports/{import_id}", wrapper.RemoveChatImport)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/imports/{import_id}", wrapper.GetChatImport)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/imports/{import_id}/messages", wrapper.AddImportedMessages)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/imports/{import_id}/finish", wrapper.FinishChatImport)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/imports/{import_id}/senders/{sender_key}", wrapper.AssignImportSender)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/imports/{import_id}/senders/{sender_key}/decision", wrapper.DecideImportSender)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/chats/{chat_id}/messages/forward", wrapper.ForwardMessages)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/chats/{chat_id}/messages/delete", wrapper.DeleteMessages)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/search/messages", wrapper.SearchAllMessages)
@@ -29103,6 +30122,213 @@ func (response ClearChatHistory426ApplicationProblemPlusJSONResponse) VisitClear
 	return err
 }
 
+type ListChatImportsRequestObject struct {
+	ChatId ChatId `json:"chat_id"`
+	Params ListChatImportsParams
+}
+
+type ListChatImportsResponseObject interface {
+	VisitListChatImportsResponse(w http.ResponseWriter) error
+}
+
+type ListChatImports200JSONResponse ChatImportList
+
+func (response ListChatImports200JSONResponse) VisitListChatImportsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListChatImports401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ListChatImports401ApplicationProblemPlusJSONResponse) VisitListChatImportsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListChatImports404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response ListChatImports404ApplicationProblemPlusJSONResponse) VisitListChatImportsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListChatImports426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response ListChatImports426ApplicationProblemPlusJSONResponse) VisitListChatImportsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartChatImportRequestObject struct {
+	ChatId ChatId `json:"chat_id"`
+	Params StartChatImportParams
+	Body   *StartChatImportJSONRequestBody
+}
+
+type StartChatImportResponseObject interface {
+	VisitStartChatImportResponse(w http.ResponseWriter) error
+}
+
+type StartChatImport201JSONResponse ChatImport
+
+func (response StartChatImport201JSONResponse) VisitStartChatImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartChatImport400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response StartChatImport400ApplicationProblemPlusJSONResponse) VisitStartChatImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartChatImport401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response StartChatImport401ApplicationProblemPlusJSONResponse) VisitStartChatImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartChatImport403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response StartChatImport403ApplicationProblemPlusJSONResponse) VisitStartChatImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartChatImport404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response StartChatImport404ApplicationProblemPlusJSONResponse) VisitStartChatImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartChatImport409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response StartChatImport409ApplicationProblemPlusJSONResponse) VisitStartChatImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartChatImport422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response StartChatImport422ApplicationProblemPlusJSONResponse) VisitStartChatImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartChatImport426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response StartChatImport426ApplicationProblemPlusJSONResponse) VisitStartChatImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListChatMediaRequestObject struct {
 	ChatId ChatId `json:"chat_id"`
 	Params ListChatMediaParams
@@ -35085,6 +36311,639 @@ type TransferGroupOwnership426ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response TransferGroupOwnership426ApplicationProblemPlusJSONResponse) VisitTransferGroupOwnershipResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveChatImportRequestObject struct {
+	ImportId ImportId `json:"import_id"`
+	Params   RemoveChatImportParams
+}
+
+type RemoveChatImportResponseObject interface {
+	VisitRemoveChatImportResponse(w http.ResponseWriter) error
+}
+
+type RemoveChatImport202Response struct {
+}
+
+func (response RemoveChatImport202Response) VisitRemoveChatImportResponse(w http.ResponseWriter) error {
+	w.WriteHeader(202)
+	return nil
+}
+
+type RemoveChatImport401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response RemoveChatImport401ApplicationProblemPlusJSONResponse) VisitRemoveChatImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveChatImport403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response RemoveChatImport403ApplicationProblemPlusJSONResponse) VisitRemoveChatImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveChatImport404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response RemoveChatImport404ApplicationProblemPlusJSONResponse) VisitRemoveChatImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveChatImport426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response RemoveChatImport426ApplicationProblemPlusJSONResponse) VisitRemoveChatImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetChatImportRequestObject struct {
+	ImportId ImportId `json:"import_id"`
+	Params   GetChatImportParams
+}
+
+type GetChatImportResponseObject interface {
+	VisitGetChatImportResponse(w http.ResponseWriter) error
+}
+
+type GetChatImport200JSONResponse ChatImport
+
+func (response GetChatImport200JSONResponse) VisitGetChatImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetChatImport401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response GetChatImport401ApplicationProblemPlusJSONResponse) VisitGetChatImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetChatImport404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetChatImport404ApplicationProblemPlusJSONResponse) VisitGetChatImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetChatImport426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetChatImport426ApplicationProblemPlusJSONResponse) VisitGetChatImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type FinishChatImportRequestObject struct {
+	ImportId ImportId `json:"import_id"`
+	Params   FinishChatImportParams
+}
+
+type FinishChatImportResponseObject interface {
+	VisitFinishChatImportResponse(w http.ResponseWriter) error
+}
+
+type FinishChatImport200JSONResponse ChatImport
+
+func (response FinishChatImport200JSONResponse) VisitFinishChatImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type FinishChatImport401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response FinishChatImport401ApplicationProblemPlusJSONResponse) VisitFinishChatImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type FinishChatImport403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response FinishChatImport403ApplicationProblemPlusJSONResponse) VisitFinishChatImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type FinishChatImport404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response FinishChatImport404ApplicationProblemPlusJSONResponse) VisitFinishChatImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type FinishChatImport422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response FinishChatImport422ApplicationProblemPlusJSONResponse) VisitFinishChatImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type FinishChatImport426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response FinishChatImport426ApplicationProblemPlusJSONResponse) VisitFinishChatImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddImportedMessagesRequestObject struct {
+	ImportId ImportId `json:"import_id"`
+	Params   AddImportedMessagesParams
+	Body     *AddImportedMessagesJSONRequestBody
+}
+
+type AddImportedMessagesResponseObject interface {
+	VisitAddImportedMessagesResponse(w http.ResponseWriter) error
+}
+
+type AddImportedMessages200JSONResponse ImportProgress
+
+func (response AddImportedMessages200JSONResponse) VisitAddImportedMessagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddImportedMessages400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response AddImportedMessages400ApplicationProblemPlusJSONResponse) VisitAddImportedMessagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddImportedMessages401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response AddImportedMessages401ApplicationProblemPlusJSONResponse) VisitAddImportedMessagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddImportedMessages403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response AddImportedMessages403ApplicationProblemPlusJSONResponse) VisitAddImportedMessagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddImportedMessages404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response AddImportedMessages404ApplicationProblemPlusJSONResponse) VisitAddImportedMessagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddImportedMessages409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response AddImportedMessages409ApplicationProblemPlusJSONResponse) VisitAddImportedMessagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddImportedMessages422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response AddImportedMessages422ApplicationProblemPlusJSONResponse) VisitAddImportedMessagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddImportedMessages426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response AddImportedMessages426ApplicationProblemPlusJSONResponse) VisitAddImportedMessagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AssignImportSenderRequestObject struct {
+	ImportId  ImportId        `json:"import_id"`
+	SenderKey ImportSenderKey `json:"sender_key"`
+	Params    AssignImportSenderParams
+	Body      *AssignImportSenderJSONRequestBody
+}
+
+type AssignImportSenderResponseObject interface {
+	VisitAssignImportSenderResponse(w http.ResponseWriter) error
+}
+
+type AssignImportSender200JSONResponse ChatImportSender
+
+func (response AssignImportSender200JSONResponse) VisitAssignImportSenderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AssignImportSender400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response AssignImportSender400ApplicationProblemPlusJSONResponse) VisitAssignImportSenderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AssignImportSender401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response AssignImportSender401ApplicationProblemPlusJSONResponse) VisitAssignImportSenderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AssignImportSender403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response AssignImportSender403ApplicationProblemPlusJSONResponse) VisitAssignImportSenderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AssignImportSender404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response AssignImportSender404ApplicationProblemPlusJSONResponse) VisitAssignImportSenderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AssignImportSender409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response AssignImportSender409ApplicationProblemPlusJSONResponse) VisitAssignImportSenderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AssignImportSender422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response AssignImportSender422ApplicationProblemPlusJSONResponse) VisitAssignImportSenderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AssignImportSender426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response AssignImportSender426ApplicationProblemPlusJSONResponse) VisitAssignImportSenderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DecideImportSenderRequestObject struct {
+	ImportId  ImportId        `json:"import_id"`
+	SenderKey ImportSenderKey `json:"sender_key"`
+	Params    DecideImportSenderParams
+	Body      *DecideImportSenderJSONRequestBody
+}
+
+type DecideImportSenderResponseObject interface {
+	VisitDecideImportSenderResponse(w http.ResponseWriter) error
+}
+
+type DecideImportSender200JSONResponse ChatImportSender
+
+func (response DecideImportSender200JSONResponse) VisitDecideImportSenderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DecideImportSender400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response DecideImportSender400ApplicationProblemPlusJSONResponse) VisitDecideImportSenderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DecideImportSender401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response DecideImportSender401ApplicationProblemPlusJSONResponse) VisitDecideImportSenderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DecideImportSender404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response DecideImportSender404ApplicationProblemPlusJSONResponse) VisitDecideImportSenderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DecideImportSender422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response DecideImportSender422ApplicationProblemPlusJSONResponse) VisitDecideImportSenderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DecideImportSender426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response DecideImportSender426ApplicationProblemPlusJSONResponse) VisitDecideImportSenderResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -45482,6 +47341,12 @@ type StrictServerInterface interface {
 	// ClearChatHistory Clear the history of a chat
 	// (POST /chats/{chat_id}/clear)
 	ClearChatHistory(ctx context.Context, request ClearChatHistoryRequestObject) (ClearChatHistoryResponseObject, error)
+	// ListChatImports The imported histories of a chat
+	// (GET /chats/{chat_id}/imports)
+	ListChatImports(ctx context.Context, request ListChatImportsRequestObject) (ListChatImportsResponseObject, error)
+	// StartChatImport Start importing a history from another messenger
+	// (POST /chats/{chat_id}/imports)
+	StartChatImport(ctx context.Context, request StartChatImportRequestObject) (StartChatImportResponseObject, error)
 	// ListChatMedia Photos, videos, audio, voice messages, files or links of a chat
 	// (GET /chats/{chat_id}/media)
 	ListChatMedia(ctx context.Context, request ListChatMediaRequestObject) (ListChatMediaResponseObject, error)
@@ -45656,6 +47521,24 @@ type StrictServerInterface interface {
 	// TransferGroupOwnership Make another member the owner
 	// (POST /groups/{chat_id}/transfer-owner)
 	TransferGroupOwnership(ctx context.Context, request TransferGroupOwnershipRequestObject) (TransferGroupOwnershipResponseObject, error)
+	// RemoveChatImport Remove an imported history
+	// (DELETE /imports/{import_id})
+	RemoveChatImport(ctx context.Context, request RemoveChatImportRequestObject) (RemoveChatImportResponseObject, error)
+	// GetChatImport One import, for resuming it or showing its senders
+	// (GET /imports/{import_id})
+	GetChatImport(ctx context.Context, request GetChatImportRequestObject) (GetChatImportResponseObject, error)
+	// FinishChatImport Finish an import once every message is stored
+	// (POST /imports/{import_id}/finish)
+	FinishChatImport(ctx context.Context, request FinishChatImportRequestObject) (FinishChatImportResponseObject, error)
+	// AddImportedMessages Add the next batch of messages to a running import
+	// (PUT /imports/{import_id}/messages)
+	AddImportedMessages(ctx context.Context, request AddImportedMessagesRequestObject) (AddImportedMessagesResponseObject, error)
+	// AssignImportSender Suggest a member for a name of the export, or take the suggestion back
+	// (PUT /imports/{import_id}/senders/{sender_key})
+	AssignImportSender(ctx context.Context, request AssignImportSenderRequestObject) (AssignImportSenderResponseObject, error)
+	// DecideImportSender Confirm or decline that a name of the export is you, or withdraw a confirmation
+	// (POST /imports/{import_id}/senders/{sender_key}/decision)
+	DecideImportSender(ctx context.Context, request DecideImportSenderRequestObject) (DecideImportSenderResponseObject, error)
 	// GetInvite The group behind an invite link
 	// (GET /invites/{token})
 	GetInvite(ctx context.Context, request GetInviteRequestObject) (GetInviteResponseObject, error)
@@ -47634,6 +49517,67 @@ func (sh *strictHandler) ClearChatHistory(w http.ResponseWriter, r *http.Request
 	}
 }
 
+// ListChatImports operation middleware
+func (sh *strictHandler) ListChatImports(w http.ResponseWriter, r *http.Request, chatId ChatId, params ListChatImportsParams) {
+	var request ListChatImportsRequestObject
+
+	request.ChatId = chatId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListChatImports(ctx, request.(ListChatImportsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListChatImports")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListChatImportsResponseObject); ok {
+		if err := validResponse.VisitListChatImportsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// StartChatImport operation middleware
+func (sh *strictHandler) StartChatImport(w http.ResponseWriter, r *http.Request, chatId ChatId, params StartChatImportParams) {
+	var request StartChatImportRequestObject
+
+	request.ChatId = chatId
+	request.Params = params
+
+	var body StartChatImportJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.StartChatImport(ctx, request.(StartChatImportRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "StartChatImport")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(StartChatImportResponseObject); ok {
+		if err := validResponse.VisitStartChatImportResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListChatMedia operation middleware
 func (sh *strictHandler) ListChatMedia(w http.ResponseWriter, r *http.Request, chatId ChatId, params ListChatMediaParams) {
 	var request ListChatMediaRequestObject
@@ -49354,6 +51298,191 @@ func (sh *strictHandler) TransferGroupOwnership(w http.ResponseWriter, r *http.R
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(TransferGroupOwnershipResponseObject); ok {
 		if err := validResponse.VisitTransferGroupOwnershipResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RemoveChatImport operation middleware
+func (sh *strictHandler) RemoveChatImport(w http.ResponseWriter, r *http.Request, importId ImportId, params RemoveChatImportParams) {
+	var request RemoveChatImportRequestObject
+
+	request.ImportId = importId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RemoveChatImport(ctx, request.(RemoveChatImportRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RemoveChatImport")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RemoveChatImportResponseObject); ok {
+		if err := validResponse.VisitRemoveChatImportResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetChatImport operation middleware
+func (sh *strictHandler) GetChatImport(w http.ResponseWriter, r *http.Request, importId ImportId, params GetChatImportParams) {
+	var request GetChatImportRequestObject
+
+	request.ImportId = importId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetChatImport(ctx, request.(GetChatImportRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetChatImport")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetChatImportResponseObject); ok {
+		if err := validResponse.VisitGetChatImportResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// FinishChatImport operation middleware
+func (sh *strictHandler) FinishChatImport(w http.ResponseWriter, r *http.Request, importId ImportId, params FinishChatImportParams) {
+	var request FinishChatImportRequestObject
+
+	request.ImportId = importId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.FinishChatImport(ctx, request.(FinishChatImportRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "FinishChatImport")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(FinishChatImportResponseObject); ok {
+		if err := validResponse.VisitFinishChatImportResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AddImportedMessages operation middleware
+func (sh *strictHandler) AddImportedMessages(w http.ResponseWriter, r *http.Request, importId ImportId, params AddImportedMessagesParams) {
+	var request AddImportedMessagesRequestObject
+
+	request.ImportId = importId
+	request.Params = params
+
+	var body AddImportedMessagesJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AddImportedMessages(ctx, request.(AddImportedMessagesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AddImportedMessages")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AddImportedMessagesResponseObject); ok {
+		if err := validResponse.VisitAddImportedMessagesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AssignImportSender operation middleware
+func (sh *strictHandler) AssignImportSender(w http.ResponseWriter, r *http.Request, importId ImportId, senderKey ImportSenderKey, params AssignImportSenderParams) {
+	var request AssignImportSenderRequestObject
+
+	request.ImportId = importId
+	request.SenderKey = senderKey
+	request.Params = params
+
+	var body AssignImportSenderJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AssignImportSender(ctx, request.(AssignImportSenderRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AssignImportSender")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AssignImportSenderResponseObject); ok {
+		if err := validResponse.VisitAssignImportSenderResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DecideImportSender operation middleware
+func (sh *strictHandler) DecideImportSender(w http.ResponseWriter, r *http.Request, importId ImportId, senderKey ImportSenderKey, params DecideImportSenderParams) {
+	var request DecideImportSenderRequestObject
+
+	request.ImportId = importId
+	request.SenderKey = senderKey
+	request.Params = params
+
+	var body DecideImportSenderJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DecideImportSender(ctx, request.(DecideImportSenderRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DecideImportSender")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DecideImportSenderResponseObject); ok {
+		if err := validResponse.VisitDecideImportSenderResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

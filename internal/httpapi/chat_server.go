@@ -146,7 +146,7 @@ func serviceError(w http.ResponseWriter, r *http.Request, log *slog.Logger, what
 		WriteProblem(w, http.StatusConflict, ErrorCodeAlreadyExists, details()...)
 	case errors.Is(err, chats.ErrLimit), errors.Is(err, messages.ErrLimit):
 		WriteProblem(w, http.StatusConflict, ErrorCodeLimitReached, details()...)
-	case errors.Is(err, chats.ErrConflict):
+	case errors.Is(err, chats.ErrConflict), errors.Is(err, messages.ErrConflict):
 		WriteProblem(w, http.StatusConflict, ErrorCodeConflict, details()...)
 	case errors.Is(err, messages.ErrInvalid):
 		WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, details()...)

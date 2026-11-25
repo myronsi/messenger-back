@@ -168,6 +168,44 @@ type ChatDeletion struct {
 	SearchDone   bool
 }
 
+type ChatImport struct {
+	ID             int64
+	ChatID         int64
+	ImportedBy     *int64
+	Source         string
+	State          string
+	MessageCount   int32
+	FileCount      int32
+	FirstAt        time.Time
+	LastAt         time.Time
+	LowerBound     int64
+	FirstMessageID int64
+	LastMessageID  int64
+	NextIndex      int32
+	CreatedAt      time.Time
+	FinishedAt     *time.Time
+}
+
+type ChatImportSender struct {
+	ImportID        int64
+	SenderKey       string
+	Name            string
+	MessageCount    int32
+	AssignedUserID  *int64
+	State           string
+	DeclinedUserIds []int64
+	DecidedAt       *time.Time
+}
+
+type ChatImportWindow struct {
+	ImportID int64
+	Chunk    int32
+	Node     int32
+	StartMs  int64
+	Size     int32
+	Span     pgtype.Range[pgtype.Int8]
+}
+
 type ChatInviteLink struct {
 	ID        int64
 	ChatID    int64
