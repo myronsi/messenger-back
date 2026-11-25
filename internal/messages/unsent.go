@@ -68,7 +68,7 @@ func (s *Service) KeepUnsent(ctx context.Context, r SendRequest, cause error) {
 	}
 	err := s.d.Store.Unsent().Save(ctx, postgres.UnsentMessage{
 		UserID: r.SenderID, ChatID: r.ChatID, ClientTempID: r.ClientTempID, Type: r.Type, Content: r.Content,
-		ReplyTo: r.ReplyTo, AttachmentIDs: ids, Drawings: drawings, StickerID: r.StickerID, ErrorCode: code,
+		ReplyTo: r.ReplyTo, AttachmentIDs: ids, Drawings: drawings, StickerID: r.StickerID, Payload: unsentPayload(r), ErrorCode: code,
 	})
 	if err != nil {
 		s.d.Log.WarnContext(ctx, "keep unsent message", "error", err, "chat_id", r.ChatID)

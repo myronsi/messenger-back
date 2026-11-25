@@ -184,7 +184,7 @@ func startRealtime(p *app.Process, pg *postgres.Store, rd *redis.Store, sc *scyl
 		Messages: repo, Store: pg, Members: members, Unread: redis.NewUnread(rdb, ""),
 		Dedup: redis.NewDedup(rdb, "", 0), IDs: idsrc, Notifier: fan, Accepted: p.Metrics.MessageAccepted, Log: log,
 		Events: st.events, QueueNotification: pg.Notifications().Enqueue, NotificationReady: pg.Notifications().Ready, Emoji: emoji.New(pg), Moderation: mod,
-		Counter: counter, Changes: pg.Sync(),
+		Counter: counter, Changes: pg.Sync(), Directory: dir,
 	})
 	gw, err = realtime.New(realtime.Options{
 		Auth: ticketAuth, Messages: svc, Fanout: fan, Bus: bus, Presence: presence,
@@ -201,6 +201,7 @@ func startRealtime(p *app.Process, pg *postgres.Store, rd *redis.Store, sc *scyl
 	st.done.Go(func() { bus.Run(st.ctx) })
 	st.done.Go(func() { presence.Run(st.ctx) })
 	st.done.Go(func() { counter.Run(st.ctx, stats.FlushEvery) })
+	st.done.Go(func() { svc.RunPollCloser(st.ctx, messages.PollCloseEvery) })
 	return st, nil
 }
 

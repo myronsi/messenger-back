@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/myronsi/messenger-back/internal/messages"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 )
 
@@ -80,6 +81,18 @@ func (m *MessageServer) presentUnsent(r *http.Request, viewerID int64, u postgre
 			sticker := PresentSticker(st, m.o.BasePath)
 			item.Sticker = &sticker
 		}
+	}
+	poll, contact, location := messages.UnsentPayload(u)
+	if poll != nil {
+		p := PollCreateFrom(*poll)
+		item.Poll = &p
+	}
+	if contact != nil {
+		item.Contact = &ContactCreate{UserId: FormatID(contact.UserID)}
+	}
+	if location != nil {
+		l := LocationCreateFrom(*location)
+		item.Location = &l
 	}
 	return item, nil
 }

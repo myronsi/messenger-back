@@ -361,6 +361,30 @@ type Participant struct {
 	IsRequest              bool
 }
 
+type Poll struct {
+	MessageID       int64
+	ChatID          int64
+	CreatorID       int64
+	Question        string
+	Options         []string
+	MultipleAnswers bool
+	Anonymous       bool
+	CorrectOption   *int16
+	Explanation     *string
+	CloseAt         *time.Time
+	ClosedAt        *time.Time
+	ClosedBy        *int64
+	Version         int32
+	CreatedAt       time.Time
+}
+
+type PollVote struct {
+	MessageID int64
+	UserID    int64
+	Option    int16
+	VotedAt   time.Time
+}
+
 type PublicName struct {
 	LowerName string
 	UserID    *int64
@@ -496,6 +520,7 @@ type UnsentMessage struct {
 	StickerID     *int64
 	ErrorCode     string
 	CreatedAt     time.Time
+	Payload       []byte
 }
 
 type UploadSession struct {

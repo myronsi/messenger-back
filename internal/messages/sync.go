@@ -88,7 +88,7 @@ type collapseKey struct {
 
 func keyOf(c postgres.SyncChange) collapseKey {
 	switch c.Kind {
-	case postgres.SyncMessageEdited, postgres.SyncReactions, postgres.SyncMessageDeleted, postgres.SyncMessageHidden:
+	case postgres.SyncMessageEdited, postgres.SyncReactions, postgres.SyncPoll, postgres.SyncMessageDeleted, postgres.SyncMessageHidden:
 		return collapseKey{c.ChatID, c.MessageID, "message"}
 	case postgres.SyncPins:
 		return collapseKey{c.ChatID, 0, "pins"}
@@ -122,7 +122,7 @@ func (s *Service) syncEntries(ctx context.Context, userID int64, changes []postg
 			e.Scope = ScopeEveryone
 		case postgres.SyncMessageHidden:
 			e.Kind, e.Scope = postgres.SyncMessageDeleted, ScopeMe
-		case postgres.SyncMessageEdited, postgres.SyncReactions:
+		case postgres.SyncMessageEdited, postgres.SyncReactions, postgres.SyncPoll:
 			m, ok, err := s.current(ctx, userID, c.ChatID, c.MessageID)
 			if err != nil {
 				return nil, err

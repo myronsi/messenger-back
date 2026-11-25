@@ -92,7 +92,12 @@ func (m *MessageServer) renderWith(ctx context.Context, viewer, chatID int64, ms
 			}
 		}
 	}
-	people, err := m.o.Directory.ForViewer(ctx, viewer, uniq(senders))
+	contacts := messages.ContactUserIDs(msgs...)
+	people, err := m.o.Directory.ForViewer(ctx, viewer, uniq(append(senders, contacts...)))
+	if err != nil {
+		return nil, err
+	}
+	polls, err := m.o.Service.PollViews(ctx, viewer, chatID, msgs)
 	if err != nil {
 		return nil, err
 	}
@@ -128,6 +133,15 @@ func (m *MessageServer) renderWith(ctx context.Context, viewer, chatID int64, ms
 		if msg.StickerID != nil {
 			if st, ok := stickers[*msg.StickerID]; ok {
 				parts.Sticker = &st
+			}
+		}
+		if pv, ok := polls[msg.ID]; ok {
+			parts.Poll = &pv
+		}
+		if c, ok := messages.ParseContact(msg); ok {
+			parts.ContactLoaded = true
+			if v, found := people[c.UserID]; found {
+				parts.Contact = &v
 			}
 		}
 		if msg.SenderID != nil {
@@ -307,6 +321,9 @@ func (m *MessageServer) SendMessage(w http.ResponseWriter, r *http.Request, chat
 			return
 		}
 		req.StickerID = &sticker
+	}
+	if !kindRequest(w, body, &req) {
+		return
 	}
 	if !allow(w, r, m.o.Limiter, RateSend, strconv.FormatInt(p.UserID, 10), m.o.Log) {
 		m.o.Service.KeepUnsent(r.Context(), req, messages.ErrRateLimited)

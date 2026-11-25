@@ -19,6 +19,7 @@ const (
 	SyncPins           SyncKind = "pins"
 	SyncHistoryCleared SyncKind = "history_cleared"
 	SyncChatHidden     SyncKind = "chat_hidden"
+	SyncPoll           SyncKind = "poll"
 )
 
 const SyncChangeRetention = 30 * 24 * time.Hour

@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/myronsi/messenger-back/internal/events"
 	"github.com/myronsi/messenger-back/internal/ids"
 	"github.com/myronsi/messenger-back/internal/linkpreview"
+	"github.com/myronsi/messenger-back/internal/messages"
 	"github.com/myronsi/messenger-back/internal/store/elastic"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/redis"
@@ -79,6 +81,16 @@ type Indexer struct {
 	// settle is rebuildSettle, shorter in tests.
 	settle    time.Duration
 	deletions ChatDeletions
+	polls     Polls
+}
+
+type Polls interface {
+	Polls(ctx context.Context, messageIDs []int64) (map[int64]postgres.Poll, error)
+}
+
+func (in *Indexer) WithPolls(p Polls) *Indexer {
+	in.polls = p
+	return in
 }
 
 type ChatDeletions interface {
@@ -108,7 +120,32 @@ func id(n int64) string { return strconv.FormatInt(n, 10) }
 
 // indexable reports whether a message belongs in the index: stored, not deleted, with something to find.
 func indexable(m scylla.Message) bool {
-	return !m.Deleted && m.Type != scylla.TypeSystem && (m.Content != nil || m.AttachmentID != nil)
+	return !m.Deleted && m.Type != scylla.TypeSystem && m.Type != scylla.TypeContact && (m.Content != nil || m.AttachmentID != nil)
+}
+
+func (in *Indexer) kindText(ctx context.Context, m scylla.Message) (string, bool) {
+	switch m.Type {
+	case scylla.TypeLocation:
+		if l, ok := messages.ParseLocation(m); ok && l.Title != nil {
+			return *l.Title, true
+		}
+		return "", true
+	case scylla.TypePoll:
+		if in.polls == nil {
+			return "", false
+		}
+		found, err := in.polls.Polls(ctx, []int64{m.ID})
+		if err != nil {
+			in.log.WarnContext(ctx, "index poll", "error", err, "message_id", m.ID)
+			return "", false
+		}
+		p, ok := found[m.ID]
+		if !ok {
+			return "", false
+		}
+		return strings.Join(append([]string{p.Question}, p.Options...), "\n"), true
+	}
+	return "", false
 }
 
 // doc builds the document of a message (hidden_for is set by the caller when it knows it).
@@ -117,9 +154,11 @@ func (in *Indexer) doc(ctx context.Context, m scylla.Message) Doc {
 	if m.SenderID != nil {
 		d.SenderID = id(*m.SenderID)
 	}
-	if m.Content != nil {
+	if text, ok := in.kindText(ctx, m); ok {
+		d.Content = emoji.Plain(text)
+	} else if m.Content != nil {
 		d.Content = emoji.Plain(*m.Content)
-		d.HasLink = len(linkpreview.FindURLs(*m.Content, 1)) > 0
+		d.HasLink = m.Type != scylla.TypePoll && m.Type != scylla.TypeLocation && len(linkpreview.FindURLs(*m.Content, 1)) > 0
 	}
 	if m.AttachmentID != nil {
 		if a, err := in.files.Get(ctx, uuid.UUID(*m.AttachmentID)); err == nil {

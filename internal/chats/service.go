@@ -58,6 +58,7 @@ type Store interface {
 	Stickers() postgres.StickerRepository
 	Sharing() postgres.SharingRepository
 	MessagePins() postgres.MessagePinRepository
+	Polls() postgres.PollRepository
 }
 
 // MessageStore is the part of the message store the chat list reads.
@@ -961,6 +962,9 @@ func (s *Service) ClearHistory(ctx context.Context, userID, chatID int64, scope 
 		}
 		if err := s.d.Store.MessagePins().ClearPins(context.WithoutCancel(ctx), chatID, bound); err != nil {
 			s.d.Log.WarnContext(ctx, "clear pins", "error", err, "chat_id", chatID)
+		}
+		if err := s.d.Store.Polls().DeletePollsUpTo(context.WithoutCancel(ctx), chatID, bound); err != nil {
+			s.d.Log.WarnContext(ctx, "clear polls", "error", err, "chat_id", chatID)
 		}
 	} else {
 		if err := s.d.Store.Chats().ClearForUser(ctx, chatID, userID, bound, false); err != nil {

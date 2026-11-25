@@ -11,24 +11,30 @@ import (
 )
 
 const (
-	SystemGroupCreated  = "group_created"
-	SystemMemberAdded   = "member_added"
-	SystemMemberJoined  = "member_joined"
-	SystemMemberRemoved = "member_removed"
-	SystemMemberLeft    = "member_left"
-	SystemCall          = "call"
+	SystemGroupCreated     = "group_created"
+	SystemMemberAdded      = "member_added"
+	SystemMemberJoined     = "member_joined"
+	SystemMemberRemoved    = "member_removed"
+	SystemMemberLeft       = "member_left"
+	SystemCall             = "call"
+	SystemGroupRenamed     = "group_renamed"
+	SystemGroupAvatar      = "group_avatar_changed"
+	SystemOwnerTransferred = "owner_transferred"
 )
 
 type SystemEvent struct {
-	Kind        string       `json:"kind"`
-	ActorID     *int64       `json:"actor_id,omitempty"`
-	ActorName   string       `json:"actor_name,omitempty"`
-	TargetID    *int64       `json:"target_id,omitempty"`
-	TargetName  string       `json:"target_name,omitempty"`
-	Call        *CallSummary `json:"call,omitempty"`
-	MessageID   *int64       `json:"message_id,omitempty"`
-	Snippet     string       `json:"snippet,omitempty"`
-	MessageType string       `json:"message_type,omitempty"`
+	Kind          string       `json:"kind"`
+	ActorID       *int64       `json:"actor_id,omitempty"`
+	ActorName     string       `json:"actor_name,omitempty"`
+	TargetID      *int64       `json:"target_id,omitempty"`
+	TargetName    string       `json:"target_name,omitempty"`
+	Call          *CallSummary `json:"call,omitempty"`
+	MessageID     *int64       `json:"message_id,omitempty"`
+	Snippet       string       `json:"snippet,omitempty"`
+	MessageType   string       `json:"message_type,omitempty"`
+	OldName       string       `json:"old_name,omitempty"`
+	NewName       string       `json:"new_name,omitempty"`
+	AvatarRemoved *bool        `json:"avatar_removed,omitempty"`
 }
 
 type CallSummary struct {

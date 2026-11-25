@@ -24,6 +24,7 @@ type UnsentMessage struct {
 	// Drawings is a JSON object from attachment id to its drawing.
 	Drawings  []byte
 	StickerID *int64
+	Payload   []byte
 	ErrorCode string
 	CreatedAt time.Time
 }
@@ -52,7 +53,7 @@ func (r unsentRepo) Save(ctx context.Context, m UnsentMessage) error {
 	}
 	if err := r.s.q.UpsertUnsentMessage(ctx, sqlcdb.UpsertUnsentMessageParams{
 		UserID: m.UserID, ChatID: m.ChatID, ClientTempID: m.ClientTempID, Type: m.Type, Content: m.Content, ReplyTo: m.ReplyTo,
-		AttachmentIds: ids, Drawings: m.Drawings, StickerID: m.StickerID, ErrorCode: m.ErrorCode,
+		AttachmentIds: ids, Drawings: m.Drawings, StickerID: m.StickerID, Payload: m.Payload, ErrorCode: m.ErrorCode,
 	}); err != nil {
 		return mapError(err)
 	}
@@ -71,7 +72,7 @@ func (r unsentRepo) List(ctx context.Context, userID, chatID int64) ([]UnsentMes
 		out = append(out, UnsentMessage{
 			UserID: row.UserID, ChatID: row.ChatID, ClientTempID: row.ClientTempID, Type: row.Type, Content: row.Content,
 			ReplyTo: row.ReplyTo, AttachmentIDs: row.AttachmentIds, Drawings: row.Drawings, StickerID: row.StickerID,
-			ErrorCode: row.ErrorCode, CreatedAt: row.CreatedAt,
+			Payload: row.Payload, ErrorCode: row.ErrorCode, CreatedAt: row.CreatedAt,
 		})
 	}
 	return out, nil
