@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -163,6 +164,78 @@ func TestMessagesOverHTTP(t *testing.T) {
 	e.do(t, request{method: http.MethodPut, path: "/me/blocked-users/" + e.uid(t, alice), token: bob.access})
 	if a, _ := e.history(t, alice, chat, ""); len(a[2]["read_by"].([]any)) != 0 {
 		t.Fatalf("read_by of a user who blocked the viewer: %v", a[2]["read_by"])
+	}
+}
+
+func readers(item map[string]any) []string {
+	var out []string
+	for _, r := range item["read_by"].([]any) {
+		out = append(out, r.(map[string]any)["user_id"].(string))
+	}
+	slices.Sort(out)
+	return out
+}
+
+func sorted(ids ...string) []string {
+	slices.Sort(ids)
+	return ids
+}
+
+func TestGroupReadReceiptsOverHTTP(t *testing.T) {
+	e := newChatEnv(t)
+	alice, bob, carol, dave := e.register(t, "alice"), e.register(t, "bob"), e.register(t, "carol"), e.register(t, "dave")
+	e.openInvites(t, bob, carol, dave)
+	bobID, carolID, daveID := e.uid(t, bob), e.uid(t, carol), e.uid(t, dave)
+	group := e.do(t, request{method: http.MethodPost, path: "/groups", token: alice.access,
+		body: map[string]any{"name": "Team", "member_ids": []string{bobID, carolID, daveID}}})
+	if group.Code != http.StatusCreated {
+		t.Fatalf("create group: %d %s", group.Code, group.Body)
+	}
+	chat := group.json()["id"].(string)
+	ids := make([]string, 3)
+	for i := range ids {
+		ids[i] = e.send(t, alice, chat, "g-"+strconv.Itoa(i), "m"+strconv.Itoa(i)).json()["id"].(string)
+	}
+	read := func(s session, id string) {
+		t.Helper()
+		if r := e.do(t, request{method: http.MethodPost, path: "/chats/" + chat + "/read", token: s.access, body: map[string]any{"message_id": id}}); r.Code != http.StatusOK {
+			t.Fatalf("read: %d %s", r.Code, r.Body)
+		}
+	}
+	read(bob, ids[1])
+	read(carol, ids[2])
+	read(dave, ids[2])
+
+	byID := func(s session, query string) map[string][]string {
+		t.Helper()
+		got, _ := e.history(t, s, chat, query)
+		out := map[string][]string{}
+		for _, it := range got {
+			out[it["id"].(string)] = readers(it)
+		}
+		return out
+	}
+	got := byID(alice, "")
+	if want := sorted(bobID, carolID, daveID); !slices.Equal(got[ids[0]], want) || !slices.Equal(got[ids[1]], want) {
+		t.Fatalf("read_by of the read messages: %v", got)
+	}
+	if want := sorted(carolID, daveID); !slices.Equal(got[ids[2]], want) {
+		t.Fatalf("read_by of the newest message: %v", got[ids[2]])
+	}
+	if newest := byID(alice, "?after="+ids[1]); !slices.Equal(newest[ids[2]], sorted(carolID, daveID)) {
+		t.Fatalf("read_by on a page after bob's marker: %v", newest)
+	}
+
+	if r := e.do(t, request{method: http.MethodPatch, path: "/me/privacy", token: carol.access, body: map[string]any{"read_receipts_enabled": false}}); r.Code != http.StatusOK {
+		t.Fatalf("turn off read receipts: %d %s", r.Code, r.Body)
+	}
+	e.do(t, request{method: http.MethodPut, path: "/me/blocked-users/" + e.uid(t, alice), token: dave.access})
+	got = byID(alice, "")
+	if !slices.Equal(got[ids[1]], []string{bobID}) || len(got[ids[2]]) != 0 {
+		t.Fatalf("read_by without carol's receipts and with dave blocking alice: %v", got)
+	}
+	if own := byID(bob, ""); !slices.Equal(own[ids[0]], []string{daveID}) {
+		t.Fatalf("read_by as bob sees it: %v", own[ids[0]])
 	}
 }
 
