@@ -110,7 +110,7 @@ SELECT count(*)::int AS live, coalesce(max(position) + 1, 0)::int AS next_positi
 FROM stickers WHERE pack_id = @pack_id AND deleted_at IS NULL;
 
 -- name: InsertOwnedSticker :one
-INSERT INTO stickers (pack_id, attachment_id, emoji, position) VALUES (@pack_id, @attachment_id, @emoji, @position)
+INSERT INTO stickers (pack_id, attachment_id, emoji, position, is_animated) VALUES (@pack_id, @attachment_id, @emoji, @position, @is_animated)
 RETURNING id;
 
 -- name: SetStickerEmoji :execrows

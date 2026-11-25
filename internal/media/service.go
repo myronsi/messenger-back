@@ -181,6 +181,7 @@ type Upload struct {
 	Waveform   []int
 	StartMS    *int
 	EndMS      *int
+	Crop       *StickerCrop
 }
 
 // cleanName keeps a display name for the file: the base name, printable, at most 255 bytes.
@@ -223,8 +224,8 @@ func (s *Service) upload(ctx context.Context, u Upload, tags *Tags) (postgres.At
 	switch u.Purpose {
 	case PurposeMessage, PurposeAvatar:
 	case PurposeSticker:
-		if u.Kind != "" && u.Kind != KindImage {
-			return postgres.Attachment{}, fmt.Errorf("%w: a sticker is an image", ErrInvalid)
+		if u.Kind != "" && u.Kind != KindImage && u.Kind != KindVideo {
+			return postgres.Attachment{}, fmt.Errorf("%w: a sticker is made from an image or a video", ErrInvalid)
 		}
 	case PurposeProfileMusic:
 		if u.Kind != "" && u.Kind != KindAudio {
@@ -241,8 +242,11 @@ func (s *Service) upload(ctx context.Context, u Upload, tags *Tags) (postgres.At
 	default:
 		return postgres.Attachment{}, fmt.Errorf("%w: unknown purpose", ErrInvalid)
 	}
-	if (u.StartMS != nil || u.EndMS != nil) && u.Purpose != PurposeProfileMusic {
-		return postgres.Attachment{}, fmt.Errorf("%w: start_ms and end_ms are for profile music", ErrInvalid)
+	if (u.StartMS != nil || u.EndMS != nil) && u.Purpose != PurposeProfileMusic && u.Purpose != PurposeSticker {
+		return postgres.Attachment{}, fmt.Errorf("%w: start_ms and end_ms are for profile music and stickers", ErrInvalid)
+	}
+	if u.Crop != nil && u.Purpose != PurposeSticker {
+		return postgres.Attachment{}, fmt.Errorf("%w: crop is for stickers", ErrInvalid)
 	}
 	switch u.Kind {
 	case "", KindImage, KindAudio, KindVoice, KindVideo, KindFile:
@@ -285,11 +289,18 @@ func (s *Service) upload(ctx context.Context, u Upload, tags *Tags) (postgres.At
 	}
 	if det.ContentType == "video/webm" {
 		det = s.webmKind(ctx, tmp.Name(), det)
-		if u.Purpose == PurposeProfileBackground && det.Kind != KindVideo {
+		if (u.Purpose == PurposeProfileBackground || u.Purpose == PurposeSticker) && det.Kind != KindVideo {
 			return postgres.Attachment{}, ErrUnsupported
 		}
 	}
+	animatedSticker := u.Purpose == PurposeSticker && AnimatedStickerSource(det)
+	if u.Purpose == PurposeSticker && !animatedSticker && (u.StartMS != nil || u.EndMS != nil || u.Crop != nil) {
+		return postgres.Attachment{}, fmt.Errorf("%w: start_ms, end_ms and crop are for stickers from a video or GIF", ErrInvalid)
+	}
 	limitOf := s.o.Limits.of(u.Purpose, det.Kind)
+	if animatedSticker {
+		limitOf = MaxAnimatedStickerSource
+	}
 	if isProfilePurpose(u.Purpose) {
 		limitOf = profileLimit(u.Purpose, det)
 	}
@@ -355,6 +366,15 @@ func (s *Service) upload(ctx context.Context, u Upload, tags *Tags) (postgres.At
 			return postgres.Attachment{}, err
 		}
 		body = tmp
+	case animatedSticker:
+		clip, err := s.processAnimatedSticker(ctx, tmp.Name(), u, vs)
+		if err != nil {
+			return postgres.Attachment{}, err
+		}
+		w, h, secs := int32(StickerSide), int32(StickerSide), clip.Duration.Seconds()
+		rec.Kind, rec.Width, rec.Height, rec.MimeType, rec.Size = KindImage, &w, &h, "image/webp", int64(len(clip.Data))
+		rec.Filename, rec.Duration = "sticker.webp", &secs
+		body = bytes.NewReader(clip.Data)
 	case u.Purpose == PurposeSticker:
 		img, err := s.processSticker(ctx, tmp, size, det.ContentType, vs)
 		if err != nil {

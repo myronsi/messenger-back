@@ -209,7 +209,7 @@ func (q *Queries) InsertBuiltinSticker(ctx context.Context, arg InsertBuiltinSti
 }
 
 const insertOwnedSticker = `-- name: InsertOwnedSticker :one
-INSERT INTO stickers (pack_id, attachment_id, emoji, position) VALUES ($1, $2, $3, $4)
+INSERT INTO stickers (pack_id, attachment_id, emoji, position, is_animated) VALUES ($1, $2, $3, $4, $5)
 RETURNING id
 `
 
@@ -218,6 +218,7 @@ type InsertOwnedStickerParams struct {
 	AttachmentID uuid.UUID
 	Emoji        string
 	Position     int32
+	IsAnimated   bool
 }
 
 func (q *Queries) InsertOwnedSticker(ctx context.Context, arg InsertOwnedStickerParams) (int64, error) {
@@ -226,6 +227,7 @@ func (q *Queries) InsertOwnedSticker(ctx context.Context, arg InsertOwnedSticker
 		arg.AttachmentID,
 		arg.Emoji,
 		arg.Position,
+		arg.IsAnimated,
 	)
 	var id int64
 	err := row.Scan(&id)
