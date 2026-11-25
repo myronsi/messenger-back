@@ -197,6 +197,19 @@ func (c *ChatServer) SetGroupAvatar(w http.ResponseWriter, r *http.Request, chat
 	c.writeGroup(w, r, http.StatusOK, g, err, "set group avatar")
 }
 
+func (c *ChatServer) DeleteGroupAvatar(w http.ResponseWriter, r *http.Request, chatID ChatId, _ DeleteGroupAvatarParams) {
+	p, ok := principalOr401(w, r)
+	if !ok {
+		return
+	}
+	id, ok := parseID(w, "chat_id", chatID)
+	if !ok || !c.changeAllowed(w, r, p.UserID) {
+		return
+	}
+	g, err := c.o.Service.RemoveGroupAvatar(r.Context(), p.UserID, id)
+	c.writeGroup(w, r, http.StatusOK, g, err, "remove group avatar")
+}
+
 // AddGroupParticipant implements POST /groups/{id}/participants.
 func (c *ChatServer) AddGroupParticipant(w http.ResponseWriter, r *http.Request, chatID ChatId, _ AddGroupParticipantParams) {
 	p, ok := principalOr401(w, r)

@@ -733,6 +733,14 @@ func (s *Server) SetGroupAvatar(w http.ResponseWriter, r *http.Request, chatID C
 	s.chats.SetGroupAvatar(w, r, chatID, params)
 }
 
+func (s *Server) DeleteGroupAvatar(w http.ResponseWriter, r *http.Request, chatID ChatId, params DeleteGroupAvatarParams) {
+	if s.chats == nil {
+		s.AuthServer.DeleteGroupAvatar(w, r, chatID, params)
+		return
+	}
+	s.chats.DeleteGroupAvatar(w, r, chatID, params)
+}
+
 func (s *Server) GetGroupRoleLog(w http.ResponseWriter, r *http.Request, chatID ChatId, params GetGroupRoleLogParams) {
 	if s.chats == nil {
 		s.AuthServer.GetGroupRoleLog(w, r, chatID, params)
