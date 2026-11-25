@@ -1020,3 +1020,27 @@ func (s *Server) GetStorageKey(w http.ResponseWriter, r *http.Request, params Ge
 	}
 	s.messages.GetStorageKey(w, r, params)
 }
+
+func (s *Server) VotePoll(w http.ResponseWriter, r *http.Request, chatID ChatId, messageID MessageId, params VotePollParams) {
+	if s.messages == nil {
+		s.AuthServer.VotePoll(w, r, chatID, messageID, params)
+		return
+	}
+	s.messages.VotePoll(w, r, chatID, messageID, params)
+}
+
+func (s *Server) ClosePoll(w http.ResponseWriter, r *http.Request, chatID ChatId, messageID MessageId, params ClosePollParams) {
+	if s.messages == nil {
+		s.AuthServer.ClosePoll(w, r, chatID, messageID, params)
+		return
+	}
+	s.messages.ClosePoll(w, r, chatID, messageID, params)
+}
+
+func (s *Server) ListPollVoters(w http.ResponseWriter, r *http.Request, chatID ChatId, messageID MessageId, params ListPollVotersParams) {
+	if s.messages == nil {
+		s.AuthServer.ListPollVoters(w, r, chatID, messageID, params)
+		return
+	}
+	s.messages.ListPollVoters(w, r, chatID, messageID, params)
+}

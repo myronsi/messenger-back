@@ -135,6 +135,10 @@ func serviceError(w http.ResponseWriter, r *http.Request, log *slog.Logger, what
 		WriteProblem(w, http.StatusNotFound, ErrorCodeNotFound)
 	case errors.Is(err, messages.ErrBlocked):
 		WriteProblem(w, http.StatusForbidden, ErrorCodeBlockedByUser)
+	case errors.Is(err, messages.ErrPollClosed):
+		WriteProblem(w, http.StatusConflict, ErrorCodePollClosed)
+	case errors.Is(err, messages.ErrQuizAnswered):
+		WriteProblem(w, http.StatusConflict, ErrorCodeQuizAnswered)
 	case errors.Is(err, messages.ErrForbidden):
 		var field *messages.FieldForbiddenError
 		if errors.As(err, &field) {
