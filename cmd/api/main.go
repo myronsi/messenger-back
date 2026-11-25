@@ -27,6 +27,7 @@ import (
 	"github.com/myronsi/messenger-back/internal/httpapi"
 	"github.com/myronsi/messenger-back/internal/internalapi"
 	"github.com/myronsi/messenger-back/internal/linkpreview"
+	"github.com/myronsi/messenger-back/internal/maps"
 	"github.com/myronsi/messenger-back/internal/media"
 	"github.com/myronsi/messenger-back/internal/moderation"
 	"github.com/myronsi/messenger-back/internal/notifications"
@@ -252,7 +253,10 @@ func run() error {
 				},
 			}),
 			Limiter: rt.limiter, BasePath: cfg.HTTP.BasePath, Log: log,
-		})).WithStickers(httpapi.NewStickerServer(httpapi.StickerOptions{
+		})).WithMaps(httpapi.NewMapServer(maps.New(maps.Options{
+			TileURL: cfg.Maps.TileURL, UserAgent: mapUserAgent(cfg), Referer: cfg.HTTP.PublicWebOrigin,
+			Key: maps.DeriveKey(cfg.JWTSecret.Reveal()), Store: storage,
+		}), rt.limiter, log)).WithStickers(httpapi.NewStickerServer(httpapi.StickerOptions{
 			Service: stickers.New(pg.Stickers()), BasePath: cfg.HTTP.BasePath, Log: log,
 		})).WithEmoji(httpapi.NewEmojiServer(httpapi.EmojiOptions{
 			Service: emoji.New(pg), Images: mediaSvc, BasePath: cfg.HTTP.BasePath, Log: log,
@@ -334,4 +338,15 @@ func loopbackListener(addr string) bool {
 	}
 	ip, err := netip.ParseAddr(host)
 	return err == nil && ip.IsLoopback()
+}
+
+func mapUserAgent(cfg config.Config) string {
+	if cfg.Maps.UserAgent != "" {
+		return cfg.Maps.UserAgent
+	}
+	ua := "MessengerMaps/" + version.Backend
+	if cfg.HTTP.PublicWebOrigin != "" {
+		ua += " (+" + cfg.HTTP.PublicWebOrigin + ")"
+	}
+	return ua
 }

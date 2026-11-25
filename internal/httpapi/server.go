@@ -18,6 +18,7 @@ type Server struct {
 	chats         *ChatServer
 	messages      *MessageServer
 	linkPreviews  *LinkPreviewServer
+	maps          *MapServer
 	meta          MetaInfo
 	notifications *NotificationOptions
 	calls         *CallServer
@@ -34,6 +35,24 @@ func (s *Server) WithMessages(m *MessageServer) *Server { s.messages = m; return
 func (s *Server) WithLinkPreviews(l *LinkPreviewServer) *Server { s.linkPreviews = l; return s }
 
 func (s *Server) WithStickers(st *StickerServer) *Server { s.stickers = st; return s }
+
+func (s *Server) WithMaps(m *MapServer) *Server { s.maps = m; return s }
+
+func (s *Server) GetMapTile(w http.ResponseWriter, r *http.Request, z, x, y int, params GetMapTileParams) {
+	if s.maps == nil {
+		s.AuthServer.GetMapTile(w, r, z, x, y, params)
+		return
+	}
+	s.maps.GetMapTile(w, r, z, x, y, params)
+}
+
+func (s *Server) GetStaticMap(w http.ResponseWriter, r *http.Request, params GetStaticMapParams) {
+	if s.maps == nil {
+		s.AuthServer.GetStaticMap(w, r, params)
+		return
+	}
+	s.maps.GetStaticMap(w, r, params)
+}
 
 func (s *Server) WithEmoji(e *EmojiServer) *Server { s.emoji = e; return s }
 

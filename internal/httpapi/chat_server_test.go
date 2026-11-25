@@ -24,6 +24,7 @@ import (
 	"github.com/myronsi/messenger-back/internal/events"
 	"github.com/myronsi/messenger-back/internal/ids"
 	"github.com/myronsi/messenger-back/internal/linkpreview"
+	"github.com/myronsi/messenger-back/internal/maps"
 	"github.com/myronsi/messenger-back/internal/messages"
 	"github.com/myronsi/messenger-back/internal/moderation"
 	"github.com/myronsi/messenger-back/internal/notifications"
@@ -202,10 +203,11 @@ func newChatEnvWith(t *testing.T, withSearch bool) *chatEnv {
 		if err := index.Ensure(context.Background()); err != nil {
 			t.Fatal(err)
 		}
-		deps.Events = indexLog{search.NewIndexer(index, repo, store.Attachments(), nil)}
+		deps.Events = indexLog{search.NewIndexer(index, repo, store.Attachments(), nil).WithPolls(store.Polls())}
 	}
-	msgs := messages.New(deps)
 	dir := users.NewDirectory(store, nil, apiBase).WithLabels(modSvc)
+	deps.Directory, deps.Maps = dir, maps.NewSigner(maps.DeriveKey("test"))
+	msgs := messages.New(deps)
 	ev := &chatEvents{created: map[int64][]int64{}, updated: map[int64][]int64{}, removed: map[int64][]int64{},
 		groupCreated: map[int64][]int64{}, groupUpdates: map[int64]int{}, updatedViews: map[int64]chats.View{}}
 	tokens := notifications.NewActionTokens("test-secret")

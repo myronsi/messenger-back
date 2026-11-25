@@ -74,10 +74,16 @@ type Config struct {
 	Inactive      InactiveAccounts
 	Connections   Connections
 	Internal      Internal
+	Maps          Maps
 	GeoIPDBPath   string `env:"GEOIP_DB_PATH"`
 
 	// WorkerAddr is where the worker serves /healthz and /metrics.
 	WorkerAddr string `env:"WORKER_ADDR" envDefault:":8081"`
+}
+
+type Maps struct {
+	TileURL   string `env:"MAP_TILE_URL" envDefault:"https://tile.openstreetmap.org/{z}/{x}/{y}.png"`
+	UserAgent string `env:"MAP_TILE_USER_AGENT"`
 }
 
 // Postgres tunes the connection pool; the connection URL is DATABASE_URL.
