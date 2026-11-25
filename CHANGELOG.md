@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.35.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.34.1-alpha.1...v1.35.0-alpha.1) (2026-11-24)
+
+
+### Features
+
+* **deploy:** optional Prometheus, node-exporter and Grafana with a Messenger dashboard ([#243](https://github.com/myronsi/messenger-back/issues/243)) ([18c8e30](https://github.com/myronsi/messenger-back/commit/18c8e3068587e77a0cb05c00cceaa8b0082c1801))
+* **observability:** metrics for WebSocket events, fan-out, store operations, the pool and streams ([#242](https://github.com/myronsi/messenger-back/issues/242)) ([4756b96](https://github.com/myronsi/messenger-back/commit/4756b96eb6adfc53c34d8f05c631d072354d641f))
+
 ## [1.34.1-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.34.0-alpha.1...v1.34.1-alpha.1) (2026-11-24)
 
 
