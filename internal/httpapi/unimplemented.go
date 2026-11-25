@@ -711,3 +711,21 @@ func (Unimplemented) ListSyncChanges(w http.ResponseWriter, r *http.Request, _ L
 func (Unimplemented) GetStorageKey(w http.ResponseWriter, r *http.Request, _ GetStorageKeyParams) {
 	notImplemented(w, r)
 }
+func (Unimplemented) VotePoll(w http.ResponseWriter, r *http.Request, _ ChatId, _ MessageId, _ VotePollParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) ClosePoll(w http.ResponseWriter, r *http.Request, _ ChatId, _ MessageId, _ ClosePollParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) ListPollVoters(w http.ResponseWriter, r *http.Request, _ ChatId, _ MessageId, _ ListPollVotersParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) DeleteGroupAvatar(w http.ResponseWriter, r *http.Request, _ ChatId, _ DeleteGroupAvatarParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) GetMapTile(w http.ResponseWriter, r *http.Request, _ int, _ int, _ int, _ GetMapTileParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) GetStaticMap(w http.ResponseWriter, r *http.Request, _ GetStaticMapParams) {
+	notImplemented(w, r)
+}

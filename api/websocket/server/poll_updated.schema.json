@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ServerPollUpdatedEvent",
+  "description": "Someone voted, changed or took back a vote, or the poll closed. Goes to every member of the chat, each with the poll as they see it (results only after they voted, for the creator, or once closed). Replace Message.poll when version is higher than the one you have.",
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "poll_updated"
+    },
+    "event_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "chat_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "message_id": {
+          "$ref": "../../openapi.yaml#/components/schemas/Id"
+        },
+        "poll": {
+          "$ref": "../../openapi.yaml#/components/schemas/Poll"
+        }
+      },
+      "required": [
+        "message_id",
+        "poll"
+      ]
+    }
+  },
+  "required": [
+    "type",
+    "event_id",
+    "chat_id",
+    "data"
+  ]
+}

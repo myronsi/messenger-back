@@ -46,6 +46,9 @@
       "$ref": "server/pin_update.schema.json"
     },
     {
+      "$ref": "server/poll_updated.schema.json"
+    },
+    {
       "$ref": "server/user_updated.schema.json"
     },
     {
