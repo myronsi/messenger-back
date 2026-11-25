@@ -130,9 +130,9 @@ WebSocket, with the same rules as the WebSocket events:
   `404`). `next_cursor` continues in the direction of the request (older for the newest page, `before` and
   `around`; newer for `after`), `prev_cursor` the other way. A cursor is `null` when the store knows nothing is left
   in that direction; the way back (`prev_cursor` of a `before` or `after` page) is always set, and may lead to an
-  empty page. Each message carries its reactions; in a direct chat, `read_by` holds the other user once their read
-  marker reached it, if they share read receipts and did not block the caller. Groups carry no `read_by`: their
-  member lists can be long, and every page would read all of them.
+  empty page. Each message carries its reactions, and `read_by` holds the other members (direct chats and groups)
+  whose read marker reached it, except its sender, if they share read receipts and did not block the caller. Only
+  members whose marker reached the oldest message of the page are looked up.
 - `POST /chats/{id}/messages` is the `message` event: `201` for a new message, `200` with the stored message when the
   `client_temp_id` was used before. It shares the rate limit of WebSocket sends.
 - `PATCH /messages/{id}` (the sender's own text messages, not forwarded copies, which show someone else's words) and
