@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.45
+  version: 2.1.0-alpha.46
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -62,6 +62,8 @@ tags:
     description: Approval requests (direct messages and group invites)
   - name: websocket
     description: Realtime connection (see `websocket.md`)
+  - name: imports
+    description: Chat histories imported from other messengers
   - name: calls
     description: Audio calls (see `docs/calls.md` and `docs/calls-e2ee.md`)
   - name: public
@@ -2354,6 +2356,213 @@ paths:
               schema: { $ref: "#/components/schemas/PinnedMessagePage" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+  /chats/{chat_id}/imports:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ChatId"
+    get:
+      tags: [imports]
+      operationId: listChatImports
+      summary: The imported histories of a chat
+      description: |
+        Imports that are running or done, oldest period first. A sender the importer assigned to a member is
+        `pending` or `declined` only for the importer and that member; everyone else sees it as `unassigned`
+        without `user_id` until the member confirms.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "200":
+          description: The imports
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChatImportList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [imports]
+      operationId: startChatImport
+      summary: Start importing a history from another messenger
+      description: |
+        The client parses the export (Telegram Desktop JSON or a WhatsApp chat export) on the device, uploads the
+        files with `POST /attachments`, then sends the messages in order with `PUT /imports/{import_id}/messages`
+        and ends with `POST /imports/{import_id}/finish`.
+
+        In a direct chat either user may import, not in a chat in the Requests folder or with a block (`403`). In a
+        group only an admin or the owner may (`403`). One import per chat runs at a time (`409`). The messages are
+        placed above the oldest message of the chat, in their original order; a second import goes next to the
+        imports whose periods it follows, and an import whose period overlaps an existing one is `409`.
+
+        `senders` lists every name of the export. `me: true` marks the caller's own messages. `user_id` suggests a
+        member of the chat for a name; that member confirms it after the import is finished. Every other name is
+        shown as text.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StartChatImportRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "201":
+          description: The import, running
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChatImport" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+  /imports/{import_id}:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ImportId"
+    get:
+      tags: [imports]
+      operationId: getChatImport
+      summary: One import, for resuming it or showing its senders
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "200":
+          description: The import
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChatImport" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [imports]
+      operationId: removeChatImport
+      summary: Remove an imported history
+      description: |
+        The importer, or the owner of a group, removes every message of the import for everyone. The messages
+        disappear at once (`import_update` with state `removing`); the worker deletes them afterwards.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "202":
+          description: Removing
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /imports/{import_id}/messages:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ImportId"
+    put:
+      tags: [imports]
+      operationId: addImportedMessages
+      summary: Add the next batch of messages to a running import
+      description: |
+        Only the importer. `from_index` must be the import's `next_index`; a batch that was stored already answers
+        with the current `next_index`, so a retry after a lost answer is safe. Another `from_index` is `409`.
+        Attachments must be the importer's own uploads. Imported messages send no push and count as read.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AddImportedMessagesRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Stored
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImportProgress" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+  /imports/{import_id}/finish:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ImportId"
+    post:
+      tags: [imports]
+      operationId: finishChatImport
+      summary: Finish an import once every message is stored
+      description: |
+        Only the importer, once `next_index` equals `message_count` (`422` before). Adds the closing system
+        message, tells every member to load the chat again (`import_update`, sync change `history_imported`) and
+        asks each assigned member to confirm their messages (`import_sender_update`).
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "200":
+          description: The finished import
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChatImport" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+  /imports/{import_id}/senders/{sender_key}:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ImportId"
+      - $ref: "#/components/parameters/ImportSenderKey"
+    put:
+      tags: [imports]
+      operationId: assignImportSender
+      summary: Suggest a member for a name of the export, or take the suggestion back
+      description: |
+        Only the importer. `user_id` must be another member of the chat; `null` makes the name text again. A name
+        that is `me` or `confirmed` cannot be reassigned, and a member who declined or withdrew a name cannot be
+        suggested for it again (`409`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AssignImportSenderRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: The sender
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChatImportSender" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+  /imports/{import_id}/senders/{sender_key}/decision:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ImportId"
+      - $ref: "#/components/parameters/ImportSenderKey"
+    post:
+      tags: [imports]
+      operationId: decideImportSender
+      summary: Confirm or decline that a name of the export is you, or withdraw a confirmation
+      description: |
+        Only the member the importer suggested, once the import is finished. `confirm` links the messages of the
+        name to the caller's account for everyone; `decline` keeps them as text; `withdraw` turns a confirmed name
+        back into text. After `decline` or `withdraw` the importer cannot suggest the caller for that name again.
+        `404` when the caller is not the suggested member or the name is not in the matching state.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DecideImportSenderRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: The sender
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChatImportSender" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
   /chats/{chat_id}/messages/forward:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
@@ -6078,6 +6287,16 @@ components:
       in: path
       required: true
       schema: { $ref: "#/components/schemas/Id" }
+    ImportId:
+      name: import_id
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/Id" }
+    ImportSenderKey:
+      name: sender_key
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/ImportSenderKey" }
     UserId:
       name: user_id
       in: path
@@ -7770,10 +7989,11 @@ components:
         message and its `scope`. `pins_changed`: load the pins of the chat again. `history_cleared`: drop the
         messages up to and including `before_message_id` (`scope` says for whom). `chat_hidden`: the caller
         deleted the chat for themselves up to `before_message_id`.
+        `history_imported`: an imported history was added, removed or a sender confirmed; load the chat again.
       properties:
         type:
           type: string
-          enum: [message_updated, message_deleted, pins_changed, history_cleared, chat_hidden]
+          enum: [message_updated, message_deleted, pins_changed, history_cleared, chat_hidden, history_imported]
         chat_id: { $ref: "#/components/schemas/Id" }
         message_id: { $ref: "#/components/schemas/Id" }
         scope:
@@ -7852,12 +8072,16 @@ components:
         read_by:
           type: array
           items: { $ref: "#/components/schemas/ReadReceipt" }
-        created_at: { $ref: "#/components/schemas/Timestamp" }
+        created_at: 
+          description: When the message was sent; for an imported message, when it was sent in the other messenger.
+          allOf: [{ $ref: "#/components/schemas/Timestamp" }]
         edited_at:
           oneOf:
             - $ref: "#/components/schemas/Timestamp"
             - type: "null"
         is_deleted: { type: boolean }
+        import:
+          $ref: "#/components/schemas/MessageImport"
         removed_by_moderation:
           type: boolean
           description: |
@@ -7905,7 +8129,7 @@ components:
         height: { type: [integer, "null"], minimum: 1 }
     SystemEventKind:
       type: string
-      enum: [group_created, member_added, member_joined, member_removed, member_left, call, message_pinned, message_unpinned]
+      enum: [group_created, member_added, member_joined, member_removed, member_left, call, message_pinned, message_unpinned, history_imported, history_import_ended, imported_note]
     SystemEvent:
       type: object
       description: |
@@ -7913,6 +8137,8 @@ components:
         are the display names at the time of the event. `target` fields are set for `member_added` and
         `member_removed`. `call` is set for `call` messages: one per call, posted when the call ends, `actor` is the
         initiator. `message_id` and `snippet` are set for `message_pinned` and `message_unpinned`.
+        `history_imported` opens and `history_import_ended` closes an imported history; both carry `import`, and
+        `actor` is the importer. `imported_note` is a line of the export that is not a message; its text is `text`.
       required: [kind, actor_id, actor_name]
       properties:
         kind: { $ref: "#/components/schemas/SystemEventKind" }
@@ -7934,6 +8160,11 @@ components:
             Start of the pinned message's text at the time of the event (at most 60 characters plus `…`); empty for a
             message without text, which clients name by its `message_type`.
         message_type: { $ref: "#/components/schemas/MessageType" }
+        import: { $ref: "#/components/schemas/ImportSummary" }
+        text:
+          type: string
+          maxLength: 4096
+          description: The line of the export, for `imported_note`.
     MessagePage:
       type: object
       required: [items, next_cursor, prev_cursor]
@@ -8295,6 +8526,188 @@ components:
           description: Newest pin first
           items: { $ref: "#/components/schemas/PinnedMessage" }
         next_cursor: { $ref: "#/components/schemas/Cursor" }
+    ImportSource:
+      type: string
+      enum: [telegram, whatsapp]
+    ChatImportState:
+      type: string
+      description: "`running`: messages are being added. `done`: finished. `removing`: being removed."
+      enum: [running, done, removing]
+    ImportSenderKey:
+      type: string
+      description: The client's key for one name of the export.
+      pattern: "^[A-Za-z0-9_-]{1,64}$"
+    ImportSenderState:
+      type: string
+      description: |
+        `me`: the importer's own messages. `unassigned`: shown as text. `pending`: suggested for `user_id`, who has
+        not answered. `confirmed`: `user_id` confirmed; the messages show their account. `declined`: the suggested
+        member said no; shown as text.
+      enum: [me, unassigned, pending, confirmed, declined]
+    ChatImportSender:
+      type: object
+      required: [key, name, message_count, state, user_id]
+      properties:
+        key: { $ref: "#/components/schemas/ImportSenderKey" }
+        name: { type: string, minLength: 1, maxLength: 128 }
+        message_count: { type: integer, minimum: 0 }
+        state: { $ref: "#/components/schemas/ImportSenderState" }
+        user_id:
+          oneOf:
+            - $ref: "#/components/schemas/Id"
+            - type: "null"
+    ChatImport:
+      type: object
+      required: [id, chat_id, source, state, message_count, file_count, first_at, last_at, next_index, imported_by, created_at, finished_at, senders]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        chat_id: { $ref: "#/components/schemas/Id" }
+        source: { $ref: "#/components/schemas/ImportSource" }
+        state: { $ref: "#/components/schemas/ChatImportState" }
+        message_count: { type: integer, minimum: 1, maximum: 100000 }
+        file_count: { type: integer, minimum: 0, maximum: 5000 }
+        first_at: { $ref: "#/components/schemas/Timestamp" }
+        last_at: { $ref: "#/components/schemas/Timestamp" }
+        next_index:
+          type: integer
+          minimum: 0
+          description: How many messages are stored; the `from_index` of the next batch.
+        imported_by:
+          oneOf:
+            - $ref: "#/components/schemas/Id"
+            - type: "null"
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        finished_at:
+          oneOf:
+            - $ref: "#/components/schemas/Timestamp"
+            - type: "null"
+        senders:
+          type: array
+          items: { $ref: "#/components/schemas/ChatImportSender" }
+    ChatImportList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/ChatImport" }
+    StartChatImportSender:
+      type: object
+      required: [key, name, message_count]
+      properties:
+        key: { $ref: "#/components/schemas/ImportSenderKey" }
+        name: { type: string, minLength: 1, maxLength: 128 }
+        message_count: { type: integer, minimum: 0 }
+        me:
+          type: boolean
+          description: The caller's own messages; at most one sender.
+        user_id:
+          description: A member of the chat suggested for this name; not with `me`.
+          allOf: [{ $ref: "#/components/schemas/Id" }]
+    StartChatImportRequest:
+      type: object
+      required: [source, message_count, file_count, first_at, last_at, senders]
+      properties:
+        source: { $ref: "#/components/schemas/ImportSource" }
+        message_count: { type: integer, minimum: 1, maximum: 100000 }
+        file_count: { type: integer, minimum: 0, maximum: 5000 }
+        first_at: { $ref: "#/components/schemas/Timestamp" }
+        last_at: { $ref: "#/components/schemas/Timestamp" }
+        senders:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items: { $ref: "#/components/schemas/StartChatImportSender" }
+    ImportedMessageType:
+      type: string
+      description: "`note`: a line of the export that is not a message (for example that someone joined), shown as a system message."
+      enum: [text, file, voice, note]
+    ImportedMessage:
+      type: object
+      required: [index, original_at, type]
+      properties:
+        index:
+          type: integer
+          minimum: 0
+          description: Position in the import, counting from 0 without gaps.
+        sender_key:
+          description: Required except for `note`.
+          allOf: [{ $ref: "#/components/schemas/ImportSenderKey" }]
+        original_at:
+          description: When the message was sent in the other messenger; between the import's `first_at` and `last_at`.
+          allOf: [{ $ref: "#/components/schemas/Timestamp" }]
+        type: { $ref: "#/components/schemas/ImportedMessageType" }
+        content:
+          type: [string, "null"]
+          maxLength: 4096
+        attachment_ids:
+          type: array
+          description: The importer's uploads; two to ten images or videos make an album.
+          minItems: 1
+          maxItems: 10
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/AttachmentRef" }
+        reply_to_index:
+          type: integer
+          minimum: 0
+          description: "`index` of an earlier message of the import that this one answers."
+    AddImportedMessagesRequest:
+      type: object
+      required: [from_index, messages]
+      properties:
+        from_index: { type: integer, minimum: 0 }
+        messages:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items: { $ref: "#/components/schemas/ImportedMessage" }
+    ImportProgress:
+      type: object
+      required: [next_index]
+      properties:
+        next_index: { type: integer, minimum: 0 }
+    AssignImportSenderRequest:
+      type: object
+      required: [user_id]
+      properties:
+        user_id:
+          oneOf:
+            - $ref: "#/components/schemas/Id"
+            - type: "null"
+    DecideImportSenderRequest:
+      type: object
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [confirm, decline, withdraw]
+    MessageImport:
+      type: object
+      description: Set on messages that came from an import.
+      required: [import_id, source, original_at]
+      properties:
+        import_id: { $ref: "#/components/schemas/Id" }
+        source: { $ref: "#/components/schemas/ImportSource" }
+        original_at: { $ref: "#/components/schemas/Timestamp" }
+        sender_name:
+          type: string
+          description: The name in the export; absent on system messages.
+        sender_state:
+          type: string
+          description: |
+            `me`: the importer's own message, `sender` is the importer. `confirmed`: the member confirmed the name,
+            `sender` is that member. `unconfirmed`: `sender` is `null`; show `sender_name` as text. Absent on system
+            messages.
+          enum: [me, confirmed, unconfirmed]
+    ImportSummary:
+      type: object
+      required: [import_id, source, message_count, first_at, last_at]
+      properties:
+        import_id: { $ref: "#/components/schemas/Id" }
+        source: { $ref: "#/components/schemas/ImportSource" }
+        message_count: { type: integer, minimum: 1 }
+        first_at: { $ref: "#/components/schemas/Timestamp" }
+        last_at: { $ref: "#/components/schemas/Timestamp" }
     CreateChatRequest:
       type: object
       required: [user_id]

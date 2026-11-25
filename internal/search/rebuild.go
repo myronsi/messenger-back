@@ -173,3 +173,47 @@ func cursor(sort []any) string {
 	mid, _ := sort[1].(string)
 	return strconv.FormatInt(int64(ms), 10) + "_" + mid
 }
+
+func (in *Indexer) indexRange(ctx context.Context, index string, chatID, from, to int64) error {
+	if chatID == 0 || from == 0 || to < from {
+		return nil
+	}
+	hidden, err := in.msgs.DeletedForMe(ctx, chatID)
+	if err != nil {
+		return err
+	}
+	q := scylla.PageQuery{ChatID: chatID, After: from - 1, Limit: pageSize}
+	for {
+		page, err := in.msgs.Page(ctx, q)
+		if err != nil {
+			return err
+		}
+		var (
+			docs    []Doc
+			deletes []string
+			past    bool
+		)
+		for _, m := range page.Messages {
+			if m.ID > to {
+				past = true
+				break
+			}
+			if !indexable(m) {
+				deletes = append(deletes, id(m.ID))
+				continue
+			}
+			d := in.doc(ctx, m)
+			for _, uid := range hidden[m.ID] {
+				d.HiddenFor = append(d.HiddenFor, id(uid))
+			}
+			docs = append(docs, d)
+		}
+		if err := in.bulk(ctx, index, docs, deletes); err != nil {
+			return err
+		}
+		if past || !page.HasNewer || len(page.Messages) == 0 {
+			return nil
+		}
+		q.After = page.Messages[len(page.Messages)-1].ID
+	}
+}

@@ -2,6 +2,24 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.46
+
+- Chat import from Telegram and WhatsApp: `GET`/`POST /chats/{chat_id}/imports` (`listChatImports`,
+  `startChatImport`), `GET`/`DELETE /imports/{import_id}` (`getChatImport`, `removeChatImport`),
+  `PUT /imports/{import_id}/messages` (`addImportedMessages`), `POST /imports/{import_id}/finish`
+  (`finishChatImport`), `PUT /imports/{import_id}/senders/{sender_key}` (`assignImportSender`) and
+  `POST /imports/{import_id}/senders/{sender_key}/decision` (`decideImportSender`). New schemas `ChatImport`,
+  `ChatImportList`, `ChatImportSender`, `ChatImportState`, `ImportSource`, `ImportSenderKey`, `ImportSenderState`,
+  `StartChatImportRequest`, `StartChatImportSender`, `ImportedMessage`, `ImportedMessageType`,
+  `AddImportedMessagesRequest`, `ImportProgress`, `AssignImportSenderRequest`, `DecideImportSenderRequest`,
+  `MessageImport` and `ImportSummary`; new path parameters `ImportId` and `ImportSenderKey`.
+- `Message` gains `import`; for imported messages `created_at` is the time in the other messenger, and `sender` is
+  `null` until the member behind the name confirms it.
+- `SystemEventKind` gains `history_imported`, `history_import_ended` and `imported_note`; `SystemEvent` gains
+  `import` and `text`.
+- `SyncChange.type` gains `history_imported`.
+- WebSocket server events `import_update` and `import_sender_update`.
+
 ## 2.1.0-alpha.45
 
 - `GET /search/messages` gains the query parameter `kind` (`MediaKind`: `image`, `visual`, `audio`, `voice`, `file`,

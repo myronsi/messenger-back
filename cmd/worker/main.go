@@ -16,6 +16,7 @@ import (
 	"github.com/myronsi/messenger-back/internal/inactive"
 	"github.com/myronsi/messenger-back/internal/jobs"
 	"github.com/myronsi/messenger-back/internal/media"
+	"github.com/myronsi/messenger-back/internal/messages"
 	"github.com/myronsi/messenger-back/internal/moderation"
 	"github.com/myronsi/messenger-back/internal/notifications"
 	"github.com/myronsi/messenger-back/internal/observability"
@@ -59,7 +60,8 @@ func run() error {
 		return err
 	}
 	defer es.Close()
-	msgs := scylla.NewMessages(sc, cfg.Scylla.Timeout)
+	rawMsgs := scylla.NewMessages(sc, cfg.Scylla.Timeout)
+	msgs := messages.NewImportResolver(rawMsgs, pg.Imports())
 	index := search.NewIndex(es, cfg.Search.Alias, cfg.Search.Replicas)
 	indexer := search.NewIndexer(index, msgs, pg.Attachments(), log).WithDeletions(pg.Chats())
 	if len(os.Args) > 1 && os.Args[1] == "reindex" {
@@ -174,7 +176,12 @@ func run() error {
 	}
 	if err := start(redis.ConsumerOptions{
 		Stream: redis.StreamChats, Group: jobs.GroupChatCleanup,
-		Handler: jobs.ChatCleanup(msgs, redis.NewUnread(rd.Client(), ""), pg.Chats(), pg.Attachments(), scylla.DeleteGracePeriod, log),
+		Handler: jobs.ChatCleanup(rawMsgs, redis.NewUnread(rd.Client(), ""), pg.Chats(), pg.Attachments(), scylla.DeleteGracePeriod, log),
+	}); err != nil {
+		return err
+	}
+	if err := start(redis.ConsumerOptions{
+		Stream: redis.StreamChats, Group: jobs.GroupImportCleanup, Handler: jobs.ImportCleanup(rawMsgs, pg.Imports(), log),
 	}); err != nil {
 		return err
 	}

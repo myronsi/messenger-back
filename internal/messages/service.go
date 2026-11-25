@@ -91,6 +91,7 @@ type Store interface {
 	Unsent() postgres.UnsentRepository
 	Sharing() postgres.SharingRepository
 	MessagePins() postgres.MessagePinRepository
+	Imports() postgres.ImportRepository
 }
 
 // Deps are the collaborators of the service.
@@ -113,6 +114,7 @@ type Deps struct {
 	Emoji      EmojiFilter
 	Moderation Moderation
 	Counter    Counter
+	Imports    ImportStore
 	Log        *slog.Logger
 }
 
@@ -756,7 +758,7 @@ func (s *Service) Edit(ctx context.Context, userID, chatID, messageID int64, con
 	}
 	// A forwarded copy shows someone else's words: editing it would put new words in their mouth.
 	// A file keeps its attachment; only its caption changes.
-	if m.SenderID == nil || *m.SenderID != userID || (m.Type != scylla.TypeText && m.Type != scylla.TypeFile) || m.Forwarded != nil {
+	if m.SenderID == nil || *m.SenderID != userID || (m.Type != scylla.TypeText && m.Type != scylla.TypeFile) || m.Forwarded != nil || m.Import != nil {
 		return scylla.Message{}, ErrForbidden
 	}
 	if empty && m.Type != scylla.TypeFile {
@@ -829,7 +831,7 @@ func (s *Service) Delete(ctx context.Context, userID, chatID, messageID int64, s
 	if err != nil {
 		return err
 	}
-	if scope == ScopeEveryone && (m.SenderID == nil || *m.SenderID != userID) {
+	if scope == ScopeEveryone && !deletesOwn(m, userID) {
 		if err := s.requireMayDeleteOthers(ctx, chatID, userID); err != nil {
 			return err
 		}
@@ -865,7 +867,7 @@ func (s *Service) DeleteMany(ctx context.Context, userID, chatID int64, messageI
 			}
 			done[messageID] = m.Deleted
 		}
-		if scope == ScopeEveryone && !othersChecked && (m.SenderID == nil || *m.SenderID != userID) {
+		if scope == ScopeEveryone && !othersChecked && !deletesOwn(m, userID) {
 			if err := s.requireMayDeleteOthers(ctx, chatID, userID); err != nil {
 				return err
 			}
