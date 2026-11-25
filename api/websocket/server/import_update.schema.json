@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ServerImportUpdateEvent",
+  "description": "An imported history of the chat started, finished or is being removed; goes to every member. On done and removing, load the chat's history again; GET /chats/{chat_id}/imports lists the imports.",
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "import_update"
+    },
+    "event_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "chat_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "import_id": {
+          "$ref": "../../openapi.yaml#/components/schemas/Id"
+        },
+        "state": {
+          "$ref": "../../openapi.yaml#/components/schemas/ChatImportState"
+        }
+      },
+      "required": [
+        "import_id",
+        "state"
+      ]
+    }
+  },
+  "required": [
+    "type",
+    "event_id",
+    "chat_id",
+    "data"
+  ]
+}

@@ -591,3 +591,15 @@ func (f *Fanout) sticker(ctx context.Context, m scylla.Message) *postgres.Sticke
 	}
 	return nil
 }
+
+func (f *Fanout) ImportChanged(ctx context.Context, c messages.ImportChange, recipients []int64) {
+	f.same(ctx, "import_update", c.ChatID, map[string]any{"import_id": idString(c.ImportID), "state": c.State}, recipients)
+}
+
+func (f *Fanout) ImportSenderChanged(ctx context.Context, c messages.ImportSenderChange, recipients []int64) {
+	sender := map[string]any{"key": c.Sender.Key, "name": c.Sender.Name, "message_count": c.Sender.MessageCount, "state": c.Sender.State}
+	if c.Sender.AssignedUserID != nil {
+		sender["user_id"] = idString(*c.Sender.AssignedUserID)
+	}
+	f.same(ctx, "import_sender_update", c.ChatID, map[string]any{"import_id": idString(c.ImportID), "sender": sender}, recipients)
+}

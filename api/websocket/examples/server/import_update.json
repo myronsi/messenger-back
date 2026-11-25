@@ -1,0 +1,9 @@
+{
+  "type": "import_update",
+  "event_id": "7217400317439950013",
+  "chat_id": "42",
+  "data": {
+    "import_id": "3",
+    "state": "done"
+  }
+}

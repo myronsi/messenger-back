@@ -75,15 +75,17 @@ func (m *MessageServer) presentChanges(r *http.Request, viewer int64, entries []
 			if err != nil {
 				return nil, err
 			}
-			c.Type, c.Message = MessageUpdated, &rendered[0]
+			c.Type, c.Message = SyncChangeTypeMessageUpdated, &rendered[0]
 		case postgres.SyncMessageDeleted:
-			c.Type, c.MessageId = MessageDeleted, formatIDPtr(&e.MessageID)
+			c.Type, c.MessageId = SyncChangeTypeMessageDeleted, formatIDPtr(&e.MessageID)
 		case postgres.SyncPins:
-			c.Type = PinsChanged
+			c.Type = SyncChangeTypePinsChanged
 		case postgres.SyncHistoryCleared:
-			c.Type, c.BeforeMessageId = HistoryCleared, formatIDPtr(&e.MessageID)
+			c.Type, c.BeforeMessageId = SyncChangeTypeHistoryCleared, formatIDPtr(&e.MessageID)
 		case postgres.SyncChatHidden:
-			c.Type, c.BeforeMessageId = ChatHidden, formatIDPtr(&e.MessageID)
+			c.Type, c.BeforeMessageId = SyncChangeTypeChatHidden, formatIDPtr(&e.MessageID)
+		case postgres.SyncHistoryImported:
+			c.Type = SyncChangeTypeHistoryImported
 		default:
 			continue
 		}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/myronsi/messenger-back/internal/events"
 	"github.com/myronsi/messenger-back/internal/ids"
@@ -20,15 +21,30 @@ const (
 )
 
 type SystemEvent struct {
-	Kind        string       `json:"kind"`
-	ActorID     *int64       `json:"actor_id,omitempty"`
-	ActorName   string       `json:"actor_name,omitempty"`
-	TargetID    *int64       `json:"target_id,omitempty"`
-	TargetName  string       `json:"target_name,omitempty"`
-	Call        *CallSummary `json:"call,omitempty"`
-	MessageID   *int64       `json:"message_id,omitempty"`
-	Snippet     string       `json:"snippet,omitempty"`
-	MessageType string       `json:"message_type,omitempty"`
+	Kind        string         `json:"kind"`
+	ActorID     *int64         `json:"actor_id,omitempty"`
+	ActorName   string         `json:"actor_name,omitempty"`
+	TargetID    *int64         `json:"target_id,omitempty"`
+	TargetName  string         `json:"target_name,omitempty"`
+	Call        *CallSummary   `json:"call,omitempty"`
+	MessageID   *int64         `json:"message_id,omitempty"`
+	Snippet     string         `json:"snippet,omitempty"`
+	MessageType string         `json:"message_type,omitempty"`
+	Import      *ImportSummary `json:"import,omitempty"`
+	Text        string         `json:"text,omitempty"`
+}
+
+type ImportSummary struct {
+	ImportID     int64     `json:"import_id,string"`
+	Source       string    `json:"source"`
+	MessageCount int       `json:"message_count"`
+	FirstAt      time.Time `json:"first_at"`
+	LastAt       time.Time `json:"last_at"`
+}
+
+func jsonSystemEvent(e SystemEvent) (string, error) {
+	body, err := json.Marshal(e)
+	return string(body), err
 }
 
 type CallSummary struct {

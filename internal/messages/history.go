@@ -260,6 +260,9 @@ func (s *Service) forwardSources(ctx context.Context, userID, chatID int64, mess
 			if err != nil {
 				return nil, err
 			}
+			if src.SenderID == nil && src.Import != nil {
+				name = src.Import.SenderName
+			}
 			origin = &scylla.Forwarded{MessageID: src.ID, SenderID: src.SenderID, SenderName: name}
 		}
 		out = append(out, forwardSource{src, origin})
