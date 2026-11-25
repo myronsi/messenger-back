@@ -1,6 +1,7 @@
 package chats
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -478,10 +479,23 @@ func (s *Service) UpdateGroup(ctx context.Context, userID, chatID int64, name *s
 	if name == nil && !setDescription {
 		return GroupView{}, fmt.Errorf("%w: send name or description", ErrInvalid)
 	}
+	oldName := ""
+	if name != nil {
+		before, err := s.d.Store.Chats().Get(ctx, chatID)
+		if err != nil && !errors.Is(err, postgres.ErrNotFound) {
+			return GroupView{}, unavailable(err)
+		}
+		if before.Name != nil {
+			oldName = *before.Name
+		}
+	}
 	if _, err := s.d.Store.Chats().UpdateGroup(ctx, chatID, userID, name, setDescription, description); err != nil {
 		return GroupView{}, groupError(err)
 	}
 	s.changed(ctx, chatID)
+	if name != nil && *name != oldName {
+		s.logGroup(ctx, chatID, userID, messages.SystemEvent{Kind: messages.SystemGroupRenamed, OldName: oldName, NewName: *name})
+	}
 	return s.group(ctx, userID, chatID)
 }
 
@@ -555,7 +569,42 @@ func (s *Service) SetGroupAvatar(ctx context.Context, userID, chatID int64, atta
 		return GroupView{}, groupError(err)
 	}
 	s.changed(ctx, chatID)
+	removed := false
+	s.logGroup(ctx, chatID, userID, messages.SystemEvent{Kind: messages.SystemGroupAvatar, AvatarRemoved: &removed})
 	return s.group(ctx, userID, chatID)
+}
+
+func (s *Service) RemoveGroupAvatar(ctx context.Context, userID, chatID int64) (GroupView, error) {
+	if err := s.allow(ctx, userID, moderation.ManageGroup, 0); err != nil {
+		return GroupView{}, err
+	}
+	before, err := s.d.Store.Chats().Get(ctx, chatID)
+	if err != nil && !errors.Is(err, postgres.ErrNotFound) {
+		return GroupView{}, unavailable(err)
+	}
+	if err := s.d.Store.Chats().SetGroupAvatarAs(ctx, chatID, userID, nil); err != nil {
+		return GroupView{}, groupError(err)
+	}
+	if before.AvatarAttachmentID != nil {
+		s.changed(ctx, chatID)
+		removed := true
+		s.logGroup(ctx, chatID, userID, messages.SystemEvent{Kind: messages.SystemGroupAvatar, AvatarRemoved: &removed})
+	}
+	return s.group(ctx, userID, chatID)
+}
+
+func (s *Service) logGroup(ctx context.Context, chatID, actor int64, e messages.SystemEvent) {
+	found, err := s.d.Store.Users().GetMany(ctx, []int64{actor})
+	if err != nil {
+		s.d.Log.WarnContext(ctx, "group log name", "error", err, "chat_id", chatID)
+	}
+	if u, ok := found[actor]; ok {
+		e.ActorName = cmp.Or(u.DisplayName, u.Username)
+	}
+	e.ActorID = &actor
+	if _, err := s.d.Sender.SendSystem(ctx, chatID, e); err != nil {
+		s.d.Log.WarnContext(ctx, "group log", "error", err, "chat_id", chatID, "kind", e.Kind)
+	}
 }
 
 // AddMember adds a user to the group, or invites them when they approve invitations first (the group then
@@ -693,6 +742,7 @@ func (s *Service) TransferOwnership(ctx context.Context, userID, chatID, target 
 		return GroupView{}, groupError(err)
 	}
 	s.changed(ctx, chatID)
+	s.logMembers(ctx, chatID, messages.SystemOwnerTransferred, userID, target)
 	return s.group(ctx, userID, chatID)
 }
 

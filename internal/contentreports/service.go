@@ -41,6 +41,7 @@ type Store interface {
 	Users() postgres.UserRepository
 	Attachments() postgres.AttachmentRepository
 	Chats() postgres.ChatRepository
+	Polls() postgres.PollRepository
 }
 
 type Metrics interface {
@@ -82,18 +83,47 @@ type CopyChat struct {
 }
 
 type CopyMessage struct {
-	ID                string     `json:"id"`
-	SenderID          *string    `json:"sender_id"`
-	SenderName        string     `json:"sender_name"`
-	SenderUsername    string     `json:"sender_username,omitempty"`
-	Type              string     `json:"type"`
-	Text              *string    `json:"text"`
-	Files             []string   `json:"files"`
-	ForwardedFromName *string    `json:"forwarded_from_name,omitempty"`
-	ReplyTo           *string    `json:"reply_to,omitempty"`
-	SentAt            time.Time  `json:"sent_at"`
-	EditedAt          *time.Time `json:"edited_at,omitempty"`
-	Reported          bool       `json:"reported"`
+	ID                string        `json:"id"`
+	SenderID          *string       `json:"sender_id"`
+	SenderName        string        `json:"sender_name"`
+	SenderUsername    string        `json:"sender_username,omitempty"`
+	Type              string        `json:"type"`
+	Text              *string       `json:"text"`
+	Files             []string      `json:"files"`
+	ForwardedFromName *string       `json:"forwarded_from_name,omitempty"`
+	ReplyTo           *string       `json:"reply_to,omitempty"`
+	SentAt            time.Time     `json:"sent_at"`
+	EditedAt          *time.Time    `json:"edited_at,omitempty"`
+	Reported          bool          `json:"reported"`
+	Poll              *CopyPoll     `json:"poll,omitempty"`
+	Location          *CopyLocation `json:"location,omitempty"`
+	Contact           *CopyContact  `json:"contact,omitempty"`
+}
+
+type CopyPoll struct {
+	Question        string           `json:"question"`
+	Options         []CopyPollOption `json:"options"`
+	MultipleAnswers bool             `json:"multiple_answers"`
+	Anonymous       bool             `json:"anonymous"`
+	Quiz            bool             `json:"quiz"`
+	Closed          bool             `json:"closed"`
+}
+
+type CopyPollOption struct {
+	Text  string `json:"text"`
+	Votes int    `json:"votes"`
+}
+
+type CopyLocation struct {
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
+	Title     *string `json:"title,omitempty"`
+}
+
+type CopyContact struct {
+	UserID   string `json:"user_id"`
+	Name     string `json:"name"`
+	Username string `json:"username,omitempty"`
 }
 
 type CopyGroup struct {
@@ -277,7 +307,11 @@ func (s *Service) copyMessages(ctx context.Context, msgs []scylla.Message, repor
 			files = append(files, uuid.UUID(a))
 		}
 	}
-	people, err := s.d.Store.Users().GetMany(ctx, senderIDs)
+	people, err := s.d.Store.Users().GetMany(ctx, append(senderIDs, messages.ContactUserIDs(msgs...)...))
+	if err != nil {
+		return nil, unavailable(err)
+	}
+	polls, err := s.d.Store.Polls().Polls(ctx, messages.PollIDs(msgs...))
 	if err != nil {
 		return nil, unavailable(err)
 	}
@@ -313,6 +347,7 @@ func (s *Service) copyMessages(ctx context.Context, msgs []scylla.Message, repor
 				c.Files = append(c.Files, f.Filename)
 			}
 		}
+		copyKind(&c, m, people, polls, s.d.Now())
 		out = append(out, c)
 	}
 	return out, nil

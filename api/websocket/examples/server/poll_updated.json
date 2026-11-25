@@ -1,0 +1,25 @@
+{
+  "type": "poll_updated",
+  "event_id": "7217400317439950013",
+  "chat_id": "42",
+  "data": {
+    "message_id": "7217400317439950002",
+    "poll": {
+      "question": "Where do we meet?",
+      "options": [
+        { "text": "Café", "voter_count": 3 },
+        { "text": "Park", "voter_count": 1 }
+      ],
+      "multiple_answers": false,
+      "anonymous": true,
+      "quiz": false,
+      "explanation": null,
+      "close_at": null,
+      "closed_at": null,
+      "total_voters": 4,
+      "my_votes": [0],
+      "can_close": false,
+      "version": 4
+    }
+  }
+}

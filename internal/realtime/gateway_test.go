@@ -997,3 +997,33 @@ func TestRefusedVoiceNamesTheSetting(t *testing.T) {
 		t.Fatalf("refused voice: %v", ev)
 	}
 }
+
+func TestPollUpdatedShowsResultsToVotersOnly(t *testing.T) {
+	e := newEnv(t)
+	a := e.instance("a")
+	ctx := context.Background()
+	alice, bob := e.user("alice"), e.user("bob")
+	chat, _, err := e.pg.Chats().CreateDirect(ctx, alice, bob)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ca := e.online(a, alice)
+	cb := e.online(a, bob)
+	waitDelivery(t, ca, cb, chat.ID)
+
+	if err := e.pg.Polls().CreatePoll(ctx, postgres.Poll{MessageID: 77, ChatID: chat.ID, CreatorID: alice, Question: "Q", Options: []string{"A", "B"}, Anonymous: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := e.pg.Polls().Vote(ctx, 77, alice, []int{1}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	a.fanout.PollChanged(ctx, chat.ID, 77, []int64{alice, bob})
+	mine := data(ca.next("poll_updated"))["poll"].(map[string]any)
+	if mine["total_voters"] != float64(1) || mine["my_votes"].([]any)[0] != float64(1) {
+		t.Fatalf("voter's poll_updated: %v", mine)
+	}
+	theirs := data(cb.next("poll_updated"))
+	if theirs["message_id"] != "77" || theirs["poll"].(map[string]any)["total_voters"] != nil || len(theirs["poll"].(map[string]any)["my_votes"].([]any)) != 0 {
+		t.Fatalf("non-voter's poll_updated: %v", theirs)
+	}
+}

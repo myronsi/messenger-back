@@ -324,11 +324,31 @@ func (s *Service) logPin(ctx context.Context, chatID, actorID int64, kind string
 	}
 }
 
-func pinSnippet(m scylla.Message) string {
+func snippetSource(m scylla.Message) string {
+	switch m.Type {
+	case scylla.TypeContact:
+		return ""
+	case scylla.TypeLocation:
+		if l, ok := ParseLocation(m); ok && l.Title != nil {
+			return *l.Title
+		}
+		return ""
+	}
 	if m.Content == nil {
 		return ""
 	}
-	text := strings.Join(strings.Fields(emoji.Plain(*m.Content)), " ")
+	if m.Type == scylla.TypePoll {
+		return strings.TrimPrefix(*m.Content, pollSummary(""))
+	}
+	return *m.Content
+}
+
+func pinSnippet(m scylla.Message) string {
+	source := snippetSource(m)
+	if source == "" {
+		return ""
+	}
+	text := strings.Join(strings.Fields(emoji.Plain(source)), " ")
 	if utf8.RuneCountInString(text) <= pinSnippetRunes {
 		return text
 	}

@@ -135,6 +135,18 @@ type uploadForm struct {
 	waveform   []int
 	startMS    *int
 	endMS      *int
+	crop       [3]*float64
+}
+
+func (f *uploadForm) stickerCrop() (*media.StickerCrop, bool) {
+	x, y, size := f.crop[0], f.crop[1], f.crop[2]
+	if x == nil && y == nil && size == nil {
+		return nil, true
+	}
+	if x == nil || y == nil || size == nil {
+		return nil, false
+	}
+	return &media.StickerCrop{X: *x, Y: *y, Size: *size}, true
 }
 
 func (f *uploadForm) close() {
@@ -226,6 +238,13 @@ func readUploadForm(r *http.Request, limit int64) (*uploadForm, error) {
 			} else {
 				f.endMS = &n
 			}
+		case "crop_x", "crop_y", "crop_size":
+			n, err := strconv.ParseFloat(v, 64)
+			if err != nil || n < 0 || n > 1 {
+				f.close()
+				return nil, errFormInvalid
+			}
+			f.crop[map[string]int{"crop_x": 0, "crop_y": 1, "crop_size": 2}[name]] = &n
 		case "waveform":
 			// A JSON array, or one value per field.
 			if strings.HasPrefix(v, "[") {
@@ -267,9 +286,14 @@ func (m *MediaServer) UploadAttachment(w http.ResponseWriter, r *http.Request, _
 		return
 	}
 	defer form.close()
+	crop, ok := form.stickerCrop()
+	if !ok {
+		WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "crop_size", Message: "send crop_x, crop_y and crop_size together"})
+		return
+	}
 	a, tags, err := m.o.Service.UploadWithTags(r.Context(), media.Upload{
 		UploaderID: p.UserID, Purpose: form.purpose, Kind: form.kind, Filename: form.filename,
-		Body: form.file, DurationMS: form.durationMS, Waveform: form.waveform, StartMS: form.startMS, EndMS: form.endMS,
+		Body: form.file, DurationMS: form.durationMS, Waveform: form.waveform, StartMS: form.startMS, EndMS: form.endMS, Crop: crop,
 	})
 	if err != nil {
 		m.uploadFailed(w, r, err)
@@ -506,6 +530,8 @@ func (m *MediaServer) ServeNotificationImage(w http.ResponseWriter, r *http.Requ
 		variant, suffix = media.VariantDisplay, "-display"
 	case notifications.ImageThumbnail:
 		variant, suffix = media.VariantThumbnail, "-thumbnail"
+	case notifications.ImageStill:
+		variant, suffix = media.VariantPanel, "-panel"
 	}
 	d, err := m.o.Service.OpenUnchecked(r.Context(), src.Attachment, variant)
 	if errors.Is(err, media.ErrNoAccess) {

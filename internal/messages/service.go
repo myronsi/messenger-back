@@ -91,6 +91,7 @@ type Store interface {
 	Unsent() postgres.UnsentRepository
 	Sharing() postgres.SharingRepository
 	MessagePins() postgres.MessagePinRepository
+	Polls() postgres.PollRepository
 	Imports() postgres.ImportRepository
 }
 
@@ -114,6 +115,8 @@ type Deps struct {
 	Emoji      EmojiFilter
 	Moderation Moderation
 	Counter    Counter
+	Directory  Directory
+	Maps       MapSigner
 	Imports    ImportStore
 	Log        *slog.Logger
 }
@@ -309,6 +312,9 @@ type SendRequest struct {
 	ReplyTo      *int64
 	Drawings     map[uuid.UUID][]byte
 	StickerID    *int64
+	Poll         *PollInput
+	Contact      *ContactInput
+	Location     *LocationInput
 }
 
 // Sent is the result of Send. Duplicate means the client_temp_id was used before; Message then carries the id
@@ -340,6 +346,9 @@ func (s *Service) validateSend(r SendRequest) error {
 	if r.StickerID != nil && r.Type != scylla.TypeSticker {
 		return invalid("only a sticker message has sticker_id")
 	}
+	if err := validatePayload(r); err != nil {
+		return err
+	}
 	switch r.Type {
 	case scylla.TypeText:
 		if r.Content == nil || strings.TrimSpace(*r.Content) == "" {
@@ -359,8 +368,9 @@ func (s *Service) validateSend(r SendRequest) error {
 		if r.Content != nil || r.AttachmentID != nil {
 			return invalid("a sticker message has no content and no attachment")
 		}
+	case scylla.TypePoll, scylla.TypeContact, scylla.TypeLocation:
 	default:
-		return invalid("type must be text, file, voice or sticker")
+		return invalid("type must be text, file, voice, sticker, poll, contact or location")
 	}
 	return nil
 }
@@ -368,6 +378,9 @@ func (s *Service) validateSend(r SendRequest) error {
 // send stores a message and delivers it to the members of the chat.
 func (s *Service) send(ctx context.Context, r SendRequest) (Sent, error) {
 	if err := s.validateSend(r); err != nil {
+		return Sent{}, err
+	}
+	if err := s.checkPollTime(r.Poll); err != nil {
 		return Sent{}, err
 	}
 	if err := s.requireMember(ctx, r.ChatID, r.SenderID); err != nil {
@@ -382,6 +395,10 @@ func (s *Service) send(ctx context.Context, r SendRequest) (Sent, error) {
 			return Sent{}, err
 		}
 		r.Content = &cleaned
+	}
+	extra, err := s.prepareKind(ctx, r)
+	if err != nil {
+		return Sent{}, err
 	}
 	chat, holders, err := s.d.Store.Chats().GetWithRequestHolders(ctx, r.ChatID)
 	if errors.Is(err, postgres.ErrNotFound) {
@@ -456,6 +473,15 @@ func (s *Service) send(ctx context.Context, r SendRequest) (Sent, error) {
 	if sticker != nil {
 		image, emoji := gocql.UUID(sticker.Image.ID), sticker.Emoji
 		m.StickerID, m.AttachmentID, m.Content = &sticker.ID, &image, &emoji
+	}
+	if extra.content != nil {
+		m.Content, m.Payload = extra.content, extra.payload
+	}
+	if extra.poll != nil {
+		if err := s.createPoll(ctx, m, *extra.poll); err != nil {
+			s.abandon(ctx, r, id, resumed)
+			return Sent{}, err
+		}
 	}
 	if chat.Type == postgres.ChatGroup && m.Content != nil && (m.Type == scylla.TypeText || m.Type == scylla.TypeFile) {
 		m.Mentions, m.MentionsAll = s.resolveMentions(ctx, r.ChatID, r.SenderID, *m.Content)
@@ -703,7 +729,11 @@ func (s *Service) linkAttachments(ctx context.Context, m scylla.Message, drawing
 }
 
 func (s *Service) indexURLs(ctx context.Context, m scylla.Message) error {
-	if m.Content == nil || m.Type == scylla.TypeSystem || m.Type == scylla.TypeSticker {
+	switch m.Type {
+	case scylla.TypeSystem, scylla.TypeSticker, scylla.TypePoll, scylla.TypeContact, scylla.TypeLocation:
+		return nil
+	}
+	if m.Content == nil {
 		return nil
 	}
 	urls := linkpreview.FindURLs(*m.Content, postgres.MaxMessageURLs)
@@ -908,6 +938,9 @@ func (s *Service) requireNotHidden(ctx context.Context, userID int64, m scylla.M
 
 func (s *Service) unlink(ctx context.Context, m scylla.Message) error {
 	s.forgetPins(ctx, m.ChatID, []int64{m.ID})
+	if m.Type == scylla.TypePoll {
+		s.forgetPolls(ctx, m.ChatID, []int64{m.ID})
+	}
 	if err := s.d.Store.Sharing().RemoveUnreadMentions(context.WithoutCancel(ctx), m.ChatID, []int64{m.ID}); err != nil {
 		s.d.Log.WarnContext(ctx, "remove unread mentions", "error", err, "chat_id", m.ChatID)
 	}

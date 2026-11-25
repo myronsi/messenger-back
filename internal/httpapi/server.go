@@ -18,6 +18,7 @@ type Server struct {
 	chats         *ChatServer
 	messages      *MessageServer
 	linkPreviews  *LinkPreviewServer
+	maps          *MapServer
 	meta          MetaInfo
 	notifications *NotificationOptions
 	calls         *CallServer
@@ -34,6 +35,24 @@ func (s *Server) WithMessages(m *MessageServer) *Server { s.messages = m; return
 func (s *Server) WithLinkPreviews(l *LinkPreviewServer) *Server { s.linkPreviews = l; return s }
 
 func (s *Server) WithStickers(st *StickerServer) *Server { s.stickers = st; return s }
+
+func (s *Server) WithMaps(m *MapServer) *Server { s.maps = m; return s }
+
+func (s *Server) GetMapTile(w http.ResponseWriter, r *http.Request, z, x, y int, params GetMapTileParams) {
+	if s.maps == nil {
+		s.AuthServer.GetMapTile(w, r, z, x, y, params)
+		return
+	}
+	s.maps.GetMapTile(w, r, z, x, y, params)
+}
+
+func (s *Server) GetStaticMap(w http.ResponseWriter, r *http.Request, params GetStaticMapParams) {
+	if s.maps == nil {
+		s.AuthServer.GetStaticMap(w, r, params)
+		return
+	}
+	s.maps.GetStaticMap(w, r, params)
+}
 
 func (s *Server) WithEmoji(e *EmojiServer) *Server { s.emoji = e; return s }
 
@@ -733,6 +752,14 @@ func (s *Server) SetGroupAvatar(w http.ResponseWriter, r *http.Request, chatID C
 	s.chats.SetGroupAvatar(w, r, chatID, params)
 }
 
+func (s *Server) DeleteGroupAvatar(w http.ResponseWriter, r *http.Request, chatID ChatId, params DeleteGroupAvatarParams) {
+	if s.chats == nil {
+		s.AuthServer.DeleteGroupAvatar(w, r, chatID, params)
+		return
+	}
+	s.chats.DeleteGroupAvatar(w, r, chatID, params)
+}
+
 func (s *Server) GetGroupRoleLog(w http.ResponseWriter, r *http.Request, chatID ChatId, params GetGroupRoleLogParams) {
 	if s.chats == nil {
 		s.AuthServer.GetGroupRoleLog(w, r, chatID, params)
@@ -1011,6 +1038,30 @@ func (s *Server) GetStorageKey(w http.ResponseWriter, r *http.Request, params Ge
 		return
 	}
 	s.messages.GetStorageKey(w, r, params)
+}
+
+func (s *Server) VotePoll(w http.ResponseWriter, r *http.Request, chatID ChatId, messageID MessageId, params VotePollParams) {
+	if s.messages == nil {
+		s.AuthServer.VotePoll(w, r, chatID, messageID, params)
+		return
+	}
+	s.messages.VotePoll(w, r, chatID, messageID, params)
+}
+
+func (s *Server) ClosePoll(w http.ResponseWriter, r *http.Request, chatID ChatId, messageID MessageId, params ClosePollParams) {
+	if s.messages == nil {
+		s.AuthServer.ClosePoll(w, r, chatID, messageID, params)
+		return
+	}
+	s.messages.ClosePoll(w, r, chatID, messageID, params)
+}
+
+func (s *Server) ListPollVoters(w http.ResponseWriter, r *http.Request, chatID ChatId, messageID MessageId, params ListPollVotersParams) {
+	if s.messages == nil {
+		s.AuthServer.ListPollVoters(w, r, chatID, messageID, params)
+		return
+	}
+	s.messages.ListPollVoters(w, r, chatID, messageID, params)
 }
 
 func (s *Server) ListChatImports(w http.ResponseWriter, r *http.Request, chatID ChatId, params ListChatImportsParams) {

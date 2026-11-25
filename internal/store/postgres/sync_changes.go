@@ -20,6 +20,7 @@ const (
 	SyncHistoryCleared  SyncKind = "history_cleared"
 	SyncChatHidden      SyncKind = "chat_hidden"
 	SyncHistoryImported SyncKind = "history_imported"
+	SyncPoll            SyncKind = "poll"
 )
 
 const SyncChangeRetention = 30 * 24 * time.Hour

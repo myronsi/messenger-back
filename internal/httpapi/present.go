@@ -178,13 +178,16 @@ type MessageParts struct {
 	Reactions  []scylla.Reaction
 	ReadBy     []ReadReceipt
 	// ClientTempID is set on the sender's own copy of a new message.
-	ClientTempID string
-	BasePath     string
-	Reply        *ReplyOrigin
-	Drawings     map[uuid.UUID][]byte
-	Sticker      *postgres.Sticker
-	ForwardLink  bool
-	Viewer       int64
+	ClientTempID  string
+	BasePath      string
+	Reply         *ReplyOrigin
+	Drawings      map[uuid.UUID][]byte
+	Sticker       *postgres.Sticker
+	ForwardLink   bool
+	Viewer        int64
+	Poll          *messages.PollView
+	Contact       *users.View
+	ContactLoaded bool
 }
 
 func PresentModerationReason(r scylla.ModerationRemoval) ModerationRemovalReason {
@@ -354,6 +357,7 @@ func PresentMessage(m scylla.Message, p MessageParts) Message {
 		out.Content = nil
 		out.SystemEvent = presentSystemEvent(e)
 	}
+	presentKind(&out, m, p)
 	if im := m.Import; im != nil {
 		out.CreatedAt = utc(im.OriginalAt)
 		out.Import = &MessageImport{ImportId: FormatID(im.ID), Source: ImportSource(im.Source), OriginalAt: utc(im.OriginalAt)}
@@ -380,6 +384,11 @@ func presentSystemEvent(e messages.SystemEvent) *SystemEvent {
 		snippet, kind := e.Snippet, MessageType(e.MessageType)
 		out.Snippet, out.MessageType = &snippet, &kind
 	}
+	if e.Kind == messages.SystemGroupRenamed {
+		oldName, newName := e.OldName, e.NewName
+		out.OldName, out.NewName = &oldName, &newName
+	}
+	out.AvatarRemoved = e.AvatarRemoved
 	if im := e.Import; im != nil {
 		out.Import = &ImportSummary{ImportId: FormatID(im.ImportID), Source: ImportSource(im.Source), MessageCount: im.MessageCount, FirstAt: utc(im.FirstAt), LastAt: utc(im.LastAt)}
 	}

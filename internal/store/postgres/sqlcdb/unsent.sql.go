@@ -30,7 +30,7 @@ func (q *Queries) DeleteUnsentMessage(ctx context.Context, arg DeleteUnsentMessa
 }
 
 const listUnsentMessages = `-- name: ListUnsentMessages :many
-SELECT user_id, chat_id, client_temp_id, type, content, reply_to, attachment_ids, drawings, sticker_id, error_code, created_at FROM unsent_messages WHERE user_id = $1 AND chat_id = $2 ORDER BY created_at, client_temp_id
+SELECT user_id, chat_id, client_temp_id, type, content, reply_to, attachment_ids, drawings, sticker_id, error_code, created_at, payload FROM unsent_messages WHERE user_id = $1 AND chat_id = $2 ORDER BY created_at, client_temp_id
 `
 
 type ListUnsentMessagesParams struct {
@@ -59,6 +59,7 @@ func (q *Queries) ListUnsentMessages(ctx context.Context, arg ListUnsentMessages
 			&i.StickerID,
 			&i.ErrorCode,
 			&i.CreatedAt,
+			&i.Payload,
 		); err != nil {
 			return nil, err
 		}
@@ -89,9 +90,9 @@ func (q *Queries) TrimUnsentMessages(ctx context.Context, arg TrimUnsentMessages
 }
 
 const upsertUnsentMessage = `-- name: UpsertUnsentMessage :exec
-INSERT INTO unsent_messages (user_id, chat_id, client_temp_id, type, content, reply_to, attachment_ids, drawings, sticker_id, error_code)
+INSERT INTO unsent_messages (user_id, chat_id, client_temp_id, type, content, reply_to, attachment_ids, drawings, sticker_id, payload, error_code)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
-        $9, $10)
+        $9, $10, $11)
 ON CONFLICT (user_id, chat_id, client_temp_id) DO UPDATE SET error_code = EXCLUDED.error_code
 `
 
@@ -105,6 +106,7 @@ type UpsertUnsentMessageParams struct {
 	AttachmentIds []uuid.UUID
 	Drawings      []byte
 	StickerID     *int64
+	Payload       []byte
 	ErrorCode     string
 }
 
@@ -119,6 +121,7 @@ func (q *Queries) UpsertUnsentMessage(ctx context.Context, arg UpsertUnsentMessa
 		arg.AttachmentIds,
 		arg.Drawings,
 		arg.StickerID,
+		arg.Payload,
 		arg.ErrorCode,
 	)
 	return err

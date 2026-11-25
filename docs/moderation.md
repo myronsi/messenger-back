@@ -114,8 +114,8 @@ Each decision tells the reporters of the subject once per report (`report_outcom
 | `invite_to_group` | `chats.CreateGroup` (each initial member), `chats.AddMember` |
 | `create_group` | `chats.CreateGroup` |
 | `call` | `calls.Start` (direct: the peer; group: no target); `calls.Join` (suspended only) |
-| `manage_group` | `chats.UpdateGroup`, `SetGroupAvatar`, `SetGroupBackground`, `SetRole`, `TransferOwnership`, `RemoveMember` of someone else (suspended only) |
-| `send` | `messages.Send`, `Resend`, `Edit`, `React`, `ForwardMany`; `Typing` drops the indicator |
+| `manage_group` | `chats.UpdateGroup`, `SetGroupAvatar`, `RemoveGroupAvatar`, `SetGroupBackground`, `SetRole`, `TransferOwnership`, `RemoveMember` of someone else (suspended only) |
+| `send` | `messages.Send`, `Resend`, `Edit`, `React`, `Vote`, `ForwardMany`; `Typing` drops the indicator |
 | `forward` | `messages.ForwardMany` when a forwarded message has a file (stickers excluded) |
 | `upload` | `POST /attachments`, `POST /upload-sessions` (`httpapi.Server`) |
 | `edit_profile` | `PATCH /me` with `display_name` or `username`, `PUT /me/avatar`, `PUT /me/music`, `PUT /me/background` |

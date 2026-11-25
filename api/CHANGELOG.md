@@ -2,6 +2,22 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.47
+
+- New message types `poll`, `contact` and `location` (`MessageType`, `SendMessageRequest.type`, `UnsentMessage.type`),
+  sent over REST only. `SendMessageRequest` and `UnsentMessage` gain `poll` (`PollCreate`), `contact`
+  (`ContactCreate`) and `location` (`LocationCreate`); `Message` gains `poll` (`Poll`), `contact` (`ContactCard`) and
+  `location` (`MessageLocation`). Their `content` holds a plain-text summary for older clients.
+- Polls: `PUT /chats/{chat_id}/messages/{message_id}/poll/votes` (`votePoll`), `POST …/poll/close` (`closePoll`) and
+  `GET …/poll/voters` (`listPollVoters`). New schemas `PollQuizCreate`, `PollOption`, `PollVoteRequest`; `ErrorCode`
+  gains `poll_closed` and `quiz_answered`. New WebSocket server event `poll_updated`.
+- Maps: `GET /maps/tiles/{z}/{x}/{y}` (`getMapTile`) and `GET /maps/static` (`getStaticMap`), new tag `maps`, new
+  schema `MapImage`.
+- `SystemEventKind` gains `group_renamed`, `group_avatar_changed` and `owner_transferred`; `SystemEvent` gains
+  `old_name`, `new_name` and `avatar_removed`. New `DELETE /groups/{chat_id}/avatar` (`deleteGroupAvatar`).
+- Stickers from videos and GIFs: `UploadAttachmentRequest` gains `crop_x`, `crop_y` and `crop_size`; `start_ms` and
+  `end_ms` also apply to stickers.
+
 ## 2.1.0-alpha.46
 
 - Chat import from Telegram and WhatsApp: `GET`/`POST /chats/{chat_id}/imports` (`listChatImports`,

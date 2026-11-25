@@ -44,6 +44,9 @@ keep the clock from stepping back across a restart.
 | `hidden_messages` | `((user_id, chat_id), message_id DESC)` | `deleted_for_me` or `not_delivered`; replaces the JSON arrays of v1 |
 | `hidden_message_users` | `(chat_id, user_id)` | who hid messages in a chat, so deleting the chat finds their `hidden_messages` partitions |
 
+`messages.payload` (migration `000007`) holds the JSON of a `contact` or `location` message; polls live in
+PostgreSQL ([message-types.md](message-types.md)).
+
 The bucket of a Snowflake ID is computed from the ID; a v1 message's bucket comes from its creation time and is
 looked up in `message_locations`.
 
@@ -170,7 +173,7 @@ can show messages per day without counting ScyllaDB rows. It has one row per day
 | Column | Meaning |
 | --- | --- |
 | `day` | UTC date of the message id (the time the message was sent) |
-| `type` | `text`, `file`, `voice` or `sticker` |
+| `type` | `text`, `file`, `voice`, `sticker`, `poll`, `contact` or `location` |
 | `messages` | Messages of that type sent that day |
 | `attachments` | Files in those messages; an album counts every file. Only `file` and `voice` have attachments |
 
@@ -190,7 +193,8 @@ A send that fails for a reason that may pass later is kept for the sender, so it
 all of their devices with its error and a retry: `forbidden` (privacy, a role), `blocked_by_user`, `rate_limited`
 (WebSocket and HTTP sends) and `internal_error`. A send refused by the account status (`account_restricted`,
 [moderation.md](moderation.md)) is not kept: it passes only after the status changes. Invalid sends and chats that are gone are not kept. The row
-(`unsent_messages`, migration 000031) holds the request: type, text, reply, sticker, drawings and the ids of the
+(`unsent_messages`, migration 000031) holds the request: type, text, reply, sticker, drawings, the poll, contact or
+location (`payload`, migration 000058) and the ids of the
 sender's own uploads, which the upload cleanup then leaves alone. Sending again with the same `client_temp_id`
 deletes the row when it succeeds; the sender can also discard it. A user keeps at most 500, the oldest go first.
 

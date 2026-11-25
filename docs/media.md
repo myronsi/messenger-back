@@ -153,7 +153,17 @@ Packs with `default: true` are in every user's panel until the user removes them
 Users make their own packs. The client crops, cuts out and draws on the image itself and uploads the finished picture
 with `purpose: sticker`: a PNG, JPEG or still WebP of at most 5 MB. The server decodes it (dropping all metadata),
 fits it into 512 x 512 px with a transparent border and encodes a WebP with ffmpeg (a PNG when ffmpeg is missing);
-the result must be at most 512 KB. Until the image is added to a pack only its uploader can load it, and an image
+the result must be at most 512 KB.
+
+A sticker can also be made from a video (MP4, WebM, MOV) or a GIF of at most 15 MB (`internal/media/sticker_video.go`).
+ffmpeg keeps at most 3 s (`start_ms`/`end_ms`, otherwise the first 3 s), crops the square `crop_x`/`crop_y`/
+`crop_size` or fits the clip into 512 x 512 with a transparent border, drops the sound and encodes a looping
+animated WebP (`libwebp_anim`). It lowers quality and frame rate (30, 24, 20, 15 fps) until the file is at most 1 MB,
+otherwise `413`. The `panel` variant is a still first frame and `message` an animated 320 px copy of at most
+512 KB. The attachment records the clip length in `duration`, and adding it to a pack sets `is_animated`. The work
+runs inside the upload request with an image worker slot, not as a job.
+
+Until the image is added to a pack only its uploader can load it, and an image
 no pack uses is collected like any other unused upload. A user has at most 50 packs of at most 120 stickers; only
 the owner changes a pack, and deleting a pack or a sticker only marks it deleted, so sent stickers keep showing.
 Every user pack has a random `slug`, its share link, and pack IDs are not secret, so a user pack is served by

@@ -60,6 +60,8 @@ const sendMessage = (body) => ({ client_temp_id: "c-1", ...body });
 const ATTACHMENT = "5f0c8a64-2f2b-4c7e-9d0e-6b1f3a2c4d5e";
 const ALBUM = [ATTACHMENT, "5f0c8a64-2f2b-4c7e-9d0e-6b1f3a2c4d5f"];
 const STROKE = { type: "stroke", color: "#ff0000", width: 0.01, points: [0.1, 0.2, 0.3, 0.4] };
+const POLL = { question: "Where do we meet?", options: ["Café", "Park"] };
+const PLACE = { latitude: 52.520008, longitude: 13.404954, accuracy_m: 20, title: "Alexanderplatz" };
 const LABEL = { type: "text", color: "#0000ff", x: 0.5, y: 0.5, size: 0.05, text: "here" };
 const drawn = (...items) => [{ attachment_id: ATTACHMENT, drawing: { version: 1, items } }];
 negative.push(
@@ -88,6 +90,17 @@ negative.push(
   ["SendMessageRequest", sendMessage({ type: "file", attachment_id: ATTACHMENT, drawings: drawn({ ...LABEL, points: [0, 0] }) })],
   ["SendMessageRequest", sendMessage({ type: "file", attachment_id: ATTACHMENT, drawings: drawn({ ...STROKE, color: "red" }) })],
   ["SendMessageRequest", sendMessage({ type: "file", attachment_id: ATTACHMENT, drawings: drawn({ ...STROKE, points: [0, 2] }) })],
+  ["SendMessageRequest", sendMessage({ type: "poll" })],
+  ["SendMessageRequest", sendMessage({ type: "poll", poll: POLL, content: "x" })],
+  ["SendMessageRequest", sendMessage({ type: "poll", poll: { ...POLL, options: ["Only"] } })],
+  ["SendMessageRequest", sendMessage({ type: "poll", poll: { ...POLL, quiz: { explanation: "x" } } })],
+  ["SendMessageRequest", sendMessage({ type: "text", content: "x", poll: POLL })],
+  ["SendMessageRequest", sendMessage({ type: "contact" })],
+  ["SendMessageRequest", sendMessage({ type: "contact", contact: { user_id: "7" }, sticker_id: "9" })],
+  ["SendMessageRequest", sendMessage({ type: "location", location: { latitude: 91, longitude: 0 } })],
+  ["SendMessageRequest", sendMessage({ type: "location", location: PLACE, attachment_id: ATTACHMENT })],
+  ["SendMessageRequest", sendMessage({ type: "sticker", sticker_id: "9", location: PLACE })],
+  ["PollVoteRequest", { options: [0, 0] }],
   ["CreateStickerPackRequest", { title: "" }],
   ["CreateStickerPackRequest", { title: "Cats", owner_id: "1" }],
   ["AddStickerRequest", { attachment_id: ATTACHMENT }],
@@ -105,6 +118,12 @@ const positive = [
   ["SendMessageRequest", sendMessage({ type: "file", attachment_id: ATTACHMENT, reply_to: "7", drawings: drawn(STROKE, LABEL) })],
   ["SendMessageRequest", sendMessage({ type: "voice", attachment_id: ATTACHMENT, content: null })],
   ["SendMessageRequest", sendMessage({ type: "sticker", sticker_id: "9", reply_to: "7" })],
+  ["SendMessageRequest", sendMessage({ type: "poll", poll: POLL, reply_to: "7" })],
+  ["SendMessageRequest", sendMessage({ type: "poll", poll: { ...POLL, anonymous: false, quiz: { correct_option: 1, explanation: "Easy" } } })],
+  ["SendMessageRequest", sendMessage({ type: "contact", contact: { user_id: "7" } })],
+  ["SendMessageRequest", sendMessage({ type: "location", location: PLACE })],
+  ["PollVoteRequest", { options: [] }],
+  ["PollVoteRequest", { options: [0, 2] }],
   ["CreateStickerPackRequest", { title: "Cats" }],
   ["AddStickerRequest", { attachment_id: ATTACHMENT, emoji: "🐱" }],
   ["ReorderStickersRequest", { sticker_ids: ["9", "8"] }],

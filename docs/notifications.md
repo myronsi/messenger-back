@@ -124,18 +124,19 @@ adding the provider configuration are required before device delivery can be ver
   them for the sender's photo and the "Mark as read" action. The tokens come in the push payload.
 
 A message push carries `chat_id`, `message_id`, `user_id`, `sound`, `expires_at`, `content_type` (`text`, `photo`,
-`video`, `audio`, `voice`, `file`, `album`, `sticker`), `chat_type` (`direct` or `group`) and `preview` (whether the
+`video`, `audio`, `voice`, `file`, `album`, `sticker`, `poll`, `contact`, `location`), `chat_type` (`direct` or `group`) and `preview` (whether the
 title and body show the sender and text). The server sends no English placeholder text: without previews `title` is
 `Messenger` and `body` is empty, and the client shows a localized label for `content_type`. With previews, `title`
 is the sender (the recipient's contact name for the sender when there is one, at most 64 characters), `body` is the
-text or caption (at most 160 characters, for a sticker its emoji), and a group adds `chat_title` (at most 64
+text or caption (at most 160 characters; for a sticker its emoji, for a poll `📊 <question>`, for a contact
+`👤 @<username>`, for a location `📍` and the place name), and a group adds `chat_title` (at most 64
 characters). `read_token` comes always (valid seven days) and, only with previews on, `avatar_token`
 (valid one hour). In a group with a picture `avatar_token` is a group-picture token (`c.` prefix) for the same
 `/notifications/avatar/{token}` route, which answers only while the recipient is still a member; otherwise it is the
 sender's. With previews on, a photo, video, album, sticker or a message that is a single custom emoji also
 carries `image_token` (`m.` prefix, valid one hour) for the same route. It answers with the picture the
 notification shows: the display copy of a photo, the thumbnail of a video, the first item of an album, the sticker
-image or the custom emoji image. It answers 404 once the recipient left the chat, joined after the message, or the
+image (the still `panel` frame of a sticker made from a video or GIF) or the custom emoji image. It answers 404 once the recipient left the chat, joined after the message, or the
 message was deleted for everyone or for the recipient, and for messages without a picture (text, voice, documents). Birthday reminders carry `kind: "birthday"`, the birthday user's avatar token with previews, and their own
 web push topic (`birthday-<chat_id>`) so they do not replace a pending message push. A message push to a member it mentions (`@username`, or `@all` from an owner or admin, also in a muted chat while `mentions_in_muted` is on) carries `kind: "mention"`; other message pushes have no `kind`. Each token is an HMAC bound to one purpose, recipient, push device and chat or sender, keyed from
 `PUSH_VAPID_PRIVATE_KEY`, so API and worker need no extra secret. Rotating that key invalidates all tokens. A token names its device and that device's session, and works only while both

@@ -369,7 +369,7 @@ func (r stickerRepo) AddSticker(ctx context.Context, ownerID, packID int64, imag
 			return ErrLimit
 		}
 		id, err = q.InsertOwnedSticker(ctx, sqlcdb.InsertOwnedStickerParams{
-			PackID: packID, AttachmentID: image, Emoji: emoji, Position: stats.NextPosition,
+			PackID: packID, AttachmentID: image, Emoji: emoji, Position: stats.NextPosition, IsAnimated: a.Duration != nil,
 		})
 		return err
 	})

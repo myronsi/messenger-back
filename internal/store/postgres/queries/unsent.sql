@@ -1,7 +1,7 @@
 -- name: UpsertUnsentMessage :exec
-INSERT INTO unsent_messages (user_id, chat_id, client_temp_id, type, content, reply_to, attachment_ids, drawings, sticker_id, error_code)
+INSERT INTO unsent_messages (user_id, chat_id, client_temp_id, type, content, reply_to, attachment_ids, drawings, sticker_id, payload, error_code)
 VALUES (@user_id, @chat_id, @client_temp_id, @type, sqlc.narg(content), sqlc.narg(reply_to), @attachment_ids, sqlc.narg(drawings),
-        sqlc.narg(sticker_id), @error_code)
+        sqlc.narg(sticker_id), sqlc.narg(payload), @error_code)
 ON CONFLICT (user_id, chat_id, client_temp_id) DO UPDATE SET error_code = EXCLUDED.error_code;
 
 -- name: TrimUnsentMessages :exec

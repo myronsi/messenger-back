@@ -21,11 +21,14 @@ const MaxPage = 100
 
 // Message types.
 const (
-	TypeText    = "text"
-	TypeFile    = "file"
-	TypeVoice   = "voice"
-	TypeSystem  = "system"
-	TypeSticker = "sticker"
+	TypeText     = "text"
+	TypeFile     = "file"
+	TypeVoice    = "voice"
+	TypeSystem   = "system"
+	TypeSticker  = "sticker"
+	TypePoll     = "poll"
+	TypeContact  = "contact"
+	TypeLocation = "location"
 )
 
 // Reasons a message is hidden from one user.
@@ -64,6 +67,7 @@ type Message struct {
 	Mentions     []int64
 	MentionsAll  bool
 	Import       *Import
+	Payload      *string
 }
 
 type Import struct {
@@ -201,7 +205,7 @@ func (r *Messages) session(ctx context.Context) (context.Context, context.Cancel
 
 const messageColumns = `message_id, sender_id, type, content, attachment_id, reply_to, forwarded_from_message_id,
 forwarded_from_sender_id, forwarded_from_sender_name, edited_at, deleted, created_at, album_ids, sticker_id, mentions, mentions_all,
-import_id, import_sender, original_at`
+import_id, import_sender, original_at, payload`
 
 const selectColumns = messageColumns + `, removed_by_moderation, moderation_reason_code, moderation_reason_text`
 
@@ -225,7 +229,7 @@ func scanMessage(chatID int64, scan func(dest ...any) bool) (Message, bool) {
 		originalAt *time.Time
 	)
 	if !scan(&m.ID, &sender, &m.Type, &content, &attachment, &m.ReplyTo, &fwdID, &fwdSender, &fwdName, &edited, &deleted, &m.CreatedAt, &m.AlbumIDs, &m.StickerID, &m.Mentions, &all,
-		&importID, &importKey, &originalAt, &removed, &modCode, &modText) {
+		&importID, &importKey, &originalAt, &m.Payload, &removed, &modCode, &modText) {
 		return Message{}, false
 	}
 	if importID != nil && importKey != nil && originalAt != nil {
@@ -250,14 +254,14 @@ func scanMessage(chatID int64, scan func(dest ...any) bool) (Message, bool) {
 		}
 	}
 	if m.Deleted {
-		m.Content, m.AttachmentID, m.AlbumIDs, m.StickerID, m.Mentions, m.MentionsAll = nil, nil, nil, nil, nil, false
+		m.Content, m.AttachmentID, m.AlbumIDs, m.StickerID, m.Mentions, m.MentionsAll, m.Payload = nil, nil, nil, nil, nil, false, nil
 	}
 	return m, true
 }
 
 func validType(t string) bool {
 	switch t {
-	case TypeText, TypeFile, TypeVoice, TypeSystem, TypeSticker:
+	case TypeText, TypeFile, TypeVoice, TypeSystem, TypeSticker, TypePoll, TypeContact, TypeLocation:
 		return true
 	}
 	return false
@@ -339,7 +343,7 @@ func (r *Messages) Insert(ctx context.Context, m Message) error {
 	return nil
 }
 
-const insertMessage = `INSERT INTO messages (chat_id, bucket, ` + messageColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+const insertMessage = `INSERT INTO messages (chat_id, bucket, ` + messageColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 func insertValues(m Message, bucket int) []any {
 	var fwdID, fwdSender *int64
@@ -356,7 +360,7 @@ func insertValues(m Message, bucket int) []any {
 	return []any{
 		m.ChatID, bucket, m.ID, m.SenderID, m.Type, m.Content, m.AttachmentID, m.ReplyTo,
 		fwdID, fwdSender, fwdName, m.EditedAt, m.Deleted, m.CreatedAt, m.AlbumIDs, m.StickerID, mentionSet(m.Mentions), mentionsAll(m.MentionsAll),
-		importID, importKey, originalAt,
+		importID, importKey, originalAt, m.Payload,
 	}
 }
 
@@ -450,7 +454,7 @@ func (r *Messages) Delete(ctx context.Context, chatID, messageID int64) error {
 	}
 	// A lightweight transaction like Edit, so the two are serialized (mixing them with plain writes would
 	// order them by client timestamps instead). Deleting twice is harmless.
-	_, err = sess.Query(`UPDATE messages SET deleted = true, content = null, attachment_id = null, album_ids = null, sticker_id = null, mentions = null, mentions_all = null WHERE chat_id = ? AND bucket = ? AND message_id = ? IF EXISTS`,
+	_, err = sess.Query(`UPDATE messages SET deleted = true, content = null, attachment_id = null, album_ids = null, sticker_id = null, mentions = null, mentions_all = null, payload = null WHERE chat_id = ? AND bucket = ? AND message_id = ? IF EXISTS`,
 		chatID, bucket, messageID).WithContext(ctx).SerialConsistency(gocql.LocalSerial).MapScanCAS(map[string]any{})
 	if err != nil {
 		return fmt.Errorf("delete message: %w", err)
@@ -468,7 +472,7 @@ func (r *Messages) Remove(ctx context.Context, chatID, messageID int64, reason M
 	if err != nil {
 		return err
 	}
-	_, err = sess.Query(`UPDATE messages SET deleted = true, content = null, attachment_id = null, album_ids = null, sticker_id = null, mentions = null, mentions_all = null, removed_by_moderation = true, moderation_reason_code = ?, moderation_reason_text = ? WHERE chat_id = ? AND bucket = ? AND message_id = ? IF EXISTS`,
+	_, err = sess.Query(`UPDATE messages SET deleted = true, content = null, attachment_id = null, album_ids = null, sticker_id = null, mentions = null, mentions_all = null, payload = null, removed_by_moderation = true, moderation_reason_code = ?, moderation_reason_text = ? WHERE chat_id = ? AND bucket = ? AND message_id = ? IF EXISTS`,
 		reason.Code, reason.Text, chatID, bucket, messageID).WithContext(ctx).SerialConsistency(gocql.LocalSerial).MapScanCAS(map[string]any{})
 	if err != nil {
 		return fmt.Errorf("remove message: %w", err)

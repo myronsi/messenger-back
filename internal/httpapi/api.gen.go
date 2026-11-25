@@ -647,6 +647,8 @@ const (
 	ErrorCodeLimitReached             ErrorCode = "limit_reached"
 	ErrorCodeNotFound                 ErrorCode = "not_found"
 	ErrorCodePayloadTooLarge          ErrorCode = "payload_too_large"
+	ErrorCodePollClosed               ErrorCode = "poll_closed"
+	ErrorCodeQuizAnswered             ErrorCode = "quiz_answered"
 	ErrorCodeRateLimited              ErrorCode = "rate_limited"
 	ErrorCodeSessionTooNew            ErrorCode = "session_too_new"
 	ErrorCodeStaleEpoch               ErrorCode = "stale_epoch"
@@ -704,6 +706,10 @@ func (e ErrorCode) Valid() bool {
 	case ErrorCodeNotFound:
 		return true
 	case ErrorCodePayloadTooLarge:
+		return true
+	case ErrorCodePollClosed:
+		return true
+	case ErrorCodeQuizAnswered:
 		return true
 	case ErrorCodeRateLimited:
 		return true
@@ -949,17 +955,26 @@ func (e MessageImportSenderState) Valid() bool {
 
 // Defines values for MessageType.
 const (
-	MessageTypeFile    MessageType = "file"
-	MessageTypeSticker MessageType = "sticker"
-	MessageTypeSystem  MessageType = "system"
-	MessageTypeText    MessageType = "text"
-	MessageTypeVoice   MessageType = "voice"
+	MessageTypeContact  MessageType = "contact"
+	MessageTypeFile     MessageType = "file"
+	MessageTypeLocation MessageType = "location"
+	MessageTypePoll     MessageType = "poll"
+	MessageTypeSticker  MessageType = "sticker"
+	MessageTypeSystem   MessageType = "system"
+	MessageTypeText     MessageType = "text"
+	MessageTypeVoice    MessageType = "voice"
 )
 
 // Valid indicates whether the value is a known member of the MessageType enum.
 func (e MessageType) Valid() bool {
 	switch e {
+	case MessageTypeContact:
+		return true
 	case MessageTypeFile:
+		return true
+	case MessageTypeLocation:
+		return true
+	case MessageTypePoll:
 		return true
 	case MessageTypeSticker:
 		return true
@@ -1318,16 +1333,25 @@ func (e SearchVisibility) Valid() bool {
 
 // Defines values for SendMessageRequestType.
 const (
-	SendMessageRequestTypeFile    SendMessageRequestType = "file"
-	SendMessageRequestTypeSticker SendMessageRequestType = "sticker"
-	SendMessageRequestTypeText    SendMessageRequestType = "text"
-	SendMessageRequestTypeVoice   SendMessageRequestType = "voice"
+	SendMessageRequestTypeContact  SendMessageRequestType = "contact"
+	SendMessageRequestTypeFile     SendMessageRequestType = "file"
+	SendMessageRequestTypeLocation SendMessageRequestType = "location"
+	SendMessageRequestTypePoll     SendMessageRequestType = "poll"
+	SendMessageRequestTypeSticker  SendMessageRequestType = "sticker"
+	SendMessageRequestTypeText     SendMessageRequestType = "text"
+	SendMessageRequestTypeVoice    SendMessageRequestType = "voice"
 )
 
 // Valid indicates whether the value is a known member of the SendMessageRequestType enum.
 func (e SendMessageRequestType) Valid() bool {
 	switch e {
+	case SendMessageRequestTypeContact:
+		return true
 	case SendMessageRequestTypeFile:
+		return true
+	case SendMessageRequestTypeLocation:
+		return true
+	case SendMessageRequestTypePoll:
 		return true
 	case SendMessageRequestTypeSticker:
 		return true
@@ -1436,7 +1460,9 @@ func (e SyncChangeType) Valid() bool {
 // Defines values for SystemEventKind.
 const (
 	SystemEventKindCall               SystemEventKind = "call"
+	SystemEventKindGroupAvatarChanged SystemEventKind = "group_avatar_changed"
 	SystemEventKindGroupCreated       SystemEventKind = "group_created"
+	SystemEventKindGroupRenamed       SystemEventKind = "group_renamed"
 	SystemEventKindHistoryImportEnded SystemEventKind = "history_import_ended"
 	SystemEventKindHistoryImported    SystemEventKind = "history_imported"
 	SystemEventKindImportedNote       SystemEventKind = "imported_note"
@@ -1446,6 +1472,7 @@ const (
 	SystemEventKindMemberRemoved      SystemEventKind = "member_removed"
 	SystemEventKindMessagePinned      SystemEventKind = "message_pinned"
 	SystemEventKindMessageUnpinned    SystemEventKind = "message_unpinned"
+	SystemEventKindOwnerTransferred   SystemEventKind = "owner_transferred"
 )
 
 // Valid indicates whether the value is a known member of the SystemEventKind enum.
@@ -1453,7 +1480,11 @@ func (e SystemEventKind) Valid() bool {
 	switch e {
 	case SystemEventKindCall:
 		return true
+	case SystemEventKindGroupAvatarChanged:
+		return true
 	case SystemEventKindGroupCreated:
+		return true
+	case SystemEventKindGroupRenamed:
 		return true
 	case SystemEventKindHistoryImportEnded:
 		return true
@@ -1472,6 +1503,8 @@ func (e SystemEventKind) Valid() bool {
 	case SystemEventKindMessagePinned:
 		return true
 	case SystemEventKindMessageUnpinned:
+		return true
+	case SystemEventKindOwnerTransferred:
 		return true
 	default:
 		return false
@@ -1510,16 +1543,25 @@ func (e TwoFactorChallengeTwoFactorRequired) Valid() bool {
 
 // Defines values for UnsentMessageType.
 const (
-	UnsentMessageTypeFile    UnsentMessageType = "file"
-	UnsentMessageTypeSticker UnsentMessageType = "sticker"
-	UnsentMessageTypeText    UnsentMessageType = "text"
-	UnsentMessageTypeVoice   UnsentMessageType = "voice"
+	UnsentMessageTypeContact  UnsentMessageType = "contact"
+	UnsentMessageTypeFile     UnsentMessageType = "file"
+	UnsentMessageTypeLocation UnsentMessageType = "location"
+	UnsentMessageTypePoll     UnsentMessageType = "poll"
+	UnsentMessageTypeSticker  UnsentMessageType = "sticker"
+	UnsentMessageTypeText     UnsentMessageType = "text"
+	UnsentMessageTypeVoice    UnsentMessageType = "voice"
 )
 
 // Valid indicates whether the value is a known member of the UnsentMessageType enum.
 func (e UnsentMessageType) Valid() bool {
 	switch e {
+	case UnsentMessageTypeContact:
+		return true
 	case UnsentMessageTypeFile:
+		return true
+	case UnsentMessageTypeLocation:
+		return true
+	case UnsentMessageTypePoll:
 		return true
 	case UnsentMessageTypeSticker:
 		return true
@@ -2411,6 +2453,24 @@ type ConnectionStart struct {
 	RedirectUrl string `json:"redirect_url"`
 }
 
+// ContactCard defines model for ContactCard.
+type ContactCard struct {
+	// User The shared user as the requesting user may see them now, not as they were when the card was sent; `null`
+	// when the account is gone.
+	User *User `json:"user"`
+
+	// UserId Decimal ID as a string (Snowflake IDs exceed 2^53).
+	//
+	// Examples: 7217400317439950848
+	UserId Id `json:"user_id"`
+}
+
+// ContactCreate defines model for ContactCreate.
+type ContactCreate struct {
+	// UserId A user whose profile the sender may open (`403` otherwise), the sender included; not a deleted account.
+	UserId Id `json:"user_id"`
+}
+
 // ContactNameRequest defines model for ContactNameRequest.
 type ContactNameRequest struct {
 	ContactName string `json:"contact_name"`
@@ -2469,6 +2529,12 @@ type CreateUploadSessionRequest struct {
 	// Purpose `sticker`: a PNG, JPEG or still WebP of at most 5 MB. The server fits it into 512 x 512 px with a transparent
 	// border and stores a WebP (`413` when that is still over 512 KB). Only its uploader can load it until it is
 	// added to a pack.
+	//
+	// A sticker can also be made from a video (`kind: video`: MP4, WebM or MOV) or an animated GIF of at most 15 MB.
+	// The server keeps at most 3 s of it (from `start_ms` to `end_ms`, or the first 3 s), crops it to the square
+	// `crop_x`, `crop_y`, `crop_size` when given (otherwise it fits the clip into the square with a transparent
+	// border), drops the sound and stores a looping animated WebP of at most 512 x 512 px (`413` when it is still
+	// over 1 MB at the lowest quality). The sticker then has `is_animated: true`.
 	//
 	// `profile_music`: an audio file of at most 20 MB. The server keeps at most 30 s of it (from `start_ms` to
 	// `end_ms`, or the first 30 s), stored as AAC, reads the title and artist into `tags` and the embedded cover
@@ -2978,6 +3044,17 @@ type Location struct {
 	CountryCode *string `json:"country_code"`
 }
 
+// LocationCreate defines model for LocationCreate.
+type LocationCreate struct {
+	// AccuracyM Accuracy of a measured position in metres; omit for a point picked on the map.
+	AccuracyM *int    `json:"accuracy_m,omitempty"`
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
+
+	// Title A name for the place, typed by the sender.
+	Title *string `json:"title,omitempty"`
+}
+
 // LoginRequest defines model for LoginRequest.
 type LoginRequest struct {
 	Password *string  `json:"password,omitempty"`
@@ -2987,6 +3064,15 @@ type LoginRequest struct {
 // LoginResponse defines model for LoginResponse.
 type LoginResponse struct {
 	union json.RawMessage
+}
+
+// MapImage defines model for MapImage.
+type MapImage struct {
+	Height int `json:"height"`
+
+	// Url `GET /maps/static` with the signed point; load it like other API images
+	Url   string `json:"url"`
+	Width int    `json:"width"`
 }
 
 // MarkReadRequest defines model for MarkReadRequest.
@@ -3079,7 +3165,11 @@ type Message struct {
 	// ClientTempId Client-generated ID that makes sending idempotent and ties acks and errors to the send.
 	ClientTempId *ClientTempId `json:"client_temp_id,omitempty"`
 
-	// Content Text, the caption of a file, or the emoji of a sticker; `null` when deleted.
+	// Contact The shared user of a `contact` message; absent for other types, when deleted and in chat-list previews.
+	Contact *ContactCard `json:"contact,omitempty"`
+
+	// Content Text, the caption of a file, the emoji of a sticker, or the plain-text summary of a poll, contact or
+	// location (see `MessageType`); `null` when deleted.
 	Content *string `json:"content"`
 
 	// CreatedAt When the message was sent; for an imported message, when it was sent in the other messenger.
@@ -3096,6 +3186,9 @@ type Message struct {
 	Import    *MessageImport `json:"import,omitempty"`
 	IsDeleted bool           `json:"is_deleted"`
 
+	// Location The place of a `location` message; absent for other types and when deleted.
+	Location *MessageLocation `json:"location,omitempty"`
+
 	// Mentions Group members the text mentions by `@username` (ignoring case), found by the server when the message was
 	// sent or last edited; at most 20. Absent when there are none and in direct chats. Clients render every
 	// `@name` token as a link to `/@name`; these IDs only decide highlighting and notifications.
@@ -3106,8 +3199,11 @@ type Message struct {
 
 	// ModerationReason Why moderation removed the message; only for its sender, absent for everyone else.
 	ModerationReason *ModerationRemovalReason `json:"moderation_reason,omitempty"`
-	Reactions        []Reaction               `json:"reactions"`
-	ReadBy           []ReadReceipt            `json:"read_by"`
+
+	// Poll The poll of a `poll` message as the requesting user sees it; absent for other types, when deleted and in chat-list previews.
+	Poll      *Poll         `json:"poll,omitempty"`
+	Reactions []Reaction    `json:"reactions"`
+	ReadBy    []ReadReceipt `json:"read_by"`
 
 	// RemovedByModeration `true` when moderation removed the message; it is then also `is_deleted`. Clients show "Removed by
 	// moderation" instead of the deleted placeholder. Absent otherwise.
@@ -3127,13 +3223,19 @@ type Message struct {
 	Sticker *Sticker `json:"sticker,omitempty"`
 
 	// SystemEvent What a `system` message records; set on system messages only, whose `content` is then `null`. The names
-	// are the display names at the time of the event. `target` fields are set for `member_added` and
-	// `member_removed`. `call` is set for `call` messages: one per call, posted when the call ends, `actor` is the
-	// initiator. `message_id` and `snippet` are set for `message_pinned` and `message_unpinned`.
+	// are the display names at the time of the event. `target` fields are set for `member_added`,
+	// `member_removed` and `owner_transferred` (the new owner; `actor` is the previous one). `call` is set for
+	// `call` messages: one per call, posted when the call ends, `actor` is the initiator. `message_id` and
+	// `snippet` are set for `message_pinned` and `message_unpinned`. `old_name` and `new_name` are set for
+	// `group_renamed`, `avatar_removed` for `group_avatar_changed`.
 	// `history_imported` opens and `history_import_ended` closes an imported history; both carry `import`, and
 	// `actor` is the importer. `imported_note` is a line of the export that is not a message; its text is `text`.
 	SystemEvent *SystemEvent `json:"system_event,omitempty"`
-	Type        MessageType  `json:"type"`
+
+	// Type `poll`, `contact` and `location` carry their data in `Message.poll`, `Message.contact` and
+	// `Message.location`. For older clients their `content` holds a short plain-text summary: `📊 <question>`,
+	// `👤 @<username>`, or `📍 <place name> <OpenStreetMap link>`.
+	Type MessageType `json:"type"`
 }
 
 // MessageImport Set on messages that came from an import.
@@ -3159,6 +3261,15 @@ type MessageImport struct {
 // messages.
 type MessageImportSenderState string
 
+// MessageLocation Coordinates are rounded to 6 decimals (about 10 cm).
+type MessageLocation struct {
+	AccuracyM *int     `json:"accuracy_m"`
+	Latitude  float64  `json:"latitude"`
+	Longitude float64  `json:"longitude"`
+	Map       MapImage `json:"map"`
+	Title     *string  `json:"title"`
+}
+
 // MessagePage defines model for MessagePage.
 type MessagePage struct {
 	// Items Oldest to newest
@@ -3180,7 +3291,9 @@ type MessageSearchPage struct {
 	NextCursor *Cursor `json:"next_cursor"`
 }
 
-// MessageType defines model for MessageType.
+// MessageType `poll`, `contact` and `location` carry their data in `Message.poll`, `Message.contact` and
+// `Message.location`. For older clients their `content` holds a short plain-text summary: `📊 <question>`,
+// `👤 @<username>`, or `📍 <place name> <OpenStreetMap link>`.
 type MessageType string
 
 // Meta defines model for Meta.
@@ -3376,6 +3489,68 @@ type PlaybackUrl struct {
 
 	// Url Same-origin path with the playback token; set it as `src` of a media element.
 	Url string `json:"url"`
+}
+
+// Poll A poll as the requesting user sees it. Results (`voter_count`, `total_voters`, `is_correct`, `explanation`)
+// are `null` or absent until that user voted, unless they created the poll or it is closed. A poll is closed
+// when `closed_at` is set; clients also treat it as closed once `close_at` has passed.
+type Poll struct {
+	Anonymous bool `json:"anonymous"`
+
+	// CanClose The user may close the poll now.
+	CanClose bool       `json:"can_close"`
+	CloseAt  *Timestamp `json:"close_at"`
+	ClosedAt *Timestamp `json:"closed_at"`
+
+	// Explanation The explanation of a quiz once the user sees the results.
+	Explanation     *string `json:"explanation"`
+	MultipleAnswers bool    `json:"multiple_answers"`
+
+	// MyVotes Indexes of the options the user voted for; empty when they have not voted.
+	MyVotes  []int        `json:"my_votes"`
+	Options  []PollOption `json:"options"`
+	Question string       `json:"question"`
+	Quiz     bool         `json:"quiz"`
+
+	// TotalVoters People who voted, each counted once even with several answers.
+	TotalVoters *int `json:"total_voters"`
+
+	// Version Grows with every vote and when the poll closes; keep the poll with the highest version.
+	Version int `json:"version"`
+}
+
+// PollCreate A new poll. Option texts are trimmed and must differ (ignoring case). `quiz` makes it a quiz: one correct
+// option, one answer per voter that cannot be changed; it cannot be combined with `multiple_answers`.
+// `close_at` closes the poll automatically, 5 minutes to 30 days from now.
+type PollCreate struct {
+	// Anonymous `false` lets everyone who sees the results list who voted for what. Anonymous votes are still stored
+	// with the voter, so each member votes once and can change the vote, but no one else sees them.
+	Anonymous       *bool           `json:"anonymous,omitempty"`
+	CloseAt         *Timestamp      `json:"close_at,omitempty"`
+	MultipleAnswers *bool           `json:"multiple_answers,omitempty"`
+	Options         []string        `json:"options"`
+	Question        string          `json:"question"`
+	Quiz            *PollQuizCreate `json:"quiz,omitempty"`
+}
+
+// PollOption defines model for PollOption.
+type PollOption struct {
+	// IsCorrect Set on every option of a quiz once the user sees the results; absent otherwise.
+	IsCorrect  *bool  `json:"is_correct,omitempty"`
+	Text       string `json:"text"`
+	VoterCount *int   `json:"voter_count"`
+}
+
+// PollQuizCreate defines model for PollQuizCreate.
+type PollQuizCreate struct {
+	// CorrectOption Index into `options`
+	CorrectOption int     `json:"correct_option"`
+	Explanation   *string `json:"explanation,omitempty"`
+}
+
+// PollVoteRequest defines model for PollVoteRequest.
+type PollVoteRequest struct {
+	Options []int `json:"options"`
 }
 
 // PrivacyExceptions User IDs per setting. An exception wins over the setting whatever its value; `allow` always lets the user in, `deny` always keeps them out.
@@ -3771,9 +3946,13 @@ type ReplyPreview struct {
 	IsDeleted bool `json:"is_deleted"`
 
 	// RemovedByModeration `true` when moderation removed the answered message. Absent otherwise.
-	RemovedByModeration *bool       `json:"removed_by_moderation,omitempty"`
-	Sender              *User       `json:"sender"`
-	Type                MessageType `json:"type"`
+	RemovedByModeration *bool `json:"removed_by_moderation,omitempty"`
+	Sender              *User `json:"sender"`
+
+	// Type `poll`, `contact` and `location` carry their data in `Message.poll`, `Message.contact` and
+	// `Message.location`. For older clients their `content` holds a short plain-text summary: `📊 <question>`,
+	// `👤 @<username>`, or `📍 <place name> <OpenStreetMap link>`.
+	Type MessageType `json:"type"`
 }
 
 // ReportOutcome defines model for ReportOutcome.
@@ -3879,13 +4058,24 @@ type SendMessageRequest struct {
 
 	// ClientTempId Client-generated ID that makes sending idempotent and ties acks and errors to the send.
 	ClientTempId ClientTempId `json:"client_temp_id"`
-	Content      *string      `json:"content,omitempty"`
+
+	// Contact The shared user of a `contact` message.
+	Contact *ContactCreate `json:"contact,omitempty"`
+	Content *string        `json:"content,omitempty"`
 
 	// Drawings Drawings on images of a `file` message, at most one per image. Each `attachment_id` must be one of the
 	// message's attachments. An image with a drawing may also be an image of the message in `reply_to`
 	// instead of the sender's own upload: that is how a member draws on an image someone sent.
 	Drawings *[]AttachmentDrawing `json:"drawings,omitempty"`
-	ReplyTo  *Id                  `json:"reply_to,omitempty"`
+
+	// Location The place of a `location` message.
+	Location *LocationCreate `json:"location,omitempty"`
+
+	// Poll The poll of a `poll` message. Poll, contact and location messages have no content, attachment, sticker or
+	// drawings; the server writes a plain-text summary into `content` for older clients. Send them with this
+	// operation; the WebSocket `message` event does not take them.
+	Poll    *PollCreate `json:"poll,omitempty"`
+	ReplyTo *Id         `json:"reply_to,omitempty"`
 
 	// StickerId The sticker of a `sticker` message, from any pack that is not deleted. Sticker messages have no content,
 	// attachment or drawings; the server sets `content` to the sticker's emoji. Send stickers with this
@@ -3997,7 +4187,8 @@ type StartChatImportSender struct {
 }
 
 // Sticker One sticker of a pack. `image` is a WebP or PNG of at most 512 x 512 px with transparency, animated when
-// `is_animated` is true; any signed-in user can load it. Clients show it without a bubble.
+// `is_animated` is true (also stickers made from a video or GIF); any signed-in user can load it. The `panel`
+// variant of an animated sticker is a still first frame. Clients show it without a bubble.
 type Sticker struct {
 	// Emoji The emoji the sticker stands for, for previews, notifications and search.
 	Emoji string `json:"emoji"`
@@ -4125,14 +4316,19 @@ type SyncChangesPage struct {
 }
 
 // SystemEvent What a `system` message records; set on system messages only, whose `content` is then `null`. The names
-// are the display names at the time of the event. `target` fields are set for `member_added` and
-// `member_removed`. `call` is set for `call` messages: one per call, posted when the call ends, `actor` is the
-// initiator. `message_id` and `snippet` are set for `message_pinned` and `message_unpinned`.
+// are the display names at the time of the event. `target` fields are set for `member_added`,
+// `member_removed` and `owner_transferred` (the new owner; `actor` is the previous one). `call` is set for
+// `call` messages: one per call, posted when the call ends, `actor` is the initiator. `message_id` and
+// `snippet` are set for `message_pinned` and `message_unpinned`. `old_name` and `new_name` are set for
+// `group_renamed`, `avatar_removed` for `group_avatar_changed`.
 // `history_imported` opens and `history_import_ended` closes an imported history; both carry `import`, and
 // `actor` is the importer. `imported_note` is a line of the export that is not a message; its text is `text`.
 type SystemEvent struct {
 	ActorId   *Id    `json:"actor_id"`
 	ActorName string `json:"actor_name"`
+
+	// AvatarRemoved `true` when the group photo was removed, `false` when a new one was set.
+	AvatarRemoved *bool `json:"avatar_removed,omitempty"`
 
 	// Call The call a `call` system message records.
 	Call   *CallSummary    `json:"call,omitempty"`
@@ -4140,11 +4336,18 @@ type SystemEvent struct {
 	Kind   SystemEventKind `json:"kind"`
 
 	// MessageId The pinned or unpinned message.
-	MessageId   *Id          `json:"message_id,omitempty"`
-	MessageType *MessageType `json:"message_type,omitempty"`
+	MessageId *Id `json:"message_id,omitempty"`
 
-	// Snippet Start of the pinned message's text at the time of the event (at most 60 characters plus `…`); empty for a
-	// message without text, which clients name by its `message_type`.
+	// MessageType `poll`, `contact` and `location` carry their data in `Message.poll`, `Message.contact` and
+	// `Message.location`. For older clients their `content` holds a short plain-text summary: `📊 <question>`,
+	// `👤 @<username>`, or `📍 <place name> <OpenStreetMap link>`.
+	MessageType *MessageType `json:"message_type,omitempty"`
+	NewName     *string      `json:"new_name,omitempty"`
+	OldName     *string      `json:"old_name,omitempty"`
+
+	// Snippet Start of the pinned message's text at the time of the event (at most 60 characters plus `…`): the question
+	// of a poll, the place name of a location. Empty for a message without text and for a contact, which clients
+	// name by its `message_type`.
 	Snippet *string `json:"snippet,omitempty"`
 
 	// TargetId Decimal ID as a string (Snowflake IDs exceed 2^53).
@@ -4233,16 +4436,26 @@ type UnsentMessage struct {
 
 	// ClientTempId Client-generated ID that makes sending idempotent and ties acks and errors to the send.
 	ClientTempId ClientTempId `json:"client_temp_id"`
-	Content      *string      `json:"content"`
-	CreatedAt    Timestamp    `json:"created_at"`
+
+	// Contact The contact of an unsent `contact` message, as it was sent.
+	Contact   *ContactCreate `json:"contact,omitempty"`
+	Content   *string        `json:"content"`
+	CreatedAt Timestamp      `json:"created_at"`
 
 	// ErrorCode Stable machine-readable error code. New codes can appear in MINOR versions; unknown
 	// codes must be treated like `internal_error`.
 	ErrorCode ErrorCode `json:"error_code"`
-	ReplyTo   *Id       `json:"reply_to"`
+
+	// Location The place of an unsent `location` message, as it was sent.
+	Location *LocationCreate `json:"location,omitempty"`
+
+	// Poll The poll of an unsent `poll` message, as it was sent.
+	Poll    *PollCreate `json:"poll,omitempty"`
+	ReplyTo *Id         `json:"reply_to"`
 
 	// Sticker One sticker of a pack. `image` is a WebP or PNG of at most 512 x 512 px with transparency, animated when
-	// `is_animated` is true; any signed-in user can load it. Clients show it without a bubble.
+	// `is_animated` is true (also stickers made from a video or GIF); any signed-in user can load it. The `panel`
+	// variant of an animated sticker is a still first frame. Clients show it without a bubble.
 	Sticker *Sticker          `json:"sticker,omitempty"`
 	Type    UnsentMessageType `json:"type"`
 }
@@ -4389,10 +4602,21 @@ type UpdateStickerRequest struct {
 
 // UploadAttachmentRequest defines model for UploadAttachmentRequest.
 type UploadAttachmentRequest struct {
+	// CropSize `sticker` from a video or GIF: side of the square crop, as a fraction of the shorter side. Send all three
+	// crop fields or none; the square must lie inside the frame.
+	CropSize *float32 `json:"crop_size,omitempty"`
+
+	// CropX `sticker` from a video or GIF: left edge of the square crop, as a fraction of the width.
+	CropX *float32 `json:"crop_x,omitempty"`
+
+	// CropY `sticker` from a video or GIF: top edge of the square crop, as a fraction of the height.
+	CropY *float32 `json:"crop_y,omitempty"`
+
 	// DurationMs Length of a voice message
 	DurationMs *int `json:"duration_ms,omitempty"`
 
-	// EndMs `profile_music` only: where the kept part ends, at most 30 s after `start_ms`.
+	// EndMs `profile_music`: where the kept part ends, at most 30 s after `start_ms`. `sticker` from a video or GIF: at
+	// most 3 s after `start_ms`.
 	EndMs *int               `json:"end_ms,omitempty"`
 	File  openapi_types.File `json:"file"`
 	Kind  *AttachmentKind    `json:"kind,omitempty"`
@@ -4400,6 +4624,12 @@ type UploadAttachmentRequest struct {
 	// Purpose `sticker`: a PNG, JPEG or still WebP of at most 5 MB. The server fits it into 512 x 512 px with a transparent
 	// border and stores a WebP (`413` when that is still over 512 KB). Only its uploader can load it until it is
 	// added to a pack.
+	//
+	// A sticker can also be made from a video (`kind: video`: MP4, WebM or MOV) or an animated GIF of at most 15 MB.
+	// The server keeps at most 3 s of it (from `start_ms` to `end_ms`, or the first 3 s), crops it to the square
+	// `crop_x`, `crop_y`, `crop_size` when given (otherwise it fits the clip into the square with a transparent
+	// border), drops the sound and stores a looping animated WebP of at most 512 x 512 px (`413` when it is still
+	// over 1 MB at the lowest quality). The sticker then has `is_animated: true`.
 	//
 	// `profile_music`: an audio file of at most 20 MB. The server keeps at most 30 s of it (from `start_ms` to
 	// `end_ms`, or the first 30 s), stored as AAC, reads the title and artist into `tags` and the embedded cover
@@ -4413,7 +4643,7 @@ type UploadAttachmentRequest struct {
 	// `POST /emoji/packs/{pack_id}/emoji`.
 	Purpose UploadPurpose `json:"purpose"`
 
-	// StartMs `profile_music` only: where the kept part starts.
+	// StartMs `profile_music`, and `sticker` from a video or GIF: where the kept part starts.
 	StartMs *int `json:"start_ms,omitempty"`
 
 	// Waveform Amplitude samples (0-255) of a voice message
@@ -4423,6 +4653,12 @@ type UploadAttachmentRequest struct {
 // UploadPurpose `sticker`: a PNG, JPEG or still WebP of at most 5 MB. The server fits it into 512 x 512 px with a transparent
 // border and stores a WebP (`413` when that is still over 512 KB). Only its uploader can load it until it is
 // added to a pack.
+//
+// A sticker can also be made from a video (`kind: video`: MP4, WebM or MOV) or an animated GIF of at most 15 MB.
+// The server keeps at most 3 s of it (from `start_ms` to `end_ms`, or the first 3 s), crops it to the square
+// `crop_x`, `crop_y`, `crop_size` when given (otherwise it fits the clip into the square with a transparent
+// border), drops the sound and stores a looping animated WebP of at most 512 x 512 px (`413` when it is still
+// over 1 MB at the lowest quality). The sticker then has `is_animated: true`.
 //
 // `profile_music`: an audio file of at most 20 MB. The server keeps at most 30 s of it (from `start_ms` to
 // `end_ms`, or the first 30 s), stored as AAC, reads the title and artist into `tags` and the embedded cover
@@ -5394,6 +5630,41 @@ type PinMessageParams struct {
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
 }
 
+// ClosePollParams defines parameters for ClosePoll.
+type ClosePollParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// ListPollVotersParams defines parameters for ListPollVoters.
+type ListPollVotersParams struct {
+	Option int `form:"option" json:"option"`
+
+	// Limit Page size
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// After Opaque `next_cursor` of the previous page
+	After *After `form:"after,omitempty" json:"after,omitempty"`
+
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// VotePollParams defines parameters for VotePoll.
+type VotePollParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
 // UnreportMessageParams defines parameters for UnreportMessage.
 type UnreportMessageParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
@@ -5648,6 +5919,15 @@ type GetGroupParams struct {
 
 // UpdateGroupParams defines parameters for UpdateGroup.
 type UpdateGroupParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// DeleteGroupAvatarParams defines parameters for DeleteGroupAvatar.
+type DeleteGroupAvatarParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
@@ -5946,6 +6226,28 @@ type GetLinkPreviewImageParams struct {
 	Url string `form:"url" json:"url"`
 	Sig string `form:"sig" json:"sig"`
 
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// GetStaticMapParams defines parameters for GetStaticMap.
+type GetStaticMapParams struct {
+	Lat float64 `form:"lat" json:"lat"`
+	Lon float64 `form:"lon" json:"lon"`
+	Sig string  `form:"sig" json:"sig"`
+
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// GetMapTileParams defines parameters for GetMapTile.
+type GetMapTileParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
@@ -6936,6 +7238,9 @@ type ForwardMessagesJSONRequestBody = ForwardMessagesRequest
 // PinMessageJSONRequestBody defines body for PinMessage for application/json ContentType.
 type PinMessageJSONRequestBody = PinMessageRequest
 
+// VotePollJSONRequestBody defines body for VotePoll for application/json ContentType.
+type VotePollJSONRequestBody = PollVoteRequest
+
 // ReportMessageJSONRequestBody defines body for ReportMessage for application/json ContentType.
 type ReportMessageJSONRequestBody = ContentReportRequest
 
@@ -7614,6 +7919,15 @@ type ServerInterface interface {
 	// PinMessage Pin a message
 	// (PUT /chats/{chat_id}/messages/{message_id}/pin)
 	PinMessage(w http.ResponseWriter, r *http.Request, chatId ChatId, messageId MessageId, params PinMessageParams)
+	// ClosePoll Close a poll
+	// (POST /chats/{chat_id}/messages/{message_id}/poll/close)
+	ClosePoll(w http.ResponseWriter, r *http.Request, chatId ChatId, messageId MessageId, params ClosePollParams)
+	// ListPollVoters Who voted for an option of a public poll
+	// (GET /chats/{chat_id}/messages/{message_id}/poll/voters)
+	ListPollVoters(w http.ResponseWriter, r *http.Request, chatId ChatId, messageId MessageId, params ListPollVotersParams)
+	// VotePoll Vote in a poll, change the vote or take it back
+	// (PUT /chats/{chat_id}/messages/{message_id}/poll/votes)
+	VotePoll(w http.ResponseWriter, r *http.Request, chatId ChatId, messageId MessageId, params VotePollParams)
 	// UnreportMessage Withdraw a message report
 	// (DELETE /chats/{chat_id}/messages/{message_id}/report)
 	UnreportMessage(w http.ResponseWriter, r *http.Request, chatId ChatId, messageId MessageId, params UnreportMessageParams)
@@ -7698,6 +8012,9 @@ type ServerInterface interface {
 	// UpdateGroup Change name or description
 	// (PATCH /groups/{chat_id})
 	UpdateGroup(w http.ResponseWriter, r *http.Request, chatId ChatId, params UpdateGroupParams)
+	// DeleteGroupAvatar Remove the group avatar
+	// (DELETE /groups/{chat_id}/avatar)
+	DeleteGroupAvatar(w http.ResponseWriter, r *http.Request, chatId ChatId, params DeleteGroupAvatarParams)
 	// SetGroupAvatar Set the group avatar from an uploaded attachment
 	// (PUT /groups/{chat_id}/avatar)
 	SetGroupAvatar(w http.ResponseWriter, r *http.Request, chatId ChatId, params SetGroupAvatarParams)
@@ -7791,6 +8108,12 @@ type ServerInterface interface {
 	// GetLinkPreviewImage The image of a link preview, through the server
 	// (GET /link-preview/image)
 	GetLinkPreviewImage(w http.ResponseWriter, r *http.Request, params GetLinkPreviewImageParams)
+	// GetStaticMap The map image of a location message
+	// (GET /maps/static)
+	GetStaticMap(w http.ResponseWriter, r *http.Request, params GetStaticMapParams)
+	// GetMapTile A 256 px map tile, through the server
+	// (GET /maps/tiles/{z}/{x}/{y})
+	GetMapTile(w http.ResponseWriter, r *http.Request, z int, x int, y int, params GetMapTileParams)
 	// DeleteMe Delete the account
 	// (DELETE /me)
 	DeleteMe(w http.ResponseWriter, r *http.Request, params DeleteMeParams)
@@ -12757,6 +13080,279 @@ func (siw *ServerInterfaceWrapper) PinMessage(w http.ResponseWriter, r *http.Req
 	handler.ServeHTTP(w, r)
 }
 
+// ClosePoll operation middleware
+func (siw *ServerInterfaceWrapper) ClosePoll(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "message_id" -------------
+	var messageId MessageId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "message_id", r.PathValue("message_id"), &messageId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "message_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ClosePollParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ClosePoll(w, r, chatId, messageId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListPollVoters operation middleware
+func (siw *ServerInterfaceWrapper) ListPollVoters(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "message_id" -------------
+	var messageId MessageId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "message_id", r.PathValue("message_id"), &messageId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "message_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListPollVotersParams
+
+	// ------------- Required query parameter "option" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "option", r.URL.Query(), &params.Option, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "option"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "option", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "after" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "after", r.URL.Query(), &params.After, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "after"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after", Err: err})
+		}
+		return
+	}
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListPollVoters(w, r, chatId, messageId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// VotePoll operation middleware
+func (siw *ServerInterfaceWrapper) VotePoll(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "message_id" -------------
+	var messageId MessageId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "message_id", r.PathValue("message_id"), &messageId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "message_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params VotePollParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.VotePoll(w, r, chatId, messageId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // UnreportMessage operation middleware
 func (siw *ServerInterfaceWrapper) UnreportMessage(w http.ResponseWriter, r *http.Request) {
 
@@ -14711,6 +15307,75 @@ func (siw *ServerInterfaceWrapper) UpdateGroup(w http.ResponseWriter, r *http.Re
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateGroup(w, r, chatId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteGroupAvatar operation middleware
+func (siw *ServerInterfaceWrapper) DeleteGroupAvatar(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteGroupAvatarParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteGroupAvatar(w, r, chatId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -16999,6 +17664,192 @@ func (siw *ServerInterfaceWrapper) GetLinkPreviewImage(w http.ResponseWriter, r 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetLinkPreviewImage(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetStaticMap operation middleware
+func (siw *ServerInterfaceWrapper) GetStaticMap(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetStaticMapParams
+
+	// ------------- Required query parameter "lat" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "lat", r.URL.Query(), &params.Lat, runtime.BindQueryParameterOptions{Type: "number", Format: "double"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "lat"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "lat", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "lon" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "lon", r.URL.Query(), &params.Lon, runtime.BindQueryParameterOptions{Type: "number", Format: "double"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "lon"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "lon", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "sig" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "sig", r.URL.Query(), &params.Sig, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sig"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sig", Err: err})
+		}
+		return
+	}
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetStaticMap(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMapTile operation middleware
+func (siw *ServerInterfaceWrapper) GetMapTile(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "z" -------------
+	var z int
+
+	err = runtime.BindStyledParameterWithOptions("simple", "z", r.PathValue("z"), &z, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "z", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "x" -------------
+	var x int
+
+	err = runtime.BindStyledParameterWithOptions("simple", "x", r.PathValue("x"), &x, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "x", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "y" -------------
+	var y int
+
+	err = runtime.BindStyledParameterWithOptions("simple", "y", r.PathValue("y"), &y, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "y", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetMapTileParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMapTile(w, r, z, x, y, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -23633,6 +24484,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/chats/{chat_id}/messages/{message_id}/pin", wrapper.UnpinMessage)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/chats/{chat_id}/messages/{message_id}/pin", wrapper.PinMessage)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/chats/{chat_id}/pins", wrapper.ListPinnedMessages)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/chats/{chat_id}/messages/{message_id}/poll/votes", wrapper.VotePoll)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/chats/{chat_id}/messages/{message_id}/poll/close", wrapper.ClosePoll)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/chats/{chat_id}/messages/{message_id}/poll/voters", wrapper.ListPollVoters)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/chats/{chat_id}/imports", wrapper.ListChatImports)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/chats/{chat_id}/imports", wrapper.StartChatImport)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/imports/{import_id}", wrapper.RemoveChatImport)
@@ -23653,6 +24507,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/groups/{chat_id}", wrapper.DeleteGroup)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/groups/{chat_id}", wrapper.GetGroup)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/groups/{chat_id}", wrapper.UpdateGroup)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/groups/{chat_id}/avatar", wrapper.DeleteGroupAvatar)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/groups/{chat_id}/avatar", wrapper.SetGroupAvatar)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/groups/{chat_id}/background", wrapper.DeleteGroupBackground)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/groups/{chat_id}/background", wrapper.SetGroupBackground)
@@ -23717,6 +24572,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/stickers/recent", wrapper.ListRecentStickers)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/link-preview", wrapper.GetLinkPreview)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/link-preview/image", wrapper.GetLinkPreviewImage)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/maps/tiles/{z}/{x}/{y}", wrapper.GetMapTile)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/maps/static", wrapper.GetStaticMap)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/notifications", wrapper.GetNotificationSettings)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/me/notifications", wrapper.UpdateNotificationSettings)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/notifications/avatar/{token}", wrapper.GetNotificationAvatar)
@@ -31387,6 +32244,354 @@ func (response PinMessage426ApplicationProblemPlusJSONResponse) VisitPinMessageR
 	return err
 }
 
+type ClosePollRequestObject struct {
+	ChatId    ChatId    `json:"chat_id"`
+	MessageId MessageId `json:"message_id"`
+	Params    ClosePollParams
+}
+
+type ClosePollResponseObject interface {
+	VisitClosePollResponse(w http.ResponseWriter) error
+}
+
+type ClosePoll200JSONResponse Poll
+
+func (response ClosePoll200JSONResponse) VisitClosePollResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ClosePoll401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ClosePoll401ApplicationProblemPlusJSONResponse) VisitClosePollResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ClosePoll403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response ClosePoll403ApplicationProblemPlusJSONResponse) VisitClosePollResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ClosePoll404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response ClosePoll404ApplicationProblemPlusJSONResponse) VisitClosePollResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ClosePoll426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response ClosePoll426ApplicationProblemPlusJSONResponse) VisitClosePollResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPollVotersRequestObject struct {
+	ChatId    ChatId    `json:"chat_id"`
+	MessageId MessageId `json:"message_id"`
+	Params    ListPollVotersParams
+}
+
+type ListPollVotersResponseObject interface {
+	VisitListPollVotersResponse(w http.ResponseWriter) error
+}
+
+type ListPollVoters200JSONResponse UserPage
+
+func (response ListPollVoters200JSONResponse) VisitListPollVotersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPollVoters400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response ListPollVoters400ApplicationProblemPlusJSONResponse) VisitListPollVotersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPollVoters401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ListPollVoters401ApplicationProblemPlusJSONResponse) VisitListPollVotersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPollVoters403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response ListPollVoters403ApplicationProblemPlusJSONResponse) VisitListPollVotersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPollVoters404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response ListPollVoters404ApplicationProblemPlusJSONResponse) VisitListPollVotersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPollVoters426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response ListPollVoters426ApplicationProblemPlusJSONResponse) VisitListPollVotersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VotePollRequestObject struct {
+	ChatId    ChatId    `json:"chat_id"`
+	MessageId MessageId `json:"message_id"`
+	Params    VotePollParams
+	Body      *VotePollJSONRequestBody
+}
+
+type VotePollResponseObject interface {
+	VisitVotePollResponse(w http.ResponseWriter) error
+}
+
+type VotePoll200JSONResponse Poll
+
+func (response VotePoll200JSONResponse) VisitVotePollResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VotePoll400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response VotePoll400ApplicationProblemPlusJSONResponse) VisitVotePollResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VotePoll401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response VotePoll401ApplicationProblemPlusJSONResponse) VisitVotePollResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VotePoll403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response VotePoll403ApplicationProblemPlusJSONResponse) VisitVotePollResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VotePoll404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response VotePoll404ApplicationProblemPlusJSONResponse) VisitVotePollResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VotePoll409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response VotePoll409ApplicationProblemPlusJSONResponse) VisitVotePollResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VotePoll422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response VotePoll422ApplicationProblemPlusJSONResponse) VisitVotePollResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VotePoll426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response VotePoll426ApplicationProblemPlusJSONResponse) VisitVotePollResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VotePoll429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response VotePoll429ApplicationProblemPlusJSONResponse) VisitVotePollResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type UnreportMessageRequestObject struct {
 	ChatId    ChatId    `json:"chat_id"`
 	MessageId MessageId `json:"message_id"`
@@ -34033,6 +35238,93 @@ type UpdateGroup426ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response UpdateGroup426ApplicationProblemPlusJSONResponse) VisitUpdateGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteGroupAvatarRequestObject struct {
+	ChatId ChatId `json:"chat_id"`
+	Params DeleteGroupAvatarParams
+}
+
+type DeleteGroupAvatarResponseObject interface {
+	VisitDeleteGroupAvatarResponse(w http.ResponseWriter) error
+}
+
+type DeleteGroupAvatar200JSONResponse Group
+
+func (response DeleteGroupAvatar200JSONResponse) VisitDeleteGroupAvatarResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteGroupAvatar401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteGroupAvatar401ApplicationProblemPlusJSONResponse) VisitDeleteGroupAvatarResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteGroupAvatar403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteGroupAvatar403ApplicationProblemPlusJSONResponse) VisitDeleteGroupAvatarResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteGroupAvatar404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteGroupAvatar404ApplicationProblemPlusJSONResponse) VisitDeleteGroupAvatarResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteGroupAvatar426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteGroupAvatar426ApplicationProblemPlusJSONResponse) VisitDeleteGroupAvatarResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -37430,6 +38722,212 @@ func (response GetLinkPreviewImage429ApplicationProblemPlusJSONResponse) VisitGe
 	w.WriteHeader(429)
 	_, err := buf.WriteTo(w)
 	return err
+}
+
+type GetStaticMapRequestObject struct {
+	Params GetStaticMapParams
+}
+
+type GetStaticMapResponseObject interface {
+	VisitGetStaticMapResponse(w http.ResponseWriter) error
+}
+
+type GetStaticMap200ImagejpegResponse struct {
+	Body          io.Reader
+	ContentLength int64
+}
+
+func (response GetStaticMap200ImagejpegResponse) VisitGetStaticMapResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "image/jpeg")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type GetStaticMap400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response GetStaticMap400ApplicationProblemPlusJSONResponse) VisitGetStaticMapResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetStaticMap401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response GetStaticMap401ApplicationProblemPlusJSONResponse) VisitGetStaticMapResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetStaticMap403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response GetStaticMap403ApplicationProblemPlusJSONResponse) VisitGetStaticMapResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetStaticMap426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetStaticMap426ApplicationProblemPlusJSONResponse) VisitGetStaticMapResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetStaticMap503Response struct {
+}
+
+func (response GetStaticMap503Response) VisitGetStaticMapResponse(w http.ResponseWriter) error {
+	w.WriteHeader(503)
+	return nil
+}
+
+type GetMapTileRequestObject struct {
+	Z      int `json:"z"`
+	X      int `json:"x"`
+	Y      int `json:"y"`
+	Params GetMapTileParams
+}
+
+type GetMapTileResponseObject interface {
+	VisitGetMapTileResponse(w http.ResponseWriter) error
+}
+
+type GetMapTile200ImagepngResponse struct {
+	Body          io.Reader
+	ContentLength int64
+}
+
+func (response GetMapTile200ImagepngResponse) VisitGetMapTileResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "image/png")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type GetMapTile400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response GetMapTile400ApplicationProblemPlusJSONResponse) VisitGetMapTileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMapTile401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response GetMapTile401ApplicationProblemPlusJSONResponse) VisitGetMapTileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMapTile426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetMapTile426ApplicationProblemPlusJSONResponse) VisitGetMapTileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMapTile429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response GetMapTile429ApplicationProblemPlusJSONResponse) VisitGetMapTileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMapTile503Response struct {
+}
+
+func (response GetMapTile503Response) VisitGetMapTileResponse(w http.ResponseWriter) error {
+	w.WriteHeader(503)
+	return nil
 }
 
 type DeleteMeRequestObject struct {
@@ -47374,6 +48872,15 @@ type StrictServerInterface interface {
 	// PinMessage Pin a message
 	// (PUT /chats/{chat_id}/messages/{message_id}/pin)
 	PinMessage(ctx context.Context, request PinMessageRequestObject) (PinMessageResponseObject, error)
+	// ClosePoll Close a poll
+	// (POST /chats/{chat_id}/messages/{message_id}/poll/close)
+	ClosePoll(ctx context.Context, request ClosePollRequestObject) (ClosePollResponseObject, error)
+	// ListPollVoters Who voted for an option of a public poll
+	// (GET /chats/{chat_id}/messages/{message_id}/poll/voters)
+	ListPollVoters(ctx context.Context, request ListPollVotersRequestObject) (ListPollVotersResponseObject, error)
+	// VotePoll Vote in a poll, change the vote or take it back
+	// (PUT /chats/{chat_id}/messages/{message_id}/poll/votes)
+	VotePoll(ctx context.Context, request VotePollRequestObject) (VotePollResponseObject, error)
 	// UnreportMessage Withdraw a message report
 	// (DELETE /chats/{chat_id}/messages/{message_id}/report)
 	UnreportMessage(ctx context.Context, request UnreportMessageRequestObject) (UnreportMessageResponseObject, error)
@@ -47458,6 +48965,9 @@ type StrictServerInterface interface {
 	// UpdateGroup Change name or description
 	// (PATCH /groups/{chat_id})
 	UpdateGroup(ctx context.Context, request UpdateGroupRequestObject) (UpdateGroupResponseObject, error)
+	// DeleteGroupAvatar Remove the group avatar
+	// (DELETE /groups/{chat_id}/avatar)
+	DeleteGroupAvatar(ctx context.Context, request DeleteGroupAvatarRequestObject) (DeleteGroupAvatarResponseObject, error)
 	// SetGroupAvatar Set the group avatar from an uploaded attachment
 	// (PUT /groups/{chat_id}/avatar)
 	SetGroupAvatar(ctx context.Context, request SetGroupAvatarRequestObject) (SetGroupAvatarResponseObject, error)
@@ -47551,6 +49061,12 @@ type StrictServerInterface interface {
 	// GetLinkPreviewImage The image of a link preview, through the server
 	// (GET /link-preview/image)
 	GetLinkPreviewImage(ctx context.Context, request GetLinkPreviewImageRequestObject) (GetLinkPreviewImageResponseObject, error)
+	// GetStaticMap The map image of a location message
+	// (GET /maps/static)
+	GetStaticMap(ctx context.Context, request GetStaticMapRequestObject) (GetStaticMapResponseObject, error)
+	// GetMapTile A 256 px map tile, through the server
+	// (GET /maps/tiles/{z}/{x}/{y})
+	GetMapTile(ctx context.Context, request GetMapTileRequestObject) (GetMapTileResponseObject, error)
 	// DeleteMe Delete the account
 	// (DELETE /me)
 	DeleteMe(ctx context.Context, request DeleteMeRequestObject) (DeleteMeResponseObject, error)
@@ -49851,6 +51367,97 @@ func (sh *strictHandler) PinMessage(w http.ResponseWriter, r *http.Request, chat
 	}
 }
 
+// ClosePoll operation middleware
+func (sh *strictHandler) ClosePoll(w http.ResponseWriter, r *http.Request, chatId ChatId, messageId MessageId, params ClosePollParams) {
+	var request ClosePollRequestObject
+
+	request.ChatId = chatId
+	request.MessageId = messageId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ClosePoll(ctx, request.(ClosePollRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ClosePoll")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ClosePollResponseObject); ok {
+		if err := validResponse.VisitClosePollResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListPollVoters operation middleware
+func (sh *strictHandler) ListPollVoters(w http.ResponseWriter, r *http.Request, chatId ChatId, messageId MessageId, params ListPollVotersParams) {
+	var request ListPollVotersRequestObject
+
+	request.ChatId = chatId
+	request.MessageId = messageId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListPollVoters(ctx, request.(ListPollVotersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListPollVoters")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListPollVotersResponseObject); ok {
+		if err := validResponse.VisitListPollVotersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// VotePoll operation middleware
+func (sh *strictHandler) VotePoll(w http.ResponseWriter, r *http.Request, chatId ChatId, messageId MessageId, params VotePollParams) {
+	var request VotePollRequestObject
+
+	request.ChatId = chatId
+	request.MessageId = messageId
+	request.Params = params
+
+	var body VotePollJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.VotePoll(ctx, request.(VotePollRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "VotePoll")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(VotePollResponseObject); ok {
+		if err := validResponse.VisitVotePollResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // UnreportMessage operation middleware
 func (sh *strictHandler) UnreportMessage(w http.ResponseWriter, r *http.Request, chatId ChatId, messageId MessageId, params UnreportMessageParams) {
 	var request UnreportMessageRequestObject
@@ -50663,6 +52270,33 @@ func (sh *strictHandler) UpdateGroup(w http.ResponseWriter, r *http.Request, cha
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateGroupResponseObject); ok {
 		if err := validResponse.VisitUpdateGroupResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteGroupAvatar operation middleware
+func (sh *strictHandler) DeleteGroupAvatar(w http.ResponseWriter, r *http.Request, chatId ChatId, params DeleteGroupAvatarParams) {
+	var request DeleteGroupAvatarRequestObject
+
+	request.ChatId = chatId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteGroupAvatar(ctx, request.(DeleteGroupAvatarRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteGroupAvatar")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteGroupAvatarResponseObject); ok {
+		if err := validResponse.VisitDeleteGroupAvatarResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -51589,6 +53223,61 @@ func (sh *strictHandler) GetLinkPreviewImage(w http.ResponseWriter, r *http.Requ
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetLinkPreviewImageResponseObject); ok {
 		if err := validResponse.VisitGetLinkPreviewImageResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetStaticMap operation middleware
+func (sh *strictHandler) GetStaticMap(w http.ResponseWriter, r *http.Request, params GetStaticMapParams) {
+	var request GetStaticMapRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetStaticMap(ctx, request.(GetStaticMapRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetStaticMap")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetStaticMapResponseObject); ok {
+		if err := validResponse.VisitGetStaticMapResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetMapTile operation middleware
+func (sh *strictHandler) GetMapTile(w http.ResponseWriter, r *http.Request, z int, x int, y int, params GetMapTileParams) {
+	var request GetMapTileRequestObject
+
+	request.Z = z
+	request.X = x
+	request.Y = y
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMapTile(ctx, request.(GetMapTileRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMapTile")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetMapTileResponseObject); ok {
+		if err := validResponse.VisitGetMapTileResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/myronsi/messenger-back/internal/emoji"
+	"github.com/myronsi/messenger-back/internal/messages"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 	"github.com/myronsi/messenger-back/internal/store/scylla"
 )
@@ -33,14 +34,17 @@ const (
 )
 
 const (
-	ContentText    = "text"
-	ContentPhoto   = "photo"
-	ContentVideo   = "video"
-	ContentAudio   = "audio"
-	ContentVoice   = "voice"
-	ContentFile    = "file"
-	ContentAlbum   = "album"
-	ContentSticker = "sticker"
+	ContentText     = "text"
+	ContentPhoto    = "photo"
+	ContentVideo    = "video"
+	ContentAudio    = "audio"
+	ContentVoice    = "voice"
+	ContentFile     = "file"
+	ContentAlbum    = "album"
+	ContentSticker  = "sticker"
+	ContentPoll     = "poll"
+	ContentContact  = "contact"
+	ContentLocation = "location"
 )
 
 type Delivery interface {
@@ -278,8 +282,8 @@ func (w *Worker) content(ctx context.Context, j postgres.NotificationJob, m scyl
 		if r.Preferences.Previews {
 			p.Preview, p.SenderID = true, fmt.Sprint(*m.SenderID)
 			p.Title = clip(emoji.Plain(cmp.Or(names[uid], senderName)), titleRunes)
-			if m.Content != nil {
-				p.Body = clip(emoji.Plain(*m.Content), bodyRunes)
+			if body := pushBody(m); body != "" {
+				p.Body = clip(emoji.Plain(body), bodyRunes)
 			}
 			if chat.Type == postgres.ChatGroup && chat.Name != nil {
 				p.ChatTitle = clip(emoji.Plain(*chat.Name), titleRunes)
@@ -296,6 +300,12 @@ func (w *Worker) contentType(ctx context.Context, m scylla.Message) string {
 		return ContentVoice
 	case scylla.TypeSticker:
 		return ContentSticker
+	case scylla.TypePoll:
+		return ContentPoll
+	case scylla.TypeContact:
+		return ContentContact
+	case scylla.TypeLocation:
+		return ContentLocation
 	}
 	ids := m.AttachmentIDs()
 	if len(ids) == 0 {
@@ -404,4 +414,17 @@ func clip(s string, n int) string {
 		return string(r)
 	}
 	return strings.TrimSpace(string(r[:n-1])) + "…"
+}
+
+func pushBody(m scylla.Message) string {
+	if m.Type == scylla.TypeLocation {
+		if l, ok := messages.ParseLocation(m); ok && l.Title != nil {
+			return "📍 " + *l.Title
+		}
+		return "📍"
+	}
+	if m.Content == nil {
+		return ""
+	}
+	return *m.Content
 }
