@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.37.0](https://github.com/myronsi/messenger-back/compare/v1.37.0-alpha.1...v1.37.0) (2026-11-26)
+
+
+### Miscellaneous Chores
+
+* release 1.37.0 ([#253](https://github.com/myronsi/messenger-back/issues/253)) ([b6965a4](https://github.com/myronsi/messenger-back/commit/b6965a4795c6a8880cfb072e8ccd6e40903394c3))
+
 ## [1.37.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.36.0-alpha.1...v1.37.0-alpha.1) (2026-11-26)
 
 
