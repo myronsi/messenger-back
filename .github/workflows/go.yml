@@ -36,8 +36,13 @@ jobs:
           go generate ./...
           git diff --exit-code
 
-  test:
+  test-shard:
+    name: test (${{ matrix.shard }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [media, httpapi-auth, rest]
     services:
       postgres:
         image: postgres:18-alpine
@@ -77,9 +82,49 @@ jobs:
       - name: Start stores and install versioned media tools
         run: bash deploy/ci/setup-test.sh
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        id: go
         with:
           go-version-file: go.mod
-      - run: go test -race ./...
+          cache: false
+      - name: Restore the race build cache
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-race-${{ matrix.shard }}-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-race-${{ matrix.shard }}-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-
+            go-race-${{ matrix.shard }}-${{ runner.os }}-${{ steps.go.outputs.go-version }}-
+      - name: Test ${{ matrix.shard }}
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          case "$SHARD" in
+            media) packages="./internal/media/" ;;
+            httpapi-auth) packages="./internal/httpapi/ ./internal/auth/" ;;
+            rest) packages=$(go list ./... | grep -vE '/internal/(httpapi|auth|media)$') ;;
+            *) echo "unknown shard $SHARD" >&2; exit 1 ;;
+          esac
+          go test -race $packages
+      - name: Save the race build cache
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-race-${{ matrix.shard }}-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+
+  test:
+    if: always()
+    needs: test-shard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every test shard passed
+        env:
+          RESULT: ${{ needs.test-shard.result }}
+        run: test "$RESULT" = success
 
   # The migrations create the schema on an empty database, roll back and apply again, with the real tool.
   migrations:

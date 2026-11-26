@@ -2,14 +2,8 @@ package auth
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"net/netip"
-	"net/url"
-	"os"
-	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -17,73 +11,17 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/pquerna/otp/totp"
 	goredis "github.com/redis/go-redis/v9"
 
 	"github.com/myronsi/messenger-back/internal/store/postgres"
+	"github.com/myronsi/messenger-back/internal/testenv"
 )
-
-const migrationsDir = "../../migrations/postgres"
 
 // newStore returns a Store on a fresh database with the full schema, or skips the test.
 func newStore(t *testing.T) *postgres.Store {
 	t.Helper()
-	admin := os.Getenv("TEST_DATABASE_URL")
-	if admin == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-	conn, err := pgx.Connect(ctx, admin)
-	if err != nil {
-		t.Fatal(err)
-	}
-	raw := make([]byte, 6)
-	if _, err := rand.Read(raw); err != nil {
-		t.Fatal(err)
-	}
-	name := "test_" + hex.EncodeToString(raw)
-	if _, err := conn.Exec(ctx, "CREATE DATABASE "+name); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		c, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		_, _ = conn.Exec(c, "DROP DATABASE IF EXISTS "+name+" WITH (FORCE)")
-		_ = conn.Close(c)
-	})
-	u, err := url.Parse(admin)
-	if err != nil {
-		t.Fatal(err)
-	}
-	u.Path = "/" + name
-
-	files, err := filepath.Glob(filepath.Join(migrationsDir, "*.up.sql"))
-	if err != nil || len(files) == 0 {
-		t.Fatalf("no migrations: %v", err)
-	}
-	sort.Strings(files)
-	mc, err := pgx.Connect(ctx, u.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer mc.Close(ctx)
-	for _, f := range files {
-		sql, err := os.ReadFile(f)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := mc.Exec(ctx, string(sql), pgx.QueryExecModeSimpleProtocol); err != nil {
-			t.Fatalf("%s: %v", filepath.Base(f), err)
-		}
-	}
-	s, err := postgres.New(ctx, u.String(), postgres.Options{MaxConns: 8, QueryTimeout: 10 * time.Second})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(s.Close)
-	return s
+	return testenv.Postgres(t)
 }
 
 type env struct {
