@@ -6,6 +6,8 @@ Backend releases use release-please on `master`. Merge a Conventional Commit PR,
 
 All releases deploy to staging through `deploy-go.yml`. Stable releases deploy to production when `GO_PRODUCTION=true`; the workflow advances `edge` because the production environment accepts that branch. Production settings live only on the server in `/opt/messenger-go/.env` and `.env.notifications`. Deployment backs up PostgreSQL, applies migrations and checks readiness; failure restores the previous image. See [deployment](deploy-go.md).
 
+To turn the pre-release train into a stable release (which also deploys to production), merge a PR whose description ends with a footer line like Release-As: 1.37.0.
+
 Python `0.x` releases, images, deployment workflows and compose assets are retired. Historical tags and release assets remain records and must not be deployed.
 
 Validation uses `go.yml` (Go tests, lint, image, development and deployment stacks), `api-ci.yml` (API contract), `frontend-compat.yml` (frontend smoke tests against the Go stack), and `pr-title.yml`. The frontend compatibility suite checks its latest release and, nightly or for API changes, its main branch.
