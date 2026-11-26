@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.37.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.36.0-alpha.1...v1.37.0-alpha.1) (2026-11-26)
+
+
+### Features
+
+* **calls:** camera and screen sharing behind feature flags ([#250](https://github.com/myronsi/messenger-back/issues/250)) ([e4904e6](https://github.com/myronsi/messenger-back/commit/e4904e6513ab647773cf1d0e0e24f401ade1440e))
+
+
+### Bug Fixes
+
+* **imports:** animated WebP stickers and imports of up to 500,000 messages ([#252](https://github.com/myronsi/messenger-back/issues/252)) ([ff55cba](https://github.com/myronsi/messenger-back/commit/ff55cba324df82100652b96609cbc67248240810))
+
 ## [1.36.0-alpha.1](https://github.com/myronsi/messenger-back/compare/v1.35.0-alpha.1...v1.36.0-alpha.1) (2026-11-25)
 
 
