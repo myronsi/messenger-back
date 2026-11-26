@@ -2,6 +2,13 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.49
+
+- Chat imports hold up to 500,000 messages: `ChatImport.message_count` and `StartChatImportRequest.message_count`
+  allow up to `500000`.
+- `UploadPurpose` `message` accepts animated WebP (for example WhatsApp stickers in an import) and keeps the
+  animation; before, such files got `415`.
+  
 ## 2.1.0-alpha.48
 
 - Video and screen sharing in calls: `CallConfig` (`GET /calls/config`) gains `video_enabled` and

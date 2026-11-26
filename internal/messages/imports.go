@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	MaxImportMessages = 100000
+	MaxImportMessages = 500000
 	MaxImportFiles    = 5000
 	MaxImportBatch    = 500
 	MaxImportSenders  = 200

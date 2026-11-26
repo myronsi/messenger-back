@@ -2535,7 +2535,10 @@ type CreateUploadSessionRequest struct {
 	Filename string                          `json:"filename"`
 	Kind     *CreateUploadSessionRequestKind `json:"kind,omitempty"`
 
-	// Purpose `sticker`: a PNG, JPEG or still WebP of at most 5 MB. The server fits it into 512 x 512 px with a transparent
+	// Purpose `message`: an animated WebP keeps its frames (at most 300); the server removes its metadata and checks every
+	// frame. `avatar` and `profile_background` take only still WebP (`415` otherwise).
+	//
+	// `sticker`: a PNG, JPEG or still WebP of at most 5 MB. The server fits it into 512 x 512 px with a transparent
 	// border and stores a WebP (`413` when that is still over 512 KB). Only its uploader can load it until it is
 	// added to a pack.
 	//
@@ -4630,7 +4633,10 @@ type UploadAttachmentRequest struct {
 	File  openapi_types.File `json:"file"`
 	Kind  *AttachmentKind    `json:"kind,omitempty"`
 
-	// Purpose `sticker`: a PNG, JPEG or still WebP of at most 5 MB. The server fits it into 512 x 512 px with a transparent
+	// Purpose `message`: an animated WebP keeps its frames (at most 300); the server removes its metadata and checks every
+	// frame. `avatar` and `profile_background` take only still WebP (`415` otherwise).
+	//
+	// `sticker`: a PNG, JPEG or still WebP of at most 5 MB. The server fits it into 512 x 512 px with a transparent
 	// border and stores a WebP (`413` when that is still over 512 KB). Only its uploader can load it until it is
 	// added to a pack.
 	//
@@ -4659,7 +4665,10 @@ type UploadAttachmentRequest struct {
 	Waveform *[]int `json:"waveform,omitempty"`
 }
 
-// UploadPurpose `sticker`: a PNG, JPEG or still WebP of at most 5 MB. The server fits it into 512 x 512 px with a transparent
+// UploadPurpose `message`: an animated WebP keeps its frames (at most 300); the server removes its metadata and checks every
+// frame. `avatar` and `profile_background` take only still WebP (`415` otherwise).
+//
+// `sticker`: a PNG, JPEG or still WebP of at most 5 MB. The server fits it into 512 x 512 px with a transparent
 // border and stores a WebP (`413` when that is still over 512 KB). Only its uploader can load it until it is
 // added to a pack.
 //
