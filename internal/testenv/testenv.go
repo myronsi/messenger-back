@@ -6,6 +6,7 @@ package testenv
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"net/url"
@@ -53,8 +54,12 @@ func Postgres(t testing.TB) *postgres.Store {
 	if err != nil {
 		t.Fatalf("postgres: %v", err)
 	}
+	template, err := postgresTemplate(ctx, admin)
+	if err != nil {
+		t.Fatalf("postgres template: %v", err)
+	}
 	name := randomName("test_")
-	if _, err := conn.Exec(ctx, "CREATE DATABASE "+name); err != nil {
+	if _, err := conn.Exec(ctx, "CREATE DATABASE "+name+" TEMPLATE "+template); err != nil {
 		t.Fatalf("create database: %v", err)
 	}
 	t.Cleanup(func() {
@@ -73,17 +78,6 @@ func Postgres(t testing.TB) *postgres.Store {
 	if err != nil {
 		t.Fatal(err)
 	}
-	files, _ := filepath.Glob(filepath.Join(root(), "migrations", "postgres", "*.up.sql"))
-	slices.Sort(files)
-	for _, f := range files {
-		sql, err := os.ReadFile(f) //nolint:gosec // the repository's own migrations
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := db.Exec(ctx, string(sql), pgx.QueryExecModeSimpleProtocol); err != nil {
-			t.Fatalf("%s: %v", filepath.Base(f), err)
-		}
-	}
 	// Each test has a database of its own, but the ScyllaDB keyspace and the search index are shared: chat ids
 	// start at random, so tests do not read each other's messages.
 	var start [5]byte
@@ -100,6 +94,93 @@ func Postgres(t testing.TB) *postgres.Store {
 	}
 	t.Cleanup(s.Close)
 	return s
+}
+
+const templateLockKey = 7_342_118_905
+
+var (
+	templateOnce sync.Once
+	templateName string
+	templateErr  error
+)
+
+func postgresTemplate(ctx context.Context, admin string) (string, error) {
+	templateOnce.Do(func() { templateName, templateErr = buildPostgresTemplate(ctx, admin) })
+	return templateName, templateErr
+}
+
+func buildPostgresTemplate(ctx context.Context, admin string) (string, error) {
+	files, err := filepath.Glob(filepath.Join(root(), "migrations", "postgres", "*.up.sql"))
+	if err != nil {
+		return "", err
+	}
+	if len(files) == 0 {
+		return "", fmt.Errorf("no postgres migrations found")
+	}
+	slices.Sort(files)
+	sum := sha256.New()
+	migrations := make([]string, 0, len(files))
+	for _, f := range files {
+		sql, err := os.ReadFile(f) //nolint:gosec // the repository's own migrations
+		if err != nil {
+			return "", err
+		}
+		sum.Write([]byte(filepath.Base(f)))
+		sum.Write(sql)
+		migrations = append(migrations, string(sql))
+	}
+	name := "template_" + hex.EncodeToString(sum.Sum(nil))[:16]
+
+	conn, err := pgx.Connect(ctx, admin)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = conn.Close(context.Background()) }()
+	if _, err := conn.Exec(ctx, "SELECT pg_advisory_lock($1)", templateLockKey); err != nil {
+		return "", err
+	}
+	defer func() { _, _ = conn.Exec(context.Background(), "SELECT pg_advisory_unlock($1)", templateLockKey) }()
+
+	var exists bool
+	if err := conn.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM pg_database WHERE datname = $1)", name).Scan(&exists); err != nil {
+		return "", err
+	}
+	if exists {
+		return name, nil
+	}
+
+	building := randomName("template_build_")
+	if _, err := conn.Exec(ctx, "CREATE DATABASE "+building); err != nil {
+		return "", err
+	}
+	if err := migrate(ctx, admin, building, files, migrations); err != nil {
+		_, _ = conn.Exec(context.Background(), "DROP DATABASE IF EXISTS "+building+" WITH (FORCE)")
+		return "", err
+	}
+	if _, err := conn.Exec(ctx, "ALTER DATABASE "+building+" RENAME TO "+name); err != nil {
+		_, _ = conn.Exec(context.Background(), "DROP DATABASE IF EXISTS "+building+" WITH (FORCE)")
+		return "", err
+	}
+	return name, nil
+}
+
+func migrate(ctx context.Context, admin, database string, files, migrations []string) error {
+	u, err := url.Parse(admin)
+	if err != nil {
+		return err
+	}
+	u.Path = "/" + database
+	db, err := pgx.Connect(ctx, u.String())
+	if err != nil {
+		return err
+	}
+	defer func() { _ = db.Close(context.Background()) }()
+	for i, sql := range migrations {
+		if _, err := db.Exec(ctx, sql, pgx.QueryExecModeSimpleProtocol); err != nil {
+			return fmt.Errorf("%s: %w", filepath.Base(files[i]), err)
+		}
+	}
+	return nil
 }
 
 // Elastic returns a store and an index alias of the test's own; the alias's indices and template are deleted
