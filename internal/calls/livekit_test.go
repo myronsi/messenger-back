@@ -67,6 +67,32 @@ func TestParticipantGrantClaims(t *testing.T) {
 	}
 }
 
+func TestParticipantGrantVideoSources(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		camera, share bool
+		want          []any
+	}{
+		{name: "audio only", want: []any{"microphone"}},
+		{name: "camera", camera: true, want: []any{"microphone", "camera"}},
+		{name: "screen share", share: true, want: []any{"microphone", "screen_share", "screen_share_audio"}},
+		{name: "both", camera: true, share: true, want: []any{"microphone", "camera", "screen_share", "screen_share_audio"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			g := NewGrants(testKey, testSecret, time.Minute).EnableVideo(tc.camera, tc.share)
+			token, _, err := g.Participant("call-5", "7:x", time.Now())
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, _ := json.Marshal(parseClaims(t, token, testSecret)["video"].(map[string]any)["canPublishSources"])
+			want, _ := json.Marshal(tc.want)
+			if string(got) != string(want) {
+				t.Fatalf("canPublishSources = %s, want %s", got, want)
+			}
+		})
+	}
+}
+
 func webhookToken(t *testing.T, key, secret string, body []byte, exp time.Time) string {
 	t.Helper()
 	sum := sha256.Sum256(body)

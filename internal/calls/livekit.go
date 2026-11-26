@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -30,13 +31,33 @@ var (
 )
 
 type Grants struct {
-	key    string
-	secret []byte
-	ttl    time.Duration
+	key     string
+	secret  []byte
+	ttl     time.Duration
+	sources []string
 }
 
+const (
+	SourceMicrophone       = "microphone"
+	SourceCamera           = "camera"
+	SourceScreenShare      = "screen_share"
+	SourceScreenShareAudio = "screen_share_audio"
+)
+
 func NewGrants(apiKey, apiSecret string, ttl time.Duration) *Grants {
-	return &Grants{key: apiKey, secret: []byte(apiSecret), ttl: ttl}
+	return &Grants{key: apiKey, secret: []byte(apiSecret), ttl: ttl, sources: []string{SourceMicrophone}}
+}
+
+func (g *Grants) EnableVideo(camera, screenShare bool) *Grants {
+	sources := []string{SourceMicrophone}
+	if camera {
+		sources = append(sources, SourceCamera)
+	}
+	if screenShare {
+		sources = append(sources, SourceScreenShare, SourceScreenShareAudio)
+	}
+	g.sources = sources
+	return g
 }
 
 type videoGrant struct {
@@ -79,7 +100,7 @@ func (g *Grants) Participant(room, identity string, now time.Time) (string, time
 		},
 		Video: &videoGrant{
 			Room: room, RoomJoin: true, CanPublish: flag(true), CanSubscribe: flag(true), CanPublishData: flag(false),
-			CanPublishSources: []string{"microphone"}, CanUpdateOwnMetadata: flag(false),
+			CanPublishSources: slices.Clone(g.sources), CanUpdateOwnMetadata: flag(false),
 		},
 	})
 	return token, exp, err

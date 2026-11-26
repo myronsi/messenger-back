@@ -2,6 +2,12 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.48
+
+- Video and screen sharing in calls: `CallConfig` (`GET /calls/config`) gains `video_enabled` and
+  `screen_share_enabled`. When they are on, the media grant also allows the `camera`, `screen_share` and
+  `screen_share_audio` sources; every source is end-to-end encrypted with the same per-epoch sender keys as audio.
+
 ## 2.1.0-alpha.47
 
 - New message types `poll`, `contact` and `location` (`MessageType`, `SendMessageRequest.type`, `UnsentMessage.type`),

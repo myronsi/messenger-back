@@ -19,6 +19,8 @@ type Calls struct {
 	RingTimeout           time.Duration `env:"CALLS_RING_TIMEOUT" envDefault:"30s"`
 	EmptyGrace            time.Duration `env:"CALLS_EMPTY_GRACE" envDefault:"20s"`
 	TokenTTL              time.Duration `env:"CALLS_TOKEN_TTL" envDefault:"10m"`
+	VideoEnabled          bool          `env:"CALLS_VIDEO_ENABLED" envDefault:"false"`
+	ScreenShareEnabled    bool          `env:"CALLS_SCREEN_SHARE_ENABLED" envDefault:"false"`
 }
 
 func (c Calls) validate(production bool) []string {

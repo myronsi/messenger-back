@@ -2129,6 +2129,15 @@ type CallConfig struct {
 
 	// RingTimeoutSeconds How long an invitation rings before it counts as missed.
 	RingTimeoutSeconds int `json:"ring_timeout_seconds"`
+
+	// ScreenShareEnabled Participants may share their screen, with its sound where the browser offers it. Several participants may
+	// share at the same time. Always `false` while `enabled` is `false`. Clients treat a missing field as
+	// `false`.
+	ScreenShareEnabled bool `json:"screen_share_enabled"`
+
+	// VideoEnabled Participants may publish their camera. Always `false` while `enabled` is `false`. Clients treat a missing
+	// field (older servers) as `false`.
+	VideoEnabled bool `json:"video_enabled"`
 }
 
 // CallEndReason Why the call ended: `completed` (people talked), `missed` (nobody answered in time), `declined` (the peer of a
@@ -7820,7 +7829,7 @@ type ServerInterface interface {
 	// ListMyCalls Calls that are not over and involve the current user
 	// (GET /calls)
 	ListMyCalls(w http.ResponseWriter, r *http.Request, params ListMyCallsParams)
-	// GetCallConfig Whether audio calls are available and their limits
+	// GetCallConfig Whether calls are available and their limits
 	// (GET /calls/config)
 	GetCallConfig(w http.ResponseWriter, r *http.Request, params GetCallConfigParams)
 	// GetCall A call of one of the user's chats
@@ -48773,7 +48782,7 @@ type StrictServerInterface interface {
 	// ListMyCalls Calls that are not over and involve the current user
 	// (GET /calls)
 	ListMyCalls(ctx context.Context, request ListMyCallsRequestObject) (ListMyCallsResponseObject, error)
-	// GetCallConfig Whether audio calls are available and their limits
+	// GetCallConfig Whether calls are available and their limits
 	// (GET /calls/config)
 	GetCallConfig(ctx context.Context, request GetCallConfigRequestObject) (GetCallConfigResponseObject, error)
 	// GetCall A call of one of the user's chats

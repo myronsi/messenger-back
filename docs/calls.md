@@ -1,6 +1,7 @@
-# Audio calls
+# Calls
 
-One-to-one and group audio calls for the web app and the installed PWA, end-to-end encrypted, through a
+One-to-one and group calls with audio, camera video and screen sharing, for the web app and the installed PWA,
+end-to-end encrypted, through a
 self-hosted [LiveKit](https://docs.livekit.io/) media server on the same host as the API. The plan and its decisions
 are summarised in [Decisions](#decisions); the encryption design is the ADR [calls-e2ee.md](calls-e2ee.md).
 
@@ -12,8 +13,8 @@ browser ──REST/WS──► api (calls service) ──► PostgreSQL (calls, 
    └──────── WebRTC (UDP / TURN-TLS), encrypted frames ────────┘
 ```
 
-The API decides who may ring, join and hear whom. LiveKit only forwards encrypted audio frames; it never holds a
-media key.
+The API decides who may ring, join and hear whom. LiveKit only forwards encrypted audio and video frames; it never
+holds a media key.
 
 ## Decisions
 
@@ -75,6 +76,24 @@ Participant states: `ringing` → `joined` | `declined` | `missed`; `joined` →
 Every change bumps the call's `version` and is published as a `call_updated` event to all chat members. Clients
 load `GET /calls` after every reconnect.
 
+## Video and screen sharing
+
+Decided 2026-11-26. Both are switched on separately (`CALLS_VIDEO_ENABLED`, `CALLS_SCREEN_SHARE_ENABLED`, both off by
+default) and reported by `GET /calls/config` as `video_enabled` and `screen_share_enabled`.
+
+| Topic | Decision |
+|---|---|
+| Where | Direct and group calls, up to the same participant limit as audio. |
+| Start | Every call starts as an audio call; ringing and push are unchanged. Inside the call each participant turns their camera on or off; it is off when joining. |
+| Screen sharing | Desktop browsers only (mobile browsers have no `getDisplayMedia`). Several participants may share at the same time. A shared Chrome/Edge tab may carry its sound (`screen_share_audio`). |
+| Quality | Camera up to 720p30 with simulcast layers 180p, 360p and 720p; screen up to 1080p at most 15 fps. The client subscribes only to visible tiles at their size (adaptive stream, dynacast). |
+| Who may | Whoever may call a user (`calls_from`) may also send video; there is no separate setting. |
+| Encryption | Every source uses the same per-epoch sender keys as audio, behind the same gate: a client publishes a track only after its envelopes for the current epoch were accepted. There is no unencrypted fallback. |
+
+The server keeps no camera or sharing state: LiveKit's track publications tell the clients who has which source on.
+Switching a flag off takes effect for each participant at their next grant (renewal within `CALLS_TOKEN_TTL`, or a
+rejoin); the API configuration is the same on every instance.
+
 ## Encryption
 
 See [calls-e2ee.md](calls-e2ee.md). In short: each session registers a P-256 identity key
@@ -92,7 +111,10 @@ events to the recipient session only, and keeps them until the call ends for `GE
 | `iss` | `CALLS_API_KEY` |
 | `sub` | identity `<user_id>:<session_id>` |
 | `nbf`, `exp`, `jti` | now, now + TTL, random |
-| `video` | `room: "call-<call_id>"`, `roomJoin: true`, `canPublish: true`, `canSubscribe: true`, `canPublishData: false`, `canPublishSources: ["microphone"]`, `canUpdateOwnMetadata: false` |
+| `video` | `room: "call-<call_id>"`, `roomJoin: true`, `canPublish: true`, `canSubscribe: true`, `canPublishData: false`, `canPublishSources`, `canUpdateOwnMetadata: false` |
+
+`canPublishSources` is always `microphone`; `camera` is added when `CALLS_VIDEO_ENABLED` is on, `screen_share` and
+`screen_share_audio` when `CALLS_SCREEN_SHARE_ENABLED` is on. LiveKit refuses any other source.
 
 The token is only issued to the session that joined, only while the call is not over. A token alone does not keep
 someone in a call: removals call LiveKit's `RemoveParticipant`, and a removed identity cannot get a new grant.
@@ -411,6 +433,20 @@ first profile). Media of TURN users passes the host's network twice (client to T
 through the Elastic IP), so it counts twice in the network metrics. On two burstable vCPUs, packets per second is
 the likely first limit, before bandwidth.
 
+Video adds to this per forwarded track. Planning numbers with simulcast, where receivers of small tiles get a low
+layer:
+
+| Profile | Outbound |
+|---|---|
+| Direct call, both cameras at 720p (≈ 1.5 Mbit/s each) | ≈ 3 Mbit/s |
+| 10 people, every camera on, 9 small tiles per receiver (≈ 150 kbit/s each) | ≈ 13.5 Mbit/s |
+| The same room plus one 1080p screen share watched by 9 (≈ 1.5 Mbit/s each) | ≈ 27 Mbit/s |
+
+Under LiveKit's limit of about 160 Mbit/s that is roughly 50 direct video calls or 5 to 10 full group rooms with
+video, and video packets per second weigh more on one vCPU than audio. `CALLS_MAX_ACTIVE_PARTICIPANTS` counts
+sessions, not tracks, so set it from the video profiles of the load test before switching video on. Each Mbit/s
+held for an hour is about 0.45 GB of egress.
+
 **Price it before launch:** the egress of the first profile and of a realistic day (the expected call minutes per
 day) at the region's current data-transfer-out rate, plus CPU credits if the instance runs in unlimited mode. Set
 an AWS Budgets alert on monthly data transfer. These are planning estimates, not a bill or a measured capacity.
@@ -437,6 +473,8 @@ Never on the production host without a controlled window and abort thresholds, a
    - `livekit_node_packet_total{type="dropped"}` is above 1 % of `type="out"`, or the median `livekit_quality_score`
      is below 3.5;
    - `livekit` memory is above 90 % of `CALLS_MEM_LIMIT`, or the host has less than 1 GiB available.
+   With video switched on, repeat the ramp with every publisher sending a 720p camera with simulcast (the video
+   publisher options of `lk load-test --help`) and add steps with one and with three screen shares per room of 10.
 6. **Result:** set `CALLS_MAX_ACTIVE_PARTICIPANTS` to about 70 % of the highest participant count that passed, and
    write the measured CPU, packets/s, egress, join failures and reconnect time per step into the release ticket.
    250 stays a target until a step shows it.
@@ -482,6 +520,12 @@ notes) in the release ticket.
    in both directions. Android Chrome, the Android PWA, iOS Safari and the iOS home-screen PWA behave differently:
    record it, do not expect native-call behaviour. After unlocking, the call is still there or offers to rejoin.
 8. A denied or missing microphone and an unsupported browser show an explanation, never an unencrypted call.
+9. Video (with `CALLS_VIDEO_ENABLED`): turning the camera on shows it to everyone within a second or two; turning it
+   off shows the avatar again and the camera light goes out. On phones, the camera can be flipped. After someone joins
+   or leaves, video continues after at most a short freeze. With all 10 cameras on, a phone stays usable.
+10. Screen sharing (with `CALLS_SCREEN_SHARE_ENABLED`, desktop): a shared screen, window and Chrome/Edge tab (with
+    "share tab audio") appear on the others' stage, readable at 1080p; two people share at once and viewers can
+    switch; stopping from the browser's share bar ends the share everywhere. Phones show no share button.
 
 ### Local development
 

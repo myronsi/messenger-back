@@ -90,6 +90,14 @@ Call metadata (who, when, outcome) for 90 days, identity public keys per session
 call ends. Never audio, never plaintext media keys, never security codes. Envelope bodies and keys are never
 logged.
 
+## Video and screen sharing (2026-11-26)
+
+Camera, screen share and screen share audio tracks use the same scheme without change: the participant's sender key
+of the current epoch encrypts every frame of every source it publishes, and the same gate applies (no track is
+published before its envelopes for the epoch were accepted). LiveKit's frame encryption leaves the codec's first
+bytes in the clear so the SFU can still pick simulcast layers and spot keyframes; the picture itself stays
+encrypted. After an epoch switch a receiver may show a short freeze until a keyframe under the new key arrives.
+
 ## Consequences
 
 - One extra round of envelopes per epoch: with 10 participants that is at most 90 small envelopes per change.
@@ -104,7 +112,7 @@ logged.
 
 | Attacker | Protected | Not protected |
 |---|---|---|
-| Curious or compromised SFU / TURN | Audio content | Who talks when (packet timing), IP addresses |
+| Curious or compromised SFU / TURN | Audio, camera and screen content | Who talks when (packet timing), IP addresses; which sources are on, and video resolution and frame rate |
 | Compromised API server | Audio content of calls whose identity keys were verified by code comparison | Metadata; it can add a fake device, which shows up in the roster and changes the code |
 | Removed participant | Audio after removal | Audio heard before removal |
 | Late joiner | Audio before joining | — |
