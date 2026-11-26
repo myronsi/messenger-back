@@ -15,6 +15,7 @@ func callLimits(c config.Calls) calls.Config {
 	return calls.Config{
 		PublicURL: c.PublicURL, MaxParticipants: c.MaxParticipants, MaxActiveParticipants: c.MaxActiveParticipants,
 		RingTimeout: c.RingTimeout, EmptyGrace: c.EmptyGrace, TokenTTL: c.TokenTTL,
+		VideoEnabled: c.VideoEnabled, ScreenShareEnabled: c.ScreenShareEnabled,
 	}
 }
 
@@ -33,7 +34,8 @@ func startCalls(p *app.Process, pg *postgres.Store, rd *redis.Store, rt *realtim
 		rt.done.Go(func() { closer.RunDisabled(rt.ctx) })
 		return nil, nil
 	}
-	grants := calls.NewGrants(cfg.Calls.APIKey, cfg.Calls.APISecret.Reveal(), cfg.Calls.TokenTTL)
+	grants := calls.NewGrants(cfg.Calls.APIKey, cfg.Calls.APISecret.Reveal(), cfg.Calls.TokenTTL).
+		EnableVideo(cfg.Calls.VideoEnabled, cfg.Calls.ScreenShareEnabled)
 	deps := calls.Deps{
 		Store: pg, Members: rt.messages.Members, Notifier: rt.fanout, System: rt.messages,
 		Media: calls.NewRoomClient(cfg.Calls.APIURL, grants), Grants: grants, Metrics: p.Metrics,
@@ -48,6 +50,7 @@ func startCalls(p *app.Process, pg *postgres.Store, rd *redis.Store, rt *realtim
 	}
 	svc := calls.New(callLimits(cfg.Calls), deps)
 	rt.done.Go(func() { svc.Run(rt.ctx) })
-	p.Log.Info("audio calls enabled", "max_participants", cfg.Calls.MaxParticipants)
+	p.Log.Info("calls enabled", "max_participants", cfg.Calls.MaxParticipants,
+		"video", cfg.Calls.VideoEnabled, "screen_share", cfg.Calls.ScreenShareEnabled)
 	return svc, nil
 }

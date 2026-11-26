@@ -8,6 +8,12 @@ Contract changes only. The backend changelog is `CHANGELOG.md` in the repository
   allow up to `500000`.
 - `UploadPurpose` `message` accepts animated WebP (for example WhatsApp stickers in an import) and keeps the
   animation; before, such files got `415`.
+  
+## 2.1.0-alpha.48
+
+- Video and screen sharing in calls: `CallConfig` (`GET /calls/config`) gains `video_enabled` and
+  `screen_share_enabled`. When they are on, the media grant also allows the `camera`, `screen_share` and
+  `screen_share_audio` sources; every source is end-to-end encrypted with the same per-epoch sender keys as audio.
 
 ## 2.1.0-alpha.47
 

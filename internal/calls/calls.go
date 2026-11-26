@@ -76,6 +76,8 @@ type Config struct {
 	RingTimeout           time.Duration
 	EmptyGrace            time.Duration
 	TokenTTL              time.Duration
+	VideoEnabled          bool
+	ScreenShareEnabled    bool
 }
 
 const Retention = 90 * 24 * time.Hour

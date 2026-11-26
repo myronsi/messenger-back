@@ -77,6 +77,8 @@ setup is in [calls.md](calls.md#deployment).
 | `CALLS_RING_TIMEOUT` | `30s` | ring window (5s-5m) |
 | `CALLS_EMPTY_GRACE` | `20s` | reconnect grace of an empty group call or a lost participant (1s-5m) |
 | `CALLS_TOKEN_TTL` | `10m` | lifetime of a media grant (1m-24h) |
+| `CALLS_VIDEO_ENABLED` | `false` | participants may publish their camera (`video_enabled` in `GET /calls/config`, `camera` in the media grant) |
+| `CALLS_SCREEN_SHARE_ENABLED` | `false` | participants may share their screen and its sound (`screen_share_enabled`, `screen_share` and `screen_share_audio` in the media grant) |
 
 ## CI
 

@@ -163,8 +163,10 @@ func (c *CallServer) GetCallConfig(w http.ResponseWriter, r *http.Request, _ Get
 		return
 	}
 	noStore(w)
+	enabled := c.o.Service != nil
 	writeJSONStatus(w, http.StatusOK, CallConfig{
-		Enabled: c.o.Service != nil, MaxParticipants: max(c.o.Limits.MaxParticipants, 2),
+		Enabled: enabled, MaxParticipants: max(c.o.Limits.MaxParticipants, 2),
+		VideoEnabled: enabled && c.o.Limits.VideoEnabled, ScreenShareEnabled: enabled && c.o.Limits.ScreenShareEnabled,
 		RingTimeoutSeconds: max(int(c.o.Limits.RingTimeout/time.Second), 1),
 	})
 }

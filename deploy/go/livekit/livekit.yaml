@@ -1,4 +1,4 @@
-# LiveKit, the media server of audio calls (docs/calls.md#deployment): one node, no Redis.
+# LiveKit, the media server of calls (docs/calls.md#deployment): one node, no Redis.
 # The same on every host and free of secrets. compose.yaml adds what differs per host as environment of the
 # livekit service: the API key and secret (LIVEKIT_KEYS), the public IP (NODE_IP), the UDP and TCP ports, the
 # TURN domain, port and certificate, and room.max_participants (CALLS_MAX_PARTICIPANTS).
@@ -29,7 +29,8 @@ webhook:
     - http://api:8080/api/v2/calls/media-webhook
 
 limit:
-  # About 160 Mbit/s: above it the node refuses new participants (planned peak about 72 Mbit/s).
+  # About 160 Mbit/s: above it the node refuses new participants (planned audio peak about 72 Mbit/s; a full
+  # 10-person video room with a screen share needs about 27 Mbit/s, docs/calls.md#traffic-budget).
   bytes_per_sec: 20000000
 
 logging:

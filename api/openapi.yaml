@@ -6124,10 +6124,11 @@ paths:
     get:
       tags: [calls]
       operationId: getCallConfig
-      summary: Whether audio calls are available and their limits
+      summary: Whether calls are available and their limits
       description: |
         `enabled` is `false` when the server has no media service configured or calls are switched off; clients then
-        hide every call control. Clients must also check that the browser supports call encryption before offering
+        hide every call control. `video_enabled` and `screen_share_enabled` say whether the camera and screen sharing
+        controls are offered; the media grant allows only the sources that are switched on. Clients must also check that the browser supports call encryption before offering
         calls.
       responses:
         "426": { $ref: "#/components/responses/ClientOutdated" }
@@ -9820,9 +9821,20 @@ components:
     # ----------------------------------------------------------- calls
     CallConfig:
       type: object
-      required: [enabled, max_participants, ring_timeout_seconds]
+      required: [enabled, video_enabled, screen_share_enabled, max_participants, ring_timeout_seconds]
       properties:
         enabled: { type: boolean }
+        video_enabled:
+          type: boolean
+          description: |
+            Participants may publish their camera. Always `false` while `enabled` is `false`. Clients treat a missing
+            field (older servers) as `false`.
+        screen_share_enabled:
+          type: boolean
+          description: |
+            Participants may share their screen, with its sound where the browser offers it. Several participants may
+            share at the same time. Always `false` while `enabled` is `false`. Clients treat a missing field as
+            `false`.
         max_participants:
           type: integer
           minimum: 2
