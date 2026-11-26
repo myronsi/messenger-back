@@ -80,7 +80,10 @@ The sender also receives the broadcast `message` event with the stored message (
 | `approval_request_created` | New request in the inbox |
 | `presence` | A user came online or went offline |
 | `account_status` | Your account status changed (`AccountStatus`); only your own sessions get it |
-| `report_outcome` | The moderation team reviewed something you reported (`ReportOutcome`); only your own sessions get it |
+| `report_outcome` | The moderation team reviewed something you reported (`ReportOutcome`); only your own sessions get it |
+| `client_settings_updated` | Your synced appearance or recent emoji changed (`ClientSettings`); only your own sessions get it |
+| `wallpaper_updated` | One of your chat backgrounds changed or was removed (`WallpaperUpdatedEvent`); only your own sessions get it |
+| `playlists_updated` | One of your playlists was created, changed or deleted (`PlaylistsUpdatedEvent`); only your own sessions get it |
 | `user_updated` | A user you share a chat with changed their profile (`profile_version`) |
 | `attachment_updated` | An optimized copy of an attachment you can see is ready (or failed): replace it in your messages |
 | `call_updated` | A call of the chat changed (state, participants, epoch); carries the whole call, keep the highest `version` |

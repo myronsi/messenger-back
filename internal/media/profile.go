@@ -17,6 +17,7 @@ import (
 const (
 	PurposeProfileMusic      = postgres.PurposeProfileMusic
 	PurposeProfileBackground = postgres.PurposeProfileBackground
+	PurposeChatWallpaper     = postgres.PurposeChatWallpaper
 
 	MaxMusicClip          = 30 * time.Second
 	MaxBackgroundVideo    = 15 * time.Second
@@ -25,6 +26,7 @@ const (
 	profileMusicLimit     = 20 << 20
 	backgroundImageLimit  = 10 << 20
 	backgroundMotionLimit = 15 << 20
+	wallpaperLimit        = 10 << 20
 	musicTimeout          = 60 * time.Second
 )
 
@@ -50,12 +52,15 @@ func sniff(head []byte) string {
 }
 
 func isProfilePurpose(purpose string) bool {
-	return purpose == PurposeProfileMusic || purpose == PurposeProfileBackground
+	return purpose == PurposeProfileMusic || purpose == PurposeProfileBackground || purpose == PurposeChatWallpaper
 }
 
 func profileLimit(purpose string, det Detected) int64 {
 	if purpose == PurposeProfileMusic {
 		return profileMusicLimit
+	}
+	if purpose == PurposeChatWallpaper {
+		return wallpaperLimit
 	}
 	if det.Kind == KindVideo || det.ContentType == "image/gif" {
 		return backgroundMotionLimit
@@ -76,6 +81,9 @@ func detectProfile(head []byte, purpose string) (Detected, error) {
 		return Detected{}, err
 	}
 	if det.Kind != KindImage && det.Kind != KindVideo {
+		return Detected{}, ErrUnsupported
+	}
+	if purpose == PurposeChatWallpaper && (det.Kind != KindImage || det.ContentType == "image/gif") {
 		return Detected{}, ErrUnsupported
 	}
 	return det, nil

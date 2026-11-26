@@ -260,6 +260,7 @@ WHERE a.id = $1
   AND NOT EXISTS (SELECT 1 FROM user_avatar_history h WHERE h.attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM stickers s WHERE s.attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM custom_emoji e WHERE e.attachment_id = a.id)
+  AND NOT EXISTS (SELECT 1 FROM chat_wallpapers w WHERE w.attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM unsent_messages m WHERE m.attachment_ids @> ARRAY[a.id])
 RETURNING a.storage_key, a.thumbnail_key, a.variants
 `
@@ -780,6 +781,7 @@ WHERE a.created_at < $1
   AND NOT EXISTS (SELECT 1 FROM user_avatar_history h WHERE h.attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM stickers s WHERE s.attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM custom_emoji e WHERE e.attachment_id = a.id)
+  AND NOT EXISTS (SELECT 1 FROM chat_wallpapers w WHERE w.attachment_id = a.id)
   AND NOT EXISTS (SELECT 1 FROM unsent_messages m WHERE m.attachment_ids @> ARRAY[a.id])
   AND NOT EXISTS (SELECT 1 FROM media_jobs j WHERE j.attachment_id = a.id AND j.state = 'running')
 ORDER BY a.created_at

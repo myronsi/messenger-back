@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ServerPlaylistsUpdatedEvent",
+  "description": "One of your playlists was created, changed or deleted on one of your devices (sent only to your own sessions).",
+  "type": "object",
+  "required": [
+    "type",
+    "event_id",
+    "chat_id",
+    "data"
+  ],
+  "properties": {
+    "type": {
+      "const": "playlists_updated"
+    },
+    "event_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "chat_id": {
+      "type": "null"
+    },
+    "data": {
+      "type": "object",
+      "description": "`created` and `updated` carry the new summary; load the playlist with `GET /me/playlists/{playlist_id}` when its `version` is newer than your copy. `deleted` has `playlist: null`.",
+      "required": [
+        "action",
+        "playlist_id",
+        "playlist"
+      ],
+      "properties": {
+        "action": {
+          "enum": [
+            "created",
+            "updated",
+            "deleted"
+          ]
+        },
+        "playlist_id": {
+          "$ref": "../../openapi.yaml#/components/schemas/Id"
+        },
+        "playlist": {
+          "oneOf": [
+            {
+              "$ref": "../../openapi.yaml#/components/schemas/PlaylistSummary"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

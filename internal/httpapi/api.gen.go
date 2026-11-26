@@ -131,6 +131,45 @@ func (e AccountStatusLevel) Valid() bool {
 	}
 }
 
+// Defines values for AppearanceSettingsCorners.
+const (
+	Default AppearanceSettingsCorners = "default"
+	Round   AppearanceSettingsCorners = "round"
+	Sharp   AppearanceSettingsCorners = "sharp"
+)
+
+// Valid indicates whether the value is a known member of the AppearanceSettingsCorners enum.
+func (e AppearanceSettingsCorners) Valid() bool {
+	switch e {
+	case Default:
+		return true
+	case Round:
+		return true
+	case Sharp:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AppearanceSettingsDensity.
+const (
+	Comfortable AppearanceSettingsDensity = "comfortable"
+	Compact     AppearanceSettingsDensity = "compact"
+)
+
+// Valid indicates whether the value is a known member of the AppearanceSettingsDensity enum.
+func (e AppearanceSettingsDensity) Valid() bool {
+	switch e {
+	case Comfortable:
+		return true
+	case Compact:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ApprovalRequestStatus.
 const (
 	ApprovalRequestStatusApproved ApprovalRequestStatus = "approved"
@@ -1460,6 +1499,7 @@ func (e SyncChangeType) Valid() bool {
 // Defines values for SystemEventKind.
 const (
 	SystemEventKindCall               SystemEventKind = "call"
+	SystemEventKindChatWallpaperSet   SystemEventKind = "chat_wallpaper_set"
 	SystemEventKindGroupAvatarChanged SystemEventKind = "group_avatar_changed"
 	SystemEventKindGroupCreated       SystemEventKind = "group_created"
 	SystemEventKindGroupRenamed       SystemEventKind = "group_renamed"
@@ -1479,6 +1519,8 @@ const (
 func (e SystemEventKind) Valid() bool {
 	switch e {
 	case SystemEventKindCall:
+		return true
+	case SystemEventKindChatWallpaperSet:
 		return true
 	case SystemEventKindGroupAvatarChanged:
 		return true
@@ -1598,6 +1640,7 @@ func (e UpdateRoleRequestRole) Valid() bool {
 // Defines values for UploadPurpose.
 const (
 	UploadPurposeAvatar            UploadPurpose = "avatar"
+	UploadPurposeChatWallpaper     UploadPurpose = "chat_wallpaper"
 	UploadPurposeEmoji             UploadPurpose = "emoji"
 	UploadPurposeMessage           UploadPurpose = "message"
 	UploadPurposeProfileBackground UploadPurpose = "profile_background"
@@ -1609,6 +1652,8 @@ const (
 func (e UploadPurpose) Valid() bool {
 	switch e {
 	case UploadPurposeAvatar:
+		return true
+	case UploadPurposeChatWallpaper:
 		return true
 	case UploadPurposeEmoji:
 		return true
@@ -1664,6 +1709,27 @@ func (e VoiceVideoPolicy) Valid() bool {
 	case VoiceVideoPolicyContacts:
 		return true
 	case VoiceVideoPolicyEveryone:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WallpaperPattern.
+const (
+	Dots WallpaperPattern = "dots"
+	Grid WallpaperPattern = "grid"
+	None WallpaperPattern = "none"
+)
+
+// Valid indicates whether the value is a known member of the WallpaperPattern enum.
+func (e WallpaperPattern) Valid() bool {
+	switch e {
+	case Dots:
+		return true
+	case Grid:
+		return true
+	case None:
 		return true
 	default:
 		return false
@@ -1933,6 +1999,22 @@ type AddStickerRequest struct {
 	AttachmentId AttachmentRef `json:"attachment_id"`
 	Emoji        string        `json:"emoji"`
 }
+
+// AppearanceSettings The look of the app shared by the user's devices. A device may keep its own value for any field ("only on
+// this device"); that choice is stored on the device, not here.
+type AppearanceSettings struct {
+	// Accent Name of a client accent color. Clients use their default for a name they do not know.
+	Accent   string                    `json:"accent"`
+	Corners  AppearanceSettingsCorners `json:"corners"`
+	Density  AppearanceSettingsDensity `json:"density"`
+	FontSize int                       `json:"font_size"`
+}
+
+// AppearanceSettingsCorners defines model for AppearanceSettings.Corners.
+type AppearanceSettingsCorners string
+
+// AppearanceSettingsDensity defines model for AppearanceSettings.Density.
+type AppearanceSettingsDensity string
 
 // ApprovalRequest defines model for ApprovalRequest.
 type ApprovalRequest struct {
@@ -2384,6 +2466,21 @@ type ClearHistoryRequest struct {
 // ClearHistoryRequestScope defines model for ClearHistoryRequest.Scope.
 type ClearHistoryRequestScope string
 
+// ClientSettings defines model for ClientSettings.
+type ClientSettings struct {
+	Appearance *AppearanceSettings `json:"appearance"`
+
+	// RecentEmoji Newest first.
+	RecentEmoji []RecentEmoji `json:"recent_emoji"`
+
+	// RecentReactions Newest first.
+	RecentReactions []RecentEmoji `json:"recent_reactions"`
+	UpdatedAt       *Timestamp    `json:"updated_at"`
+
+	// Version Goes up on every change; `0` when nothing was saved yet.
+	Version int64 `json:"version"`
+}
+
 // ClientTempId Client-generated ID that makes sending idempotent and ties acks and errors to the send.
 type ClientTempId = string
 
@@ -2525,6 +2622,13 @@ type CreateInviteLinkRequest struct {
 	Name    *string `json:"name,omitempty"`
 }
 
+// CreatePlaylistRequest defines model for CreatePlaylistRequest.
+type CreatePlaylistRequest struct {
+	// Name Trimmed by the server; empty after trimming is `422`.
+	Name   PlaylistName          `json:"name"`
+	Tracks *[]PlaylistTrackInput `json:"tracks,omitempty"`
+}
+
 // CreateStickerPackRequest defines model for CreateStickerPackRequest.
 type CreateStickerPackRequest struct {
 	Title string `json:"title"`
@@ -2558,6 +2662,10 @@ type CreateUploadSessionRequest struct {
 	// `emoji`: a PNG, JPEG, still WebP or GIF of at most 8 MB. The server scales it into 128 x 128 px (a GIF frame
 	// by frame) and refuses it with `413` when the result is still over 256 KB. Use it with
 	// `POST /emoji/packs/{pack_id}/emoji`.
+	//
+	// `chat_wallpaper`: a still image (JPEG, PNG, WebP or HEIC) of at most 10 MB; no GIF or video. Use it with
+	// `PUT /me/wallpapers/default` or `PUT /chats/{chat_id}/wallpaper`. Its uploader can load it, and the other
+	// person of a direct chat once it was set there for both.
 	Purpose UploadPurpose `json:"purpose"`
 
 	// Size Bytes of the whole file; at most the upload limit of its kind.
@@ -3239,7 +3347,8 @@ type Message struct {
 	// `member_removed` and `owner_transferred` (the new owner; `actor` is the previous one). `call` is set for
 	// `call` messages: one per call, posted when the call ends, `actor` is the initiator. `message_id` and
 	// `snippet` are set for `message_pinned` and `message_unpinned`. `old_name` and `new_name` are set for
-	// `group_renamed`, `avatar_removed` for `group_avatar_changed`.
+	// `group_renamed`, `avatar_removed` for `group_avatar_changed`. `chat_wallpaper_set`: `actor` set a background
+	// for both people of a direct chat.
 	// `history_imported` opens and `history_import_ended` closes an imported history; both carry `import`, and
 	// `actor` is the importer. `imported_note` is a line of the export that is not a message; its text is `text`.
 	SystemEvent *SystemEvent `json:"system_event,omitempty"`
@@ -3501,6 +3610,98 @@ type PlaybackUrl struct {
 
 	// Url Same-origin path with the playback token; set it as `src` of a media element.
 	Url string `json:"url"`
+}
+
+// Playlist defines model for Playlist.
+type Playlist struct {
+	CreatedAt Timestamp `json:"created_at"`
+
+	// Id Decimal ID as a string (Snowflake IDs exceed 2^53).
+	//
+	// Examples: 7217400317439950848
+	Id         Id              `json:"id"`
+	Name       string          `json:"name"`
+	TrackCount int             `json:"track_count"`
+	Tracks     []PlaylistTrack `json:"tracks"`
+	UpdatedAt  Timestamp       `json:"updated_at"`
+
+	// Version Goes up on every change of the name or the tracks.
+	Version int64 `json:"version"`
+}
+
+// PlaylistList defines model for PlaylistList.
+type PlaylistList struct {
+	Items []PlaylistSummary `json:"items"`
+}
+
+// PlaylistName Trimmed by the server; empty after trimming is `422`.
+type PlaylistName = string
+
+// PlaylistSummary defines model for PlaylistSummary.
+type PlaylistSummary struct {
+	CreatedAt Timestamp `json:"created_at"`
+
+	// Id Decimal ID as a string (Snowflake IDs exceed 2^53).
+	//
+	// Examples: 7217400317439950848
+	Id         Id        `json:"id"`
+	Name       string    `json:"name"`
+	TrackCount int       `json:"track_count"`
+	UpdatedAt  Timestamp `json:"updated_at"`
+
+	// Version Goes up on every change of the name or the tracks.
+	Version int64 `json:"version"`
+}
+
+// PlaylistTrack defines model for PlaylistTrack.
+type PlaylistTrack struct {
+	Artist *string `json:"artist,omitempty"`
+
+	// Attachment Set only when `available`.
+	Attachment *Attachment `json:"attachment,omitempty"`
+
+	// AttachmentId ID of an uploaded attachment (a UUID, unlike the decimal IDs of messages, users and chats).
+	//
+	// Examples: 5f0c8a64-2f2b-4c7e-9d0e-6b1f3a2c4d5e
+	AttachmentId AttachmentRef `json:"attachment_id"`
+
+	// Available `false` when the caller can no longer open the file (left the chat, the message was deleted). Clients show
+	// the track greyed out; the server does not serve it.
+	Available bool `json:"available"`
+
+	// ChatId Decimal ID as a string (Snowflake IDs exceed 2^53).
+	//
+	// Examples: 7217400317439950848
+	ChatId          *Id      `json:"chat_id,omitempty"`
+	DurationSeconds *float32 `json:"duration_seconds,omitempty"`
+
+	// MessageId Decimal ID as a string (Snowflake IDs exceed 2^53).
+	//
+	// Examples: 7217400317439950848
+	MessageId *Id    `json:"message_id,omitempty"`
+	Title     string `json:"title"`
+}
+
+// PlaylistTrackInput defines model for PlaylistTrackInput.
+type PlaylistTrackInput struct {
+	Artist *string `json:"artist,omitempty"`
+
+	// AttachmentId ID of an uploaded attachment (a UUID, unlike the decimal IDs of messages, users and chats).
+	//
+	// Examples: 5f0c8a64-2f2b-4c7e-9d0e-6b1f3a2c4d5e
+	AttachmentId AttachmentRef `json:"attachment_id"`
+
+	// ChatId Decimal ID as a string (Snowflake IDs exceed 2^53).
+	//
+	// Examples: 7217400317439950848
+	ChatId          *Id      `json:"chat_id,omitempty"`
+	DurationSeconds *float32 `json:"duration_seconds,omitempty"`
+
+	// MessageId Decimal ID as a string (Snowflake IDs exceed 2^53).
+	//
+	// Examples: 7217400317439950848
+	MessageId *Id    `json:"message_id,omitempty"`
+	Title     string `json:"title"`
 }
 
 // Poll A poll as the requesting user sees it. Results (`voter_count`, `total_voters`, `is_correct`, `explanation`)
@@ -3849,6 +4050,9 @@ type ReadReceipt struct {
 	UserId Id `json:"user_id"`
 }
 
+// RecentEmoji A Unicode emoji or a custom emoji token, exactly as the client inserts it.
+type RecentEmoji = string
+
 // RecoverWithKeyRequest defines model for RecoverWithKeyRequest.
 type RecoverWithKeyRequest struct {
 	Code        *string `json:"code,omitempty"`
@@ -3931,9 +4135,21 @@ type RemoveRecoveryEmail struct {
 	Password *string `json:"password,omitempty"`
 }
 
+// RenamePlaylistRequest defines model for RenamePlaylistRequest.
+type RenamePlaylistRequest struct {
+	// Name Trimmed by the server; empty after trimming is `422`.
+	Name PlaylistName `json:"name"`
+}
+
 // ReorderStickersRequest defines model for ReorderStickersRequest.
 type ReorderStickersRequest struct {
 	StickerIds []Id `json:"sticker_ids"`
+}
+
+// ReplacePlaylistTracksRequest defines model for ReplacePlaylistTracksRequest.
+type ReplacePlaylistTracksRequest struct {
+	Tracks  []PlaylistTrackInput `json:"tracks"`
+	Version int64                `json:"version"`
 }
 
 // ReplaceRecoveryKeyRequest defines model for ReplaceRecoveryKeyRequest.
@@ -4142,6 +4358,30 @@ type SetBackgroundRequest struct {
 	Preset *BackgroundPreset `json:"preset,omitempty"`
 }
 
+// SetChatWallpaperRequest defines model for SetChatWallpaperRequest.
+type SetChatWallpaperRequest struct {
+	// AttachmentId ID of an uploaded attachment (a UUID, unlike the decimal IDs of messages, users and chats).
+	//
+	// Examples: 5f0c8a64-2f2b-4c7e-9d0e-6b1f3a2c4d5e
+	AttachmentId *AttachmentRef     `json:"attachment_id,omitempty"`
+	Blur         *int               `json:"blur,omitempty"`
+	Colors       *[]BackgroundColor `json:"colors,omitempty"`
+	Dim          *int               `json:"dim,omitempty"`
+
+	// ForBoth Direct chats with another person only. Also sets it as the other person's background.
+	ForBoth *bool `json:"for_both,omitempty"`
+
+	// Kind `media` an uploaded image, GIF or short video (`attachment`), `preset` one of the clients' built-in
+	// gradients (`preset`), `color` one color or a gradient of two (`colors`).
+	Kind ProfileBackgroundKind `json:"kind"`
+
+	// Pattern Dots or a grid drawn over a `color` background.
+	Pattern *WallpaperPattern `json:"pattern,omitempty"`
+
+	// Preset Name of a built-in gradient. Clients show their default background for a name they do not know.
+	Preset *BackgroundPreset `json:"preset,omitempty"`
+}
+
 // SetMusicRequest defines model for SetMusicRequest.
 type SetMusicRequest struct {
 	// Artist Shown artist, filled in the same way.
@@ -4166,6 +4406,29 @@ type SetRecoveryEmail struct {
 	Code     *string             `json:"code,omitempty"`
 	Email    openapi_types.Email `json:"email"`
 	Password *string             `json:"password,omitempty"`
+}
+
+// SetWallpaperRequest `preset` needs `preset`; `color` needs `colors` and may have `pattern`; `media` needs `attachment_id` (an
+// upload of the caller with purpose `chat_wallpaper`) and may have `blur` (default `0`) and `dim` (absent:
+// automatic, see `Wallpaper`). Other fields must be absent (`422` otherwise).
+type SetWallpaperRequest struct {
+	// AttachmentId ID of an uploaded attachment (a UUID, unlike the decimal IDs of messages, users and chats).
+	//
+	// Examples: 5f0c8a64-2f2b-4c7e-9d0e-6b1f3a2c4d5e
+	AttachmentId *AttachmentRef     `json:"attachment_id,omitempty"`
+	Blur         *int               `json:"blur,omitempty"`
+	Colors       *[]BackgroundColor `json:"colors,omitempty"`
+	Dim          *int               `json:"dim,omitempty"`
+
+	// Kind `media` an uploaded image, GIF or short video (`attachment`), `preset` one of the clients' built-in
+	// gradients (`preset`), `color` one color or a gradient of two (`colors`).
+	Kind ProfileBackgroundKind `json:"kind"`
+
+	// Pattern Dots or a grid drawn over a `color` background.
+	Pattern *WallpaperPattern `json:"pattern,omitempty"`
+
+	// Preset Name of a built-in gradient. Clients show their default background for a name they do not know.
+	Preset *BackgroundPreset `json:"preset,omitempty"`
 }
 
 // StartCallRequest defines model for StartCallRequest.
@@ -4332,7 +4595,8 @@ type SyncChangesPage struct {
 // `member_removed` and `owner_transferred` (the new owner; `actor` is the previous one). `call` is set for
 // `call` messages: one per call, posted when the call ends, `actor` is the initiator. `message_id` and
 // `snippet` are set for `message_pinned` and `message_unpinned`. `old_name` and `new_name` are set for
-// `group_renamed`, `avatar_removed` for `group_avatar_changed`.
+// `group_renamed`, `avatar_removed` for `group_avatar_changed`. `chat_wallpaper_set`: `actor` set a background
+// for both people of a direct chat.
 // `history_imported` opens and `history_import_ended` closes an imported history; both carry `import`, and
 // `actor` is the importer. `imported_note` is a line of the export that is not a message; its text is `text`.
 type SystemEvent struct {
@@ -4474,6 +4738,15 @@ type UnsentMessage struct {
 
 // UnsentMessageType defines model for UnsentMessage.Type.
 type UnsentMessageType string
+
+// UpdateClientSettingsRequest Only the parts to replace. Duplicates in the lists are dropped, keeping the first.
+type UpdateClientSettingsRequest struct {
+	// Appearance The look of the app shared by the user's devices. A device may keep its own value for any field ("only on
+	// this device"); that choice is stored on the device, not here.
+	Appearance      *AppearanceSettings `json:"appearance,omitempty"`
+	RecentEmoji     *[]RecentEmoji      `json:"recent_emoji,omitempty"`
+	RecentReactions *[]RecentEmoji      `json:"recent_reactions,omitempty"`
+}
 
 // UpdateCustomEmojiRequest defines model for UpdateCustomEmojiRequest.
 type UpdateCustomEmojiRequest struct {
@@ -4656,6 +4929,10 @@ type UploadAttachmentRequest struct {
 	// `emoji`: a PNG, JPEG, still WebP or GIF of at most 8 MB. The server scales it into 128 x 128 px (a GIF frame
 	// by frame) and refuses it with `413` when the result is still over 256 KB. Use it with
 	// `POST /emoji/packs/{pack_id}/emoji`.
+	//
+	// `chat_wallpaper`: a still image (JPEG, PNG, WebP or HEIC) of at most 10 MB; no GIF or video. Use it with
+	// `PUT /me/wallpapers/default` or `PUT /chats/{chat_id}/wallpaper`. Its uploader can load it, and the other
+	// person of a direct chat once it was set there for both.
 	Purpose UploadPurpose `json:"purpose"`
 
 	// StartMs `profile_music`, and `sticker` from a video or GIF: where the kept part starts.
@@ -4688,6 +4965,10 @@ type UploadAttachmentRequest struct {
 // `emoji`: a PNG, JPEG, still WebP or GIF of at most 8 MB. The server scales it into 128 x 128 px (a GIF frame
 // by frame) and refuses it with `413` when the result is still over 256 KB. Use it with
 // `POST /emoji/packs/{pack_id}/emoji`.
+//
+// `chat_wallpaper`: a still image (JPEG, PNG, WebP or HEIC) of at most 10 MB; no GIF or video. Use it with
+// `PUT /me/wallpapers/default` or `PUT /chats/{chat_id}/wallpaper`. Its uploader can load it, and the other
+// person of a direct chat once it was set there for both.
 type UploadPurpose string
 
 // UploadSession defines model for UploadSession.
@@ -4775,6 +5056,49 @@ type Visibility string
 // VoiceVideoPolicy Who may send the user voice messages and videos in a direct chat. Groups are not affected.
 type VoiceVideoPolicy string
 
+// Wallpaper `preset` a built-in background of the clients (`preset`), `color` one color or a gradient of two (`colors`,
+// optional `pattern`), `media` an uploaded photo (`attachment`) with `blur` in px and `dim` in percent. A `media`
+// background without `dim` is dimmed automatically by the client (20 % in a dark theme, none in a light one).
+type Wallpaper struct {
+	Attachment *Attachment        `json:"attachment,omitempty"`
+	Blur       *int               `json:"blur,omitempty"`
+	Colors     *[]BackgroundColor `json:"colors,omitempty"`
+	Dim        *int               `json:"dim,omitempty"`
+
+	// Kind `media` an uploaded image, GIF or short video (`attachment`), `preset` one of the clients' built-in
+	// gradients (`preset`), `color` one color or a gradient of two (`colors`).
+	Kind ProfileBackgroundKind `json:"kind"`
+
+	// Pattern Dots or a grid drawn over a `color` background.
+	Pattern *WallpaperPattern `json:"pattern,omitempty"`
+
+	// Preset Name of a built-in gradient. Clients show their default background for a name they do not know.
+	Preset *BackgroundPreset `json:"preset,omitempty"`
+}
+
+// WallpaperEntry defines model for WallpaperEntry.
+type WallpaperEntry struct {
+	// ChatId The chat, or `null` for the default of all chats.
+	ChatId *Id `json:"chat_id"`
+
+	// SetBy Who set it; the other person when they used `for_both`.
+	SetBy     Id        `json:"set_by"`
+	UpdatedAt Timestamp `json:"updated_at"`
+
+	// Wallpaper `preset` a built-in background of the clients (`preset`), `color` one color or a gradient of two (`colors`,
+	// optional `pattern`), `media` an uploaded photo (`attachment`) with `blur` in px and `dim` in percent. A `media`
+	// background without `dim` is dimmed automatically by the client (20 % in a dark theme, none in a light one).
+	Wallpaper Wallpaper `json:"wallpaper"`
+}
+
+// WallpaperList defines model for WallpaperList.
+type WallpaperList struct {
+	Items []WallpaperEntry `json:"items"`
+}
+
+// WallpaperPattern Dots or a grid drawn over a `color` background.
+type WallpaperPattern string
+
 // WebProfileVisibility Whether people without an account (and link previews in other apps) see the profile card at `/@username`:
 // display name, username, and the avatar and bio when `avatar_visibility` and `profile_visibility` are
 // `everyone`. Defaults to `everyone`.
@@ -4846,6 +5170,11 @@ type Limit = int
 //
 // Examples: 7217400317439950848
 type MessageId = Id
+
+// PlaylistId Decimal ID as a string (Snowflake IDs exceed 2^53).
+//
+// Examples: 7217400317439950848
+type PlaylistId = Id
 
 // PublicNameParam A username or a group's public name. One name space for both, unique ignoring case; links are `/@name` on the
 // web app's origin.
@@ -5761,6 +6090,24 @@ type DeleteUnsentMessageParams struct {
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
 }
 
+// DeleteChatWallpaperParams defines parameters for DeleteChatWallpaper.
+type DeleteChatWallpaperParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// SetChatWallpaperParams defines parameters for SetChatWallpaper.
+type SetChatWallpaperParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
 // GetCustomEmojiParams defines parameters for GetCustomEmoji.
 type GetCustomEmojiParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
@@ -6432,6 +6779,24 @@ type SetCallIdentityParams struct {
 	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
 }
 
+// GetClientSettingsParams defines parameters for GetClientSettings.
+type GetClientSettingsParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// UpdateClientSettingsParams defines parameters for UpdateClientSettings.
+type UpdateClientSettingsParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
 // ListMyConnectionsParams defines parameters for ListMyConnections.
 type ListMyConnectionsParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
@@ -6533,6 +6898,60 @@ type SetMyMusicParams struct {
 
 // ChangePasswordParams defines parameters for ChangePassword.
 type ChangePasswordParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// ListPlaylistsParams defines parameters for ListPlaylists.
+type ListPlaylistsParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// CreatePlaylistParams defines parameters for CreatePlaylist.
+type CreatePlaylistParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// DeletePlaylistParams defines parameters for DeletePlaylist.
+type DeletePlaylistParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// GetPlaylistParams defines parameters for GetPlaylist.
+type GetPlaylistParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// RenamePlaylistParams defines parameters for RenamePlaylist.
+type RenamePlaylistParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// ReplacePlaylistTracksParams defines parameters for ReplacePlaylistTracks.
+type ReplacePlaylistTracksParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
@@ -6668,6 +7087,33 @@ type RevokeSessionParams struct {
 
 // GetStorageKeyParams defines parameters for GetStorageKey.
 type GetStorageKeyParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// ListWallpapersParams defines parameters for ListWallpapers.
+type ListWallpapersParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// DeleteDefaultWallpaperParams defines parameters for DeleteDefaultWallpaper.
+type DeleteDefaultWallpaperParams struct {
+	// XClientVersion Version of the client app, for logs and the per-client metric.
+	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
+
+	// XClientApiVersion Contract version the client was built with (`API_VERSION` of `@myronsi/messenger-api`). A different MAJOR or a version below `min_client_api_version` is answered with `426`; a malformed value with `400` (`invalid_client_version`).
+	XClientApiVersion *ClientApiVersion `json:"X-Client-Api-Version,omitempty"`
+}
+
+// SetDefaultWallpaperParams defines parameters for SetDefaultWallpaper.
+type SetDefaultWallpaperParams struct {
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
@@ -7265,6 +7711,9 @@ type ReportMessageJSONRequestBody = ContentReportRequest
 // MarkChatReadJSONRequestBody defines body for MarkChatRead for application/json ContentType.
 type MarkChatReadJSONRequestBody = MarkReadRequest
 
+// SetChatWallpaperJSONRequestBody defines body for SetChatWallpaper for application/json ContentType.
+type SetChatWallpaperJSONRequestBody = SetChatWallpaperRequest
+
 // CreateEmojiPackJSONRequestBody defines body for CreateEmojiPack for application/json ContentType.
 type CreateEmojiPackJSONRequestBody = EmojiPackTitleRequest
 
@@ -7349,6 +7798,9 @@ type SetMyBackgroundJSONRequestBody = SetBackgroundRequest
 // SetCallIdentityJSONRequestBody defines body for SetCallIdentity for application/json ContentType.
 type SetCallIdentityJSONRequestBody = CallIdentityRequest
 
+// UpdateClientSettingsJSONRequestBody defines body for UpdateClientSettings for application/json ContentType.
+type UpdateClientSettingsJSONRequestBody = UpdateClientSettingsRequest
+
 // ReorderMyConnectionsJSONRequestBody defines body for ReorderMyConnections for application/json ContentType.
 type ReorderMyConnectionsJSONRequestBody = ConnectionOrderRequest
 
@@ -7376,6 +7828,15 @@ type UpdateNotificationSettingsJSONRequestBody = NotificationPreferences
 // ChangePasswordJSONRequestBody defines body for ChangePassword for application/json ContentType.
 type ChangePasswordJSONRequestBody = ChangePasswordRequest
 
+// CreatePlaylistJSONRequestBody defines body for CreatePlaylist for application/json ContentType.
+type CreatePlaylistJSONRequestBody = CreatePlaylistRequest
+
+// RenamePlaylistJSONRequestBody defines body for RenamePlaylist for application/json ContentType.
+type RenamePlaylistJSONRequestBody = RenamePlaylistRequest
+
+// ReplacePlaylistTracksJSONRequestBody defines body for ReplacePlaylistTracks for application/json ContentType.
+type ReplacePlaylistTracksJSONRequestBody = ReplacePlaylistTracksRequest
+
 // UpdatePrivacySettingsJSONRequestBody defines body for UpdatePrivacySettings for application/json ContentType.
 type UpdatePrivacySettingsJSONRequestBody = UpdatePrivacySettingsRequest
 
@@ -7387,6 +7848,9 @@ type ReplaceRecoveryKeyJSONRequestBody = ReplaceRecoveryKeyRequest
 
 // UpdateSecuritySettingsJSONRequestBody defines body for UpdateSecuritySettings for application/json ContentType.
 type UpdateSecuritySettingsJSONRequestBody = UpdateSecuritySettingsRequest
+
+// SetDefaultWallpaperJSONRequestBody defines body for SetDefaultWallpaper for application/json ContentType.
+type SetDefaultWallpaperJSONRequestBody = SetWallpaperRequest
 
 // EditMessageJSONRequestBody defines body for EditMessage for application/json ContentType.
 type EditMessageJSONRequestBody = EditMessageRequest
@@ -7970,6 +8434,12 @@ type ServerInterface interface {
 	// DeleteUnsentMessage Discard a rejected send
 	// (DELETE /chats/{chat_id}/unsent/{client_temp_id})
 	DeleteUnsentMessage(w http.ResponseWriter, r *http.Request, chatId ChatId, clientTempId ClientTempId, params DeleteUnsentMessageParams)
+	// DeleteChatWallpaper Use the default background in this chat again
+	// (DELETE /chats/{chat_id}/wallpaper)
+	DeleteChatWallpaper(w http.ResponseWriter, r *http.Request, chatId ChatId, params DeleteChatWallpaperParams)
+	// SetChatWallpaper Set the background of one chat
+	// (PUT /chats/{chat_id}/wallpaper)
+	SetChatWallpaper(w http.ResponseWriter, r *http.Request, chatId ChatId, params SetChatWallpaperParams)
 	// ConnectionCallback Where a provider sends the browser back
 	// (GET /connections/callback/{provider})
 	ConnectionCallback(w http.ResponseWriter, r *http.Request, provider ConnectionProviderPath)
@@ -8183,6 +8653,12 @@ type ServerInterface interface {
 	// SetCallIdentity Register this session's call identity public key
 	// (PUT /me/call-identity)
 	SetCallIdentity(w http.ResponseWriter, r *http.Request, params SetCallIdentityParams)
+	// GetClientSettings Appearance and recent emoji shared by all of the caller's devices
+	// (GET /me/client-settings)
+	GetClientSettings(w http.ResponseWriter, r *http.Request, params GetClientSettingsParams)
+	// UpdateClientSettings Change some of the synced settings
+	// (PATCH /me/client-settings)
+	UpdateClientSettings(w http.ResponseWriter, r *http.Request, params UpdateClientSettingsParams)
 	// ListMyConnections Your connected accounts
 	// (GET /me/connections)
 	ListMyConnections(w http.ResponseWriter, r *http.Request, params ListMyConnectionsParams)
@@ -8234,6 +8710,24 @@ type ServerInterface interface {
 	// ChangePassword Change the password
 	// (PUT /me/password)
 	ChangePassword(w http.ResponseWriter, r *http.Request, params ChangePasswordParams)
+	// ListPlaylists The caller's playlists, newest first, without their tracks
+	// (GET /me/playlists)
+	ListPlaylists(w http.ResponseWriter, r *http.Request, params ListPlaylistsParams)
+	// CreatePlaylist Create a playlist
+	// (POST /me/playlists)
+	CreatePlaylist(w http.ResponseWriter, r *http.Request, params CreatePlaylistParams)
+	// DeletePlaylist Delete a playlist
+	// (DELETE /me/playlists/{playlist_id})
+	DeletePlaylist(w http.ResponseWriter, r *http.Request, playlistId PlaylistId, params DeletePlaylistParams)
+	// GetPlaylist A playlist with its tracks
+	// (GET /me/playlists/{playlist_id})
+	GetPlaylist(w http.ResponseWriter, r *http.Request, playlistId PlaylistId, params GetPlaylistParams)
+	// RenamePlaylist Rename a playlist
+	// (PATCH /me/playlists/{playlist_id})
+	RenamePlaylist(w http.ResponseWriter, r *http.Request, playlistId PlaylistId, params RenamePlaylistParams)
+	// ReplacePlaylistTracks Replace the tracks of a playlist
+	// (PUT /me/playlists/{playlist_id}/tracks)
+	ReplacePlaylistTracks(w http.ResponseWriter, r *http.Request, playlistId PlaylistId, params ReplacePlaylistTracksParams)
 	// GetPrivacySettings Privacy settings and exceptions
 	// (GET /me/privacy)
 	GetPrivacySettings(w http.ResponseWriter, r *http.Request, params GetPrivacySettingsParams)
@@ -8279,6 +8773,15 @@ type ServerInterface interface {
 	// GetStorageKey The key this device encrypts its offline data with
 	// (POST /me/storage-key)
 	GetStorageKey(w http.ResponseWriter, r *http.Request, params GetStorageKeyParams)
+	// ListWallpapers The caller's chat backgrounds
+	// (GET /me/wallpapers)
+	ListWallpapers(w http.ResponseWriter, r *http.Request, params ListWallpapersParams)
+	// DeleteDefaultWallpaper Go back to the built-in background for all chats
+	// (DELETE /me/wallpapers/default)
+	DeleteDefaultWallpaper(w http.ResponseWriter, r *http.Request, params DeleteDefaultWallpaperParams)
+	// SetDefaultWallpaper Set the background for all chats
+	// (PUT /me/wallpapers/default)
+	SetDefaultWallpaper(w http.ResponseWriter, r *http.Request, params SetDefaultWallpaperParams)
 	// DeleteMessage Delete a message
 	// (DELETE /messages/{message_id})
 	DeleteMessage(w http.ResponseWriter, r *http.Request, messageId MessageId, params DeleteMessageParams)
@@ -13976,6 +14479,144 @@ func (siw *ServerInterfaceWrapper) DeleteUnsentMessage(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
+// DeleteChatWallpaper operation middleware
+func (siw *ServerInterfaceWrapper) DeleteChatWallpaper(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteChatWallpaperParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteChatWallpaper(w, r, chatId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetChatWallpaper operation middleware
+func (siw *ServerInterfaceWrapper) SetChatWallpaper(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "chat_id" -------------
+	var chatId ChatId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "chat_id", r.PathValue("chat_id"), &chatId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chat_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SetChatWallpaperParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetChatWallpaper(w, r, chatId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ConnectionCallback operation middleware
 func (siw *ServerInterfaceWrapper) ConnectionCallback(w http.ResponseWriter, r *http.Request) {
 
@@ -18950,6 +19591,126 @@ func (siw *ServerInterfaceWrapper) SetCallIdentity(w http.ResponseWriter, r *htt
 	handler.ServeHTTP(w, r)
 }
 
+// GetClientSettings operation middleware
+func (siw *ServerInterfaceWrapper) GetClientSettings(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetClientSettingsParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetClientSettings(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateClientSettings operation middleware
+func (siw *ServerInterfaceWrapper) UpdateClientSettings(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateClientSettingsParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateClientSettings(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListMyConnections operation middleware
 func (siw *ServerInterfaceWrapper) ListMyConnections(w http.ResponseWriter, r *http.Request) {
 
@@ -19791,6 +20552,402 @@ func (siw *ServerInterfaceWrapper) ChangePassword(w http.ResponseWriter, r *http
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ChangePassword(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListPlaylists operation middleware
+func (siw *ServerInterfaceWrapper) ListPlaylists(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListPlaylistsParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListPlaylists(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreatePlaylist operation middleware
+func (siw *ServerInterfaceWrapper) CreatePlaylist(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreatePlaylistParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreatePlaylist(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeletePlaylist operation middleware
+func (siw *ServerInterfaceWrapper) DeletePlaylist(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "playlist_id" -------------
+	var playlistId PlaylistId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "playlist_id", r.PathValue("playlist_id"), &playlistId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playlist_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeletePlaylistParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeletePlaylist(w, r, playlistId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPlaylist operation middleware
+func (siw *ServerInterfaceWrapper) GetPlaylist(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "playlist_id" -------------
+	var playlistId PlaylistId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "playlist_id", r.PathValue("playlist_id"), &playlistId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playlist_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetPlaylistParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPlaylist(w, r, playlistId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RenamePlaylist operation middleware
+func (siw *ServerInterfaceWrapper) RenamePlaylist(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "playlist_id" -------------
+	var playlistId PlaylistId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "playlist_id", r.PathValue("playlist_id"), &playlistId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playlist_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RenamePlaylistParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RenamePlaylist(w, r, playlistId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReplacePlaylistTracks operation middleware
+func (siw *ServerInterfaceWrapper) ReplacePlaylistTracks(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "playlist_id" -------------
+	var playlistId PlaylistId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "playlist_id", r.PathValue("playlist_id"), &playlistId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playlist_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ReplacePlaylistTracksParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReplacePlaylistTracks(w, r, playlistId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -20727,6 +21884,186 @@ func (siw *ServerInterfaceWrapper) GetStorageKey(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetStorageKey(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListWallpapers operation middleware
+func (siw *ServerInterfaceWrapper) ListWallpapers(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListWallpapersParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListWallpapers(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteDefaultWallpaper operation middleware
+func (siw *ServerInterfaceWrapper) DeleteDefaultWallpaper(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteDefaultWallpaperParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteDefaultWallpaper(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetDefaultWallpaper operation middleware
+func (siw *ServerInterfaceWrapper) SetDefaultWallpaper(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SetDefaultWallpaperParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Client-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Version")]; found {
+		var XClientVersion ClientVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Version", valueList[0], &XClientVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Version", Err: err})
+			return
+		}
+
+		params.XClientVersion = &XClientVersion
+
+	}
+
+	// ------------- Optional header parameter "X-Client-Api-Version" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Client-Api-Version")]; found {
+		var XClientApiVersion ClientApiVersion
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Client-Api-Version", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Client-Api-Version", valueList[0], &XClientApiVersion, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Client-Api-Version", Err: err})
+			return
+		}
+
+		params.XClientApiVersion = &XClientApiVersion
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetDefaultWallpaper(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -24428,6 +25765,19 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/me/music", wrapper.SetMyMusic)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/me/background", wrapper.DeleteMyBackground)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/me/background", wrapper.SetMyBackground)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/client-settings", wrapper.GetClientSettings)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/me/client-settings", wrapper.UpdateClientSettings)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/wallpapers", wrapper.ListWallpapers)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/me/wallpapers/default", wrapper.DeleteDefaultWallpaper)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/me/wallpapers/default", wrapper.SetDefaultWallpaper)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/chats/{chat_id}/wallpaper", wrapper.DeleteChatWallpaper)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/chats/{chat_id}/wallpaper", wrapper.SetChatWallpaper)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/playlists", wrapper.ListPlaylists)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/me/playlists", wrapper.CreatePlaylist)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/me/playlists/{playlist_id}", wrapper.DeletePlaylist)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/playlists/{playlist_id}", wrapper.GetPlaylist)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/me/playlists/{playlist_id}", wrapper.RenamePlaylist)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/me/playlists/{playlist_id}/tracks", wrapper.ReplacePlaylistTracks)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/me/password", wrapper.ChangePassword)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/security", wrapper.GetSecuritySettings)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/me/security", wrapper.UpdateSecuritySettings)
@@ -33320,6 +34670,191 @@ func (response DeleteUnsentMessage426ApplicationProblemPlusJSONResponse) VisitDe
 	return err
 }
 
+type DeleteChatWallpaperRequestObject struct {
+	ChatId ChatId `json:"chat_id"`
+	Params DeleteChatWallpaperParams
+}
+
+type DeleteChatWallpaperResponseObject interface {
+	VisitDeleteChatWallpaperResponse(w http.ResponseWriter) error
+}
+
+type DeleteChatWallpaper204Response struct {
+}
+
+func (response DeleteChatWallpaper204Response) VisitDeleteChatWallpaperResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteChatWallpaper401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteChatWallpaper401ApplicationProblemPlusJSONResponse) VisitDeleteChatWallpaperResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteChatWallpaper404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteChatWallpaper404ApplicationProblemPlusJSONResponse) VisitDeleteChatWallpaperResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteChatWallpaper426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteChatWallpaper426ApplicationProblemPlusJSONResponse) VisitDeleteChatWallpaperResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetChatWallpaperRequestObject struct {
+	ChatId ChatId `json:"chat_id"`
+	Params SetChatWallpaperParams
+	Body   *SetChatWallpaperJSONRequestBody
+}
+
+type SetChatWallpaperResponseObject interface {
+	VisitSetChatWallpaperResponse(w http.ResponseWriter) error
+}
+
+type SetChatWallpaper200JSONResponse WallpaperEntry
+
+func (response SetChatWallpaper200JSONResponse) VisitSetChatWallpaperResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetChatWallpaper400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response SetChatWallpaper400ApplicationProblemPlusJSONResponse) VisitSetChatWallpaperResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetChatWallpaper401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response SetChatWallpaper401ApplicationProblemPlusJSONResponse) VisitSetChatWallpaperResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetChatWallpaper403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response SetChatWallpaper403ApplicationProblemPlusJSONResponse) VisitSetChatWallpaperResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetChatWallpaper404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response SetChatWallpaper404ApplicationProblemPlusJSONResponse) VisitSetChatWallpaperResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetChatWallpaper422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response SetChatWallpaper422ApplicationProblemPlusJSONResponse) VisitSetChatWallpaperResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetChatWallpaper426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response SetChatWallpaper426ApplicationProblemPlusJSONResponse) VisitSetChatWallpaperResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ConnectionCallbackRequestObject struct {
 	Provider ConnectionProviderPath `json:"provider"`
 }
@@ -40530,6 +42065,147 @@ func (response SetCallIdentity503ApplicationProblemPlusJSONResponse) VisitSetCal
 	return err
 }
 
+type GetClientSettingsRequestObject struct {
+	Params GetClientSettingsParams
+}
+
+type GetClientSettingsResponseObject interface {
+	VisitGetClientSettingsResponse(w http.ResponseWriter) error
+}
+
+type GetClientSettings200JSONResponse ClientSettings
+
+func (response GetClientSettings200JSONResponse) VisitGetClientSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetClientSettings401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response GetClientSettings401ApplicationProblemPlusJSONResponse) VisitGetClientSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetClientSettings426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetClientSettings426ApplicationProblemPlusJSONResponse) VisitGetClientSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateClientSettingsRequestObject struct {
+	Params UpdateClientSettingsParams
+	Body   *UpdateClientSettingsJSONRequestBody
+}
+
+type UpdateClientSettingsResponseObject interface {
+	VisitUpdateClientSettingsResponse(w http.ResponseWriter) error
+}
+
+type UpdateClientSettings200JSONResponse ClientSettings
+
+func (response UpdateClientSettings200JSONResponse) VisitUpdateClientSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateClientSettings400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateClientSettings400ApplicationProblemPlusJSONResponse) VisitUpdateClientSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateClientSettings401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateClientSettings401ApplicationProblemPlusJSONResponse) VisitUpdateClientSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateClientSettings422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateClientSettings422ApplicationProblemPlusJSONResponse) VisitUpdateClientSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateClientSettings426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateClientSettings426ApplicationProblemPlusJSONResponse) VisitUpdateClientSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListMyConnectionsRequestObject struct {
 	Params ListMyConnectionsParams
 }
@@ -42216,6 +43892,523 @@ func (response ChangePassword429ApplicationProblemPlusJSONResponse) VisitChangeP
 	return err
 }
 
+type ListPlaylistsRequestObject struct {
+	Params ListPlaylistsParams
+}
+
+type ListPlaylistsResponseObject interface {
+	VisitListPlaylistsResponse(w http.ResponseWriter) error
+}
+
+type ListPlaylists200JSONResponse PlaylistList
+
+func (response ListPlaylists200JSONResponse) VisitListPlaylistsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPlaylists401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ListPlaylists401ApplicationProblemPlusJSONResponse) VisitListPlaylistsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPlaylists426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response ListPlaylists426ApplicationProblemPlusJSONResponse) VisitListPlaylistsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreatePlaylistRequestObject struct {
+	Params CreatePlaylistParams
+	Body   *CreatePlaylistJSONRequestBody
+}
+
+type CreatePlaylistResponseObject interface {
+	VisitCreatePlaylistResponse(w http.ResponseWriter) error
+}
+
+type CreatePlaylist201JSONResponse Playlist
+
+func (response CreatePlaylist201JSONResponse) VisitCreatePlaylistResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreatePlaylist400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response CreatePlaylist400ApplicationProblemPlusJSONResponse) VisitCreatePlaylistResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreatePlaylist401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response CreatePlaylist401ApplicationProblemPlusJSONResponse) VisitCreatePlaylistResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreatePlaylist409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response CreatePlaylist409ApplicationProblemPlusJSONResponse) VisitCreatePlaylistResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreatePlaylist422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response CreatePlaylist422ApplicationProblemPlusJSONResponse) VisitCreatePlaylistResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreatePlaylist426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response CreatePlaylist426ApplicationProblemPlusJSONResponse) VisitCreatePlaylistResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeletePlaylistRequestObject struct {
+	PlaylistId PlaylistId `json:"playlist_id"`
+	Params     DeletePlaylistParams
+}
+
+type DeletePlaylistResponseObject interface {
+	VisitDeletePlaylistResponse(w http.ResponseWriter) error
+}
+
+type DeletePlaylist204Response struct {
+}
+
+func (response DeletePlaylist204Response) VisitDeletePlaylistResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeletePlaylist401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response DeletePlaylist401ApplicationProblemPlusJSONResponse) VisitDeletePlaylistResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeletePlaylist404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response DeletePlaylist404ApplicationProblemPlusJSONResponse) VisitDeletePlaylistResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeletePlaylist426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response DeletePlaylist426ApplicationProblemPlusJSONResponse) VisitDeletePlaylistResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPlaylistRequestObject struct {
+	PlaylistId PlaylistId `json:"playlist_id"`
+	Params     GetPlaylistParams
+}
+
+type GetPlaylistResponseObject interface {
+	VisitGetPlaylistResponse(w http.ResponseWriter) error
+}
+
+type GetPlaylist200JSONResponse Playlist
+
+func (response GetPlaylist200JSONResponse) VisitGetPlaylistResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPlaylist401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response GetPlaylist401ApplicationProblemPlusJSONResponse) VisitGetPlaylistResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPlaylist404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetPlaylist404ApplicationProblemPlusJSONResponse) VisitGetPlaylistResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPlaylist426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetPlaylist426ApplicationProblemPlusJSONResponse) VisitGetPlaylistResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenamePlaylistRequestObject struct {
+	PlaylistId PlaylistId `json:"playlist_id"`
+	Params     RenamePlaylistParams
+	Body       *RenamePlaylistJSONRequestBody
+}
+
+type RenamePlaylistResponseObject interface {
+	VisitRenamePlaylistResponse(w http.ResponseWriter) error
+}
+
+type RenamePlaylist200JSONResponse PlaylistSummary
+
+func (response RenamePlaylist200JSONResponse) VisitRenamePlaylistResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenamePlaylist400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response RenamePlaylist400ApplicationProblemPlusJSONResponse) VisitRenamePlaylistResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenamePlaylist401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response RenamePlaylist401ApplicationProblemPlusJSONResponse) VisitRenamePlaylistResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenamePlaylist404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response RenamePlaylist404ApplicationProblemPlusJSONResponse) VisitRenamePlaylistResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenamePlaylist422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response RenamePlaylist422ApplicationProblemPlusJSONResponse) VisitRenamePlaylistResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenamePlaylist426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response RenamePlaylist426ApplicationProblemPlusJSONResponse) VisitRenamePlaylistResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplacePlaylistTracksRequestObject struct {
+	PlaylistId PlaylistId `json:"playlist_id"`
+	Params     ReplacePlaylistTracksParams
+	Body       *ReplacePlaylistTracksJSONRequestBody
+}
+
+type ReplacePlaylistTracksResponseObject interface {
+	VisitReplacePlaylistTracksResponse(w http.ResponseWriter) error
+}
+
+type ReplacePlaylistTracks200JSONResponse Playlist
+
+func (response ReplacePlaylistTracks200JSONResponse) VisitReplacePlaylistTracksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplacePlaylistTracks400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response ReplacePlaylistTracks400ApplicationProblemPlusJSONResponse) VisitReplacePlaylistTracksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplacePlaylistTracks401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ReplacePlaylistTracks401ApplicationProblemPlusJSONResponse) VisitReplacePlaylistTracksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplacePlaylistTracks404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response ReplacePlaylistTracks404ApplicationProblemPlusJSONResponse) VisitReplacePlaylistTracksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplacePlaylistTracks409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response ReplacePlaylistTracks409ApplicationProblemPlusJSONResponse) VisitReplacePlaylistTracksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplacePlaylistTracks422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response ReplacePlaylistTracks422ApplicationProblemPlusJSONResponse) VisitReplacePlaylistTracksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplacePlaylistTracks426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response ReplacePlaylistTracks426ApplicationProblemPlusJSONResponse) VisitReplacePlaylistTracksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetPrivacySettingsRequestObject struct {
 	Params GetPrivacySettingsParams
 }
@@ -43608,6 +45801,195 @@ type GetStorageKey426ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetStorageKey426ApplicationProblemPlusJSONResponse) VisitGetStorageKeyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListWallpapersRequestObject struct {
+	Params ListWallpapersParams
+}
+
+type ListWallpapersResponseObject interface {
+	VisitListWallpapersResponse(w http.ResponseWriter) error
+}
+
+type ListWallpapers200JSONResponse WallpaperList
+
+func (response ListWallpapers200JSONResponse) VisitListWallpapersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListWallpapers401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ListWallpapers401ApplicationProblemPlusJSONResponse) VisitListWallpapersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListWallpapers426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response ListWallpapers426ApplicationProblemPlusJSONResponse) VisitListWallpapersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteDefaultWallpaperRequestObject struct {
+	Params DeleteDefaultWallpaperParams
+}
+
+type DeleteDefaultWallpaperResponseObject interface {
+	VisitDeleteDefaultWallpaperResponse(w http.ResponseWriter) error
+}
+
+type DeleteDefaultWallpaper204Response struct {
+}
+
+func (response DeleteDefaultWallpaper204Response) VisitDeleteDefaultWallpaperResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteDefaultWallpaper401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteDefaultWallpaper401ApplicationProblemPlusJSONResponse) VisitDeleteDefaultWallpaperResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteDefaultWallpaper426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteDefaultWallpaper426ApplicationProblemPlusJSONResponse) VisitDeleteDefaultWallpaperResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(426)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetDefaultWallpaperRequestObject struct {
+	Params SetDefaultWallpaperParams
+	Body   *SetDefaultWallpaperJSONRequestBody
+}
+
+type SetDefaultWallpaperResponseObject interface {
+	VisitSetDefaultWallpaperResponse(w http.ResponseWriter) error
+}
+
+type SetDefaultWallpaper200JSONResponse WallpaperEntry
+
+func (response SetDefaultWallpaper200JSONResponse) VisitSetDefaultWallpaperResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetDefaultWallpaper400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response SetDefaultWallpaper400ApplicationProblemPlusJSONResponse) VisitSetDefaultWallpaperResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetDefaultWallpaper401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response SetDefaultWallpaper401ApplicationProblemPlusJSONResponse) VisitSetDefaultWallpaperResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetDefaultWallpaper422ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response SetDefaultWallpaper422ApplicationProblemPlusJSONResponse) VisitSetDefaultWallpaperResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetDefaultWallpaper426ApplicationProblemPlusJSONResponse struct {
+	ClientOutdatedApplicationProblemPlusJSONResponse
+}
+
+func (response SetDefaultWallpaper426ApplicationProblemPlusJSONResponse) VisitSetDefaultWallpaperResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -48923,6 +51305,12 @@ type StrictServerInterface interface {
 	// DeleteUnsentMessage Discard a rejected send
 	// (DELETE /chats/{chat_id}/unsent/{client_temp_id})
 	DeleteUnsentMessage(ctx context.Context, request DeleteUnsentMessageRequestObject) (DeleteUnsentMessageResponseObject, error)
+	// DeleteChatWallpaper Use the default background in this chat again
+	// (DELETE /chats/{chat_id}/wallpaper)
+	DeleteChatWallpaper(ctx context.Context, request DeleteChatWallpaperRequestObject) (DeleteChatWallpaperResponseObject, error)
+	// SetChatWallpaper Set the background of one chat
+	// (PUT /chats/{chat_id}/wallpaper)
+	SetChatWallpaper(ctx context.Context, request SetChatWallpaperRequestObject) (SetChatWallpaperResponseObject, error)
 	// ConnectionCallback Where a provider sends the browser back
 	// (GET /connections/callback/{provider})
 	ConnectionCallback(ctx context.Context, request ConnectionCallbackRequestObject) (ConnectionCallbackResponseObject, error)
@@ -49136,6 +51524,12 @@ type StrictServerInterface interface {
 	// SetCallIdentity Register this session's call identity public key
 	// (PUT /me/call-identity)
 	SetCallIdentity(ctx context.Context, request SetCallIdentityRequestObject) (SetCallIdentityResponseObject, error)
+	// GetClientSettings Appearance and recent emoji shared by all of the caller's devices
+	// (GET /me/client-settings)
+	GetClientSettings(ctx context.Context, request GetClientSettingsRequestObject) (GetClientSettingsResponseObject, error)
+	// UpdateClientSettings Change some of the synced settings
+	// (PATCH /me/client-settings)
+	UpdateClientSettings(ctx context.Context, request UpdateClientSettingsRequestObject) (UpdateClientSettingsResponseObject, error)
 	// ListMyConnections Your connected accounts
 	// (GET /me/connections)
 	ListMyConnections(ctx context.Context, request ListMyConnectionsRequestObject) (ListMyConnectionsResponseObject, error)
@@ -49187,6 +51581,24 @@ type StrictServerInterface interface {
 	// ChangePassword Change the password
 	// (PUT /me/password)
 	ChangePassword(ctx context.Context, request ChangePasswordRequestObject) (ChangePasswordResponseObject, error)
+	// ListPlaylists The caller's playlists, newest first, without their tracks
+	// (GET /me/playlists)
+	ListPlaylists(ctx context.Context, request ListPlaylistsRequestObject) (ListPlaylistsResponseObject, error)
+	// CreatePlaylist Create a playlist
+	// (POST /me/playlists)
+	CreatePlaylist(ctx context.Context, request CreatePlaylistRequestObject) (CreatePlaylistResponseObject, error)
+	// DeletePlaylist Delete a playlist
+	// (DELETE /me/playlists/{playlist_id})
+	DeletePlaylist(ctx context.Context, request DeletePlaylistRequestObject) (DeletePlaylistResponseObject, error)
+	// GetPlaylist A playlist with its tracks
+	// (GET /me/playlists/{playlist_id})
+	GetPlaylist(ctx context.Context, request GetPlaylistRequestObject) (GetPlaylistResponseObject, error)
+	// RenamePlaylist Rename a playlist
+	// (PATCH /me/playlists/{playlist_id})
+	RenamePlaylist(ctx context.Context, request RenamePlaylistRequestObject) (RenamePlaylistResponseObject, error)
+	// ReplacePlaylistTracks Replace the tracks of a playlist
+	// (PUT /me/playlists/{playlist_id}/tracks)
+	ReplacePlaylistTracks(ctx context.Context, request ReplacePlaylistTracksRequestObject) (ReplacePlaylistTracksResponseObject, error)
 	// GetPrivacySettings Privacy settings and exceptions
 	// (GET /me/privacy)
 	GetPrivacySettings(ctx context.Context, request GetPrivacySettingsRequestObject) (GetPrivacySettingsResponseObject, error)
@@ -49232,6 +51644,15 @@ type StrictServerInterface interface {
 	// GetStorageKey The key this device encrypts its offline data with
 	// (POST /me/storage-key)
 	GetStorageKey(ctx context.Context, request GetStorageKeyRequestObject) (GetStorageKeyResponseObject, error)
+	// ListWallpapers The caller's chat backgrounds
+	// (GET /me/wallpapers)
+	ListWallpapers(ctx context.Context, request ListWallpapersRequestObject) (ListWallpapersResponseObject, error)
+	// DeleteDefaultWallpaper Go back to the built-in background for all chats
+	// (DELETE /me/wallpapers/default)
+	DeleteDefaultWallpaper(ctx context.Context, request DeleteDefaultWallpaperRequestObject) (DeleteDefaultWallpaperResponseObject, error)
+	// SetDefaultWallpaper Set the background for all chats
+	// (PUT /me/wallpapers/default)
+	SetDefaultWallpaper(ctx context.Context, request SetDefaultWallpaperRequestObject) (SetDefaultWallpaperResponseObject, error)
 	// DeleteMessage Delete a message
 	// (DELETE /messages/{message_id})
 	DeleteMessage(ctx context.Context, request DeleteMessageRequestObject) (DeleteMessageResponseObject, error)
@@ -51709,6 +54130,67 @@ func (sh *strictHandler) DeleteUnsentMessage(w http.ResponseWriter, r *http.Requ
 	}
 }
 
+// DeleteChatWallpaper operation middleware
+func (sh *strictHandler) DeleteChatWallpaper(w http.ResponseWriter, r *http.Request, chatId ChatId, params DeleteChatWallpaperParams) {
+	var request DeleteChatWallpaperRequestObject
+
+	request.ChatId = chatId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteChatWallpaper(ctx, request.(DeleteChatWallpaperRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteChatWallpaper")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteChatWallpaperResponseObject); ok {
+		if err := validResponse.VisitDeleteChatWallpaperResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SetChatWallpaper operation middleware
+func (sh *strictHandler) SetChatWallpaper(w http.ResponseWriter, r *http.Request, chatId ChatId, params SetChatWallpaperParams) {
+	var request SetChatWallpaperRequestObject
+
+	request.ChatId = chatId
+	request.Params = params
+
+	var body SetChatWallpaperJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SetChatWallpaper(ctx, request.(SetChatWallpaperRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SetChatWallpaper")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SetChatWallpaperResponseObject); ok {
+		if err := validResponse.VisitSetChatWallpaperResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ConnectionCallback operation middleware
 func (sh *strictHandler) ConnectionCallback(w http.ResponseWriter, r *http.Request, provider ConnectionProviderPath) {
 	var request ConnectionCallbackRequestObject
@@ -53811,6 +56293,65 @@ func (sh *strictHandler) SetCallIdentity(w http.ResponseWriter, r *http.Request,
 	}
 }
 
+// GetClientSettings operation middleware
+func (sh *strictHandler) GetClientSettings(w http.ResponseWriter, r *http.Request, params GetClientSettingsParams) {
+	var request GetClientSettingsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetClientSettings(ctx, request.(GetClientSettingsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetClientSettings")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetClientSettingsResponseObject); ok {
+		if err := validResponse.VisitGetClientSettingsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateClientSettings operation middleware
+func (sh *strictHandler) UpdateClientSettings(w http.ResponseWriter, r *http.Request, params UpdateClientSettingsParams) {
+	var request UpdateClientSettingsRequestObject
+
+	request.Params = params
+
+	var body UpdateClientSettingsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateClientSettings(ctx, request.(UpdateClientSettingsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateClientSettings")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateClientSettingsResponseObject); ok {
+		if err := validResponse.VisitUpdateClientSettingsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListMyConnections operation middleware
 func (sh *strictHandler) ListMyConnections(w http.ResponseWriter, r *http.Request, params ListMyConnectionsParams) {
 	var request ListMyConnectionsRequestObject
@@ -54314,6 +56855,187 @@ func (sh *strictHandler) ChangePassword(w http.ResponseWriter, r *http.Request, 
 	}
 }
 
+// ListPlaylists operation middleware
+func (sh *strictHandler) ListPlaylists(w http.ResponseWriter, r *http.Request, params ListPlaylistsParams) {
+	var request ListPlaylistsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListPlaylists(ctx, request.(ListPlaylistsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListPlaylists")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListPlaylistsResponseObject); ok {
+		if err := validResponse.VisitListPlaylistsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreatePlaylist operation middleware
+func (sh *strictHandler) CreatePlaylist(w http.ResponseWriter, r *http.Request, params CreatePlaylistParams) {
+	var request CreatePlaylistRequestObject
+
+	request.Params = params
+
+	var body CreatePlaylistJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreatePlaylist(ctx, request.(CreatePlaylistRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreatePlaylist")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreatePlaylistResponseObject); ok {
+		if err := validResponse.VisitCreatePlaylistResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeletePlaylist operation middleware
+func (sh *strictHandler) DeletePlaylist(w http.ResponseWriter, r *http.Request, playlistId PlaylistId, params DeletePlaylistParams) {
+	var request DeletePlaylistRequestObject
+
+	request.PlaylistId = playlistId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeletePlaylist(ctx, request.(DeletePlaylistRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeletePlaylist")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeletePlaylistResponseObject); ok {
+		if err := validResponse.VisitDeletePlaylistResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetPlaylist operation middleware
+func (sh *strictHandler) GetPlaylist(w http.ResponseWriter, r *http.Request, playlistId PlaylistId, params GetPlaylistParams) {
+	var request GetPlaylistRequestObject
+
+	request.PlaylistId = playlistId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetPlaylist(ctx, request.(GetPlaylistRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetPlaylist")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetPlaylistResponseObject); ok {
+		if err := validResponse.VisitGetPlaylistResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RenamePlaylist operation middleware
+func (sh *strictHandler) RenamePlaylist(w http.ResponseWriter, r *http.Request, playlistId PlaylistId, params RenamePlaylistParams) {
+	var request RenamePlaylistRequestObject
+
+	request.PlaylistId = playlistId
+	request.Params = params
+
+	var body RenamePlaylistJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RenamePlaylist(ctx, request.(RenamePlaylistRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RenamePlaylist")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RenamePlaylistResponseObject); ok {
+		if err := validResponse.VisitRenamePlaylistResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ReplacePlaylistTracks operation middleware
+func (sh *strictHandler) ReplacePlaylistTracks(w http.ResponseWriter, r *http.Request, playlistId PlaylistId, params ReplacePlaylistTracksParams) {
+	var request ReplacePlaylistTracksRequestObject
+
+	request.PlaylistId = playlistId
+	request.Params = params
+
+	var body ReplacePlaylistTracksJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ReplacePlaylistTracks(ctx, request.(ReplacePlaylistTracksRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ReplacePlaylistTracks")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ReplacePlaylistTracksResponseObject); ok {
+		if err := validResponse.VisitReplacePlaylistTracksResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetPrivacySettings operation middleware
 func (sh *strictHandler) GetPrivacySettings(w http.ResponseWriter, r *http.Request, params GetPrivacySettingsParams) {
 	var request GetPrivacySettingsRequestObject
@@ -54729,6 +57451,91 @@ func (sh *strictHandler) GetStorageKey(w http.ResponseWriter, r *http.Request, p
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetStorageKeyResponseObject); ok {
 		if err := validResponse.VisitGetStorageKeyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListWallpapers operation middleware
+func (sh *strictHandler) ListWallpapers(w http.ResponseWriter, r *http.Request, params ListWallpapersParams) {
+	var request ListWallpapersRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListWallpapers(ctx, request.(ListWallpapersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListWallpapers")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListWallpapersResponseObject); ok {
+		if err := validResponse.VisitListWallpapersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteDefaultWallpaper operation middleware
+func (sh *strictHandler) DeleteDefaultWallpaper(w http.ResponseWriter, r *http.Request, params DeleteDefaultWallpaperParams) {
+	var request DeleteDefaultWallpaperRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteDefaultWallpaper(ctx, request.(DeleteDefaultWallpaperRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteDefaultWallpaper")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteDefaultWallpaperResponseObject); ok {
+		if err := validResponse.VisitDeleteDefaultWallpaperResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SetDefaultWallpaper operation middleware
+func (sh *strictHandler) SetDefaultWallpaper(w http.ResponseWriter, r *http.Request, params SetDefaultWallpaperParams) {
+	var request SetDefaultWallpaperRequestObject
+
+	request.Params = params
+
+	var body SetDefaultWallpaperJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SetDefaultWallpaper(ctx, request.(SetDefaultWallpaperRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SetDefaultWallpaper")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SetDefaultWallpaperResponseObject); ok {
+		if err := validResponse.VisitSetDefaultWallpaperResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

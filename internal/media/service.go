@@ -242,6 +242,10 @@ func (s *Service) upload(ctx context.Context, u Upload, tags *Tags) (postgres.At
 		if u.Kind != "" && u.Kind != KindImage {
 			return postgres.Attachment{}, fmt.Errorf("%w: an emoji is an image", ErrInvalid)
 		}
+	case PurposeChatWallpaper:
+		if u.Kind != "" && u.Kind != KindImage {
+			return postgres.Attachment{}, fmt.Errorf("%w: a chat background is an image", ErrInvalid)
+		}
 	default:
 		return postgres.Attachment{}, fmt.Errorf("%w: unknown purpose", ErrInvalid)
 	}
@@ -322,6 +326,8 @@ func (s *Service) upload(ctx context.Context, u Upload, tags *Tags) (postgres.At
 		prefix = "profiles/"
 	case PurposeEmoji:
 		prefix = "emoji/"
+	case PurposeChatWallpaper:
+		prefix = "wallpapers/"
 	}
 	rec := postgres.NewAttachment{
 		UploaderID: &u.UploaderID, Purpose: u.Purpose, Kind: det.Kind, Filename: cleanName(u.Filename, det.ContentType),
@@ -640,6 +646,8 @@ func (s *Service) Authorize(ctx context.Context, viewerID int64, id uuid.UUID) (
 		ok, err = s.canSeeProfileMedia(ctx, viewerID, a)
 	case PurposeEmoji:
 		ok, err = s.canSeeEmoji(ctx, viewerID, a)
+	case PurposeChatWallpaper:
+		ok, err = s.canSeeWallpaper(ctx, viewerID, a)
 	default:
 		ok, err = s.CanSee(ctx, viewerID, a)
 	}
@@ -669,6 +677,13 @@ func (s *Service) canSeeAvatar(ctx context.Context, viewerID int64, a postgres.A
 		}
 	}
 	return false, nil
+}
+
+func (s *Service) canSeeWallpaper(ctx context.Context, viewerID int64, a postgres.Attachment) (bool, error) {
+	if a.UploaderID != nil && *a.UploaderID == viewerID {
+		return true, nil
+	}
+	return s.o.Attachments.UsedAsWallpaperBy(ctx, a.ID, viewerID)
 }
 
 func (s *Service) canSeeSticker(ctx context.Context, viewerID int64, a postgres.Attachment) (bool, error) {

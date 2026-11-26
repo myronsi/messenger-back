@@ -753,3 +753,42 @@ func (Unimplemented) AssignImportSender(w http.ResponseWriter, r *http.Request, 
 func (Unimplemented) DecideImportSender(w http.ResponseWriter, r *http.Request, _ ImportId, _ ImportSenderKey, _ DecideImportSenderParams) {
 	notImplemented(w, r)
 }
+func (Unimplemented) GetClientSettings(w http.ResponseWriter, r *http.Request, _ GetClientSettingsParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) UpdateClientSettings(w http.ResponseWriter, r *http.Request, _ UpdateClientSettingsParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) ListWallpapers(w http.ResponseWriter, r *http.Request, _ ListWallpapersParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) SetDefaultWallpaper(w http.ResponseWriter, r *http.Request, _ SetDefaultWallpaperParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) DeleteDefaultWallpaper(w http.ResponseWriter, r *http.Request, _ DeleteDefaultWallpaperParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) ListPlaylists(w http.ResponseWriter, r *http.Request, _ ListPlaylistsParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) CreatePlaylist(w http.ResponseWriter, r *http.Request, _ CreatePlaylistParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) GetPlaylist(w http.ResponseWriter, r *http.Request, _ PlaylistId, _ GetPlaylistParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) RenamePlaylist(w http.ResponseWriter, r *http.Request, _ PlaylistId, _ RenamePlaylistParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) DeletePlaylist(w http.ResponseWriter, r *http.Request, _ PlaylistId, _ DeletePlaylistParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) ReplacePlaylistTracks(w http.ResponseWriter, r *http.Request, _ PlaylistId, _ ReplacePlaylistTracksParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) SetChatWallpaper(w http.ResponseWriter, r *http.Request, _ ChatId, _ SetChatWallpaperParams) {
+	notImplemented(w, r)
+}
+func (Unimplemented) DeleteChatWallpaper(w http.ResponseWriter, r *http.Request, _ ChatId, _ DeleteChatWallpaperParams) {
+	notImplemented(w, r)
+}

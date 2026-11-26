@@ -54,6 +54,7 @@ type AccountOptions struct {
 	Emoji          EmojiCleaner
 	Limiter        RateAllower
 	Moderation     Moderator
+	Personal       *Personal
 	BasePath       string
 	Log            *slog.Logger
 }

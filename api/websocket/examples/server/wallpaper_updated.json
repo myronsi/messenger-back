@@ -1,0 +1,21 @@
+{
+  "type": "wallpaper_updated",
+  "event_id": "0",
+  "chat_id": null,
+  "data": {
+    "chat_id": "42",
+    "entry": {
+      "chat_id": "42",
+      "wallpaper": {
+        "kind": "color",
+        "colors": [
+          "#3366ff",
+          "#9933ff"
+        ],
+        "pattern": "dots"
+      },
+      "set_by": "7",
+      "updated_at": "2026-11-26T10:15:00Z"
+    }
+  }
+}

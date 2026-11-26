@@ -1,0 +1,22 @@
+{
+  "type": "client_settings_updated",
+  "event_id": "0",
+  "chat_id": null,
+  "data": {
+    "appearance": {
+      "accent": "blue",
+      "font_size": 16,
+      "density": "compact",
+      "corners": "round"
+    },
+    "recent_emoji": [
+      "😀",
+      "❤️"
+    ],
+    "recent_reactions": [
+      "👍"
+    ],
+    "version": 7,
+    "updated_at": "2026-11-26T10:15:00Z"
+  }
+}

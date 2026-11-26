@@ -118,6 +118,8 @@ type chatEnv struct {
 	modCache  *redis.ModerationCache
 	peersDone chan int64
 	msgs      *messages.Service
+	notes     *noteLog
+	media     *testMedia
 }
 
 type flakyMembers struct {
@@ -220,10 +222,12 @@ func newChatEnvWith(t *testing.T, withSearch bool) *chatEnv {
 		svc.PeerPrivacyChanged(ctx, userID)
 		peersDone <- userID
 	}
+	notes, media := &noteLog{}, &testMedia{store: store, denied: map[uuid.UUID]bool{}}
+	personal := &Personal{Store: store, Media: media, Notifier: notes, BasePath: apiBase, Log: log}
 	api := NewServer(NewAuthServer(AuthOptions{Service: authSvc, Log: log, BasePath: apiBase, CookieSecure: true}), nil).
-		WithAccount(NewAccountServer(AccountOptions{Store: store, Directory: dir, Deleter: authSvc, Moderation: modSvc, BasePath: apiBase, Log: log, PeersChanged: peersChanged})).
+		WithAccount(NewAccountServer(AccountOptions{Store: store, Directory: dir, Deleter: authSvc, Moderation: modSvc, BasePath: apiBase, Log: log, PeersChanged: peersChanged, Personal: personal})).
 		WithModeration(NewModerationServer(ModerationOptions{Service: modSvc, Log: log, Content: contentreports.New(contentreports.Deps{Store: store, Messages: msgs})})).
-		WithChats(NewChatServer(ChatOptions{Service: svc, BasePath: apiBase, Log: log})).
+		WithChats(NewChatServer(ChatOptions{Service: svc, Personal: personal, BasePath: apiBase, Log: log})).
 		WithMessages(NewMessageServer(MessageOptions{Service: msgs, Store: store, Directory: dir, BasePath: apiBase, Log: log, Searcher: searcher(index, msgs, store, repo),
 			Sync: store.Sync(), Sealer: testSealer(t), SyncSettle: time.Nanosecond})).
 		WithNotifications(NotificationOptions{Store: store.Notifications(), Tokens: tokens}).
@@ -241,7 +245,7 @@ func newChatEnvWith(t *testing.T, withSearch bool) *chatEnv {
 			API:           api,
 			Authenticator: authSvc,
 		})},
-		store: store, events: ev, index: index, tokens: tokens, cacheDown: cacheDown, cleared: cleared, modCache: modCache, peersDone: peersDone, msgs: msgs,
+		store: store, events: ev, index: index, tokens: tokens, cacheDown: cacheDown, cleared: cleared, modCache: modCache, peersDone: peersDone, msgs: msgs, notes: notes, media: media,
 	}
 }
 
