@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.49
+  version: 2.1.0-alpha.50
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -515,6 +515,261 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Me" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+  /me/client-settings:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    get:
+      tags: [me]
+      operationId: getClientSettings
+      summary: Appearance and recent emoji shared by all of the caller's devices
+      description: |
+        `appearance` is `null` until a device saved it once. Theme and language are not part of it; they stay on each
+        device.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "200":
+          description: Settings
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClientSettings" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    patch:
+      tags: [me]
+      operationId: updateClientSettings
+      summary: Change some of the synced settings
+      description: |
+        Send only the parts that changed; each part replaces the stored one (last write wins). `version` goes up on
+        every change. Sends `client_settings_updated` with the result to all of the caller's sessions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateClientSettingsRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "200":
+          description: Settings after the change
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClientSettings" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+  /me/wallpapers:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    get:
+      tags: [me]
+      operationId: listWallpapers
+      summary: The caller's chat backgrounds
+      description: |
+        The default background for all chats (`chat_id: null`) and every chat with its own background. A chat
+        without an entry uses the default; without a default, clients show their built-in plain background.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "200":
+          description: Backgrounds
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WallpaperList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /me/wallpapers/default:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    put:
+      tags: [me]
+      operationId: setDefaultWallpaper
+      summary: Set the background for all chats
+      description: |
+        For `media`, upload the image with purpose `chat_wallpaper` first. Sends `wallpaper_updated` to the caller's
+        sessions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SetWallpaperRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "200":
+          description: The stored background
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WallpaperEntry" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+    delete:
+      tags: [me]
+      operationId: deleteDefaultWallpaper
+      summary: Go back to the built-in background for all chats
+      description: Chats with their own background keep it. Sends `wallpaper_updated` to the caller's sessions.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "204": { description: Removed }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /chats/{chat_id}/wallpaper:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/ChatId"
+    put:
+      tags: [chats]
+      operationId: setChatWallpaper
+      summary: Set the background of one chat
+      description: |
+        Only the caller sees it, unless `for_both` is `true`: in a direct chat with another person this stores the
+        same background for both of them (each can change or reset their own copy afterwards), posts the system line
+        `chat_wallpaper_set` and sends `wallpaper_updated` to both. `for_both` is refused with `403` in groups and
+        Saved Messages, and with `403` `blocked_by_user` when either person blocked the other. For `media`, upload
+        the image with purpose `chat_wallpaper` first.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SetChatWallpaperRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "200":
+          description: The caller's background of this chat
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WallpaperEntry" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+    delete:
+      tags: [chats]
+      operationId: deleteChatWallpaper
+      summary: Use the default background in this chat again
+      description: Only the caller's copy is removed. Sends `wallpaper_updated` to the caller's sessions.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "204": { description: Removed }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /me/playlists:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+    get:
+      tags: [me]
+      operationId: listPlaylists
+      summary: The caller's playlists, newest first, without their tracks
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "200":
+          description: Playlists
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlaylistList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [me]
+      operationId: createPlaylist
+      summary: Create a playlist
+      description: |
+        At most 100 playlists per user (`409` `limit_reached`). Sends `playlists_updated` to the caller's sessions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreatePlaylistRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "201":
+          description: Created playlist
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Playlist" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+  /me/playlists/{playlist_id}:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/PlaylistId"
+    get:
+      tags: [me]
+      operationId: getPlaylist
+      summary: A playlist with its tracks
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "200":
+          description: Playlist
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Playlist" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [me]
+      operationId: renamePlaylist
+      summary: Rename a playlist
+      description: Sends `playlists_updated` to the caller's sessions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RenamePlaylistRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "200":
+          description: Renamed playlist
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlaylistSummary" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+    delete:
+      tags: [me]
+      operationId: deletePlaylist
+      summary: Delete a playlist
+      description: Sends `playlists_updated` to the caller's sessions.
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /me/playlists/{playlist_id}/tracks:
+    parameters:
+      - $ref: "#/components/parameters/ClientVersion"
+      - $ref: "#/components/parameters/ClientApiVersion"
+      - $ref: "#/components/parameters/PlaylistId"
+    put:
+      tags: [me]
+      operationId: replacePlaylistTracks
+      summary: Replace the tracks of a playlist
+      description: |
+        The full ordered list, so adding, removing and moving tracks are one call. `version` must be the playlist's
+        current version; otherwise `409` `conflict` and nothing changes (load the playlist again and reapply the
+        change). At most 1000 tracks and each attachment once (`422`). Sends `playlists_updated` to the caller's
+        sessions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReplacePlaylistTracksRequest" }
+      responses:
+        "426": { $ref: "#/components/responses/ClientOutdated" }
+        "200":
+          description: Playlist after the change
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Playlist" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
   /me/password:
     parameters:
       - $ref: "#/components/parameters/ClientVersion"
@@ -6473,6 +6728,11 @@ components:
       in: path
       required: true
       schema: { $ref: "#/components/schemas/Id" }
+    PlaylistId:
+      name: playlist_id
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/Id" }
     MessageId:
       name: message_id
       in: path
@@ -7615,6 +7875,226 @@ components:
           minItems: 1
           maxItems: 2
           items: { $ref: "#/components/schemas/BackgroundColor" }
+    AppearanceSettings:
+      type: object
+      description: |
+        The look of the app shared by the user's devices. A device may keep its own value for any field ("only on
+        this device"); that choice is stored on the device, not here.
+      required: [accent, font_size, density, corners]
+      properties:
+        accent:
+          type: string
+          pattern: "^[a-z0-9_-]{1,32}$"
+          description: Name of a client accent color. Clients use their default for a name they do not know.
+        font_size: { type: integer, minimum: 14, maximum: 20 }
+        density: { type: string, enum: [comfortable, compact] }
+        corners: { type: string, enum: [sharp, default, round] }
+    RecentEmoji:
+      type: string
+      minLength: 1
+      maxLength: 100
+      description: A Unicode emoji or a custom emoji token, exactly as the client inserts it.
+    ClientSettings:
+      type: object
+      required: [appearance, recent_emoji, recent_reactions, version, updated_at]
+      properties:
+        appearance:
+          oneOf:
+            - $ref: "#/components/schemas/AppearanceSettings"
+            - type: "null"
+        recent_emoji:
+          type: array
+          maxItems: 24
+          description: Newest first.
+          items: { $ref: "#/components/schemas/RecentEmoji" }
+        recent_reactions:
+          type: array
+          maxItems: 8
+          description: Newest first.
+          items: { $ref: "#/components/schemas/RecentEmoji" }
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Goes up on every change; `0` when nothing was saved yet.
+        updated_at:
+          oneOf:
+            - $ref: "#/components/schemas/Timestamp"
+            - type: "null"
+    UpdateClientSettingsRequest:
+      type: object
+      minProperties: 1
+      description: Only the parts to replace. Duplicates in the lists are dropped, keeping the first.
+      properties:
+        appearance: { $ref: "#/components/schemas/AppearanceSettings" }
+        recent_emoji:
+          type: array
+          maxItems: 24
+          items: { $ref: "#/components/schemas/RecentEmoji" }
+        recent_reactions:
+          type: array
+          maxItems: 8
+          items: { $ref: "#/components/schemas/RecentEmoji" }
+    WallpaperPattern:
+      type: string
+      description: Dots or a grid drawn over a `color` background.
+      enum: [none, dots, grid]
+    Wallpaper:
+      type: object
+      description: |
+        `preset` a built-in background of the clients (`preset`), `color` one color or a gradient of two (`colors`,
+        optional `pattern`), `media` an uploaded photo (`attachment`) with `blur` in px and `dim` in percent. A `media`
+        background without `dim` is dimmed automatically by the client (20 % in a dark theme, none in a light one).
+      required: [kind]
+      properties:
+        kind: { $ref: "#/components/schemas/ProfileBackgroundKind" }
+        preset: { $ref: "#/components/schemas/BackgroundPreset" }
+        colors:
+          type: array
+          minItems: 1
+          maxItems: 2
+          items: { $ref: "#/components/schemas/BackgroundColor" }
+        pattern: { $ref: "#/components/schemas/WallpaperPattern" }
+        attachment: { $ref: "#/components/schemas/Attachment" }
+        blur: { type: integer, minimum: 0, maximum: 20 }
+        dim: { type: integer, minimum: 0, maximum: 60 }
+    SetWallpaperRequest:
+      type: object
+      required: [kind]
+      description: |
+        `preset` needs `preset`; `color` needs `colors` and may have `pattern`; `media` needs `attachment_id` (an
+        upload of the caller with purpose `chat_wallpaper`) and may have `blur` (default `0`) and `dim` (absent:
+        automatic, see `Wallpaper`). Other fields must be absent (`422` otherwise).
+      properties:
+        kind: { $ref: "#/components/schemas/ProfileBackgroundKind" }
+        preset: { $ref: "#/components/schemas/BackgroundPreset" }
+        colors:
+          type: array
+          minItems: 1
+          maxItems: 2
+          items: { $ref: "#/components/schemas/BackgroundColor" }
+        pattern: { $ref: "#/components/schemas/WallpaperPattern" }
+        attachment_id: { $ref: "#/components/schemas/AttachmentRef" }
+        blur: { type: integer, minimum: 0, maximum: 20 }
+        dim: { type: integer, minimum: 0, maximum: 60 }
+    SetChatWallpaperRequest:
+      allOf:
+        - $ref: "#/components/schemas/SetWallpaperRequest"
+        - type: object
+          properties:
+            for_both:
+              type: boolean
+              default: false
+              description: Direct chats with another person only. Also sets it as the other person's background.
+    WallpaperEntry:
+      type: object
+      required: [chat_id, wallpaper, set_by, updated_at]
+      properties:
+        chat_id:
+          description: The chat, or `null` for the default of all chats.
+          oneOf:
+            - $ref: "#/components/schemas/Id"
+            - type: "null"
+        wallpaper: { $ref: "#/components/schemas/Wallpaper" }
+        set_by:
+          description: Who set it; the other person when they used `for_both`.
+          allOf: [{ $ref: "#/components/schemas/Id" }]
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+    WallpaperList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/WallpaperEntry" }
+    PlaylistName:
+      type: string
+      minLength: 1
+      maxLength: 60
+      description: Trimmed by the server; empty after trimming is `422`.
+    PlaylistSummary:
+      type: object
+      required: [id, name, track_count, version, created_at, updated_at]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        name: { type: string }
+        track_count: { type: integer, minimum: 0, maximum: 1000 }
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Goes up on every change of the name or the tracks.
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+    PlaylistTrack:
+      type: object
+      required: [attachment_id, title, available]
+      properties:
+        attachment_id: { $ref: "#/components/schemas/AttachmentRef" }
+        attachment:
+          description: Set only when `available`.
+          allOf: [{ $ref: "#/components/schemas/Attachment" }]
+        available:
+          type: boolean
+          description: |
+            `false` when the caller can no longer open the file (left the chat, the message was deleted). Clients show
+            the track greyed out; the server does not serve it.
+        chat_id: { $ref: "#/components/schemas/Id" }
+        message_id: { $ref: "#/components/schemas/Id" }
+        title: { type: string }
+        artist: { type: string }
+        duration_seconds: { type: number, minimum: 0 }
+    Playlist:
+      allOf:
+        - $ref: "#/components/schemas/PlaylistSummary"
+        - type: object
+          required: [tracks]
+          properties:
+            tracks:
+              type: array
+              maxItems: 1000
+              items: { $ref: "#/components/schemas/PlaylistTrack" }
+    PlaylistList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: { $ref: "#/components/schemas/PlaylistSummary" }
+    PlaylistTrackInput:
+      type: object
+      required: [attachment_id, title]
+      properties:
+        attachment_id: { $ref: "#/components/schemas/AttachmentRef" }
+        chat_id: { $ref: "#/components/schemas/Id" }
+        message_id: { $ref: "#/components/schemas/Id" }
+        title: { type: string, minLength: 1, maxLength: 200 }
+        artist: { type: string, maxLength: 200 }
+        duration_seconds: { type: number, minimum: 0, maximum: 86400 }
+    CreatePlaylistRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { $ref: "#/components/schemas/PlaylistName" }
+        tracks:
+          type: array
+          maxItems: 1000
+          items: { $ref: "#/components/schemas/PlaylistTrackInput" }
+    RenamePlaylistRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { $ref: "#/components/schemas/PlaylistName" }
+    ReplacePlaylistTracksRequest:
+      type: object
+      required: [version, tracks]
+      properties:
+        version: { type: integer, format: int64, minimum: 1 }
+        tracks:
+          type: array
+          maxItems: 1000
+          items: { $ref: "#/components/schemas/PlaylistTrackInput" }
     SetBackgroundRequest:
       type: object
       required: [kind]
@@ -7696,7 +8176,11 @@ components:
         `emoji`: a PNG, JPEG, still WebP or GIF of at most 8 MB. The server scales it into 128 x 128 px (a GIF frame
         by frame) and refuses it with `413` when the result is still over 256 KB. Use it with
         `POST /emoji/packs/{pack_id}/emoji`.
-      enum: [message, avatar, sticker, profile_music, profile_background, emoji]
+
+        `chat_wallpaper`: a still image (JPEG, PNG, WebP or HEIC) of at most 10 MB; no GIF or video. Use it with
+        `PUT /me/wallpapers/default` or `PUT /chats/{chat_id}/wallpaper`. Its uploader can load it, and the other
+        person of a direct chat once it was set there for both.
+      enum: [message, avatar, sticker, profile_music, profile_background, emoji, chat_wallpaper]
     UploadAttachmentRequest:
       type: object
       required: [file, purpose]
@@ -8518,7 +9002,7 @@ components:
         height: { type: [integer, "null"], minimum: 1 }
     SystemEventKind:
       type: string
-      enum: [group_created, member_added, member_joined, member_removed, member_left, call, message_pinned, message_unpinned, history_imported, history_import_ended, imported_note, group_renamed, group_avatar_changed, owner_transferred]
+      enum: [group_created, member_added, member_joined, member_removed, member_left, call, message_pinned, message_unpinned, history_imported, history_import_ended, imported_note, group_renamed, group_avatar_changed, owner_transferred, chat_wallpaper_set]
     SystemEvent:
       type: object
       description: |
@@ -8527,7 +9011,8 @@ components:
         `member_removed` and `owner_transferred` (the new owner; `actor` is the previous one). `call` is set for
         `call` messages: one per call, posted when the call ends, `actor` is the initiator. `message_id` and
         `snippet` are set for `message_pinned` and `message_unpinned`. `old_name` and `new_name` are set for
-        `group_renamed`, `avatar_removed` for `group_avatar_changed`.
+        `group_renamed`, `avatar_removed` for `group_avatar_changed`. `chat_wallpaper_set`: `actor` set a background
+        for both people of a direct chat.
         `history_imported` opens and `history_import_ended` closes an imported history; both carry `import`, and
         `actor` is the importer. `imported_note` is a line of the export that is not a message; its text is `text`.
       required: [kind, actor_id, actor_name]

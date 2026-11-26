@@ -1,0 +1,17 @@
+{
+  "type": "playlists_updated",
+  "event_id": "0",
+  "chat_id": null,
+  "data": {
+    "action": "updated",
+    "playlist_id": "7217400317439950100",
+    "playlist": {
+      "id": "7217400317439950100",
+      "name": "Road trip",
+      "track_count": 12,
+      "version": 4,
+      "created_at": "2026-11-20T08:00:00Z",
+      "updated_at": "2026-11-26T10:15:00Z"
+    }
+  }
+}

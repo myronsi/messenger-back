@@ -17,6 +17,7 @@ import (
 // ChatOptions configures the chat list, direct chat and request endpoints.
 type ChatOptions struct {
 	Service  *chats.Service
+	Personal *Personal
 	Limiter  RateAllower
 	BasePath string
 	Log      *slog.Logger

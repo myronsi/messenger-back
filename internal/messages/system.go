@@ -21,6 +21,7 @@ const (
 	SystemGroupRenamed     = "group_renamed"
 	SystemGroupAvatar      = "group_avatar_changed"
 	SystemOwnerTransferred = "owner_transferred"
+	SystemChatWallpaper    = "chat_wallpaper_set"
 )
 
 type SystemEvent struct {

@@ -206,6 +206,7 @@ func run() error {
 		Moderation: modSvc, Log: log,
 	})
 	rt.messages.SetRequestAccepted(chatSvc.RequestAccepted)
+	personal := &httpapi.Personal{Store: pg, Media: mediaSvc, Notifier: rt.fanout, BasePath: cfg.HTTP.BasePath, Log: log}
 	router := httpapi.NewRouter(httpapi.Options{
 		HTTP:       cfg.HTTP,
 		Production: cfg.Env == "production",
@@ -231,7 +232,7 @@ func run() error {
 				}
 			},
 			Events: rt.events, Limiter: rt.limiter, Moderation: modSvc, BasePath: cfg.HTTP.BasePath, Log: log, ProfileChanged: rt.profileChanged,
-			PeersChanged: chatSvc.PeerPrivacyChanged,
+			PeersChanged: chatSvc.PeerPrivacyChanged, Personal: personal,
 		})).WithModeration(httpapi.NewModerationServer(httpapi.ModerationOptions{
 			Service: modSvc, Log: log,
 			Content: contentreports.New(contentreports.Deps{Store: pg, Messages: rt.messages, Metrics: p.Metrics, Log: log}),
@@ -239,7 +240,7 @@ func run() error {
 			Store: pg, Groups: chatSvc, Hidden: modSvc, Media: mediaServer, Limiter: rt.limiter, TrustedProxies: trustedProxies,
 			BasePath: cfg.HTTP.BasePath, WebOrigin: cfg.HTTP.PublicWebOrigin, Log: log,
 		})).WithChats(httpapi.NewChatServer(httpapi.ChatOptions{
-			Service: chatSvc,
+			Service: chatSvc, Personal: personal,
 			Limiter: rt.limiter, BasePath: cfg.HTTP.BasePath, Log: log,
 		})).WithMessages(httpapi.NewMessageServer(httpapi.MessageOptions{
 			Service: rt.messages, Store: pg, Directory: rt.directory, Limiter: rt.limiter, BasePath: cfg.HTTP.BasePath, Log: log,

@@ -328,6 +328,14 @@ func (r attachmentRepo) UsersWithProfileMedia(ctx context.Context, attachmentID 
 	return ids, mapError(err)
 }
 
+func (r attachmentRepo) UsedAsWallpaperBy(ctx context.Context, attachmentID uuid.UUID, userID int64) (bool, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	var used bool
+	err := r.s.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM chat_wallpapers WHERE attachment_id = $1 AND user_id = $2)`, attachmentID, userID).Scan(&used)
+	return used, mapError(err)
+}
+
 func (r attachmentRepo) ChatsWithBackground(ctx context.Context, attachmentID uuid.UUID) ([]int64, error) {
 	ctx, cancel := r.s.call(ctx)
 	defer cancel()

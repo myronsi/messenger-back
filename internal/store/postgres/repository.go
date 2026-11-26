@@ -539,6 +539,7 @@ type AttachmentRepository interface {
 	ChatsWithBackground(ctx context.Context, attachmentID uuid.UUID) ([]int64, error)
 	IsStickerImage(ctx context.Context, attachmentID uuid.UUID) (bool, error)
 	IsEmojiImage(ctx context.Context, attachmentID uuid.UUID) (bool, error)
+	UsedAsWallpaperBy(ctx context.Context, attachmentID uuid.UUID, userID int64) (bool, error)
 	MergeVariants(ctx context.Context, id uuid.UUID, u AttachmentUpdate) (Attachment, error)
 	SetProcessing(ctx context.Context, id uuid.UUID, state *string) error
 	ListForBackfill(ctx context.Context, f BackfillFilter) ([]Attachment, error)

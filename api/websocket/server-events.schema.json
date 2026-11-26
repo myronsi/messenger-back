@@ -88,6 +88,15 @@
       "$ref": "server/report_outcome.schema.json"
     },
     {
+      "$ref": "server/client_settings_updated.schema.json"
+    },
+    {
+      "$ref": "server/wallpaper_updated.schema.json"
+    },
+    {
+      "$ref": "server/playlists_updated.schema.json"
+    },
+    {
       "$ref": "server/recovery_request.schema.json"
     },
     {

@@ -2,6 +2,20 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.50
+
+- Synced settings: `GET` and `PATCH /me/client-settings` (`ClientSettings`, `UpdateClientSettingsRequest`,
+  `AppearanceSettings`): appearance, recent emoji (24) and recent reactions (8) shared by all devices.
+- Chat backgrounds: `GET /me/wallpapers` (`WallpaperList`), `PUT` and `DELETE /me/wallpapers/default`, `PUT` and
+  `DELETE /chats/{chat_id}/wallpaper` (`SetChatWallpaperRequest` with `for_both` for direct chats), `Wallpaper`,
+  `WallpaperEntry`, `WallpaperPattern`. `UploadPurpose` gains `chat_wallpaper`; `SystemEventKind` gains
+  `chat_wallpaper_set`.
+- Playlists: `GET` and `POST /me/playlists`, `GET`, `PATCH` and `DELETE /me/playlists/{playlist_id}`,
+  `PUT /me/playlists/{playlist_id}/tracks` (`Playlist`, `PlaylistSummary`, `PlaylistTrack` with `available`). At most
+  100 playlists and 1000 tracks each.
+- WebSocket server events `client_settings_updated`, `wallpaper_updated` and `playlists_updated`, only to the user's
+  own sessions.
+
 ## 2.1.0-alpha.49
 
 - Chat imports hold up to 500,000 messages: `ChatImport.message_count` and `StartChatImportRequest.message_count`

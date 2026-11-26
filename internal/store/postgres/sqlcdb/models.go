@@ -226,6 +226,20 @@ type ChatLink struct {
 	CreatedAt time.Time
 }
 
+type ChatWallpaper struct {
+	UserID       int64
+	ChatID       *int64
+	Kind         string
+	Preset       *string
+	Colors       []string
+	Pattern      *string
+	AttachmentID *uuid.UUID
+	Blur         *int16
+	Dim          *int16
+	SetBy        int64
+	UpdatedAt    time.Time
+}
+
 type ContentReport struct {
 	ID          int64
 	ReporterID  *int64
@@ -397,6 +411,26 @@ type Participant struct {
 	HiddenAt               *time.Time
 	Engaged                bool
 	IsRequest              bool
+}
+
+type Playlist struct {
+	ID        int64
+	UserID    int64
+	Name      string
+	Version   int64
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+type PlaylistTrack struct {
+	PlaylistID      int64
+	Position        int32
+	AttachmentID    uuid.UUID
+	ChatID          *int64
+	MessageID       *int64
+	Title           string
+	Artist          *string
+	DurationSeconds *float64
 }
 
 type Poll struct {
@@ -632,6 +666,15 @@ type UserChatPin struct {
 	ChatID   int64
 	PinnedAt time.Time
 	Position int32
+}
+
+type UserClientSetting struct {
+	UserID          int64
+	Appearance      []byte
+	RecentEmoji     []string
+	RecentReactions []string
+	Version         int64
+	UpdatedAt       time.Time
 }
 
 type UserConnection struct {

@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ServerWallpaperUpdatedEvent",
+  "description": "One of your chat backgrounds changed, from one of your devices or because the other person of a direct chat set it for both (sent only to your own sessions).",
+  "type": "object",
+  "required": [
+    "type",
+    "event_id",
+    "chat_id",
+    "data"
+  ],
+  "properties": {
+    "type": {
+      "const": "wallpaper_updated"
+    },
+    "event_id": {
+      "$ref": "../../openapi.yaml#/components/schemas/Id"
+    },
+    "chat_id": {
+      "type": "null"
+    },
+    "data": {
+      "type": "object",
+      "description": "`entry` is `null` when the background was removed.",
+      "required": [
+        "chat_id",
+        "entry"
+      ],
+      "properties": {
+        "chat_id": {
+          "oneOf": [
+            {
+              "$ref": "../../openapi.yaml#/components/schemas/Id"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The chat, or `null` for the default of all chats."
+        },
+        "entry": {
+          "oneOf": [
+            {
+              "$ref": "../../openapi.yaml#/components/schemas/WallpaperEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

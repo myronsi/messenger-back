@@ -35,6 +35,7 @@ users, chats and their participants, attachment metadata and the security log.
 | `000050_inactive_accounts` | `inactive_account_warnings`, the index `users_last_seen_idx`; `recovery_mail_queue.kind` allows `inactive_account` ([accounts.md](accounts.md#inactive-accounts)) |
 | `000051_terms_acceptance` | `users.terms_version`, `terms_accepted_at` and `age_confirmed_at`, recorded at registration ([auth.md](auth.md#registration)) |
 | `000055_session_device_key` | `user_sessions.device_key_thumbprint` and `device_key_bound_at`: the device key a session is bound to ([auth.md](auth.md#device-bound-sessions)) |
+| `000059_appearance_sync` | `user_client_settings`, `chat_wallpapers`, `playlists`, `playlist_tracks`; `attachments.purpose` allows `chat_wallpaper` ([appearance-sync.md](appearance-sync.md)) |
 
 Changes compared to v1:
 
