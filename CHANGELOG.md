@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.38.0](https://github.com/myronsi/messenger-back/compare/v1.37.0...v1.38.0) (2026-11-26)
+
+
+### Features
+
+* **personalization:** synced appearance, chat backgrounds and playlists ([#255](https://github.com/myronsi/messenger-back/issues/255)) ([5624c3a](https://github.com/myronsi/messenger-back/commit/5624c3a0af599bc694789b8554aa2047c500cca3))
+
 ## [1.37.0](https://github.com/myronsi/messenger-back/compare/v1.37.0-alpha.1...v1.37.0) (2026-11-26)
 
 
