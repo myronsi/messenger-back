@@ -40,6 +40,7 @@ type ProcessedImage struct {
 	Thumbnail   []byte // JPEG
 	Source      image.Image
 	Lossless    bool
+	Animated    bool
 	Placeholder string
 }
 
@@ -67,6 +68,9 @@ func DisplayImage(data []byte) ([]byte, error) {
 // rotation keeps its compressed pixels: only its metadata segments are removed, and the result is decoded
 // once to make sure it is a valid image. GIFs keep their frames; WebP becomes PNG (with transparency) or JPEG.
 func ProcessImage(data []byte, contentType string) (ProcessedImage, error) {
+	if contentType == "image/webp" && animatedWebP(data) {
+		return processAnimatedWebP(data)
+	}
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
 		return ProcessedImage{}, ErrUnsupported

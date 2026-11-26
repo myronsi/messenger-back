@@ -139,11 +139,14 @@ func (s *Service) processImage(ctx context.Context, path, contentType, purpose s
 	if err != nil {
 		return ProcessedImage{}, "", err
 	}
+	if img.Animated && purpose != PurposeMessage {
+		return ProcessedImage{}, "", ErrUnsupported
+	}
 	thumbType := "image/jpeg"
 	if img.Source == nil {
 		return img, thumbType, nil
 	}
-	if contentType == "image/webp" {
+	if contentType == "image/webp" && !img.Animated {
 		if webp, err := s.o.Prober.EncodeWebP(ctx, img.Source, WebPOptions{Quality: 90, Lossless: img.Lossless}); err == nil {
 			img.Data, img.ContentType = webp, "image/webp"
 		}
@@ -151,7 +154,7 @@ func (s *Service) processImage(ctx context.Context, path, contentType, purpose s
 	if t, err := s.o.Prober.Resized(ctx, img.Source, ThumbnailWebPSide, 75); err == nil {
 		img.Thumbnail, thumbType = t.Data, t.ContentType
 	}
-	if NeedsDisplay(img.ContentType, img.Width, img.Height) {
+	if !img.Animated && NeedsDisplay(img.ContentType, img.Width, img.Height) {
 		s.addResized(ctx, vs, VariantNameDisplay, img.Source, DisplaySide, 80)
 	}
 	if purpose == PurposeAvatar {

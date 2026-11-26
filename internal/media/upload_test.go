@@ -185,3 +185,25 @@ func TestWebMIsClassifiedByItsStreams(t *testing.T) {
 		})
 	}
 }
+
+func TestAnimatedWebPMessageKeepsAnimation(t *testing.T) {
+	src, err := os.ReadFile("testdata/animated-alpha.webp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := newMemStorage(0)
+	svc := memService(store, newMemAttachments(), nil)
+	a, err := svc.Upload(t.Context(), media.Upload{UploaderID: 1, Purpose: media.PurposeMessage, Filename: "STK-20260530-WA0028.webp", Body: bytes.NewReader(src)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Kind != media.KindImage || a.MimeType != "image/webp" || a.Width == nil || *a.Width != 40 || a.ThumbnailKey == nil || a.Filename != "STK-20260530-WA0028.webp" {
+		t.Fatalf("attachment %+v", a)
+	}
+	if stored := store.get(t, a.StorageKey); !bytes.Contains(stored, []byte("ANMF")) || !bytes.Contains(stored, []byte("ANIM")) {
+		t.Fatal("the stored image lost its animation")
+	}
+	if _, err := svc.Upload(t.Context(), media.Upload{UploaderID: 1, Purpose: media.PurposeAvatar, Filename: "a.webp", Body: bytes.NewReader(src)}); !errors.Is(err, media.ErrUnsupported) {
+		t.Fatalf("animated avatar: %v", err)
+	}
+}
