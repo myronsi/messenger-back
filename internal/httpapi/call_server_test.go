@@ -50,6 +50,11 @@ var testCallLimits = calls.Config{
 
 func newCallEnv(t *testing.T, enabled bool) *callEnv {
 	t.Helper()
+	return newCallEnvWith(t, enabled, testCallLimits)
+}
+
+func newCallEnvWith(t *testing.T, enabled bool, limits calls.Config) *callEnv {
+	t.Helper()
 	store, rdb := newPostgres(t), newRedis(t)
 	log := observability.NewLogger(&bytes.Buffer{}, 0, "test")
 	authSvc, err := auth.NewService(store, rdb, auth.Config{
@@ -61,14 +66,14 @@ func newCallEnv(t *testing.T, enabled bool) *callEnv {
 	}
 	var svc *calls.Service
 	if enabled {
-		svc = calls.New(testCallLimits, calls.Deps{
+		svc = calls.New(limits, calls.Deps{
 			Store: store, Media: quietMedia{}, System: quietSystem{}, Log: log,
 			Grants: calls.NewGrants("key", "0123456789abcdef0123456789abcdef", time.Minute),
 		})
 		t.Cleanup(func() { svc.Wait(context.Background()) })
 	}
 	api := NewServer(NewAuthServer(AuthOptions{Service: authSvc, Log: log, BasePath: apiBase, CookieSecure: true}), nil).
-		WithCalls(NewCallServer(CallOptions{Service: svc, Limits: testCallLimits, Log: log}))
+		WithCalls(NewCallServer(CallOptions{Service: svc, Limits: limits, Log: log}))
 	return &callEnv{
 		authEnv: &authEnv{store: store, router: NewRouter(Options{
 			HTTP:    config.HTTP{BasePath: apiBase, RequestTimeout: 10 * time.Second, ReadinessTimeout: time.Second, MaxBodyBytes: 1 << 16},
@@ -117,7 +122,8 @@ func TestCallsOverHTTP(t *testing.T) {
 	chatPath := "/chats/" + FormatID(chat.ID) + "/call"
 
 	cfg := e.do(t, request{method: http.MethodGet, path: "/calls/config", token: alice.access})
-	if cfg.Code != http.StatusOK || cfg.json()["enabled"] != true || cfg.json()["max_participants"].(float64) != 10 {
+	if cfg.Code != http.StatusOK || cfg.json()["enabled"] != true || cfg.json()["max_participants"].(float64) != 10 ||
+		cfg.json()["video_enabled"] != false || cfg.json()["screen_share_enabled"] != false {
 		t.Fatalf("config: %d %s", cfg.Code, cfg.Body)
 	}
 	if r := e.do(t, request{method: http.MethodPut, path: "/me/call-identity", token: alice.access, body: map[string]any{"public_key": "short"}}); r.Code != http.StatusUnprocessableEntity {
@@ -271,6 +277,31 @@ func TestGroupCallEndNeedsARole(t *testing.T) {
 	}
 	if r := e.do(t, request{method: http.MethodPost, path: "/calls/" + id + "/end", token: owner.access}); r.Code != http.StatusNoContent {
 		t.Fatalf("owner ends: %d", r.Code)
+	}
+}
+
+func TestCallConfigVideo(t *testing.T) {
+	limits := testCallLimits
+	limits.VideoEnabled, limits.ScreenShareEnabled = true, true
+	for _, tc := range []struct {
+		name    string
+		enabled bool
+		limits  calls.Config
+		video   bool
+		screen  bool
+	}{
+		{name: "both on", enabled: true, limits: limits, video: true, screen: true},
+		{name: "camera only", enabled: true, limits: func() calls.Config { l := limits; l.ScreenShareEnabled = false; return l }(), video: true},
+		{name: "calls off", enabled: false, limits: limits},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newCallEnvWith(t, tc.enabled, tc.limits)
+			alice := e.register(t, "alice")
+			cfg := e.do(t, request{method: http.MethodGet, path: "/calls/config", token: alice.access})
+			if cfg.Code != http.StatusOK || cfg.json()["video_enabled"] != tc.video || cfg.json()["screen_share_enabled"] != tc.screen {
+				t.Fatalf("config: %d %s", cfg.Code, cfg.Body)
+			}
+		})
 	}
 }
 
