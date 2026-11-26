@@ -62,7 +62,7 @@ Imported messages send no push notification and do not count as unread.
 
 ## Limits
 
-100,000 messages, 5,000 files and 200 sender names per import; 500 messages per batch. Files follow the normal upload limits.
+500,000 messages, 5,000 files and 200 sender names per import; 500 messages per batch. Files follow the normal upload limits.
 
 ## Storage
 

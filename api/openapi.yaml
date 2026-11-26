@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.47
+  version: 2.1.0-alpha.49
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -7672,6 +7672,9 @@ components:
     UploadPurpose:
       type: string
       description: |
+        `message`: an animated WebP keeps its frames (at most 300); the server removes its metadata and checks every
+        frame. `avatar` and `profile_background` take only still WebP (`415` otherwise).
+
         `sticker`: a PNG, JPEG or still WebP of at most 5 MB. The server fits it into 512 x 512 px with a transparent
         border and stores a WebP (`413` when that is still over 512 KB). Only its uploader can load it until it is
         added to a pack.
@@ -9017,7 +9020,7 @@ components:
         chat_id: { $ref: "#/components/schemas/Id" }
         source: { $ref: "#/components/schemas/ImportSource" }
         state: { $ref: "#/components/schemas/ChatImportState" }
-        message_count: { type: integer, minimum: 1, maximum: 100000 }
+        message_count: { type: integer, minimum: 1, maximum: 500000 }
         file_count: { type: integer, minimum: 0, maximum: 5000 }
         first_at: { $ref: "#/components/schemas/Timestamp" }
         last_at: { $ref: "#/components/schemas/Timestamp" }
@@ -9062,7 +9065,7 @@ components:
       required: [source, message_count, file_count, first_at, last_at, senders]
       properties:
         source: { $ref: "#/components/schemas/ImportSource" }
-        message_count: { type: integer, minimum: 1, maximum: 100000 }
+        message_count: { type: integer, minimum: 1, maximum: 500000 }
         file_count: { type: integer, minimum: 0, maximum: 5000 }
         first_at: { $ref: "#/components/schemas/Timestamp" }
         last_at: { $ref: "#/components/schemas/Timestamp" }
