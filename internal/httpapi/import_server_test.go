@@ -144,3 +144,41 @@ func TestRunningImportStaysOutOfTheOtherMembersChatList(t *testing.T) {
 		}
 	}
 }
+
+func TestFinishedImportIsNeverUnread(t *testing.T) {
+	e := newChatEnv(t)
+	alice, bob := e.register(t, "alice"), e.register(t, "bob")
+	chat := e.group(t, alice, "Old friends", bob)
+	r := e.do(t, request{method: http.MethodPost, path: "/chats/" + chat + "/imports", token: alice.access, body: map[string]any{
+		"source": "whatsapp", "message_count": 2, "file_count": 0,
+		"first_at": "2020-01-01T10:00:00Z", "last_at": "2020-01-02T10:00:00Z",
+		"senders": []map[string]any{
+			{"key": "s1", "name": "Anna", "message_count": 1, "me": true},
+			{"key": "s2", "name": "Bert", "message_count": 1},
+		},
+	}})
+	if r.Code != http.StatusCreated {
+		t.Fatalf("start: %d %s", r.Code, r.Body)
+	}
+	id := r.json()["id"].(string)
+	batch := map[string]any{"from_index": 0, "messages": []map[string]any{
+		{"index": 0, "sender_key": "s1", "original_at": "2020-01-01T10:00:00Z", "type": "text", "content": "old one"},
+		{"index": 1, "sender_key": "s2", "original_at": "2020-01-02T10:00:00Z", "type": "text", "content": "old two"},
+	}}
+	if r := e.do(t, request{method: http.MethodPut, path: "/imports/" + id + "/messages", token: alice.access, body: batch}); r.Code != http.StatusOK {
+		t.Fatalf("batch: %d %s", r.Code, r.Body)
+	}
+	if r := e.do(t, request{method: http.MethodPost, path: "/imports/" + id + "/finish", token: alice.access}); r.Code != http.StatusOK {
+		t.Fatalf("finish: %d %s", r.Code, r.Body)
+	}
+	view := func() map[string]any {
+		return e.do(t, request{method: http.MethodGet, path: "/chats/" + chat, token: bob.access}).json()
+	}
+	if v := view(); v["unread_count"] != 0.0 || v["first_unread_message_id"] != nil {
+		t.Fatalf("finished import counts as unread: %v %v", v["unread_count"], v["first_unread_message_id"])
+	}
+	live := e.send(t, alice, chat, "live-1", "new message").json()["id"]
+	if v := view(); v["unread_count"] != 1.0 || v["first_unread_message_id"] != live {
+		t.Fatalf("live message after the import: %v %v, want 1 %v", v["unread_count"], v["first_unread_message_id"], live)
+	}
+}

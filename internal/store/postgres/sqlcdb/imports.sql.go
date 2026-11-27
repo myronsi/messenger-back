@@ -31,7 +31,7 @@ func (q *Queries) AdvanceChatImport(ctx context.Context, arg AdvanceChatImportPa
 
 const advanceReadPointers = `-- name: AdvanceReadPointers :exec
 UPDATE participants SET last_read_message_id = $1
-WHERE chat_id = $2 AND last_read_message_id >= $3 AND last_read_message_id < $1
+WHERE chat_id = $2 AND (last_read_message_id IS NULL OR (last_read_message_id >= $3 AND last_read_message_id < $1))
 `
 
 type AdvanceReadPointersParams struct {

@@ -84,7 +84,7 @@ SELECT GREATEST(
 
 -- name: AdvanceReadPointers :exec
 UPDATE participants SET last_read_message_id = @to_id
-WHERE chat_id = @chat_id AND last_read_message_id >= @from_id AND last_read_message_id < @to_id;
+WHERE chat_id = @chat_id AND (last_read_message_id IS NULL OR (last_read_message_id >= @from_id AND last_read_message_id < @to_id));
 
 -- name: UnlinkImportedAttachments :exec
 DELETE FROM attachment_links WHERE chat_id = @chat_id AND message_id BETWEEN @from_id::bigint AND @to_id::bigint;
