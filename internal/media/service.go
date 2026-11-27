@@ -344,6 +344,11 @@ func (s *Service) upload(ctx context.Context, u Upload, tags *Tags) (postgres.At
 	if det.Kind == KindImage && u.ForImport && u.Purpose == PurposeMessage && s.o.Jobs != nil {
 		imported, fastImport = s.importImageFrom(tmp.Name(), det.ContentType)
 	}
+	var sticker importedSticker
+	fastSticker := false
+	if u.ForImport && u.Purpose == PurposeSticker && s.o.Jobs != nil && u.Crop == nil && u.StartMS == nil && u.EndMS == nil {
+		sticker, fastSticker = importStickerFrom(tmp.Name(), det.ContentType)
+	}
 	switch {
 	case u.Purpose == PurposeEmoji:
 		img, err := s.processEmoji(ctx, tmp, size, det.ContentType, vs)
@@ -381,6 +386,16 @@ func (s *Service) upload(ctx context.Context, u Upload, tags *Tags) (postgres.At
 			return postgres.Attachment{}, err
 		}
 		body = tmp
+	case fastSticker:
+		w, h := int32(StickerSide), int32(StickerSide)
+		rec.Kind, rec.Width, rec.Height, rec.MimeType, rec.Size = KindImage, &w, &h, "image/webp", int64(len(sticker.data))
+		rec.Filename = "sticker.webp"
+		if sticker.duration != nil {
+			secs := sticker.duration.Seconds()
+			rec.Duration = &secs
+		}
+		body = bytes.NewReader(sticker.data)
+		jobs = append(jobs, JobImportSticker)
 	case animatedSticker:
 		clip, err := s.processAnimatedSticker(ctx, tmp.Name(), u, det.ContentType == "image/webp", vs)
 		if err != nil {

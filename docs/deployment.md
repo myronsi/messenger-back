@@ -134,10 +134,12 @@ object storage 120-180 MiB, Elasticsearch 0.86 GiB at a 512m heap and 1.4 GiB at
 | `SCYLLA_MEM_LIMIT` | `0` | `0` |
 | `POSTGRES_MEM_LIMIT` | `384m` | `512m` |
 | `REDIS_MAXMEMORY`, `REDIS_MEM_LIMIT` | `64mb`, `192m` | `128mb`, `256m` |
-| `OBJECT_STORAGE_MEM_LIMIT` | `320m` | `512m` |
+| `OBJECT_STORAGE_MEM_LIMIT` | `448m` | `512m` |
 | `API_MEM_LIMIT` | `512m` | `768m` |
 | `WORKER_MEM_LIMIT` | `512m` | `640m` |
 | `CALLS_MEM_LIMIT` | `512m` | `768m` |
+
+A large chat import pushes object storage to about 310 MiB (measured on 2026-11-27 with 146,512 messages and 4,000 files), so 320m left no headroom on the 4 GiB host.
 
 `REDIS_MAXMEMORY` caps Redis itself, with the `noeviction` policy that [redis.md](redis.md#operating-redis)
 requires: above it Redis refuses writes, which shows up in `messenger_store_errors_total{store="redis"}`. Alert

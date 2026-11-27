@@ -210,7 +210,7 @@ func TestImportImageJobsYieldToLiveJobsAndRunOneAtATime(t *testing.T) {
 	for _, q := range []struct {
 		id   uuid.UUID
 		kind string
-	}{{first, "import_image"}, {second, "import_image"}, {live, "video"}} {
+	}{{first, "import_image"}, {second, "import_sticker"}, {live, "video"}} {
 		if ok, err := jobs.Enqueue(ctx, q.id, q.kind); err != nil || !ok {
 			t.Fatalf("enqueue %s: %v %v", q.kind, ok, err)
 		}
