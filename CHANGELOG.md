@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.40.4](https://github.com/myronsi/messenger-back/compare/v1.40.3...v1.40.4) (2026-11-27)
+
+
+### Performance Improvements
+
+* **media:** raise the import upload rate to 1,200 per minute ([#273](https://github.com/myronsi/messenger-back/issues/273)) ([28969da](https://github.com/myronsi/messenger-back/commit/28969da55e55dab42bfc94f6fe250490fb9f415a))
+* **media:** store imported 512x512 WebP stickers at once and make their variants in the worker ([#271](https://github.com/myronsi/messenger-back/issues/271)) ([343a58e](https://github.com/myronsi/messenger-back/commit/343a58e77623efe69b443247f08f9480f96c2d1b))
+
 ## [1.40.3](https://github.com/myronsi/messenger-back/compare/v1.40.2...v1.40.3) (2026-11-27)
 
 
