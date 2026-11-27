@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.40.5](https://github.com/myronsi/messenger-back/compare/v1.40.4...v1.40.5) (2026-11-27)
+
+
+### Performance Improvements
+
+* **media:** finish every imported sticker in the worker and never cache unfinished files ([#274](https://github.com/myronsi/messenger-back/issues/274)) ([064c6f7](https://github.com/myronsi/messenger-back/commit/064c6f70e50abe5b88aeabbf89ac05a7864c8e66))
+
 ## [1.40.4](https://github.com/myronsi/messenger-back/compare/v1.40.3...v1.40.4) (2026-11-27)
 
 
