@@ -2646,8 +2646,8 @@ type CreateUploadSessionRequest struct {
 	// border and stores a WebP (`413` when that is still over 512 KB). Only its uploader can load it until it is
 	// added to a pack.
 	//
-	// A sticker can also be made from a video (`kind: video`: MP4, WebM or MOV) or an animated GIF of at most 15 MB.
-	// The server keeps at most 3 s of it (from `start_ms` to `end_ms`, or the first 3 s), crops it to the square
+	// A sticker can also be made from a video (`kind: video`: MP4, WebM or MOV), an animated GIF or an animated WebP
+	// of at most 15 MB. The server keeps at most 3 s of it (from `start_ms` to `end_ms`, or the first 3 s), crops it to the square
 	// `crop_x`, `crop_y`, `crop_size` when given (otherwise it fits the clip into the square with a transparent
 	// border), drops the sound and stores a looping animated WebP of at most 512 x 512 px (`413` when it is still
 	// over 1 MB at the lowest quality). The sticker then has `is_animated: true`.
@@ -4913,8 +4913,8 @@ type UploadAttachmentRequest struct {
 	// border and stores a WebP (`413` when that is still over 512 KB). Only its uploader can load it until it is
 	// added to a pack.
 	//
-	// A sticker can also be made from a video (`kind: video`: MP4, WebM or MOV) or an animated GIF of at most 15 MB.
-	// The server keeps at most 3 s of it (from `start_ms` to `end_ms`, or the first 3 s), crops it to the square
+	// A sticker can also be made from a video (`kind: video`: MP4, WebM or MOV), an animated GIF or an animated WebP
+	// of at most 15 MB. The server keeps at most 3 s of it (from `start_ms` to `end_ms`, or the first 3 s), crops it to the square
 	// `crop_x`, `crop_y`, `crop_size` when given (otherwise it fits the clip into the square with a transparent
 	// border), drops the sound and stores a looping animated WebP of at most 512 x 512 px (`413` when it is still
 	// over 1 MB at the lowest quality). The sticker then has `is_animated: true`.
@@ -4949,8 +4949,8 @@ type UploadAttachmentRequest struct {
 // border and stores a WebP (`413` when that is still over 512 KB). Only its uploader can load it until it is
 // added to a pack.
 //
-// A sticker can also be made from a video (`kind: video`: MP4, WebM or MOV) or an animated GIF of at most 15 MB.
-// The server keeps at most 3 s of it (from `start_ms` to `end_ms`, or the first 3 s), crops it to the square
+// A sticker can also be made from a video (`kind: video`: MP4, WebM or MOV), an animated GIF or an animated WebP
+// of at most 15 MB. The server keeps at most 3 s of it (from `start_ms` to `end_ms`, or the first 3 s), crops it to the square
 // `crop_x`, `crop_y`, `crop_size` when given (otherwise it fits the clip into the square with a transparent
 // border), drops the sound and stores a looping animated WebP of at most 512 x 512 px (`413` when it is still
 // over 1 MB at the lowest quality). The sticker then has `is_animated: true`.

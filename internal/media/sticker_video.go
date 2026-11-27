@@ -1,10 +1,14 @@
 package media
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"image"
+	"io"
 	"math"
+	"os"
 	"os/exec"
 	"strconv"
 	"time"
@@ -28,8 +32,8 @@ type stickerStep struct {
 
 var stickerLadder = []stickerStep{{75, 30}, {60, 24}, {50, 20}, {40, 15}}
 
-func AnimatedStickerSource(d Detected) bool {
-	return d.Kind == KindVideo || d.ContentType == "image/gif"
+func AnimatedStickerSource(d Detected, head []byte) bool {
+	return d.Kind == KindVideo || d.ContentType == "image/gif" || (d.ContentType == "image/webp" && animatedWebP(head))
 }
 
 func validCrop(c *StickerCrop) bool {
@@ -76,24 +80,52 @@ func stickerFilter(side, fps int, crop *StickerCrop) string {
 
 func formatFraction(v float64) string { return strconv.FormatFloat(v, 'f', 4, 64) }
 
-func (s *Service) encodeStickerClip(ctx context.Context, path string, start, length time.Duration, side int, step stickerStep, crop *StickerCrop, still bool) ([]byte, error) {
+type stickerSource struct {
+	args  []string
+	stdin func() io.Reader
+}
+
+func fileStickerSource(path string, start, length time.Duration) stickerSource {
+	args := []string{"-protocol_whitelist", "file"}
+	if start > 0 {
+		args = append(args, "-ss", strconv.FormatFloat(start.Seconds(), 'f', 3, 64))
+	}
+	return stickerSource{args: append(args, "-t", strconv.FormatFloat(length.Seconds(), 'f', 3, 64), "-i", path)}
+}
+
+func framesStickerSource(frames []*image.NRGBA) stickerSource {
+	side := strconv.Itoa(StickerSide)
+	return stickerSource{
+		args: []string{"-protocol_whitelist", "pipe", "-f", "rawvideo", "-pix_fmt", "rgba", "-s", side + "x" + side,
+			"-framerate", strconv.Itoa(webpStickerFPS), "-i", "pipe:0"},
+		stdin: func() io.Reader {
+			parts := make([]io.Reader, len(frames))
+			for i, f := range frames {
+				parts[i] = bytes.NewReader(f.Pix)
+			}
+			return io.MultiReader(parts...)
+		},
+	}
+}
+
+func (s *Service) encodeStickerClip(ctx context.Context, src stickerSource, side int, step stickerStep, crop *StickerCrop, still bool) ([]byte, error) {
 	if s.o.Prober == nil || s.o.Prober.ffmpeg == "" {
 		return nil, exec.ErrNotFound
 	}
 	ctx, cancel := context.WithTimeout(ctx, stickerEncodeTimeout)
 	defer cancel()
-	args := []string{"-nostdin", "-v", "error", "-protocol_whitelist", "file", "-threads", "2"}
-	if start > 0 {
-		args = append(args, "-ss", strconv.FormatFloat(start.Seconds(), 'f', 3, 64))
-	}
-	args = append(args, "-t", strconv.FormatFloat(length.Seconds(), 'f', 3, 64), "-i", path, "-an", "-map_metadata", "-1",
-		"-vf", stickerFilter(side, step.fps, crop))
+	args := append([]string{"-nostdin", "-v", "error", "-threads", "2"}, src.args...)
+	args = append(args, "-an", "-map_metadata", "-1", "-vf", stickerFilter(side, step.fps, crop))
 	if still {
 		args = append(args, "-frames:v", "1", "-c:v", "libwebp", "-quality", strconv.Itoa(step.quality), "-f", "webp", "pipe:1")
 	} else {
 		args = append(args, "-c:v", "libwebp_anim", "-loop", "0", "-quality", strconv.Itoa(step.quality), "-f", "webp", "pipe:1")
 	}
-	out, err := exec.CommandContext(ctx, s.o.Prober.ffmpeg, args...).Output() //nolint:gosec // the arguments are built here; path is a spooled temp file
+	cmd := exec.CommandContext(ctx, s.o.Prober.ffmpeg, args...) //nolint:gosec // the arguments are built here; the input is a spooled temp file or a pipe
+	if src.stdin != nil {
+		cmd.Stdin = src.stdin()
+	}
+	out, err := cmd.Output()
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, ErrBusy
@@ -111,7 +143,30 @@ type AnimatedSticker struct {
 	Duration time.Duration
 }
 
-func (s *Service) processAnimatedSticker(ctx context.Context, path string, u Upload, vs *variantSet) (AnimatedSticker, error) {
+func (s *Service) stickerSourceOf(ctx context.Context, path string, u Upload, webp bool) (stickerSource, *StickerCrop, time.Duration, error) {
+	if webp {
+		data, err := os.ReadFile(path) //nolint:gosec // a spooled temp file
+		if err != nil {
+			return stickerSource{}, nil, 0, err
+		}
+		clip, err := webpStickerFrames(data, u)
+		if err != nil {
+			return stickerSource{}, nil, 0, err
+		}
+		return framesStickerSource(clip.frames), nil, clip.length, nil
+	}
+	total, known := s.o.Prober.duration(ctx, path)
+	start, length, err := clipWindow(u.StartMS, u.EndMS, total, known)
+	if err != nil {
+		return stickerSource{}, nil, 0, err
+	}
+	if known {
+		length = min(length, total-start)
+	}
+	return fileStickerSource(path, start, length), u.Crop, length, nil
+}
+
+func (s *Service) processAnimatedSticker(ctx context.Context, path string, u Upload, webp bool, vs *variantSet) (AnimatedSticker, error) {
 	if !validCrop(u.Crop) {
 		return AnimatedSticker{}, fmt.Errorf("%w: crop_x, crop_y and crop_size must be fractions of the frame", ErrInvalid)
 	}
@@ -121,17 +176,13 @@ func (s *Service) processAnimatedSticker(ctx context.Context, path string, u Upl
 		return AnimatedSticker{}, ErrBusy
 	}
 	defer func() { <-s.images }()
-	total, known := s.o.Prober.duration(ctx, path)
-	start, length, err := clipWindow(u.StartMS, u.EndMS, total, known)
+	src, crop, length, err := s.stickerSourceOf(ctx, path, u, webp)
 	if err != nil {
 		return AnimatedSticker{}, err
 	}
-	if known {
-		length = min(length, total-start)
-	}
 	var data []byte
 	for _, step := range stickerLadder {
-		data, err = s.encodeStickerClip(ctx, path, start, length, StickerSide, step, u.Crop, false)
+		data, err = s.encodeStickerClip(ctx, src, StickerSide, step, crop, false)
 		if err != nil {
 			return AnimatedSticker{}, err
 		}
@@ -142,13 +193,13 @@ func (s *Service) processAnimatedSticker(ctx context.Context, path string, u Upl
 	if len(data) > MaxAnimatedStickerBytes {
 		return AnimatedSticker{}, ErrTooLarge
 	}
-	if panel, err := s.encodeStickerClip(ctx, path, start, length, PanelSide, stickerStep{80, 1}, u.Crop, true); err == nil {
+	if panel, err := s.encodeStickerClip(ctx, src, PanelSide, stickerStep{80, 1}, crop, true); err == nil {
 		vs.add(VariantNamePanel, EncodedImage{Data: panel, ContentType: "image/webp", Width: PanelSide, Height: PanelSide})
 	} else if !errors.Is(err, ErrUnsupported) {
 		return AnimatedSticker{}, err
 	}
 	for _, step := range stickerLadder[1:] {
-		small, err := s.encodeStickerClip(ctx, path, start, length, MessageStickerSide, step, u.Crop, false)
+		small, err := s.encodeStickerClip(ctx, src, MessageStickerSide, step, crop, false)
 		if err != nil {
 			break
 		}

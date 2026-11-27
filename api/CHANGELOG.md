@@ -2,6 +2,12 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.51
+
+- `UploadPurpose` `sticker` accepts animated WebP as a source of an animated sticker, like an animated GIF: the server
+  keeps at most 3 s, crops it when asked and stores a looping animated WebP of at most 512 x 512 px. Before, such
+  files got `415`.
+
 ## 2.1.0-alpha.50
 
 - Synced settings: `GET` and `PATCH /me/client-settings` (`ClientSettings`, `UpdateClientSettingsRequest`,
