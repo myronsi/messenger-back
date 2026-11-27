@@ -43,7 +43,7 @@ type RateAllower interface {
 // RateUpload limits uploads per user.
 var RateUpload = redis.Rate{Name: "upload", Rate: 60, Period: time.Minute, Burst: 20}
 
-var RateImportUpload = redis.Rate{Name: "import_upload", Rate: 300, Period: time.Minute, Burst: 50}
+var RateImportUpload = redis.Rate{Name: "import_upload", Rate: 1200, Period: time.Minute, Burst: 100}
 
 type RunningImports interface {
 	RunningOfUser(ctx context.Context, userID int64) ([]postgres.ChatImport, error)

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.55
+  version: 2.1.0-alpha.56
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -1667,9 +1667,11 @@ paths:
         avatars. Attachments that are not used within 24 hours are deleted.
 
         At most 60 uploads per minute per user (`429` with `Retry-After`, before the body is read). Uploads with the
-        `import_id` of the caller's own running import have their own limit of 300 per minute (burst 50). For them a
+        `import_id` of the caller's own running import have their own limit of 1,200 per minute (burst 100). For them a
         JPEG, PNG or still WebP image is stored with its metadata removed and its size read from the header; the
         thumbnail, display copy and placeholder follow in the background (`processing`, then `attachment_updated`).
+        A sticker (`purpose: sticker`) that is already a 512×512 WebP within the sticker limits is stored the same
+        way, and its smaller copies follow in the background; until then they are served from the original.
       parameters:
         - name: import_id
           in: query

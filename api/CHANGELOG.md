@@ -2,6 +2,12 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.56
+
+- Description only: the `import_upload` rate of `POST /attachments?import_id=…` is 1,200 per minute (burst 100), and
+  an imported sticker that is already a 512×512 WebP within the sticker limits is stored at once, with its smaller
+  copies made in the background (`processing` until `attachment_updated`).
+
 ## 2.1.0-alpha.55
 
 - `import_id` of `POST /attachments` moves from the form to the query (`POST /attachments?import_id=…`), so the
