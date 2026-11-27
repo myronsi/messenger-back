@@ -80,3 +80,76 @@ func TestStickersOutsideAnImportStayInTheRequest(t *testing.T) {
 		t.Fatal("normal sticker needs its panel variant at once")
 	}
 }
+
+func pngSticker(t *testing.T, w, h int) []byte {
+	t.Helper()
+	return photoPNG(t, w, h)
+}
+
+func TestImportStickersOfAnyShapeAreFinishedInTheWorker(t *testing.T) {
+	svc, store, _, jobs := optimizingService(t)
+	ctx := t.Context()
+	a, err := svc.Upload(ctx, media.Upload{UploaderID: 1, Purpose: media.PurposeSticker, Filename: "s.png", Body: bytes.NewReader(pngSticker(t, 700, 300)), ForImport: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.ProcessingState == nil || *a.ProcessingState != media.ProcessingQueued || a.MimeType != "image/png" || *a.Width != 700 || len(jobs.jobs) != 1 {
+		t.Fatalf("upload %+v, jobs %d", a, len(jobs.jobs))
+	}
+	before, err := svc.OpenUnchecked(ctx, a.ID, media.VariantOriginal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = before.Object.Body.Close()
+	if !before.Pending {
+		t.Fatal("a sticker in processing must not be cached as final")
+	}
+	done, err := svc.RunJob(ctx, jobs.jobs[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if *done.ProcessingState != media.ProcessingDone || done.MimeType != "image/webp" || *done.Width != media.StickerSide || *done.Height != media.StickerSide {
+		t.Fatalf("after the job %+v", done)
+	}
+	if _, ok := done.Variants.Get(media.VariantNamePanel); !ok {
+		t.Fatalf("no panel variant %+v", done.Variants)
+	}
+	stored := store.get(t, done.StorageKey)
+	if int64(len(stored)) != done.Size || string(stored[8:12]) != "WEBP" {
+		t.Fatalf("main object not replaced: %d bytes, size %d", len(stored), done.Size)
+	}
+	after, err := svc.OpenUnchecked(ctx, a.ID, media.VariantOriginal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = after.Object.Body.Close()
+	if after.Pending || after.ETagSuffix == before.ETagSuffix {
+		t.Fatalf("final bytes need a final cache entry: before %q after %q", before.ETagSuffix, after.ETagSuffix)
+	}
+}
+
+func TestImportStickerJobRecoversAfterTheFileWasReplaced(t *testing.T) {
+	svc, store, rows, jobs := optimizingService(t)
+	ctx := t.Context()
+	a, err := svc.Upload(ctx, media.Upload{UploaderID: 1, Purpose: media.PurposeSticker, Filename: "s.png", Body: bytes.NewReader(pngSticker(t, 640, 480)), ForImport: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows.mu.Lock()
+	rows.failMerge = 1
+	rows.mu.Unlock()
+	if _, err := svc.RunJob(ctx, jobs.jobs[0]); err == nil {
+		t.Fatal("the first run should fail at the row update")
+	}
+	if got := store.get(t, a.StorageKey); string(got[8:12]) != "WEBP" {
+		t.Fatal("the converted file should already be stored")
+	}
+	done, err := svc.RunJob(ctx, jobs.jobs[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored := store.get(t, done.StorageKey)
+	if *done.ProcessingState != media.ProcessingDone || done.MimeType != "image/webp" || done.Size != int64(len(stored)) || *done.Width != media.StickerSide {
+		t.Fatalf("after the retry %+v", done)
+	}
+}

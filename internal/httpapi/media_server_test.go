@@ -837,3 +837,32 @@ func TestImportUploadsHaveTheirOwnRateAndDeferImageWork(t *testing.T) {
 		t.Fatalf("malformed import_id: %d", rec.Code)
 	}
 }
+
+func TestFilesInProcessingAreNotCachedAsFinal(t *testing.T) {
+	env := newMediaEnv(t)
+	s := env.register(t, "stickerer")
+	uid := env.userID(t, s)
+	env.imports.mu.Lock()
+	env.imports.byID[uid] = []int64{78}
+	env.imports.mu.Unlock()
+	up := env.uploadTo(t, apiBase+"/attachments?import_id=78", s.access, map[string]string{"purpose": "sticker"}, "s.png", smallPNG(t))
+	if up.Code != http.StatusCreated {
+		t.Fatalf("upload: %d %s", up.Code, up.Body)
+	}
+	id := up.json()["id"].(string)
+	get := func() reply {
+		return env.do(t, request{method: http.MethodGet, path: "/attachments/" + id + "/content?variant=panel", token: s.access})
+	}
+	early := get()
+	if early.Code != http.StatusOK || early.Header().Get("Cache-Control") != "private, no-cache" || !strings.Contains(early.Header().Get("ETag"), "-pending") {
+		t.Fatalf("in processing: %d %q %q", early.Code, early.Header().Get("Cache-Control"), early.Header().Get("ETag"))
+	}
+	done := media.ProcessingDone
+	if err := env.store.Attachments().SetProcessing(t.Context(), uuid.MustParse(id), &done); err != nil {
+		t.Fatal(err)
+	}
+	late := get()
+	if late.Header().Get("Cache-Control") != cacheForever || late.Header().Get("ETag") == early.Header().Get("ETag") {
+		t.Fatalf("finished: %q %q", late.Header().Get("Cache-Control"), late.Header().Get("ETag"))
+	}
+}

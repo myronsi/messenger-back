@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"errors"
 	"image"
 	"image/jpeg"
 	"io"
@@ -87,9 +88,10 @@ func (m *memStorage) keys() map[string]int {
 
 type memAttachments struct {
 	postgres.AttachmentRepository
-	mu   sync.Mutex
-	rows map[uuid.UUID]postgres.Attachment
-	fail error
+	mu        sync.Mutex
+	rows      map[uuid.UUID]postgres.Attachment
+	fail      error
+	failMerge int
 }
 
 func newMemAttachments() *memAttachments {
@@ -164,6 +166,10 @@ func withExif(raw []byte, orientation int) []byte {
 func (m *memAttachments) MergeVariants(_ context.Context, id uuid.UUID, u postgres.AttachmentUpdate) (postgres.Attachment, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.failMerge > 0 {
+		m.failMerge--
+		return postgres.Attachment{}, errors.New("database unavailable")
+	}
 	a, ok := m.rows[id]
 	if !ok {
 		return postgres.Attachment{}, postgres.ErrNotFound
@@ -193,6 +199,21 @@ func (m *memAttachments) MergeVariants(_ context.Context, id uuid.UUID, u postgr
 	}
 	if u.AudioAlbum != nil {
 		a.AudioAlbum = u.AudioAlbum
+	}
+	if u.Size != nil {
+		a.Size = *u.Size
+	}
+	if u.MimeType != nil {
+		a.MimeType = *u.MimeType
+	}
+	if u.Filename != nil {
+		a.Filename = *u.Filename
+	}
+	if u.Width != nil {
+		a.Width, a.Height = u.Width, u.Height
+	}
+	if u.Duration != nil {
+		a.Duration = u.Duration
 	}
 	m.rows[id] = a
 	return a, nil

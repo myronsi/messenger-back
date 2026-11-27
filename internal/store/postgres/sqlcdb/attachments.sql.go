@@ -841,8 +841,14 @@ SET variants = variants || $1::jsonb,
     processing_state = COALESCE($4, processing_state),
     audio_title = COALESCE($5, audio_title),
     audio_artist = COALESCE($6, audio_artist),
-    audio_album = COALESCE($7, audio_album)
-WHERE id = $8
+    audio_album = COALESCE($7, audio_album),
+    size = COALESCE($8, size),
+    mime_type = COALESCE($9, mime_type),
+    filename = COALESCE($10, filename),
+    width = COALESCE($11, width),
+    height = COALESCE($12, height),
+    duration = COALESCE($13, duration)
+WHERE id = $14
 RETURNING id, uploader_id, chat_id, storage_key, mime_type, size, width, height, duration, waveform, created_at, purpose, kind, filename, thumbnail_key, variants, placeholder, processing_state, audio_title, audio_artist, audio_album
 `
 
@@ -854,6 +860,12 @@ type MergeAttachmentVariantsParams struct {
 	AudioTitle      *string
 	AudioArtist     *string
 	AudioAlbum      *string
+	Size            *int64
+	MimeType        *string
+	Filename        *string
+	Width           *int32
+	Height          *int32
+	Duration        *float64
 	ID              uuid.UUID
 }
 
@@ -866,6 +878,12 @@ func (q *Queries) MergeAttachmentVariants(ctx context.Context, arg MergeAttachme
 		arg.AudioTitle,
 		arg.AudioArtist,
 		arg.AudioAlbum,
+		arg.Size,
+		arg.MimeType,
+		arg.Filename,
+		arg.Width,
+		arg.Height,
+		arg.Duration,
 		arg.ID,
 	)
 	var i Attachment

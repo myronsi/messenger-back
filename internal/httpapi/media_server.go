@@ -433,6 +433,9 @@ func (m *MediaServer) GetAttachmentContent(w http.ResponseWriter, r *http.Reques
 	if variant == media.VariantThumbnail && d.Legacy {
 		cache = "private, max-age=3600"
 	}
+	if d.Pending {
+		cache = "private, no-cache"
+	}
 	m.serve(w, r, d, cache, id.String()+suffix+d.ETagSuffix)
 }
 
