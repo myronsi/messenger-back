@@ -43,6 +43,7 @@ type UploadSessionRepository interface {
 	Delete(ctx context.Context, id uuid.UUID) (UploadSession, error)
 	Count(ctx context.Context, uploaderID int64) (int64, error)
 	Stale(ctx context.Context, updatedBefore time.Time, limit int) ([]UploadSession, error)
+	IdleOf(ctx context.Context, uploaderID int64, updatedBefore time.Time, limit int) ([]UploadSession, error)
 }
 
 type uploadSessionRepo struct{ s *Store }
@@ -108,6 +109,20 @@ func (r uploadSessionRepo) Count(ctx context.Context, uploaderID int64) (int64, 
 	defer cancel()
 	n, err := r.s.q.CountUploadSessions(ctx, uploaderID)
 	return n, mapError(err)
+}
+
+func (r uploadSessionRepo) IdleOf(ctx context.Context, uploaderID int64, updatedBefore time.Time, limit int) ([]UploadSession, error) {
+	ctx, cancel := r.s.call(ctx)
+	defer cancel()
+	rows, err := r.s.q.ListIdleUploadSessionsOf(ctx, sqlcdb.ListIdleUploadSessionsOfParams{UploaderID: uploaderID, UpdatedBefore: updatedBefore, MaxRows: clampLimit(limit)})
+	if err != nil {
+		return nil, mapError(err)
+	}
+	out := make([]UploadSession, len(rows))
+	for i, row := range rows {
+		out[i] = uploadSessionFrom(row)
+	}
+	return out, nil
 }
 
 func (r uploadSessionRepo) Stale(ctx context.Context, updatedBefore time.Time, limit int) ([]UploadSession, error) {

@@ -19,5 +19,8 @@ DELETE FROM upload_sessions WHERE id = @id RETURNING *;
 -- name: CountUploadSessions :one
 SELECT count(*)::bigint FROM upload_sessions WHERE uploader_id = @uploader_id;
 
+-- name: ListIdleUploadSessionsOf :many
+SELECT * FROM upload_sessions WHERE uploader_id = @uploader_id AND updated_at < @updated_before ORDER BY updated_at LIMIT @max_rows;
+
 -- name: ListStaleUploadSessions :many
 SELECT * FROM upload_sessions WHERE updated_at < @updated_before ORDER BY updated_at LIMIT @max_rows;

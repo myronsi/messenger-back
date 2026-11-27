@@ -154,6 +154,48 @@ func (q *Queries) GetUploadSession(ctx context.Context, arg GetUploadSessionPara
 	return i, err
 }
 
+const listIdleUploadSessionsOf = `-- name: ListIdleUploadSessionsOf :many
+SELECT id, uploader_id, purpose, kind, filename, size, chunk_size, received, chunks, created_at, updated_at FROM upload_sessions WHERE uploader_id = $1 AND updated_at < $2 ORDER BY updated_at LIMIT $3
+`
+
+type ListIdleUploadSessionsOfParams struct {
+	UploaderID    int64
+	UpdatedBefore time.Time
+	MaxRows       int32
+}
+
+func (q *Queries) ListIdleUploadSessionsOf(ctx context.Context, arg ListIdleUploadSessionsOfParams) ([]UploadSession, error) {
+	rows, err := q.db.Query(ctx, listIdleUploadSessionsOf, arg.UploaderID, arg.UpdatedBefore, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []UploadSession{}
+	for rows.Next() {
+		var i UploadSession
+		if err := rows.Scan(
+			&i.ID,
+			&i.UploaderID,
+			&i.Purpose,
+			&i.Kind,
+			&i.Filename,
+			&i.Size,
+			&i.ChunkSize,
+			&i.Received,
+			&i.Chunks,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listStaleUploadSessions = `-- name: ListStaleUploadSessions :many
 SELECT id, uploader_id, purpose, kind, filename, size, chunk_size, received, chunks, created_at, updated_at FROM upload_sessions WHERE updated_at < $1 ORDER BY updated_at LIMIT $2
 `

@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/myronsi/messenger-back/internal/media"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
@@ -397,3 +398,31 @@ func TestResumableUploadRefusesTooLarge(t *testing.T) {
 }
 
 var _ = postgres.Variants{}
+
+func TestResumableUploadFreesIdleSessionsAtTheCap(t *testing.T) {
+	store, rows, jobs := newMemStorage(0), newMemAttachments(), &memJobs{}
+	sessions := newMemSessions()
+	svc := media.NewService(media.Options{Storage: store, Attachments: rows, Prober: ffmpegProber(t), Jobs: jobs, Sessions: sessions})
+	open := func() error {
+		_, err := svc.CreateSession(t.Context(), media.NewSession{UploaderID: 7, Purpose: media.PurposeMessage, Filename: "big.mp4", Size: 20 << 20})
+		return err
+	}
+	for range media.MaxOpenUploads {
+		if err := open(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := open(); !errors.Is(err, media.ErrTooManyUploads) {
+		t.Fatalf("sixth session while the others are active: %v", err)
+	}
+	sessions.age(media.UploadSessionIdle + time.Minute)
+	if err := open(); err != nil {
+		t.Fatalf("an idle session should make room: %v", err)
+	}
+	if n, _ := sessions.Count(t.Context(), 7); n != media.MaxOpenUploads {
+		t.Fatalf("open sessions %d", n)
+	}
+	if _, err := svc.CreateSession(t.Context(), media.NewSession{UploaderID: 8, Purpose: media.PurposeMessage, Filename: "x", Size: 20 << 20}); err != nil {
+		t.Fatalf("another user is not affected: %v", err)
+	}
+}
