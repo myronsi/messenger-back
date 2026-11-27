@@ -163,6 +163,11 @@ otherwise `413`. The `panel` variant is a still first frame and `message` an ani
 512 KB. The attachment records the clip length in `duration`, and adding it to a pack sets `is_animated`. The work
 runs inside the upload request with an image worker slot, not as a job.
 
+An animated WebP is a sticker source too, but ffmpeg cannot decode animated WebP. The server decodes its frames in Go
+(`internal/media/sticker_webp.go`), composites them with their blend and dispose flags, crops and fits each into
+512 x 512, samples them at 30 fps inside the same 3 s window and pipes them to ffmpeg as raw RGBA, which encodes them
+like a video clip.
+
 Until the image is added to a pack only its uploader can load it, and an image
 no pack uses is collected like any other unused upload. A user has at most 50 packs of at most 120 stickers; only
 the owner changes a pack, and deleting a pack or a sticker only marks it deleted, so sent stickers keep showing.

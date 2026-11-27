@@ -60,6 +60,22 @@ func TestStickersFromVideosAndGIFs(t *testing.T) {
 		t.Fatalf("GIF sticker: %+v %v", g, err)
 	}
 
+	webp := generatedClip(t, "clip.webp", "-f", "lavfi", "-i", "testsrc=size=300x200:rate=10:duration=1", "-c:v", "libwebp_anim", "-loop", "0")
+	w, err := svc.Upload(ctx, media.Upload{UploaderID: 1, Purpose: media.PurposeSticker, Filename: "clip.webp", Body: bytes.NewReader(webp),
+		Crop: &media.StickerCrop{X: 0.1, Y: 0, Size: 1}})
+	if err != nil || w.MimeType != "image/webp" || w.Duration == nil || *w.Duration < 0.9 || *w.Duration > 1.1 || *w.Width != media.StickerSide {
+		t.Fatalf("animated WebP sticker: %+v %v", w, err)
+	}
+	if !animatedWebP(store.get(t, w.StorageKey)) {
+		t.Fatal("a sticker from an animated WebP must stay animated")
+	}
+	if panel, ok := w.Variants.Get(media.VariantNamePanel); !ok || animatedWebP(store.get(t, panel.Key)) {
+		t.Fatalf("panel variant must be a still WebP: %+v %v", panel, ok)
+	}
+	if _, err := svc.Upload(ctx, media.Upload{UploaderID: 1, Purpose: media.PurposeSticker, Filename: "clip.webp", Body: bytes.NewReader(webp), StartMS: ms(2000)}); !errors.Is(err, media.ErrInvalid) {
+		t.Fatalf("start after the end of an animated WebP: %v", err)
+	}
+
 	for name, u := range map[string]media.Upload{
 		"too long":       {StartMS: ms(0), EndMS: ms(4000)},
 		"end before":     {StartMS: ms(2000), EndMS: ms(1000)},

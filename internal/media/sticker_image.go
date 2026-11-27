@@ -45,7 +45,10 @@ func squareImage(data []byte, contentType string, side int) (*image.NRGBA, error
 	if contentType == "image/jpeg" {
 		src = orient(src, jpegOrientation(data))
 	}
-	b := src.Bounds()
+	return fitSquare(src, src.Bounds(), side), nil
+}
+
+func fitSquare(src image.Image, b image.Rectangle, side int) *image.NRGBA {
 	w, h := side, side
 	if b.Dx() > b.Dy() {
 		h = max(1, b.Dy()*side/b.Dx())
@@ -55,7 +58,7 @@ func squareImage(data []byte, contentType string, side int) (*image.NRGBA, error
 	dst := image.NewNRGBA(image.Rect(0, 0, side, side))
 	at := image.Rect((side-w)/2, (side-h)/2, (side-w)/2+w, (side-h)/2+h)
 	xdraw.CatmullRom.Scale(dst, at, src, b, xdraw.Src, nil)
-	return dst, nil
+	return dst
 }
 
 func (s *Service) processSticker(ctx context.Context, f *os.File, size int64, contentType string, vs *variantSet) (ProcessedImage, error) {

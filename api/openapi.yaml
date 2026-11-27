@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.50
+  version: 2.1.0-alpha.52
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -8160,8 +8160,8 @@ components:
         border and stores a WebP (`413` when that is still over 512 KB). Only its uploader can load it until it is
         added to a pack.
 
-        A sticker can also be made from a video (`kind: video`: MP4, WebM or MOV) or an animated GIF of at most 15 MB.
-        The server keeps at most 3 s of it (from `start_ms` to `end_ms`, or the first 3 s), crops it to the square
+        A sticker can also be made from a video (`kind: video`: MP4, WebM or MOV), an animated GIF or an animated WebP
+        of at most 15 MB. The server keeps at most 3 s of it (from `start_ms` to `end_ms`, or the first 3 s), crops it to the square
         `crop_x`, `crop_y`, `crop_size` when given (otherwise it fits the clip into the square with a transparent
         border), drops the sound and stores a looping animated WebP of at most 512 x 512 px (`413` when it is still
         over 1 MB at the lowest quality). The sticker then has `is_animated: true`.
@@ -9562,8 +9562,11 @@ components:
           items: { $ref: "#/components/schemas/StartChatImportSender" }
     ImportedMessageType:
       type: string
-      description: "`note`: a line of the export that is not a message (for example that someone joined), shown as a system message."
-      enum: [text, file, voice, note]
+      description: |
+        `note`: a line of the export that is not a message (for example that someone joined), shown as a system message.
+        `sticker`: a sticker the importer may send (usually from a pack the importer made from the export's stickers),
+        with `sticker_id` and no `content` or `attachment_ids`.
+      enum: [text, file, voice, note, sticker]
     ImportedMessage:
       type: object
       required: [index, original_at, type]
@@ -9589,6 +9592,9 @@ components:
           maxItems: 10
           uniqueItems: true
           items: { $ref: "#/components/schemas/AttachmentRef" }
+        sticker_id:
+          description: The sticker of a `sticker` message; the server sets `content` to the sticker's emoji.
+          $ref: "#/components/schemas/Id"
         reply_to_index:
           type: integer
           minimum: 0

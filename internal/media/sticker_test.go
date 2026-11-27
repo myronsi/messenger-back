@@ -163,10 +163,13 @@ func TestStickerUploads(t *testing.T) {
 	_ = shared.Object.Body.Close()
 
 	animated, _ := fs.ReadFile(stickers.Builtin(), "noto-animated/1f600.webp")
+	anim, err := svc.Upload(ctx, media.Upload{UploaderID: alice.ID, Purpose: media.PurposeSticker, Body: bytes.NewReader(animated)})
+	if err != nil || anim.MimeType != "image/webp" || anim.Duration == nil || *anim.Width != media.StickerSide {
+		t.Fatalf("an animated WebP becomes an animated sticker: %+v %v", anim, err)
+	}
 	for name, u := range map[string]media.Upload{
-		"animated": {Body: bytes.NewReader(animated)},
-		"text":     {Body: bytes.NewReader([]byte("just text, not an image at all"))},
-		"voice":    {Kind: media.KindVoice, Body: bytes.NewReader(stickerPNG(t, 10, 10))},
+		"text":  {Body: bytes.NewReader([]byte("just text, not an image at all"))},
+		"voice": {Kind: media.KindVoice, Body: bytes.NewReader(stickerPNG(t, 10, 10))},
 	} {
 		u.UploaderID, u.Purpose = alice.ID, media.PurposeSticker
 		if _, err := svc.Upload(ctx, u); err == nil {

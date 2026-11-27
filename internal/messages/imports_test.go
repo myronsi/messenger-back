@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/myronsi/messenger-back/internal/ids"
 	"github.com/myronsi/messenger-back/internal/messages"
 	"github.com/myronsi/messenger-back/internal/store/postgres"
@@ -196,6 +198,62 @@ func TestImportTakesTheLargestHistory(t *testing.T) {
 	})
 	if err != nil || ci.MessageCount != messages.MaxImportMessages {
 		t.Fatalf("start import of %d messages: %+v %v", messages.MaxImportMessages, ci.ChatImport, err)
+	}
+}
+
+func (f *importFixture) ownSticker(owner int64, emoji string) int64 {
+	f.t.Helper()
+	ctx := context.Background()
+	side := int32(512)
+	a, err := f.pg.Attachments().Create(ctx, postgres.NewAttachment{
+		UploaderID: &owner, Purpose: postgres.PurposeSticker, Kind: "image", Filename: "sticker.webp",
+		StorageKey: "stickers/" + uuid.NewString(), MimeType: "image/webp", Size: 100, Width: &side, Height: &side,
+	})
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	pack, err := f.pg.Stickers().CreatePack(ctx, owner, "Imported stickers", "imp"+uuid.NewString()[:8], 50)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	id, err := f.pg.Stickers().AddSticker(ctx, owner, pack.ID, a.ID, emoji, 120)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	return id
+}
+
+func TestImportSendsRealStickers(t *testing.T) {
+	f := newImportFixture(t)
+	ctx := context.Background()
+	alice, bob := f.user("alice"), f.user("bob")
+	chat, _, _ := f.pg.Chats().CreateDirect(ctx, alice, bob)
+	f.send(chat.ID, alice, "n1", "hi")
+	sticker, foreign := f.ownSticker(alice, "😺"), f.ownSticker(bob, "🐶")
+	ci := f.start(chat.ID, alice, importStart, importEnd, bob)
+	at := importStart.Add(time.Minute)
+	stickerMsg := func(index int, id int64) messages.ImportedMessage {
+		return messages.ImportedMessage{Index: index, SenderKey: "b", OriginalAt: at, Type: scylla.TypeSticker, StickerID: &id}
+	}
+	if _, err := f.svc.AddImportBatch(ctx, alice, ci.ID, 0, []messages.ImportedMessage{stickerMsg(0, foreign)}); !errors.Is(err, messages.ErrInvalid) {
+		t.Fatalf("a sticker of someone else's pack the importer never added: %v", err)
+	}
+	bare := messages.ImportedMessage{Index: 0, SenderKey: "a", OriginalAt: at, Type: scylla.TypeSticker}
+	if _, err := f.svc.AddImportBatch(ctx, alice, ci.ID, 0, []messages.ImportedMessage{bare}); !errors.Is(err, messages.ErrInvalid) {
+		t.Fatalf("a sticker message without sticker_id: %v", err)
+	}
+	if next, err := f.svc.AddImportBatch(ctx, alice, ci.ID, 0, []messages.ImportedMessage{stickerMsg(0, sticker), stickerMsg(1, sticker)}); err != nil || next != 2 {
+		t.Fatalf("batch: %d %v", next, err)
+	}
+	var got []scylla.Message
+	for _, m := range f.history(chat.ID, alice) {
+		if m.Type == scylla.TypeSticker {
+			got = append(got, m)
+		}
+	}
+	if len(got) != 2 || got[0].StickerID == nil || *got[0].StickerID != sticker || got[0].Content == nil || *got[0].Content != "😺" ||
+		got[0].AttachmentID == nil || got[0].Import == nil || got[0].Import.SenderName != "Bert K." {
+		t.Fatalf("imported stickers %+v", got)
 	}
 }
 
