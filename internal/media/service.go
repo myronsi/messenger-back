@@ -300,7 +300,7 @@ func (s *Service) upload(ctx context.Context, u Upload, tags *Tags) (postgres.At
 			return postgres.Attachment{}, ErrUnsupported
 		}
 	}
-	animatedSticker := u.Purpose == PurposeSticker && AnimatedStickerSource(det)
+	animatedSticker := u.Purpose == PurposeSticker && AnimatedStickerSource(det, head)
 	if u.Purpose == PurposeSticker && !animatedSticker && (u.StartMS != nil || u.EndMS != nil || u.Crop != nil) {
 		return postgres.Attachment{}, fmt.Errorf("%w: start_ms, end_ms and crop are for stickers from a video or GIF", ErrInvalid)
 	}
@@ -376,7 +376,7 @@ func (s *Service) upload(ctx context.Context, u Upload, tags *Tags) (postgres.At
 		}
 		body = tmp
 	case animatedSticker:
-		clip, err := s.processAnimatedSticker(ctx, tmp.Name(), u, vs)
+		clip, err := s.processAnimatedSticker(ctx, tmp.Name(), u, det.ContentType == "image/webp", vs)
 		if err != nil {
 			return postgres.Attachment{}, err
 		}

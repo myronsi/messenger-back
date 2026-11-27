@@ -6,6 +6,7 @@ import (
 	"errors"
 	"image"
 	"image/draw"
+	"time"
 
 	"golang.org/x/image/webp"
 )
@@ -68,8 +69,12 @@ func riffWebP(body []byte) []byte {
 
 type webpFrame struct {
 	x, y, width, height int
+	duration            time.Duration
+	blend, dispose      bool
 	alpha, bitstream    *riffChunk
 }
+
+type webpFrameFunc func(canvasW, canvasH int, f webpFrame, img image.Image) error
 
 func (f webpFrame) still() []byte {
 	var body []byte
@@ -91,6 +96,8 @@ func parseANMF(payload []byte, canvasW, canvasH int) (webpFrame, []byte, error) 
 	f := webpFrame{
 		x: uint24(payload[0:3]) * 2, y: uint24(payload[3:6]) * 2,
 		width: uint24(payload[6:9]) + 1, height: uint24(payload[9:12]) + 1,
+		duration: time.Duration(uint24(payload[12:15])) * time.Millisecond,
+		blend:    payload[15]&0x02 == 0, dispose: payload[15]&0x01 != 0,
 	}
 	if f.x+f.width > canvasW || f.y+f.height > canvasH {
 		return webpFrame{}, nil, errBadWebP
@@ -129,7 +136,7 @@ type animatedWebPResult struct {
 	first         *image.NRGBA
 }
 
-func sanitizeAnimatedWebP(data []byte) (animatedWebPResult, error) {
+func sanitizeAnimatedWebP(data []byte, each webpFrameFunc) (animatedWebPResult, error) {
 	if len(data) < 12 || string(data[:4]) != "RIFF" || string(data[8:12]) != "WEBP" {
 		return animatedWebPResult{}, errBadWebP
 	}
@@ -185,6 +192,11 @@ func sanitizeAnimatedWebP(data []byte) (animatedWebPResult, error) {
 				res.first = image.NewNRGBA(image.Rect(0, 0, res.width, res.height))
 				draw.Draw(res.first, image.Rect(f.x, f.y, f.x+f.width, f.y+f.height), img, img.Bounds().Min, draw.Src)
 			}
+			if each != nil {
+				if err := each(res.width, res.height, f, img); err != nil {
+					return animatedWebPResult{}, err
+				}
+			}
 			body = appendChunk(body, "ANMF", payload)
 		}
 	}
@@ -196,7 +208,7 @@ func sanitizeAnimatedWebP(data []byte) (animatedWebPResult, error) {
 }
 
 func processAnimatedWebP(data []byte) (ProcessedImage, error) {
-	res, err := sanitizeAnimatedWebP(data)
+	res, err := sanitizeAnimatedWebP(data, nil)
 	if errors.Is(err, ErrImageTooLarge) {
 		return ProcessedImage{}, err
 	}
