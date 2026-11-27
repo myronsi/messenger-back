@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.40.3](https://github.com/myronsi/messenger-back/compare/v1.40.2...v1.40.3) (2026-11-27)
+
+
+### Bug Fixes
+
+* **imports:** imported history never counts as unread ([#268](https://github.com/myronsi/messenger-back/issues/268)) ([2a31ae6](https://github.com/myronsi/messenger-back/commit/2a31ae67efaa45ea250980b7c7165ce012a114a6))
+
+
+### Performance Improvements
+
+* **media:** take import_id as a query parameter so the rate applies before the body ([#269](https://github.com/myronsi/messenger-back/issues/269)) ([bec6ef3](https://github.com/myronsi/messenger-back/commit/bec6ef3e14d8303e5fca7f0cd1d186332710c021))
+
 ## [1.40.2](https://github.com/myronsi/messenger-back/compare/v1.40.1...v1.40.2) (2026-11-27)
 
 
