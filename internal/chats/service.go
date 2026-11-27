@@ -536,7 +536,7 @@ func (s *Service) lastShown(ctx context.Context, e postgres.ChatEntry, viewer in
 }
 
 func unreadBy(m scylla.Message, viewer int64) bool {
-	return !m.Deleted && m.Type != scylla.TypeSystem && (m.SenderID == nil || *m.SenderID != viewer)
+	return !m.Deleted && m.Type != scylla.TypeSystem && m.Import == nil && (m.SenderID == nil || *m.SenderID != viewer)
 }
 
 // receiptsFor returns, per direct chat, the peer's receipt for the viewer's own last message: when the peer
