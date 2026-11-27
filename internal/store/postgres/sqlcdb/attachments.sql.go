@@ -837,17 +837,19 @@ const mergeAttachmentVariants = `-- name: MergeAttachmentVariants :one
 UPDATE attachments
 SET variants = variants || $1::jsonb,
     placeholder = COALESCE($2, placeholder),
-    processing_state = COALESCE($3, processing_state),
-    audio_title = COALESCE($4, audio_title),
-    audio_artist = COALESCE($5, audio_artist),
-    audio_album = COALESCE($6, audio_album)
-WHERE id = $7
+    thumbnail_key = COALESCE($3, thumbnail_key),
+    processing_state = COALESCE($4, processing_state),
+    audio_title = COALESCE($5, audio_title),
+    audio_artist = COALESCE($6, audio_artist),
+    audio_album = COALESCE($7, audio_album)
+WHERE id = $8
 RETURNING id, uploader_id, chat_id, storage_key, mime_type, size, width, height, duration, waveform, created_at, purpose, kind, filename, thumbnail_key, variants, placeholder, processing_state, audio_title, audio_artist, audio_album
 `
 
 type MergeAttachmentVariantsParams struct {
 	Variants        []byte
 	Placeholder     *string
+	ThumbnailKey    *string
 	ProcessingState *string
 	AudioTitle      *string
 	AudioArtist     *string
@@ -859,6 +861,7 @@ func (q *Queries) MergeAttachmentVariants(ctx context.Context, arg MergeAttachme
 	row := q.db.QueryRow(ctx, mergeAttachmentVariants,
 		arg.Variants,
 		arg.Placeholder,
+		arg.ThumbnailKey,
 		arg.ProcessingState,
 		arg.AudioTitle,
 		arg.AudioArtist,

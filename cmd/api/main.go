@@ -199,6 +199,7 @@ func run() error {
 		Service: mediaSvc, Store: pg, Directory: rt.directory, Limiter: rt.limiter, Events: rt.events, BasePath: cfg.HTTP.BasePath, Log: log,
 		Playback:       media.NewPlaybackSigner(cfg.JWTSecret.Reveal()),
 		ProfileChanged: rt.profileChanged,
+		Imports:        pg.Imports(),
 	})
 	chatSvc := chats.New(chats.Deps{
 		Store: pg, Messages: rt.store, Unread: rt.unread, Members: rt.members, Sender: rt.messages,

@@ -18,7 +18,9 @@ SET state = 'running', attempts = attempts + 1, started_at = now()
 WHERE id = (
     SELECT q.id FROM media_jobs q
     WHERE q.state = 'queued' AND q.run_after <= now()
-    ORDER BY q.run_after, q.id
+      AND (q.kind <> 'import_image' OR NOT EXISTS (
+        SELECT 1 FROM media_jobs r WHERE r.kind = 'import_image' AND r.state = 'running'))
+    ORDER BY q.kind = 'import_image', q.run_after, q.id
     FOR UPDATE SKIP LOCKED
     LIMIT 1
 )

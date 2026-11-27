@@ -43,6 +43,12 @@ type RateAllower interface {
 // RateUpload limits uploads per user.
 var RateUpload = redis.Rate{Name: "upload", Rate: 60, Period: time.Minute, Burst: 20}
 
+var RateImportUpload = redis.Rate{Name: "import_upload", Rate: 300, Period: time.Minute, Burst: 50}
+
+type RunningImports interface {
+	RunningOfUser(ctx context.Context, userID int64) ([]postgres.ChatImport, error)
+}
+
 // RateSearch limits user searches per user.
 var RateSearch = redis.Rate{Name: "user_search", Rate: 60, Period: time.Minute, Burst: 20}
 
@@ -95,6 +101,7 @@ type MediaOptions struct {
 	BasePath       string
 	Log            *slog.Logger
 	ProfileChanged func(ctx context.Context, userID, version int64)
+	Imports        RunningImports
 }
 
 // MediaServer implements uploads, downloads and avatars.
@@ -136,6 +143,7 @@ type uploadForm struct {
 	startMS    *int
 	endMS      *int
 	crop       [3]*float64
+	importID   *int64
 }
 
 func (f *uploadForm) stickerCrop() (*media.StickerCrop, bool) {
@@ -227,6 +235,13 @@ func readUploadForm(r *http.Request, limit int64) (*uploadForm, error) {
 				return nil, errFormInvalid
 			}
 			f.durationMS = &n
+		case "import_id":
+			id, err := strconv.ParseInt(v, 10, 64)
+			if err != nil || id <= 0 {
+				f.close()
+				return nil, errFormInvalid
+			}
+			f.importID = &id
 		case "start_ms", "end_ms":
 			n, err := strconv.Atoi(v)
 			if err != nil || n < 0 {
@@ -266,6 +281,23 @@ func readUploadForm(r *http.Request, limit int64) (*uploadForm, error) {
 	return f, nil
 }
 
+func (m *MediaServer) ownRunningImport(r *http.Request, userID int64, importID *int64) bool {
+	if importID == nil || m.o.Imports == nil {
+		return false
+	}
+	running, err := m.o.Imports.RunningOfUser(r.Context(), userID)
+	if err != nil {
+		m.o.Log.WarnContext(r.Context(), "running imports", "error", err)
+		return false
+	}
+	for _, imp := range running {
+		if imp.ID == *importID {
+			return true
+		}
+	}
+	return false
+}
+
 // UploadAttachment implements POST /attachments.
 func (m *MediaServer) UploadAttachment(w http.ResponseWriter, r *http.Request, _ UploadAttachmentParams) {
 	p, ok := PrincipalFrom(r.Context())
@@ -277,15 +309,20 @@ func (m *MediaServer) UploadAttachment(w http.ResponseWriter, r *http.Request, _
 		WriteProblem(w, http.StatusUnsupportedMediaType, ErrorCodeUnsupportedMediaType)
 		return
 	}
-	if !allow(w, r, m.o.Limiter, RateUpload, strconv.FormatInt(p.UserID, 10), m.o.Log) {
-		return
-	}
 	form, err := readUploadForm(r, m.o.Service.Limits().Max())
 	if err != nil {
 		m.uploadFailed(w, r, err)
 		return
 	}
 	defer form.close()
+	forImport := m.ownRunningImport(r, p.UserID, form.importID)
+	rate := RateUpload
+	if forImport {
+		rate = RateImportUpload
+	}
+	if !allow(w, r, m.o.Limiter, rate, strconv.FormatInt(p.UserID, 10), m.o.Log) {
+		return
+	}
 	crop, ok := form.stickerCrop()
 	if !ok {
 		WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "crop_size", Message: "send crop_x, crop_y and crop_size together"})
@@ -294,6 +331,7 @@ func (m *MediaServer) UploadAttachment(w http.ResponseWriter, r *http.Request, _
 	a, tags, err := m.o.Service.UploadWithTags(r.Context(), media.Upload{
 		UploaderID: p.UserID, Purpose: form.purpose, Kind: form.kind, Filename: form.filename,
 		Body: form.file, DurationMS: form.durationMS, Waveform: form.waveform, StartMS: form.startMS, EndMS: form.endMS, Crop: crop,
+		ForImport: forImport,
 	})
 	if err != nil {
 		m.uploadFailed(w, r, err)

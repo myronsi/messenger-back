@@ -179,6 +179,9 @@ func (m *memAttachments) MergeVariants(_ context.Context, id uuid.UUID, u postgr
 	if u.Placeholder != nil {
 		a.Placeholder = u.Placeholder
 	}
+	if u.ThumbnailKey != nil {
+		a.ThumbnailKey = u.ThumbnailKey
+	}
 	if u.ProcessingState != nil {
 		a.ProcessingState = u.ProcessingState
 	}
