@@ -189,13 +189,14 @@ func newChatEnvWith(t *testing.T, withSearch bool) *chatEnv {
 	}
 	prefix := "t" + uuid.NewString() + ":"
 	repo := scylla.NewMessages(sc, 10*time.Second)
+	resolver := messages.NewImportResolver(repo, store.Imports())
 	gen, _ := ids.NewGenerator(1)
 	members := redis.NewMembers(rdb, prefix, time.Minute)
 	unread := redis.NewUnread(rdb, prefix)
 	modCache := redis.NewModerationCache(rdb, prefix, time.Minute)
 	modSvc := moderation.New(moderation.Deps{Store: store, Cache: modCache})
 	deps := messages.Deps{
-		Messages: messages.NewImportResolver(repo, store.Imports()), Store: store, Members: members, Unread: unread, Dedup: redis.NewDedup(rdb, prefix, 0), IDs: gen, Moderation: modSvc,
+		Messages: resolver, Store: store, Members: members, Unread: unread, Dedup: redis.NewDedup(rdb, prefix, 0), IDs: gen, Moderation: modSvc,
 		Changes: store.Sync(), Imports: repo,
 	}
 	var index *search.Index
@@ -214,7 +215,7 @@ func newChatEnvWith(t *testing.T, withSearch bool) *chatEnv {
 		groupCreated: map[int64][]int64{}, groupUpdates: map[int64]int{}, updatedViews: map[int64]chats.View{}}
 	tokens := notifications.NewActionTokens("test-secret")
 	cacheDown, cleared := new(atomic.Bool), new(atomic.Int32)
-	svc := chats.New(chats.Deps{Store: store, Messages: repo, Unread: unread, Members: flakyMembers{members, cacheDown, cleared}, Sender: msgs, Directory: dir, Notifier: ev,
+	svc := chats.New(chats.Deps{Store: store, Messages: resolver, Unread: unread, Members: flakyMembers{members, cacheDown, cleared}, Sender: msgs, Directory: dir, Notifier: ev,
 		Moderation: modSvc, Changes: store.Sync()})
 	msgs.SetRequestAccepted(svc.RequestAccepted)
 	peersDone := make(chan int64, 8)

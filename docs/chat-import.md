@@ -46,7 +46,7 @@ Message ids are Snowflakes that hold their time, and history is sorted by id, so
 
 ## Visibility while running
 
-Until `finish`, only the importer sees the import's messages. For every other member, history pages, the media list and the link list leave out the messages of a running import: a page that reaches its id range continues on the other side of it, `around` one of its messages answers `404`, and the media and link cursors jump past it. Other members see the `import_update` progress instead, and `history_imported` on finish makes them reload the chat with the whole import at once. Live messages are never affected: they use other id nodes, so chatting goes on during an import.
+Until `finish`, only the importer sees the import's messages. For every other member, history pages, the chat list preview, unread counts and the first unread message, the media list and the link list leave out the messages of a running import: a page that reaches its id range continues on the other side of it, `around` one of its messages answers `404`, and the media and link cursors jump past it. Other members see the `import_update` progress instead, and `history_imported` on finish makes them reload the chat with the whole import at once. Live messages are never affected: they use other id nodes, so chatting goes on during an import.
 
 ## Removing
 

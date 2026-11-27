@@ -98,3 +98,49 @@ func TestChatImportOverHTTP(t *testing.T) {
 		}
 	}
 }
+
+func TestRunningImportStaysOutOfTheOtherMembersChatList(t *testing.T) {
+	e := newChatEnv(t)
+	alice, bob := e.register(t, "alice"), e.register(t, "bob")
+	chat := e.group(t, alice, "Old friends", bob)
+	r := e.do(t, request{method: http.MethodPost, path: "/chats/" + chat + "/imports", token: alice.access, body: map[string]any{
+		"source": "whatsapp", "message_count": 2, "file_count": 0,
+		"first_at": "2020-01-01T10:00:00Z", "last_at": "2020-01-02T10:00:00Z",
+		"senders": []map[string]any{
+			{"key": "s1", "name": "Anna", "message_count": 1, "me": true},
+			{"key": "s2", "name": "Bert", "message_count": 1},
+		},
+	}})
+	if r.Code != http.StatusCreated {
+		t.Fatalf("start: %d %s", r.Code, r.Body)
+	}
+	id := r.json()["id"].(string)
+	batch := map[string]any{"from_index": 0, "messages": []map[string]any{
+		{"index": 0, "sender_key": "s1", "original_at": "2020-01-01T10:00:00Z", "type": "text", "content": "secret one"},
+		{"index": 1, "sender_key": "s2", "original_at": "2020-01-02T10:00:00Z", "type": "text", "content": "secret two"},
+	}}
+	if r := e.do(t, request{method: http.MethodPut, path: "/imports/" + id + "/messages", token: alice.access, body: batch}); r.Code != http.StatusOK {
+		t.Fatalf("batch: %d %s", r.Code, r.Body)
+	}
+
+	view := e.do(t, request{method: http.MethodGet, path: "/chats/" + chat, token: bob.access}).json()
+	list := items(t, e.do(t, request{method: http.MethodGet, path: "/chats?folder=main", token: bob.access}))
+	for _, v := range append(list, view) {
+		last, _ := v["last_message"].(map[string]any)
+		if last != nil && (last["import"] != nil || last["content"] == "secret one" || last["content"] == "secret two") {
+			t.Fatalf("running import shows as the last message: %v", last)
+		}
+		if v["unread_count"] != 0.0 || v["first_unread_message_id"] != nil {
+			t.Fatalf("running import counts as unread: %v %v", v["unread_count"], v["first_unread_message_id"])
+		}
+	}
+	if history, _ := e.history(t, bob, chat, ""); len(history) == 0 {
+		t.Fatal("the group's own messages are gone")
+	} else {
+		for _, m := range history {
+			if m["import"] != nil {
+				t.Fatalf("running import in bob's history: %v", m)
+			}
+		}
+	}
+}

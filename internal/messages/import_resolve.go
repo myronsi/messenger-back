@@ -72,13 +72,9 @@ func (r *ImportResolver) GetMany(ctx context.Context, chatID int64, messageIDs [
 }
 
 func (r *ImportResolver) Page(ctx context.Context, q scylla.PageQuery) (scylla.Page, error) {
-	var hidden hiddenImports
-	if q.Viewer != 0 {
-		imports, err := r.imports.OfChat(ctx, q.ChatID)
-		if err != nil {
-			return scylla.Page{}, fmt.Errorf("resolve imports: %w", err)
-		}
-		hidden = runningFor(imports, q.Viewer)
+	hidden, err := r.hiddenFor(ctx, q.ChatID, q.Viewer)
+	if err != nil {
+		return scylla.Page{}, err
 	}
 	p, err := r.MessageRepository.Page(ctx, q)
 	if err != nil {
@@ -91,6 +87,52 @@ func (r *ImportResolver) Page(ctx context.Context, q scylla.PageQuery) (scylla.P
 	}
 	p.Messages, err = r.Resolve(ctx, p.Messages)
 	return p, err
+}
+
+func (r *ImportResolver) hiddenFor(ctx context.Context, chatID, viewer int64) (hiddenImports, error) {
+	if viewer == 0 {
+		return nil, nil
+	}
+	imports, err := r.imports.OfChat(ctx, chatID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve imports: %w", err)
+	}
+	return runningFor(imports, viewer), nil
+}
+
+func (r *ImportResolver) UnreadIDs(ctx context.Context, chatID, viewer, afterID int64, limit int) ([]int64, error) {
+	hidden, err := r.hiddenFor(ctx, chatID, viewer)
+	if err != nil || len(hidden) == 0 {
+		if err != nil {
+			return nil, err
+		}
+		return r.MessageRepository.UnreadIDs(ctx, chatID, viewer, afterID, limit)
+	}
+	var out []int64
+	from := afterID
+	for range len(hidden) + 1 {
+		ids, err := r.MessageRepository.UnreadIDs(ctx, chatID, viewer, from, limit-len(out))
+		if err != nil {
+			return nil, err
+		}
+		jumped := false
+		for _, id := range ids {
+			if span, ok := hidden.span(id); ok {
+				from, jumped = span.last, true
+				break
+			}
+			out = append(out, id)
+		}
+		if !jumped || len(out) >= limit {
+			break
+		}
+	}
+	return out, nil
+}
+
+func (r *ImportResolver) CountAfter(ctx context.Context, chatID, viewer, afterID int64, limit int) (int, error) {
+	ids, err := r.UnreadIDs(ctx, chatID, viewer, afterID, limit)
+	return len(ids), err
 }
 
 func (r *ImportResolver) skipHidden(ctx context.Context, q scylla.PageQuery, p scylla.Page, hidden hiddenImports) (scylla.Page, error) {
@@ -234,6 +276,15 @@ func (h hiddenImports) of(m scylla.Message) (hiddenImport, bool) {
 	}
 	for _, x := range h {
 		if x.id == m.Import.ID {
+			return x, true
+		}
+	}
+	return hiddenImport{}, false
+}
+
+func (h hiddenImports) span(id int64) (hiddenImport, bool) {
+	for _, x := range h {
+		if id >= x.first && id <= x.last {
 			return x, true
 		}
 	}
