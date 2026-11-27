@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.39.0](https://github.com/myronsi/messenger-back/compare/v1.38.0...v1.39.0) (2026-11-27)
+
+
+### Features
+
+* **imports:** import stickers as real sticker messages ([#260](https://github.com/myronsi/messenger-back/issues/260)) ([ea40ba3](https://github.com/myronsi/messenger-back/commit/ea40ba3a6f358f6cf3497aa84570a67e467c4a56))
+* **stickers:** make animated stickers from animated WebP ([#257](https://github.com/myronsi/messenger-back/issues/257)) ([e746d89](https://github.com/myronsi/messenger-back/commit/e746d892bae193dda38af5c7c669d904921fee75))
+
+
+### Bug Fixes
+
+* **imports:** allow 500,000 messages in the database too ([#259](https://github.com/myronsi/messenger-back/issues/259)) ([20bfa5f](https://github.com/myronsi/messenger-back/commit/20bfa5fc56d77b9838af7a4eca25d31520621817))
+
 ## [1.38.0](https://github.com/myronsi/messenger-back/compare/v1.37.0...v1.38.0) (2026-11-26)
 
 
