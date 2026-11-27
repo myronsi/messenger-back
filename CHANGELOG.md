@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.40.1](https://github.com/myronsi/messenger-back/compare/v1.40.0...v1.40.1) (2026-11-27)
+
+
+### Bug Fixes
+
+* **media:** free idle upload sessions when a user reaches the open-upload cap ([#263](https://github.com/myronsi/messenger-back/issues/263)) ([6aaab9e](https://github.com/myronsi/messenger-back/commit/6aaab9e6d7442c17401a3059ba6871628d1e5d2d))
+
 ## [1.40.0](https://github.com/myronsi/messenger-back/compare/v1.39.0...v1.40.0) (2026-11-27)
 
 
