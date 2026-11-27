@@ -143,7 +143,6 @@ type uploadForm struct {
 	startMS    *int
 	endMS      *int
 	crop       [3]*float64
-	importID   *int64
 }
 
 func (f *uploadForm) stickerCrop() (*media.StickerCrop, bool) {
@@ -235,13 +234,6 @@ func readUploadForm(r *http.Request, limit int64) (*uploadForm, error) {
 				return nil, errFormInvalid
 			}
 			f.durationMS = &n
-		case "import_id":
-			id, err := strconv.ParseInt(v, 10, 64)
-			if err != nil || id <= 0 {
-				f.close()
-				return nil, errFormInvalid
-			}
-			f.importID = &id
 		case "start_ms", "end_ms":
 			n, err := strconv.Atoi(v)
 			if err != nil || n < 0 {
@@ -299,7 +291,7 @@ func (m *MediaServer) ownRunningImport(r *http.Request, userID int64, importID *
 }
 
 // UploadAttachment implements POST /attachments.
-func (m *MediaServer) UploadAttachment(w http.ResponseWriter, r *http.Request, _ UploadAttachmentParams) {
+func (m *MediaServer) UploadAttachment(w http.ResponseWriter, r *http.Request, params UploadAttachmentParams) {
 	p, ok := PrincipalFrom(r.Context())
 	if !ok {
 		writeUnauthorized(w, ErrorCodeUnauthenticated)
@@ -309,13 +301,15 @@ func (m *MediaServer) UploadAttachment(w http.ResponseWriter, r *http.Request, _
 		WriteProblem(w, http.StatusUnsupportedMediaType, ErrorCodeUnsupportedMediaType)
 		return
 	}
-	form, err := readUploadForm(r, m.o.Service.Limits().Max())
-	if err != nil {
-		m.uploadFailed(w, r, err)
-		return
+	var importID *int64
+	if params.ImportId != nil {
+		id, ok := parseID(w, "import_id", *params.ImportId)
+		if !ok {
+			return
+		}
+		importID = &id
 	}
-	defer form.close()
-	forImport := m.ownRunningImport(r, p.UserID, form.importID)
+	forImport := m.ownRunningImport(r, p.UserID, importID)
 	rate := RateUpload
 	if forImport {
 		rate = RateImportUpload
@@ -323,6 +317,12 @@ func (m *MediaServer) UploadAttachment(w http.ResponseWriter, r *http.Request, _
 	if !allow(w, r, m.o.Limiter, rate, strconv.FormatInt(p.UserID, 10), m.o.Log) {
 		return
 	}
+	form, err := readUploadForm(r, m.o.Service.Limits().Max())
+	if err != nil {
+		m.uploadFailed(w, r, err)
+		return
+	}
+	defer form.close()
 	crop, ok := form.stickerCrop()
 	if !ok {
 		WriteProblem(w, http.StatusUnprocessableEntity, ErrorCodeValidationFailed, ProblemError{Field: "crop_size", Message: "send crop_x, crop_y and crop_size together"})

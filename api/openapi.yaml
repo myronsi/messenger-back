@@ -1666,10 +1666,18 @@ paths:
         returned `attachment_id` is used in messages (`type: file` or `voice`) or for
         avatars. Attachments that are not used within 24 hours are deleted.
 
-        At most 60 uploads per minute per user (`429` with `Retry-After`). Uploads with the `import_id` of the caller's
-        own running import have their own limit of 300 per minute (burst 50). For them a JPEG, PNG or still WebP
-        image is stored with its metadata removed and its size read from the header; the thumbnail, display copy and
-        placeholder follow in the background (`processing`, then `attachment_updated`).
+        At most 60 uploads per minute per user (`429` with `Retry-After`, before the body is read). Uploads with the
+        `import_id` of the caller's own running import have their own limit of 300 per minute (burst 50). For them a
+        JPEG, PNG or still WebP image is stored with its metadata removed and its size read from the header; the
+        thumbnail, display copy and placeholder follow in the background (`processing`, then `attachment_updated`).
+      parameters:
+        - name: import_id
+          in: query
+          required: false
+          description: |
+            `message` uploads of a history import: the id of the caller's own running import. Other ids are ignored
+            (the upload is handled like any other).
+          schema: { $ref: "#/components/schemas/Id" }
       requestBody:
         required: true
         content:
@@ -8236,11 +8244,6 @@ components:
           description: |
             `sticker` from a video or GIF: side of the square crop, as a fraction of the shorter side. Send all three
             crop fields or none; the square must lie inside the frame.
-        import_id:
-          description: |
-            `message` uploads of a history import: the id of the caller's own running import. Other ids are ignored
-            (the upload is handled like any other).
-          allOf: [{ $ref: "#/components/schemas/Id" }]
     Attachment:
       type: object
       required: [id, kind, filename, content_type, size, url]
