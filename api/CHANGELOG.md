@@ -2,9 +2,14 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.55
+
+- `import_id` of `POST /attachments` moves from the form to the query (`POST /attachments?import_id=…`), so the
+  upload rate (`upload` or `import_upload`) is checked before the body is read. The form field is removed.
+
 ## 2.1.0-alpha.54
 
-- `POST /attachments` gains the query parameter `import_id`: uploads of the caller's own running import get their own rate limit
+- `UploadAttachmentRequest` gains `import_id`: uploads of the caller's own running import get their own rate limit
   (300 per minute, burst 50), and their JPEG, PNG and still WebP images get the thumbnail, display copy and
   placeholder in the background: `Attachment.processing` now also covers images (`queued` until
   `attachment_updated`).
