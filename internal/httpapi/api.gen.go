@@ -2085,8 +2085,10 @@ type Attachment struct {
 	// Placeholder A ThumbHash (base64) of the image or video poster, to draw a blurred preview before the thumbnail arrives.
 	Placeholder *string `json:"placeholder,omitempty"`
 
-	// Processing Whether the server is still making an optimized copy of a video, GIF or audio file. Clients play `url`
-	// meanwhile and swap to the new copy on `attachment_updated`. `null` when there is nothing to do.
+	// Processing Whether the server is still making an optimized copy of a video, GIF or audio file, or the thumbnail,
+	// display copy and placeholder of an imported image. Clients play `url` meanwhile (for an image: a neutral
+	// placeholder or `url` itself) and swap to the new copy on `attachment_updated`. `null` when there is nothing
+	// to do.
 	Processing *MediaProcessing `json:"processing,omitempty"`
 
 	// Size Bytes
@@ -4916,7 +4918,11 @@ type UploadAttachmentRequest struct {
 	// most 3 s after `start_ms`.
 	EndMs *int               `json:"end_ms,omitempty"`
 	File  openapi_types.File `json:"file"`
-	Kind  *AttachmentKind    `json:"kind,omitempty"`
+
+	// ImportId `message` uploads of a history import: the id of the caller's own running import. Other ids are ignored
+	// (the upload is handled like any other).
+	ImportId *Id             `json:"import_id,omitempty"`
+	Kind     *AttachmentKind `json:"kind,omitempty"`
 
 	// Purpose `message`: an animated WebP keeps its frames (at most 300); the server removes its metadata and checks every
 	// frame. `avatar` and `profile_background` take only still WebP (`415` otherwise).

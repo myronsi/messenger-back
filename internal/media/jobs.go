@@ -251,6 +251,9 @@ func (s *Service) RunJob(ctx context.Context, job postgres.MediaJob) (postgres.A
 	if err := s.o.Attachments.SetProcessing(ctx, a.ID, &running); err != nil {
 		return a, err
 	}
+	if job.Kind == JobImportImage {
+		return s.runImportImage(ctx, a)
+	}
 	src, cleanup, err := s.fetch(ctx, a)
 	if err != nil {
 		return a, err

@@ -43,6 +43,7 @@ services:
     command: ["/app/worker"]
     mem_limit: ${WORKER_MEM_LIMIT:-0}
     cpus: ${WORKER_CPUS:-0}
+    cpu_shares: ${WORKER_CPU_SHARES:-1024}
     ports:
       - "127.0.0.1:${WORKER_PORT:-8081}:8081"
 

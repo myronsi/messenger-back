@@ -49,8 +49,24 @@ func (m memberRules) VisibleAttachment(ctx context.Context, viewer, chatID, _ in
 	return m.IsMember(ctx, chatID, viewer)
 }
 
+type runningImports struct {
+	mu   sync.Mutex
+	byID map[int64][]int64
+}
+
+func (r *runningImports) RunningOfUser(_ context.Context, userID int64) ([]postgres.ChatImport, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []postgres.ChatImport
+	for _, id := range r.byID[userID] {
+		out = append(out, postgres.ChatImport{ID: id, ImportedBy: &userID, State: postgres.ImportRunning})
+	}
+	return out, nil
+}
+
 type mediaEnv struct {
 	*authEnv
+	imports  *runningImports
 	store    *postgres.Store
 	tokens   *notifications.ActionTokens
 	events   *mediaEvents
@@ -132,6 +148,7 @@ func newMediaEnv(t *testing.T) *mediaEnv {
 	tokens := notifications.NewActionTokens("test-secret")
 	emitted := &mediaEvents{}
 	msgs := &notificationMessages{byID: map[int64]scylla.Message{}, hidden: map[int64]bool{}}
+	imports := &runningImports{byID: map[int64][]int64{}}
 	r := NewRouter(Options{
 		HTTP:    config.HTTP{BasePath: apiBase, RequestTimeout: 10 * time.Second, ReadinessTimeout: time.Second, MaxBodyBytes: 4096},
 		Log:     log,
@@ -139,14 +156,14 @@ func newMediaEnv(t *testing.T) *mediaEnv {
 		API: NewServer(NewAuthServer(AuthOptions{Service: svc, Log: log, BasePath: apiBase, CookieSecure: true}),
 			NewMediaServer(MediaOptions{Service: msvc, Store: store, Directory: users.NewDirectory(store, nil, apiBase),
 				Limiter: redis.NewRateLimiter(rdb, "t"+uuid.NewString()+":"), Events: emitted, BasePath: apiBase, Log: log,
-				Playback: media.NewPlaybackSigner("playback-test")})).
+				Playback: media.NewPlaybackSigner("playback-test"), Imports: imports})).
 			WithNotifications(NotificationOptions{
 				Store: store.Notifications(), Chats: store.Chats(), Messages: msgs, Attachments: store.Attachments(), Emoji: store.Emoji(), Tokens: tokens,
 			}),
 		Authenticator:  svc,
 		UploadMaxBytes: msvc.Limits().Max(),
 	})
-	return &mediaEnv{authEnv: &authEnv{router: r}, store: store, tokens: tokens, events: emitted, messages: msgs}
+	return &mediaEnv{authEnv: &authEnv{router: r}, imports: imports, store: store, tokens: tokens, events: emitted, messages: msgs}
 }
 
 func (e *mediaEnv) userID(t *testing.T, s session) int64 {
@@ -778,5 +795,40 @@ func TestUploadSessionsOverHTTP(t *testing.T) {
 	}
 	if r := e.do(t, request{method: http.MethodPost, path: "/upload-sessions", token: alice.access, body: map[string]any{"purpose": "message", "filename": "z", "size": 1 << 30}}); r.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("too large: %d", r.Code)
+	}
+}
+
+func TestImportUploadsHaveTheirOwnRateAndDeferImageWork(t *testing.T) {
+	env := newMediaEnv(t)
+	s := env.register(t, "importer")
+	uid := env.userID(t, s)
+	env.imports.mu.Lock()
+	env.imports.byID[uid] = []int64{77}
+	env.imports.mu.Unlock()
+	for i := range 30 {
+		rec := env.upload(t, s.access, map[string]string{"purpose": "message", "import_id": "77"}, "IMG-"+strconv.Itoa(i)+".png", smallPNG(t))
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("import upload %d: %d %s", i, rec.Code, rec.Body)
+		}
+		if i == 0 && rec.json()["processing"] != "queued" {
+			t.Fatalf("import image processing %v", rec.json()["processing"])
+		}
+	}
+	foreign := env.upload(t, s.access, map[string]string{"purpose": "message", "import_id": "99"}, "x.png", smallPNG(t))
+	if foreign.Code != http.StatusCreated || foreign.json()["processing"] != nil {
+		t.Fatalf("someone else's import id: %d %v", foreign.Code, foreign.json()["processing"])
+	}
+	limited := false
+	for range 25 {
+		if env.upload(t, s.access, map[string]string{"purpose": "message"}, "y.png", smallPNG(t)).Code == http.StatusTooManyRequests {
+			limited = true
+			break
+		}
+	}
+	if !limited {
+		t.Fatal("uploads outside an import keep the normal limit")
+	}
+	if rec := env.upload(t, s.access, map[string]string{"purpose": "message", "import_id": "x"}, "z.png", smallPNG(t)); rec.Code != http.StatusBadRequest {
+		t.Fatalf("malformed import_id: %d", rec.Code)
 	}
 }

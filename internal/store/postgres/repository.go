@@ -549,6 +549,7 @@ type AttachmentRepository interface {
 type AttachmentUpdate struct {
 	Variants        Variants
 	Placeholder     *string
+	ThumbnailKey    *string
 	ProcessingState *string
 	AudioTitle      *string
 	AudioArtist     *string

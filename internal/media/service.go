@@ -185,6 +185,7 @@ type Upload struct {
 	StartMS    *int
 	EndMS      *int
 	Crop       *StickerCrop
+	ForImport  bool
 }
 
 // cleanName keeps a display name for the file: the base name, printable, at most 255 bytes.
@@ -338,6 +339,11 @@ func (s *Service) upload(ctx context.Context, u Upload, tags *Tags) (postgres.At
 	var thumb []byte
 	thumbType := "image/jpeg"
 	var body io.Reader
+	var imported importedImage
+	fastImport := false
+	if det.Kind == KindImage && u.ForImport && u.Purpose == PurposeMessage && s.o.Jobs != nil {
+		imported, fastImport = s.importImageFrom(tmp.Name(), det.ContentType)
+	}
 	switch {
 	case u.Purpose == PurposeEmoji:
 		img, err := s.processEmoji(ctx, tmp, size, det.ContentType, vs)
@@ -393,6 +399,11 @@ func (s *Service) upload(ctx context.Context, u Upload, tags *Tags) (postgres.At
 		rec.Width, rec.Height, rec.MimeType, rec.Size = &w, &h, img.ContentType, int64(len(img.Data))
 		rec.Filename = "sticker" + map[string]string{"image/webp": ".webp", "image/png": ".png"}[img.ContentType]
 		body = bytes.NewReader(img.Data)
+	case fastImport:
+		w, h := int32(imported.width), int32(imported.height) //nolint:gosec // bounded by MaxImageSide
+		rec.Width, rec.Height, rec.Size = &w, &h, int64(len(imported.data))
+		body = bytes.NewReader(imported.data)
+		jobs = append(jobs, JobImportImage)
 	case det.Kind == KindImage:
 		img, tt, err := s.processImage(ctx, tmp.Name(), det.ContentType, u.Purpose, vs)
 		if err != nil {

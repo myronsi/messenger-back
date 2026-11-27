@@ -165,6 +165,7 @@ DELETE FROM attachment_links WHERE chat_id = @chat_id AND message_id <= @message
 UPDATE attachments
 SET variants = variants || @variants::jsonb,
     placeholder = COALESCE(sqlc.narg(placeholder), placeholder),
+    thumbnail_key = COALESCE(sqlc.narg(thumbnail_key), thumbnail_key),
     processing_state = COALESCE(sqlc.narg(processing_state), processing_state),
     audio_title = COALESCE(sqlc.narg(audio_title), audio_title),
     audio_artist = COALESCE(sqlc.narg(audio_artist), audio_artist),

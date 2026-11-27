@@ -363,7 +363,7 @@ func (r attachmentRepo) MergeVariants(ctx context.Context, id uuid.UUID, u Attac
 	ctx, cancel := r.s.call(ctx)
 	defer cancel()
 	row, err := r.s.q.MergeAttachmentVariants(ctx, sqlcdb.MergeAttachmentVariantsParams{
-		ID: id, Variants: u.Variants.encode(), Placeholder: u.Placeholder, ProcessingState: u.ProcessingState,
+		ID: id, Variants: u.Variants.encode(), Placeholder: u.Placeholder, ThumbnailKey: u.ThumbnailKey, ProcessingState: u.ProcessingState,
 		AudioTitle: u.AudioTitle, AudioArtist: u.AudioArtist, AudioAlbum: u.AudioAlbum,
 	})
 	if err != nil {
