@@ -421,6 +421,10 @@ func (s *Service) LinkMessages(ctx context.Context, userID, chatID, before int64
 	if err != nil {
 		return nil, 0, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
+	hidden, err := s.hiddenImports(ctx, chatID, userID)
+	if err != nil {
+		return nil, 0, err
+	}
 	scan := limit * mediaScan
 	ids, err := s.d.Store.Attachments().LinkMessageIDs(ctx, chatID, before, scan)
 	if err != nil {
@@ -439,6 +443,9 @@ func (s *Service) LinkMessages(ctx context.Context, userID, chatID, before int64
 		}
 		if err != nil {
 			return nil, 0, err
+		}
+		if span, ok := hidden.of(m); ok {
+			return found, span.first, nil
 		}
 		if m.Deleted {
 			continue
@@ -481,6 +488,10 @@ func (s *Service) Media(ctx context.Context, userID, chatID int64, kinds []strin
 	if err != nil {
 		return nil, 0, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
+	hidden, err := s.hiddenImports(ctx, chatID, userID)
+	if err != nil {
+		return nil, 0, err
+	}
 	links, err := s.d.Store.Attachments().ListLinked(ctx, chatID, kinds, before, limit*mediaScan+MaxAlbumItems)
 	if err != nil {
 		return nil, 0, fmt.Errorf("%w: %w", ErrUnavailable, err)
@@ -500,6 +511,9 @@ func (s *Service) Media(ctx context.Context, userID, chatID int64, kinds []strin
 		if err != nil {
 			return nil, 0, err
 		}
+		if span, ok := hidden.of(m); ok {
+			return items, span.first, nil
+		}
 		if !slices.Contains(m.AttachmentIDs(), gocql.UUID(l.ID)) {
 			continue
 		}
@@ -512,4 +526,12 @@ func (s *Service) Media(ctx context.Context, userID, chatID int64, kinds []strin
 		}
 	}
 	return items, 0, nil
+}
+
+func (s *Service) hiddenImports(ctx context.Context, chatID, userID int64) (hiddenImports, error) {
+	imports, err := s.d.Store.Imports().OfChat(ctx, chatID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrUnavailable, err)
+	}
+	return runningFor(imports, userID), nil
 }

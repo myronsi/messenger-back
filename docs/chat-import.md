@@ -44,6 +44,10 @@ Message ids are Snowflakes that hold their time, and history is sorted by id, so
 - An import whose period overlaps another import of the chat is refused (`409`), as is a second running import of the chat, a second running import of the same user in any chat, and a gap too small for the messages.
 - `chat_imports.last_activity_at` moves with every accepted batch. The API instances check every 10 minutes (`RunImportExpiry`) and remove running imports without a batch for 24 hours (`ImportIdleTimeout`), the same way as `DELETE`: the chat is free again and the partial history disappears. Clients upload the files of each batch right before sending it, so a long upload does not count as idle.
 
+## Visibility while running
+
+Until `finish`, only the importer sees the import's messages. For every other member, history pages, the media list and the link list leave out the messages of a running import: a page that reaches its id range continues on the other side of it, `around` one of its messages answers `404`, and the media and link cursors jump past it. Other members see the `import_update` progress instead, and `history_imported` on finish makes them reload the chat with the whole import at once. Live messages are never affected: they use other id nodes, so chatting goes on during an import.
+
 ## Removing
 
 `DELETE /imports/{import_id}` marks the import `removing`: reads drop its messages at once. The worker (`import-cleanup` consumer of `events:chats`) deletes the messages, reactions, locations and hidden markers of its id range in ScyllaDB, the attachment links, link entries and pins in PostgreSQL, and then the import rows. The search indexer deletes the documents of the range.
