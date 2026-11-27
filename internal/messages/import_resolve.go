@@ -17,6 +17,7 @@ const (
 type ImportLookup interface {
 	ByID(ctx context.Context, ids []int64) (map[int64]postgres.ChatImport, error)
 	Senders(ctx context.Context, importIDs []int64) (map[int64][]postgres.ImportSender, error)
+	OfChat(ctx context.Context, chatID int64) ([]postgres.ChatImport, error)
 }
 
 type ImportResolver struct {
@@ -71,12 +72,117 @@ func (r *ImportResolver) GetMany(ctx context.Context, chatID int64, messageIDs [
 }
 
 func (r *ImportResolver) Page(ctx context.Context, q scylla.PageQuery) (scylla.Page, error) {
+	hidden, err := r.hiddenFor(ctx, q.ChatID, q.Viewer)
+	if err != nil {
+		return scylla.Page{}, err
+	}
 	p, err := r.MessageRepository.Page(ctx, q)
 	if err != nil {
 		return p, err
 	}
+	if len(hidden) > 0 {
+		if p, err = r.skipHidden(ctx, q, p, hidden); err != nil {
+			return scylla.Page{}, err
+		}
+	}
 	p.Messages, err = r.Resolve(ctx, p.Messages)
 	return p, err
+}
+
+func (r *ImportResolver) hiddenFor(ctx context.Context, chatID, viewer int64) (hiddenImports, error) {
+	if viewer == 0 {
+		return nil, nil
+	}
+	imports, err := r.imports.OfChat(ctx, chatID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve imports: %w", err)
+	}
+	return runningFor(imports, viewer), nil
+}
+
+func (r *ImportResolver) UnreadIDs(ctx context.Context, chatID, viewer, afterID int64, limit int) ([]int64, error) {
+	hidden, err := r.hiddenFor(ctx, chatID, viewer)
+	if err != nil || len(hidden) == 0 {
+		if err != nil {
+			return nil, err
+		}
+		return r.MessageRepository.UnreadIDs(ctx, chatID, viewer, afterID, limit)
+	}
+	var out []int64
+	from := afterID
+	for range len(hidden) + 1 {
+		ids, err := r.MessageRepository.UnreadIDs(ctx, chatID, viewer, from, limit-len(out))
+		if err != nil {
+			return nil, err
+		}
+		jumped := false
+		for _, id := range ids {
+			if span, ok := hidden.span(id); ok {
+				from, jumped = span.last, true
+				break
+			}
+			out = append(out, id)
+		}
+		if !jumped || len(out) >= limit {
+			break
+		}
+	}
+	return out, nil
+}
+
+func (r *ImportResolver) CountAfter(ctx context.Context, chatID, viewer, afterID int64, limit int) (int, error) {
+	ids, err := r.UnreadIDs(ctx, chatID, viewer, afterID, limit)
+	return len(ids), err
+}
+
+func (r *ImportResolver) skipHidden(ctx context.Context, q scylla.PageQuery, p scylla.Page, hidden hiddenImports) (scylla.Page, error) {
+	if q.Around != 0 {
+		for _, m := range p.Messages {
+			if m.ID == q.Around && hidden.has(m) {
+				return scylla.Page{}, scylla.ErrNotFound
+			}
+		}
+		p.Messages = hidden.drop(p.Messages)
+		return p, nil
+	}
+	want := len(p.Messages)
+	kept := hidden.drop(p.Messages)
+	raw := p.Messages
+	newer := q.After != 0
+	for range len(hidden) {
+		if len(kept) >= want || len(raw) == 0 {
+			break
+		}
+		edge := raw[0]
+		if newer {
+			edge = raw[len(raw)-1]
+		}
+		span, ok := hidden.of(edge)
+		if !ok || (newer && !p.HasNewer) || (!newer && !p.HasOlder) {
+			break
+		}
+		next := q
+		next.Limit = want - len(kept)
+		if newer {
+			next.After = span.last
+		} else {
+			next.Before = span.first
+		}
+		more, err := r.MessageRepository.Page(ctx, next)
+		if err != nil {
+			return scylla.Page{}, err
+		}
+		raw = more.Messages
+		if newer {
+			kept = append(kept, hidden.drop(raw)...)
+			p.HasNewer = more.HasNewer
+		} else {
+			kept = append(hidden.drop(raw), kept...)
+			p.HasOlder = more.HasOlder
+		}
+	}
+	p.Messages = kept
+	return p, nil
 }
 
 func (r *ImportResolver) Resolve(ctx context.Context, msgs []scylla.Message) ([]scylla.Message, error) {
@@ -146,4 +252,56 @@ func deletesOwn(m scylla.Message, userID int64) bool {
 		return true
 	}
 	return m.Import != nil && m.Import.ImportedBy != nil && *m.Import.ImportedBy == userID
+}
+
+type hiddenImport struct {
+	id, first, last int64
+}
+
+type hiddenImports []hiddenImport
+
+func runningFor(imports []postgres.ChatImport, viewer int64) hiddenImports {
+	var out hiddenImports
+	for _, imp := range imports {
+		if imp.State == postgres.ImportRunning && (imp.ImportedBy == nil || *imp.ImportedBy != viewer) {
+			out = append(out, hiddenImport{id: imp.ID, first: imp.FirstMessageID, last: imp.LastMessageID})
+		}
+	}
+	return out
+}
+
+func (h hiddenImports) of(m scylla.Message) (hiddenImport, bool) {
+	if m.Import == nil {
+		return hiddenImport{}, false
+	}
+	for _, x := range h {
+		if x.id == m.Import.ID {
+			return x, true
+		}
+	}
+	return hiddenImport{}, false
+}
+
+func (h hiddenImports) span(id int64) (hiddenImport, bool) {
+	for _, x := range h {
+		if id >= x.first && id <= x.last {
+			return x, true
+		}
+	}
+	return hiddenImport{}, false
+}
+
+func (h hiddenImports) has(m scylla.Message) bool {
+	_, ok := h.of(m)
+	return ok
+}
+
+func (h hiddenImports) drop(msgs []scylla.Message) []scylla.Message {
+	out := make([]scylla.Message, 0, len(msgs))
+	for _, m := range msgs {
+		if !h.has(m) {
+			out = append(out, m)
+		}
+	}
+	return out
 }
