@@ -185,6 +185,22 @@ func TestImportPlacesHistoryAboveTheChat(t *testing.T) {
 	}
 }
 
+func TestImportTakesTheLargestHistory(t *testing.T) {
+	f := newImportFixture(t)
+	ctx := context.Background()
+	alice, bob := f.user("alice"), f.user("bob")
+	chat, _, _ := f.pg.Chats().CreateDirect(ctx, alice, bob)
+	f.send(chat.ID, alice, "n1", "first message here")
+	ci, err := f.svc.StartImport(ctx, messages.StartImport{
+		ChatID: chat.ID, UserID: alice, Source: messages.ImportSourceWhatsApp, MessageCount: messages.MaxImportMessages,
+		FirstAt: importStart, LastAt: importEnd,
+		Senders: []messages.ImportSenderInput{{Key: "a", Name: "Anna", MessageCount: messages.MaxImportMessages, Me: true}},
+	})
+	if err != nil || ci.MessageCount != messages.MaxImportMessages {
+		t.Fatalf("start import of %d messages: %+v %v", messages.MaxImportMessages, ci.ChatImport, err)
+	}
+}
+
 func (f *importFixture) ownSticker(owner int64, emoji string) int64 {
 	f.t.Helper()
 	ctx := context.Background()
