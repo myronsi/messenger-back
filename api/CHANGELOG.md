@@ -2,6 +2,11 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.55
+
+- `import_id` of `POST /attachments` moves from the form to the query (`POST /attachments?import_id=…`), so the
+  upload rate (`upload` or `import_upload`) is checked before the body is read. The form field is removed.
+
 ## 2.1.0-alpha.54
 
 - `UploadAttachmentRequest` gains `import_id`: uploads of the caller's own running import get their own rate limit

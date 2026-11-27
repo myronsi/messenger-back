@@ -4918,11 +4918,7 @@ type UploadAttachmentRequest struct {
 	// most 3 s after `start_ms`.
 	EndMs *int               `json:"end_ms,omitempty"`
 	File  openapi_types.File `json:"file"`
-
-	// ImportId `message` uploads of a history import: the id of the caller's own running import. Other ids are ignored
-	// (the upload is handled like any other).
-	ImportId *Id             `json:"import_id,omitempty"`
-	Kind     *AttachmentKind `json:"kind,omitempty"`
+	Kind  *AttachmentKind    `json:"kind,omitempty"`
 
 	// Purpose `message`: an animated WebP keeps its frames (at most 300); the server removes its metadata and checks every
 	// frame. `avatar` and `profile_background` take only still WebP (`415` otherwise).
@@ -5270,6 +5266,10 @@ type ValidationFailed = Problem
 
 // UploadAttachmentParams defines parameters for UploadAttachment.
 type UploadAttachmentParams struct {
+	// ImportId `message` uploads of a history import: the id of the caller's own running import. Other ids are ignored
+	// (the upload is handled like any other).
+	ImportId *Id `form:"import_id,omitempty" json:"import_id,omitempty"`
+
 	// XClientVersion Version of the client app, for logs and the per-client metric.
 	XClientVersion *ClientVersion `json:"X-Client-Version,omitempty"`
 
@@ -8975,6 +8975,19 @@ func (siw *ServerInterfaceWrapper) UploadAttachment(w http.ResponseWriter, r *ht
 
 	// Parameter object where we will unmarshal all parameters from the context
 	var params UploadAttachmentParams
+
+	// ------------- Optional query parameter "import_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "import_id", r.URL.Query(), &params.ImportId, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "import_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "import_id", Err: err})
+		}
+		return
+	}
 
 	headers := r.Header
 

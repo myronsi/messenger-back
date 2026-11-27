@@ -178,6 +178,11 @@ func (e *mediaEnv) userID(t *testing.T, s session) int64 {
 
 func (e *mediaEnv) upload(t *testing.T, token string, fields map[string]string, filename string, content []byte) reply {
 	t.Helper()
+	return e.uploadTo(t, apiBase+"/attachments", token, fields, filename, content)
+}
+
+func (e *mediaEnv) uploadTo(t *testing.T, target, token string, fields map[string]string, filename string, content []byte) reply {
+	t.Helper()
 	var body bytes.Buffer
 	mw := multipart.NewWriter(&body)
 	for k, v := range fields {
@@ -186,7 +191,7 @@ func (e *mediaEnv) upload(t *testing.T, token string, fields map[string]string, 
 	fw, _ := mw.CreateFormFile("file", filename)
 	_, _ = fw.Write(content)
 	_ = mw.Close()
-	req := httptest.NewRequest(http.MethodPost, apiBase+"/attachments", &body)
+	req := httptest.NewRequest(http.MethodPost, target, &body)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
@@ -806,7 +811,7 @@ func TestImportUploadsHaveTheirOwnRateAndDeferImageWork(t *testing.T) {
 	env.imports.byID[uid] = []int64{77}
 	env.imports.mu.Unlock()
 	for i := range 30 {
-		rec := env.upload(t, s.access, map[string]string{"purpose": "message", "import_id": "77"}, "IMG-"+strconv.Itoa(i)+".png", smallPNG(t))
+		rec := env.uploadTo(t, apiBase+"/attachments?import_id=77", s.access, map[string]string{"purpose": "message"}, "IMG-"+strconv.Itoa(i)+".png", smallPNG(t))
 		if rec.Code != http.StatusCreated {
 			t.Fatalf("import upload %d: %d %s", i, rec.Code, rec.Body)
 		}
@@ -814,7 +819,7 @@ func TestImportUploadsHaveTheirOwnRateAndDeferImageWork(t *testing.T) {
 			t.Fatalf("import image processing %v", rec.json()["processing"])
 		}
 	}
-	foreign := env.upload(t, s.access, map[string]string{"purpose": "message", "import_id": "99"}, "x.png", smallPNG(t))
+	foreign := env.uploadTo(t, apiBase+"/attachments?import_id=99", s.access, map[string]string{"purpose": "message"}, "x.png", smallPNG(t))
 	if foreign.Code != http.StatusCreated || foreign.json()["processing"] != nil {
 		t.Fatalf("someone else's import id: %d %v", foreign.Code, foreign.json()["processing"])
 	}
@@ -828,7 +833,7 @@ func TestImportUploadsHaveTheirOwnRateAndDeferImageWork(t *testing.T) {
 	if !limited {
 		t.Fatal("uploads outside an import keep the normal limit")
 	}
-	if rec := env.upload(t, s.access, map[string]string{"purpose": "message", "import_id": "x"}, "z.png", smallPNG(t)); rec.Code != http.StatusBadRequest {
+	if rec := env.uploadTo(t, apiBase+"/attachments?import_id=x", s.access, map[string]string{"purpose": "message"}, "z.png", smallPNG(t)); rec.Code != http.StatusBadRequest {
 		t.Fatalf("malformed import_id: %d", rec.Code)
 	}
 }
