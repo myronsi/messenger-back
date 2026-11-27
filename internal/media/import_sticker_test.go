@@ -127,3 +127,29 @@ func TestImportStickersOfAnyShapeAreFinishedInTheWorker(t *testing.T) {
 		t.Fatalf("final bytes need a final cache entry: before %q after %q", before.ETagSuffix, after.ETagSuffix)
 	}
 }
+
+func TestImportStickerJobRecoversAfterTheFileWasReplaced(t *testing.T) {
+	svc, store, rows, jobs := optimizingService(t)
+	ctx := t.Context()
+	a, err := svc.Upload(ctx, media.Upload{UploaderID: 1, Purpose: media.PurposeSticker, Filename: "s.png", Body: bytes.NewReader(pngSticker(t, 640, 480)), ForImport: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows.mu.Lock()
+	rows.failMerge = 1
+	rows.mu.Unlock()
+	if _, err := svc.RunJob(ctx, jobs.jobs[0]); err == nil {
+		t.Fatal("the first run should fail at the row update")
+	}
+	if got := store.get(t, a.StorageKey); string(got[8:12]) != "WEBP" {
+		t.Fatal("the converted file should already be stored")
+	}
+	done, err := svc.RunJob(ctx, jobs.jobs[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored := store.get(t, done.StorageKey)
+	if *done.ProcessingState != media.ProcessingDone || done.MimeType != "image/webp" || done.Size != int64(len(stored)) || *done.Width != media.StickerSide {
+		t.Fatalf("after the retry %+v", done)
+	}
+}
