@@ -27,8 +27,14 @@ SELECT * FROM chat_import_senders WHERE import_id = ANY(@import_ids::bigint[]) O
 SELECT import_id, chunk, node, start_ms, size FROM chat_import_windows WHERE import_id = @import_id ORDER BY chunk;
 
 -- name: AdvanceChatImport :execrows
-UPDATE chat_imports SET next_index = @next_index
+UPDATE chat_imports SET next_index = @next_index, last_activity_at = now()
 WHERE id = @id AND state = 'running' AND next_index = @from_index;
+
+-- name: RunningChatImportsOfUser :many
+SELECT * FROM chat_imports WHERE imported_by = @user_id AND state = 'running' ORDER BY id;
+
+-- name: IdleChatImports :many
+SELECT * FROM chat_imports WHERE state = 'running' AND last_activity_at < @before ORDER BY last_activity_at LIMIT @max_rows;
 
 -- name: FinishChatImport :one
 UPDATE chat_imports SET state = 'done', finished_at = now()

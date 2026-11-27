@@ -44,6 +44,7 @@ var (
 	ErrImportOverlap = fmt.Errorf("%w: the chat already has imported history from that period", ErrConflict)
 	ErrImportNoRoom  = fmt.Errorf("%w: there is no room for the imported history in this chat", ErrConflict)
 	ErrImportRunning = fmt.Errorf("%w: an import of this chat is running", ErrConflict)
+	ErrImportBusy    = fmt.Errorf("%w: another import of yours is still running; finish or remove it first", ErrConflict)
 	ErrImportIndex   = fmt.Errorf("%w: the batch does not continue the import", ErrConflict)
 )
 
@@ -195,6 +196,13 @@ func (s *Service) StartImport(ctx context.Context, r StartImport) (ChatImport, e
 	senders, err := importSenders(r, pc)
 	if err != nil {
 		return ChatImport{}, err
+	}
+	running, err := repo.RunningOfUser(ctx, r.UserID)
+	if err != nil {
+		return ChatImport{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
+	}
+	if len(running) > 0 {
+		return ChatImport{}, ErrImportBusy
 	}
 	lower, upper, err := s.importGap(ctx, repo, r)
 	if err != nil {

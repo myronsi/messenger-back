@@ -11,7 +11,7 @@ import (
 )
 
 const advanceChatImport = `-- name: AdvanceChatImport :execrows
-UPDATE chat_imports SET next_index = $1
+UPDATE chat_imports SET next_index = $1, last_activity_at = now()
 WHERE id = $2 AND state = 'running' AND next_index = $3
 `
 
@@ -79,7 +79,7 @@ func (q *Queries) AssignImportSender(ctx context.Context, arg AssignImportSender
 }
 
 const chatImportsByID = `-- name: ChatImportsByID :many
-SELECT id, chat_id, imported_by, source, state, message_count, file_count, first_at, last_at, lower_bound, first_message_id, last_message_id, next_index, created_at, finished_at FROM chat_imports WHERE id = ANY($1::bigint[])
+SELECT id, chat_id, imported_by, source, state, message_count, file_count, first_at, last_at, lower_bound, first_message_id, last_message_id, next_index, created_at, finished_at, last_activity_at FROM chat_imports WHERE id = ANY($1::bigint[])
 `
 
 func (q *Queries) ChatImportsByID(ctx context.Context, ids []int64) ([]ChatImport, error) {
@@ -107,6 +107,7 @@ func (q *Queries) ChatImportsByID(ctx context.Context, ids []int64) ([]ChatImpor
 			&i.NextIndex,
 			&i.CreatedAt,
 			&i.FinishedAt,
+			&i.LastActivityAt,
 		); err != nil {
 			return nil, err
 		}
@@ -119,7 +120,7 @@ func (q *Queries) ChatImportsByID(ctx context.Context, ids []int64) ([]ChatImpor
 }
 
 const chatImportsOfChat = `-- name: ChatImportsOfChat :many
-SELECT id, chat_id, imported_by, source, state, message_count, file_count, first_at, last_at, lower_bound, first_message_id, last_message_id, next_index, created_at, finished_at FROM chat_imports WHERE chat_id = $1 ORDER BY first_message_id
+SELECT id, chat_id, imported_by, source, state, message_count, file_count, first_at, last_at, lower_bound, first_message_id, last_message_id, next_index, created_at, finished_at, last_activity_at FROM chat_imports WHERE chat_id = $1 ORDER BY first_message_id
 `
 
 func (q *Queries) ChatImportsOfChat(ctx context.Context, chatID int64) ([]ChatImport, error) {
@@ -147,6 +148,7 @@ func (q *Queries) ChatImportsOfChat(ctx context.Context, chatID int64) ([]ChatIm
 			&i.NextIndex,
 			&i.CreatedAt,
 			&i.FinishedAt,
+			&i.LastActivityAt,
 		); err != nil {
 			return nil, err
 		}
@@ -272,7 +274,7 @@ func (q *Queries) DeleteImportedURLs(ctx context.Context, arg DeleteImportedURLs
 const finishChatImport = `-- name: FinishChatImport :one
 UPDATE chat_imports SET state = 'done', finished_at = now()
 WHERE id = $1 AND state = 'running' AND next_index = message_count
-RETURNING id, chat_id, imported_by, source, state, message_count, file_count, first_at, last_at, lower_bound, first_message_id, last_message_id, next_index, created_at, finished_at
+RETURNING id, chat_id, imported_by, source, state, message_count, file_count, first_at, last_at, lower_bound, first_message_id, last_message_id, next_index, created_at, finished_at, last_activity_at
 `
 
 func (q *Queries) FinishChatImport(ctx context.Context, id int64) (ChatImport, error) {
@@ -294,12 +296,13 @@ func (q *Queries) FinishChatImport(ctx context.Context, id int64) (ChatImport, e
 		&i.NextIndex,
 		&i.CreatedAt,
 		&i.FinishedAt,
+		&i.LastActivityAt,
 	)
 	return i, err
 }
 
 const getChatImport = `-- name: GetChatImport :one
-SELECT id, chat_id, imported_by, source, state, message_count, file_count, first_at, last_at, lower_bound, first_message_id, last_message_id, next_index, created_at, finished_at FROM chat_imports WHERE id = $1
+SELECT id, chat_id, imported_by, source, state, message_count, file_count, first_at, last_at, lower_bound, first_message_id, last_message_id, next_index, created_at, finished_at, last_activity_at FROM chat_imports WHERE id = $1
 `
 
 func (q *Queries) GetChatImport(ctx context.Context, id int64) (ChatImport, error) {
@@ -321,8 +324,55 @@ func (q *Queries) GetChatImport(ctx context.Context, id int64) (ChatImport, erro
 		&i.NextIndex,
 		&i.CreatedAt,
 		&i.FinishedAt,
+		&i.LastActivityAt,
 	)
 	return i, err
+}
+
+const idleChatImports = `-- name: IdleChatImports :many
+SELECT id, chat_id, imported_by, source, state, message_count, file_count, first_at, last_at, lower_bound, first_message_id, last_message_id, next_index, created_at, finished_at, last_activity_at FROM chat_imports WHERE state = 'running' AND last_activity_at < $1 ORDER BY last_activity_at LIMIT $2
+`
+
+type IdleChatImportsParams struct {
+	Before  time.Time
+	MaxRows int32
+}
+
+func (q *Queries) IdleChatImports(ctx context.Context, arg IdleChatImportsParams) ([]ChatImport, error) {
+	rows, err := q.db.Query(ctx, idleChatImports, arg.Before, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ChatImport{}
+	for rows.Next() {
+		var i ChatImport
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChatID,
+			&i.ImportedBy,
+			&i.Source,
+			&i.State,
+			&i.MessageCount,
+			&i.FileCount,
+			&i.FirstAt,
+			&i.LastAt,
+			&i.LowerBound,
+			&i.FirstMessageID,
+			&i.LastMessageID,
+			&i.NextIndex,
+			&i.CreatedAt,
+			&i.FinishedAt,
+			&i.LastActivityAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const importLowerBound = `-- name: ImportLowerBound :one
@@ -413,7 +463,7 @@ func (q *Queries) ImportWindowsOf(ctx context.Context, importID int64) ([]Import
 const insertChatImport = `-- name: InsertChatImport :one
 INSERT INTO chat_imports (chat_id, imported_by, source, state, message_count, file_count, first_at, last_at, lower_bound, first_message_id, last_message_id)
 VALUES ($1, $2, $3, 'running', $4, $5, $6, $7, $8, $9, $10)
-RETURNING id, chat_id, imported_by, source, state, message_count, file_count, first_at, last_at, lower_bound, first_message_id, last_message_id, next_index, created_at, finished_at
+RETURNING id, chat_id, imported_by, source, state, message_count, file_count, first_at, last_at, lower_bound, first_message_id, last_message_id, next_index, created_at, finished_at, last_activity_at
 `
 
 type InsertChatImportParams struct {
@@ -459,6 +509,7 @@ func (q *Queries) InsertChatImport(ctx context.Context, arg InsertChatImportPara
 		&i.NextIndex,
 		&i.CreatedAt,
 		&i.FinishedAt,
+		&i.LastActivityAt,
 	)
 	return i, err
 }
@@ -516,7 +567,7 @@ func (q *Queries) InsertImportWindow(ctx context.Context, arg InsertImportWindow
 const markChatImportRemoving = `-- name: MarkChatImportRemoving :one
 UPDATE chat_imports SET state = 'removing'
 WHERE id = $1 AND state IN ('running', 'done')
-RETURNING id, chat_id, imported_by, source, state, message_count, file_count, first_at, last_at, lower_bound, first_message_id, last_message_id, next_index, created_at, finished_at
+RETURNING id, chat_id, imported_by, source, state, message_count, file_count, first_at, last_at, lower_bound, first_message_id, last_message_id, next_index, created_at, finished_at, last_activity_at
 `
 
 func (q *Queries) MarkChatImportRemoving(ctx context.Context, id int64) (ChatImport, error) {
@@ -538,8 +589,50 @@ func (q *Queries) MarkChatImportRemoving(ctx context.Context, id int64) (ChatImp
 		&i.NextIndex,
 		&i.CreatedAt,
 		&i.FinishedAt,
+		&i.LastActivityAt,
 	)
 	return i, err
+}
+
+const runningChatImportsOfUser = `-- name: RunningChatImportsOfUser :many
+SELECT id, chat_id, imported_by, source, state, message_count, file_count, first_at, last_at, lower_bound, first_message_id, last_message_id, next_index, created_at, finished_at, last_activity_at FROM chat_imports WHERE imported_by = $1 AND state = 'running' ORDER BY id
+`
+
+func (q *Queries) RunningChatImportsOfUser(ctx context.Context, userID *int64) ([]ChatImport, error) {
+	rows, err := q.db.Query(ctx, runningChatImportsOfUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ChatImport{}
+	for rows.Next() {
+		var i ChatImport
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChatID,
+			&i.ImportedBy,
+			&i.Source,
+			&i.State,
+			&i.MessageCount,
+			&i.FileCount,
+			&i.FirstAt,
+			&i.LastAt,
+			&i.LowerBound,
+			&i.FirstMessageID,
+			&i.LastMessageID,
+			&i.NextIndex,
+			&i.CreatedAt,
+			&i.FinishedAt,
+			&i.LastActivityAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const unlinkImportedAttachments = `-- name: UnlinkImportedAttachments :exec

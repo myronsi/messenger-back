@@ -41,7 +41,8 @@ Message ids are Snowflakes that hold their time, and history is sorted by id, so
 - Node numbers 1008–1023 are reserved for imports; running instances lease only 0–1007 (`ids.MaxLiveNode`).
 - The import is cut into chunks of 5,000 positions. Each chunk gets a short window of milliseconds on one import node, spread over the lower half of the gap, so a later import whose period follows still finds room. `chat_import_windows` keeps the windows; an exclusion constraint stops two imports from sharing one.
 - The id of position `k` (0 is the opening line, the messages follow, the last is the closing line) is computed from its window, so a retried batch writes the same ids. Imported rows carry the import's start as their write timestamp.
-- An import whose period overlaps another import of the chat is refused (`409`), as is a second running import and a gap too small for the messages.
+- An import whose period overlaps another import of the chat is refused (`409`), as is a second running import of the chat, a second running import of the same user in any chat, and a gap too small for the messages.
+- `chat_imports.last_activity_at` moves with every accepted batch. The API instances check every 10 minutes (`RunImportExpiry`) and remove running imports without a batch for 24 hours (`ImportIdleTimeout`), the same way as `DELETE`: the chat is free again and the partial history disappears. Clients upload the files of each batch right before sending it, so a long upload does not count as idle.
 
 ## Removing
 

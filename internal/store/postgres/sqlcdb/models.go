@@ -184,6 +184,7 @@ type ChatImport struct {
 	NextIndex      int32
 	CreatedAt      time.Time
 	FinishedAt     *time.Time
+	LastActivityAt time.Time
 }
 
 type ChatImportSender struct {

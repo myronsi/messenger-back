@@ -45,6 +45,7 @@ type ChatImport struct {
 	NextIndex      int
 	CreatedAt      time.Time
 	FinishedAt     *time.Time
+	LastActivityAt time.Time
 }
 
 type ImportSender struct {
@@ -88,6 +89,8 @@ type ImportRepository interface {
 	Senders(ctx context.Context, importIDs []int64) (map[int64][]ImportSender, error)
 	Windows(ctx context.Context, importID int64) ([]ImportWindow, error)
 	Advance(ctx context.Context, id int64, from, to int) (bool, error)
+	RunningOfUser(ctx context.Context, userID int64) ([]ChatImport, error)
+	Idle(ctx context.Context, before time.Time, limit int) ([]ChatImport, error)
 	Finish(ctx context.Context, id int64) (ChatImport, error)
 	MarkRemoving(ctx context.Context, id int64) (ChatImport, error)
 	Delete(ctx context.Context, id int64) error
@@ -111,7 +114,7 @@ func chatImport(r sqlcdb.ChatImport) ChatImport {
 		ID: r.ID, ChatID: r.ChatID, ImportedBy: r.ImportedBy, Source: r.Source, State: r.State,
 		MessageCount: int(r.MessageCount), FileCount: int(r.FileCount), FirstAt: r.FirstAt, LastAt: r.LastAt,
 		LowerBound: r.LowerBound, FirstMessageID: r.FirstMessageID, LastMessageID: r.LastMessageID,
-		NextIndex: int(r.NextIndex), CreatedAt: r.CreatedAt, FinishedAt: r.FinishedAt,
+		NextIndex: int(r.NextIndex), CreatedAt: r.CreatedAt, FinishedAt: r.FinishedAt, LastActivityAt: r.LastActivityAt,
 	}
 }
 
@@ -237,6 +240,30 @@ func (r importRepo) Advance(ctx context.Context, id int64, from, to int) (bool, 
 		return false, mapError(err)
 	}
 	return n > 0, nil
+}
+
+func (r importRepo) RunningOfUser(ctx context.Context, userID int64) ([]ChatImport, error) {
+	rows, err := r.s.q.RunningChatImportsOfUser(ctx, &userID)
+	if err != nil {
+		return nil, mapError(err)
+	}
+	out := make([]ChatImport, len(rows))
+	for i, row := range rows {
+		out[i] = chatImport(row)
+	}
+	return out, nil
+}
+
+func (r importRepo) Idle(ctx context.Context, before time.Time, limit int) ([]ChatImport, error) {
+	rows, err := r.s.q.IdleChatImports(ctx, sqlcdb.IdleChatImportsParams{Before: before, MaxRows: int32(limit)}) //nolint:gosec // a small batch size
+	if err != nil {
+		return nil, mapError(err)
+	}
+	out := make([]ChatImport, len(rows))
+	for i, row := range rows {
+		out[i] = chatImport(row)
+	}
+	return out, nil
 }
 
 func (r importRepo) Finish(ctx context.Context, id int64) (ChatImport, error) {
