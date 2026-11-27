@@ -18,6 +18,7 @@ const (
 	ChunkSize          = 8 << 20
 	MaxOpenUploads     = 5
 	UploadSessionTTL   = 24 * time.Hour
+	UploadSessionIdle  = 15 * time.Minute
 	uploadChunksPrefix = "uploads/"
 )
 
@@ -67,7 +68,16 @@ func (s *Service) CreateSession(ctx context.Context, n NewSession) (postgres.Upl
 		return postgres.UploadSession{}, err
 	}
 	if open >= MaxOpenUploads {
-		return postgres.UploadSession{}, ErrTooManyUploads
+		idle, err := repo.IdleOf(ctx, n.UploaderID, time.Now().Add(-UploadSessionIdle), int(open-MaxOpenUploads+1))
+		if err != nil {
+			return postgres.UploadSession{}, err
+		}
+		for _, sess := range idle {
+			s.dropSession(ctx, sess)
+		}
+		if open-int64(len(idle)) >= MaxOpenUploads {
+			return postgres.UploadSession{}, ErrTooManyUploads
+		}
 	}
 	return repo.Create(ctx, postgres.NewUploadSession{
 		UploaderID: n.UploaderID, Purpose: n.Purpose, Kind: n.Kind, Filename: cleanName(n.Filename, ""), Size: n.Size, ChunkSize: ChunkSize,

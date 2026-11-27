@@ -7,6 +7,7 @@ import (
 	"image"
 	"image/jpeg"
 	"io"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -288,4 +289,26 @@ func (m *memSessions) Count(_ context.Context, uploaderID int64) (int64, error) 
 
 func (m *memSessions) Stale(context.Context, time.Time, int) ([]postgres.UploadSession, error) {
 	return nil, nil
+}
+
+func (m *memSessions) IdleOf(_ context.Context, uploaderID int64, before time.Time, limit int) ([]postgres.UploadSession, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []postgres.UploadSession
+	for _, s := range m.rows {
+		if s.UploaderID == uploaderID && s.UpdatedAt.Before(before) {
+			out = append(out, s)
+		}
+	}
+	slices.SortFunc(out, func(a, b postgres.UploadSession) int { return a.UpdatedAt.Compare(b.UpdatedAt) })
+	return out[:min(limit, len(out))], nil
+}
+
+func (m *memSessions) age(by time.Duration) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for id, s := range m.rows {
+		s.UpdatedAt = s.UpdatedAt.Add(-by)
+		m.rows[id] = s
+	}
 }
