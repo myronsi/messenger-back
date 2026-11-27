@@ -205,15 +205,19 @@ func (s *Service) animatedStickerVariants(ctx context.Context, src stickerSource
 	} else if !errors.Is(err, ErrUnsupported) {
 		return err
 	}
+	s.animatedMessageVariant(ctx, src, crop, vs)
+	return nil
+}
+
+func (s *Service) animatedMessageVariant(ctx context.Context, src stickerSource, crop *StickerCrop, vs *variantSet) {
 	for _, step := range stickerLadder[1:] {
 		small, err := s.encodeStickerClip(ctx, src, MessageStickerSide, step, crop, false)
 		if err != nil {
-			break
+			return
 		}
 		if len(small) <= MaxMessageStickerBytes {
 			vs.add(VariantNameMessage, EncodedImage{Data: small, ContentType: "image/webp", Width: MessageStickerSide, Height: MessageStickerSide})
-			break
+			return
 		}
 	}
-	return nil
 }
