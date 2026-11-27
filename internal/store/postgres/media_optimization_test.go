@@ -193,3 +193,44 @@ func TestUploadSessions(t *testing.T) {
 	}
 	_ = uuid.Nil
 }
+
+func TestImportImageJobsYieldToLiveJobsAndRunOneAtATime(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	u := mustUser(t, s, "importjobs")
+	jobs := s.MediaJobs()
+	attach := func(key string) uuid.UUID {
+		a, err := s.Attachments().Create(ctx, NewAttachment{UploaderID: &u.ID, Purpose: PurposeMessage, Kind: "image", StorageKey: "attachments/" + key, MimeType: "image/jpeg", Size: 1})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return a.ID
+	}
+	first, second, live := attach("i1"), attach("i2"), attach("v1")
+	for _, q := range []struct {
+		id   uuid.UUID
+		kind string
+	}{{first, "import_image"}, {second, "import_image"}, {live, "video"}} {
+		if ok, err := jobs.Enqueue(ctx, q.id, q.kind); err != nil || !ok {
+			t.Fatalf("enqueue %s: %v %v", q.kind, ok, err)
+		}
+	}
+	got, ok, err := jobs.Claim(ctx)
+	if err != nil || !ok || got.Kind != "video" {
+		t.Fatalf("the live job goes first: %+v %v %v", got, ok, err)
+	}
+	importing, ok, err := jobs.Claim(ctx)
+	if err != nil || !ok || importing.AttachmentID != first {
+		t.Fatalf("then the oldest import job: %+v %v %v", importing, ok, err)
+	}
+	if extra, ok, _ := jobs.Claim(ctx); ok {
+		t.Fatalf("a second import job ran at the same time: %+v", extra)
+	}
+	if err := jobs.Finish(ctx, importing.ID); err != nil {
+		t.Fatal(err)
+	}
+	next, ok, err := jobs.Claim(ctx)
+	if err != nil || !ok || next.AttachmentID != second {
+		t.Fatalf("the next import job after the first finished: %+v %v %v", next, ok, err)
+	}
+}

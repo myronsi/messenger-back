@@ -118,7 +118,9 @@ memory cap is killed and restarted by Docker. Set caps from measurements:
      `SCYLLA_MEMORY` plus 1.5 GiB plus the overhead, which on these hosts is more than the cap saves.
 3. Keep the sum of the memory caps below the host's memory minus about 1 GiB for the OS, Docker and nginx.
 4. CPU caps are optional on a 2-vCPU host; use them for a container known to spike, for example
-   `ELASTICSEARCH_CPUS=1.0`.
+   `ELASTICSEARCH_CPUS=1.0`. The worker runs the media jobs of history imports for hours: on a 2-vCPU host set
+   `WORKER_CPUS=1.0` and `WORKER_CPU_SHARES=512` (the API keeps the default weight 1024), so live requests win
+   when both want the CPU.
 5. For a few days after a change, look for restarts: `docker inspect -f '{{.State.OOMKilled}}' <container>`
    prints `true` after a container was killed at its cap. A container can also fail before it uses any memory, as
    ScyllaDB does under a cap: check `docker compose ps` and the logs right after applying caps.
