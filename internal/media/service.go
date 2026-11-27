@@ -387,9 +387,9 @@ func (s *Service) upload(ctx context.Context, u Upload, tags *Tags) (postgres.At
 		}
 		body = tmp
 	case fastSticker:
-		w, h := int32(StickerSide), int32(StickerSide)
-		rec.Kind, rec.Width, rec.Height, rec.MimeType, rec.Size = KindImage, &w, &h, "image/webp", int64(len(sticker.data))
-		rec.Filename = "sticker.webp"
+		w, h := int32(sticker.width), int32(sticker.height) //nolint:gosec // bounded by MaxImageSide
+		rec.Kind, rec.Width, rec.Height, rec.MimeType, rec.Size = KindImage, &w, &h, sticker.contentType, int64(len(sticker.data))
+		rec.Filename = "sticker" + extensionOf(sticker.contentType)
 		if sticker.duration != nil {
 			secs := sticker.duration.Seconds()
 			rec.Duration = &secs
@@ -614,6 +614,7 @@ type Download struct {
 	Disposition string
 	ETagSuffix  string
 	Legacy      bool
+	Pending     bool
 }
 
 // CanSee reports whether the viewer may download the attachment: the uploader always; otherwise a member of a
@@ -775,6 +776,18 @@ func HasDisplay(a postgres.Attachment) bool {
 }
 
 func (s *Service) content(ctx context.Context, a postgres.Attachment, v Variant) (Download, error) {
+	d, err := s.variantContent(ctx, a, v)
+	if pending(a) {
+		d.Pending, d.ETagSuffix = true, d.ETagSuffix+"-pending"
+	}
+	return d, err
+}
+
+func pending(a postgres.Attachment) bool {
+	return a.ProcessingState != nil && (*a.ProcessingState == ProcessingQueued || *a.ProcessingState == ProcessingRunning)
+}
+
+func (s *Service) variantContent(ctx context.Context, a postgres.Attachment, v Variant) (Download, error) {
 	key, ctype, name := a.StorageKey, a.MimeType, a.Filename
 	if vname, ok := variantNames[v]; ok {
 		if sv, ok := a.Variants.Get(vname); ok {

@@ -169,7 +169,13 @@ SET variants = variants || @variants::jsonb,
     processing_state = COALESCE(sqlc.narg(processing_state), processing_state),
     audio_title = COALESCE(sqlc.narg(audio_title), audio_title),
     audio_artist = COALESCE(sqlc.narg(audio_artist), audio_artist),
-    audio_album = COALESCE(sqlc.narg(audio_album), audio_album)
+    audio_album = COALESCE(sqlc.narg(audio_album), audio_album),
+    size = COALESCE(sqlc.narg(size), size),
+    mime_type = COALESCE(sqlc.narg(mime_type), mime_type),
+    filename = COALESCE(sqlc.narg(filename), filename),
+    width = COALESCE(sqlc.narg(width), width),
+    height = COALESCE(sqlc.narg(height), height),
+    duration = COALESCE(sqlc.narg(duration), duration)
 WHERE id = @id
 RETURNING *;
 

@@ -194,6 +194,21 @@ func (m *memAttachments) MergeVariants(_ context.Context, id uuid.UUID, u postgr
 	if u.AudioAlbum != nil {
 		a.AudioAlbum = u.AudioAlbum
 	}
+	if u.Size != nil {
+		a.Size = *u.Size
+	}
+	if u.MimeType != nil {
+		a.MimeType = *u.MimeType
+	}
+	if u.Filename != nil {
+		a.Filename = *u.Filename
+	}
+	if u.Width != nil {
+		a.Width, a.Height = u.Width, u.Height
+	}
+	if u.Duration != nil {
+		a.Duration = u.Duration
+	}
 	m.rows[id] = a
 	return a, nil
 }

@@ -38,7 +38,7 @@ func squareSticker(t *testing.T, frameMS int, extra ...riffChunk) []byte {
 
 func TestImportStickersKeepSquareAnimatedWebPWithoutMetadata(t *testing.T) {
 	src := squareSticker(t, 0, riffChunk{fourCC: "EXIF", payload: []byte(`{"sticker-pack-id":"secret"}`)}, riffChunk{fourCC: "XMP ", payload: []byte("xmp")})
-	got, err := prepareImportSticker(src)
+	got, err := prepareImportSticker(src, "image/webp")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,25 +50,28 @@ func TestImportStickersKeepSquareAnimatedWebPWithoutMetadata(t *testing.T) {
 	if !animatedWebP(got.data) || got.data[20]&0x08 != 0 {
 		t.Fatalf("flags %08b", got.data[20])
 	}
-	if got.duration == nil || *got.duration <= 0 || *got.duration > MaxStickerClip {
-		t.Fatalf("duration %v", got.duration)
+	if got.duration == nil || *got.duration <= 0 || *got.duration > MaxStickerClip || !got.ready {
+		t.Fatalf("duration %v ready %v", got.duration, got.ready)
 	}
 	if binary.LittleEndian.Uint32(got.data[4:8]) != uint32(len(got.data)-8) {
 		t.Fatal("riff size")
 	}
 }
 
-func TestImportStickersOutsideTheFastPath(t *testing.T) {
+func TestImportStickersThatNeedWorkGoToTheWorkerToo(t *testing.T) {
 	cases := map[string][]byte{
-		"not webp":         []byte("GIF89a not a webp file at all"),
 		"wrong canvas":     fixture(t, "animated.webp"),
 		"longer than clip": squareSticker(t, int((MaxStickerClip + time.Second).Milliseconds())),
 	}
 	for name, data := range cases {
 		t.Run(name, func(t *testing.T) {
-			if _, err := prepareImportSticker(data); !errors.Is(err, ErrUnsupported) {
-				t.Fatalf("got %v", err)
+			got, err := prepareImportSticker(data, "image/webp")
+			if err != nil || got.ready || got.duration == nil || *got.duration > MaxStickerClip {
+				t.Fatalf("got %+v %v", got, err)
 			}
 		})
+	}
+	if _, err := prepareImportSticker([]byte("GIF89a not a webp file at all"), "image/gif"); !errors.Is(err, ErrUnsupported) {
+		t.Fatalf("gif: %v", err)
 	}
 }

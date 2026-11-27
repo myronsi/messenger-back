@@ -554,6 +554,12 @@ type AttachmentUpdate struct {
 	AudioTitle      *string
 	AudioArtist     *string
 	AudioAlbum      *string
+	Size            *int64
+	MimeType        *string
+	Filename        *string
+	Width           *int32
+	Height          *int32
+	Duration        *float64
 }
 
 type BackfillFilter struct {
