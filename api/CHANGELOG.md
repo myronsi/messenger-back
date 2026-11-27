@@ -2,6 +2,11 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.52
+
+- Imported stickers can be real stickers: `ImportedMessageType` gains `sticker` and `ImportedMessage` gains
+  `sticker_id` (a sticker the importer may send, for example from a pack made from the export's stickers).
+
 ## 2.1.0-alpha.51
 
 - `UploadPurpose` `sticker` accepts animated WebP as a source of an animated sticker, like an animated GIF: the server
