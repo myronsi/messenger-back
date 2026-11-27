@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.40.2](https://github.com/myronsi/messenger-back/compare/v1.40.1...v1.40.2) (2026-11-27)
+
+
+### Bug Fixes
+
+* **imports:** hide a running import from other members until it finishes ([#265](https://github.com/myronsi/messenger-back/issues/265)) ([2ef82e9](https://github.com/myronsi/messenger-back/commit/2ef82e92fbf3d92f7fb7ae3be918dea1d531ab67))
+
+
+### Performance Improvements
+
+* **media:** import uploads get their own rate and defer the image work ([#267](https://github.com/myronsi/messenger-back/issues/267)) ([093858e](https://github.com/myronsi/messenger-back/commit/093858e5f971f59b78395bb2f7c9c504142ff1c3))
+
 ## [1.40.1](https://github.com/myronsi/messenger-back/compare/v1.40.0...v1.40.1) (2026-11-27)
 
 

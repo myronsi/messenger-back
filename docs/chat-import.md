@@ -48,6 +48,10 @@ Message ids are Snowflakes that hold their time, and history is sorted by id, so
 
 Until `finish`, only the importer sees the import's messages. For every other member, history pages, the chat list preview, unread counts and the first unread message, the media list and the link list leave out the messages of a running import: a page that reaches its id range continues on the other side of it, `around` one of its messages answers `404`, and the media and link cursors jump past it. Other members see the `import_update` progress instead, and `history_imported` on finish makes them reload the chat with the whole import at once. Live messages are never affected: they use other id nodes, so chatting goes on during an import.
 
+## Unread
+
+Imported messages never count as unread: unread ids and counts skip them, and `finish` moves every read position that is unset or inside the import's range to its last id. Imports sit below every visible live message, so live unread messages stay unread. Migration 000063 applied the same to imports that finished before.
+
 ## Removing
 
 `DELETE /imports/{import_id}` marks the import `removing`: reads drop its messages at once. The worker (`import-cleanup` consumer of `events:chats`) deletes the messages, reactions, locations and hidden markers of its id range in ScyllaDB, the attachment links, link entries and pins in PostgreSQL, and then the import rows. The search indexer deletes the documents of the range.
