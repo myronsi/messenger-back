@@ -2,6 +2,11 @@
 
 Contract changes only. The backend changelog is `CHANGELOG.md` in the repository root. Rules: `docs/api-compatibility.md`.
 
+## 2.1.0-alpha.53
+
+- Documentation: `startChatImport` allows one running import per user (`409` otherwise), and a running import that
+  gets no batch for 24 hours is removed (`import_update` with `removing`).
+
 ## 2.1.0-alpha.52
 
 - Imported stickers can be real stickers: `ImportedMessageType` gains `sticker` and `ImportedMessage` gains

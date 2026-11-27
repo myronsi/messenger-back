@@ -204,6 +204,7 @@ func startRealtime(p *app.Process, pg *postgres.Store, rd *redis.Store, sc *scyl
 	st.done.Go(func() { presence.Run(st.ctx) })
 	st.done.Go(func() { counter.Run(st.ctx, stats.FlushEvery) })
 	st.done.Go(func() { svc.RunPollCloser(st.ctx, messages.PollCloseEvery) })
+	st.done.Go(func() { svc.RunImportExpiry(st.ctx, messages.ImportExpiryEvery) })
 	return st, nil
 }
 
