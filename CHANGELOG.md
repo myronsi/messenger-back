@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.40.0](https://github.com/myronsi/messenger-back/compare/v1.39.0...v1.40.0) (2026-11-27)
+
+
+### Features
+
+* **imports:** one running import per user, remove imports idle for 24 h ([#261](https://github.com/myronsi/messenger-back/issues/261)) ([a7a8470](https://github.com/myronsi/messenger-back/commit/a7a8470b63314996569387a8828bc0290bee5c91))
+
 ## [1.39.0](https://github.com/myronsi/messenger-back/compare/v1.38.0...v1.39.0) (2026-11-27)
 
 
