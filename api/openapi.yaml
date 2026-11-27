@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Messenger API
-  version: 2.1.0-alpha.51
+  version: 2.1.0-alpha.52
   summary: REST contract of the Messenger backend (v2).
   description: |
     Contract for the Go backend. The WebSocket protocol is described in `websocket/` and
@@ -9562,8 +9562,11 @@ components:
           items: { $ref: "#/components/schemas/StartChatImportSender" }
     ImportedMessageType:
       type: string
-      description: "`note`: a line of the export that is not a message (for example that someone joined), shown as a system message."
-      enum: [text, file, voice, note]
+      description: |
+        `note`: a line of the export that is not a message (for example that someone joined), shown as a system message.
+        `sticker`: a sticker the importer may send (usually from a pack the importer made from the export's stickers),
+        with `sticker_id` and no `content` or `attachment_ids`.
+      enum: [text, file, voice, note, sticker]
     ImportedMessage:
       type: object
       required: [index, original_at, type]
@@ -9589,6 +9592,9 @@ components:
           maxItems: 10
           uniqueItems: true
           items: { $ref: "#/components/schemas/AttachmentRef" }
+        sticker_id:
+          description: The sticker of a `sticker` message; the server sets `content` to the sticker's emoji.
+          $ref: "#/components/schemas/Id"
         reply_to_index:
           type: integer
           minimum: 0

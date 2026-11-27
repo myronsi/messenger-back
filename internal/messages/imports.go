@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/gocql/gocql"
 	"github.com/google/uuid"
 
 	"github.com/myronsi/messenger-back/internal/events"
@@ -78,6 +79,7 @@ type ImportedMessage struct {
 	Type          string
 	Content       *string
 	AttachmentIDs []uuid.UUID
+	StickerID     *int64
 	ReplyToIndex  *int
 }
 
@@ -455,18 +457,25 @@ func (s *Service) importedMessage(ctx context.Context, imp postgres.ChatImport, 
 	default:
 		req.AlbumIDs = in.AttachmentIDs
 	}
-	if in.Type == scylla.TypeSticker {
-		return scylla.Message{}, invalid("message %d: import stickers as file messages", index)
-	}
+	req.StickerID = in.StickerID
 	if err := s.validateSend(req); err != nil {
 		return scylla.Message{}, fmt.Errorf("message %d: %w", index, err)
+	}
+	sender := *imp.ImportedBy
+	m.SenderID, m.Type, m.Content = &sender, in.Type, in.Content
+	if in.StickerID != nil {
+		st, err := s.sticker(ctx, sender, *in.StickerID)
+		if err != nil {
+			return scylla.Message{}, fmt.Errorf("message %d: %w", index, err)
+		}
+		image, emoji := gocql.UUID(st.Image.ID), st.Emoji
+		m.StickerID, m.AttachmentID, m.Content = &st.ID, &image, &emoji
+		return m, nil
 	}
 	attachments, _, err := s.checkAttachments(ctx, req)
 	if err != nil {
 		return scylla.Message{}, fmt.Errorf("message %d: %w", index, err)
 	}
-	sender := *imp.ImportedBy
-	m.SenderID, m.Type, m.Content = &sender, in.Type, in.Content
 	if len(attachments) > 0 {
 		m.AttachmentID = &attachments[0]
 	}

@@ -144,6 +144,13 @@ func (m *MessageServer) AddImportedMessages(w http.ResponseWriter, r *http.Reque
 		if in.SenderKey != nil {
 			msg.SenderKey = *in.SenderKey
 		}
+		if in.StickerId != nil {
+			sticker, ok := parseID(w, "messages.sticker_id", *in.StickerId)
+			if !ok {
+				return
+			}
+			msg.StickerID = &sticker
+		}
 		if in.AttachmentIds != nil {
 			msg.AttachmentIDs = append([]uuid.UUID(nil), *in.AttachmentIds...)
 		}

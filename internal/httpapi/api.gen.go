@@ -895,10 +895,11 @@ func (e ImportSource) Valid() bool {
 
 // Defines values for ImportedMessageType.
 const (
-	ImportedMessageTypeFile  ImportedMessageType = "file"
-	ImportedMessageTypeNote  ImportedMessageType = "note"
-	ImportedMessageTypeText  ImportedMessageType = "text"
-	ImportedMessageTypeVoice ImportedMessageType = "voice"
+	ImportedMessageTypeFile    ImportedMessageType = "file"
+	ImportedMessageTypeNote    ImportedMessageType = "note"
+	ImportedMessageTypeSticker ImportedMessageType = "sticker"
+	ImportedMessageTypeText    ImportedMessageType = "text"
+	ImportedMessageTypeVoice   ImportedMessageType = "voice"
 )
 
 // Valid indicates whether the value is a known member of the ImportedMessageType enum.
@@ -907,6 +908,8 @@ func (e ImportedMessageType) Valid() bool {
 	case ImportedMessageTypeFile:
 		return true
 	case ImportedMessageTypeNote:
+		return true
+	case ImportedMessageTypeSticker:
 		return true
 	case ImportedMessageTypeText:
 		return true
@@ -3081,11 +3084,20 @@ type ImportedMessage struct {
 	// SenderKey Required except for `note`.
 	SenderKey *ImportSenderKey `json:"sender_key,omitempty"`
 
+	// StickerId The sticker of a `sticker` message; the server sets `content` to the sticker's emoji.
+	//
+	// Examples: 7217400317439950848
+	StickerId *Id `json:"sticker_id,omitempty"`
+
 	// Type `note`: a line of the export that is not a message (for example that someone joined), shown as a system message.
+	// `sticker`: a sticker the importer may send (usually from a pack the importer made from the export's stickers),
+	// with `sticker_id` and no `content` or `attachment_ids`.
 	Type ImportedMessageType `json:"type"`
 }
 
 // ImportedMessageType `note`: a line of the export that is not a message (for example that someone joined), shown as a system message.
+// `sticker`: a sticker the importer may send (usually from a pack the importer made from the export's stickers),
+// with `sticker_id` and no `content` or `attachment_ids`.
 type ImportedMessageType string
 
 // InviteLink defines model for InviteLink.
