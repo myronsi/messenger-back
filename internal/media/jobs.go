@@ -254,6 +254,9 @@ func (s *Service) RunJob(ctx context.Context, job postgres.MediaJob) (postgres.A
 	if job.Kind == JobImportImage {
 		return s.runImportImage(ctx, a)
 	}
+	if job.Kind == JobImportSticker {
+		return s.runImportSticker(ctx, a)
+	}
 	src, cleanup, err := s.fetch(ctx, a)
 	if err != nil {
 		return a, err

@@ -193,10 +193,17 @@ func (s *Service) processAnimatedSticker(ctx context.Context, path string, u Upl
 	if len(data) > MaxAnimatedStickerBytes {
 		return AnimatedSticker{}, ErrTooLarge
 	}
+	if err := s.animatedStickerVariants(ctx, src, crop, vs); err != nil {
+		return AnimatedSticker{}, err
+	}
+	return AnimatedSticker{Data: data, Duration: length}, nil
+}
+
+func (s *Service) animatedStickerVariants(ctx context.Context, src stickerSource, crop *StickerCrop, vs *variantSet) error {
 	if panel, err := s.encodeStickerClip(ctx, src, PanelSide, stickerStep{80, 1}, crop, true); err == nil {
 		vs.add(VariantNamePanel, EncodedImage{Data: panel, ContentType: "image/webp", Width: PanelSide, Height: PanelSide})
 	} else if !errors.Is(err, ErrUnsupported) {
-		return AnimatedSticker{}, err
+		return err
 	}
 	for _, step := range stickerLadder[1:] {
 		small, err := s.encodeStickerClip(ctx, src, MessageStickerSide, step, crop, false)
@@ -208,5 +215,5 @@ func (s *Service) processAnimatedSticker(ctx context.Context, path string, u Upl
 			break
 		}
 	}
-	return AnimatedSticker{Data: data, Duration: length}, nil
+	return nil
 }
