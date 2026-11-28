@@ -73,7 +73,7 @@ type requestIDHandler struct{ slog.Handler }
 
 func (h *requestIDHandler) Handle(ctx context.Context, r slog.Record) error {
 	id := RequestID(ctx)
-	if id != "" && r.Level >= slog.LevelWarn && r.Message != "request" && errors.Is(ctx.Err(), context.Canceled) {
+	if id != "" && r.Level >= slog.LevelWarn && errors.Is(ctx.Err(), context.Canceled) && cancelledError(r) {
 		if !h.Enabled(ctx, slog.LevelDebug) {
 			return nil
 		}
@@ -83,6 +83,20 @@ func (h *requestIDHandler) Handle(ctx context.Context, r slog.Record) error {
 		r.AddAttrs(slog.String("request_id", id))
 	}
 	return h.Handler.Handle(ctx, r)
+}
+
+func cancelledError(r slog.Record) bool {
+	found := false
+	r.Attrs(func(a slog.Attr) bool {
+		if a.Key != "error" {
+			return true
+		}
+		if err, ok := a.Value.Any().(error); ok {
+			found = errors.Is(err, context.Canceled) || strings.HasSuffix(err.Error(), context.Canceled.Error())
+		}
+		return false
+	})
+	return found
 }
 
 func (h *requestIDHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
