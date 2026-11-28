@@ -37,6 +37,7 @@ services:
     cpus: ${API_CPUS:-0}
     ports:
       - "${API_BIND:-127.0.0.1}:${API_PORT:-8080}:8080"
+      - "127.0.0.1:${API_PPROF_PORT:-6060}:6060"
 
   worker:
     <<: *app
@@ -46,6 +47,7 @@ services:
     cpu_shares: ${WORKER_CPU_SHARES:-1024}
     ports:
       - "127.0.0.1:${WORKER_PORT:-8081}:8081"
+      - "127.0.0.1:${WORKER_PPROF_PORT:-6061}:6060"
 
   # --- Audio calls (COMPOSE profile calls): started by deploy.sh only with CALLS_ENABLED=true. ---
 

@@ -79,6 +79,8 @@ type Config struct {
 
 	// WorkerAddr is where the worker serves /healthz and /metrics.
 	WorkerAddr string `env:"WORKER_ADDR" envDefault:":8081"`
+	// PprofAddr turns on net/http/pprof on its own listener (empty: off). Publish it on loopback only.
+	PprofAddr string `env:"PPROF_ADDR"`
 }
 
 type Maps struct {
