@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -376,5 +377,41 @@ func TestAccessLogClientVersions(t *testing.T) {
 				t.Fatalf("unvalidated header leaked: %s", e.logs)
 			}
 		})
+	}
+}
+
+type cancelledAPI struct {
+	Unimplemented
+	cancel context.CancelFunc
+	log    *slog.Logger
+}
+
+func (c cancelledAPI) GetMeta(w http.ResponseWriter, r *http.Request) {
+	c.cancel()
+	c.log.ErrorContext(r.Context(), "read failed", "error", r.Context().Err())
+	WriteProblem(w, http.StatusServiceUnavailable, ErrorCodeInternalError)
+}
+
+func TestCancelledRequestsAreClientClosedNotServerErrors(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	var api cancelledAPI
+	e := newTestEnv(t, func(o *Options) {
+		api = cancelledAPI{cancel: cancel, log: o.Log}
+		o.API = api
+	})
+	e.do(httptest.NewRequest(http.MethodGet, "/api/v2/meta", http.NoBody).WithContext(ctx))
+	var levels []string
+	for _, line := range bytes.Split(bytes.TrimSpace(e.logs.Bytes()), []byte("\n")) {
+		var entry map[string]any
+		if err := json.Unmarshal(line, &entry); err != nil {
+			t.Fatal(err)
+		}
+		if entry["msg"] == "request" && (entry["status"] != float64(StatusClientClosedRequest) || entry["level"] != "INFO") {
+			t.Fatalf("access log %v", entry)
+		}
+		levels = append(levels, entry["msg"].(string)+":"+entry["level"].(string))
+	}
+	if !slices.Contains(levels, "read failed:DEBUG") || !slices.Contains(levels, "request:INFO") {
+		t.Fatalf("log levels %v", levels)
 	}
 }
