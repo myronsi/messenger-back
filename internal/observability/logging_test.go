@@ -54,3 +54,22 @@ func TestLoggerKeepsAttributesFromWith(t *testing.T) {
 		t.Fatalf("With() attribute not redacted: %s", buf.String())
 	}
 }
+
+func TestErrorsOfCancelledRequestsAreDebug(t *testing.T) {
+	var info, debug bytes.Buffer
+	ctx, cancel := context.WithCancel(WithRequestID(context.Background(), "req-cancelled"))
+	cancel()
+	NewLogger(&info, slog.LevelInfo, "test").ErrorContext(ctx, "read failed")
+	NewLogger(&debug, slog.LevelDebug, "test").ErrorContext(ctx, "read failed")
+	if info.Len() != 0 {
+		t.Fatalf("logged at info level: %s", info.String())
+	}
+	if !strings.Contains(debug.String(), `"level":"DEBUG"`) {
+		t.Fatalf("debug log: %s", debug.String())
+	}
+	var live bytes.Buffer
+	NewLogger(&live, slog.LevelInfo, "test").ErrorContext(WithRequestID(context.Background(), "req-live"), "read failed")
+	if !strings.Contains(live.String(), `"level":"ERROR"`) {
+		t.Fatalf("live error: %s", live.String())
+	}
+}

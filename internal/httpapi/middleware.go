@@ -151,16 +151,20 @@ func observe(log *slog.Logger, m *observability.Metrics) middleware {
 			defer func() {
 				m.RequestFinished()
 				d := time.Since(start)
-				m.ObserveRequest(r.Method, st.route, rec.status, d)
+				status := rec.status
+				if status >= 500 && errors.Is(r.Context().Err(), context.Canceled) {
+					status = StatusClientClosedRequest
+				}
+				m.ObserveRequest(r.Method, st.route, status, d)
 				level := slog.LevelInfo
 				switch {
 				case isOperational(st.route):
 					level = slog.LevelDebug
-				case rec.status >= 500:
+				case status >= 500:
 					level = slog.LevelError
 				}
 				log.Log(ctx, level, "request",
-					"method", r.Method, "route", st.route, "status", rec.status,
+					"method", r.Method, "route", st.route, "status", status,
 					"client_version", clientVersionForLog(r.Header.Get(ClientVersionHeader)),
 					"client_api_version", clientVersionForLog(r.Header.Get(ClientAPIVersionHeader)),
 					"bytes", rec.bytes, "duration_ms", float64(d.Microseconds())/1000)
@@ -169,6 +173,10 @@ func observe(log *slog.Logger, m *observability.Metrics) middleware {
 		})
 	}
 }
+
+// StatusClientClosedRequest is recorded instead of a 5xx when the client cancelled the request before the
+// answer: the client never sees it, and it is not a server failure.
+const StatusClientClosedRequest = 499
 
 func isOperational(route string) bool {
 	return route == "/healthz" || route == "/readyz" || route == "/metrics"

@@ -3,6 +3,7 @@ package observability
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"strings"
@@ -71,7 +72,14 @@ func RequestID(ctx context.Context) string {
 type requestIDHandler struct{ slog.Handler }
 
 func (h *requestIDHandler) Handle(ctx context.Context, r slog.Record) error {
-	if id := RequestID(ctx); id != "" {
+	id := RequestID(ctx)
+	if id != "" && r.Level >= slog.LevelWarn && r.Message != "request" && errors.Is(ctx.Err(), context.Canceled) {
+		if !h.Enabled(ctx, slog.LevelDebug) {
+			return nil
+		}
+		r.Level = slog.LevelDebug
+	}
+	if id != "" {
 		r.AddAttrs(slog.String("request_id", id))
 	}
 	return h.Handler.Handle(ctx, r)
