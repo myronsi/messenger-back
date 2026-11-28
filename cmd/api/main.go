@@ -287,6 +287,8 @@ func run() error {
 		Messages: rt.messages,
 	})
 
+	stopPprof := app.StartPprof(log, cfg.PprofAddr)
+	defer stopPprof()
 	log.Info("api listening", "addr", cfg.HTTP.Addr, "env", cfg.Env)
 	if err := p.Serve(srv); err != nil {
 		stopInternal(log, cfg.HTTP, internalSrv)

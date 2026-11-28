@@ -108,6 +108,15 @@ The `monitoring` profile adds Prometheus (15 days of data in the `prometheus-dat
 
 Stop it with `docker compose --profile monitoring stop prometheus node-exporter grafana`; the data stays in its volumes.
 
+### Profiling (pprof)
+
+The API and the worker can serve Go's `net/http/pprof` on a listener of their own, never on the public router. It is off while `PPROF_ADDR` is empty; keep it off on production unless a profile is needed.
+
+1. In `.env`: `PPROF_ADDR=:6060`, then `docker compose up -d --no-deps api worker`. Compose publishes the API's on `127.0.0.1:${API_PPROF_PORT}` (6060) and the worker's on `127.0.0.1:${WORKER_PPROF_PORT}` (6061), loopback only.
+2. From your PC: `ssh -L 6060:127.0.0.1:6060 -L 6061:127.0.0.1:6061 <user>@<host>`.
+3. A 30-second CPU profile of the API: `go tool pprof -http=:7070 http://localhost:6060/debug/pprof/profile?seconds=30`; the worker's on port 6061. Heap: `/debug/pprof/heap`, goroutines: `/debug/pprof/goroutine?debug=1`.
+4. Turn it off again: empty `PPROF_ADDR` and the same `docker compose up` command. A heap profile can contain message data, so profiles stay on your PC and are not shared.
+
 ## Audio calls
 
 Calls are off until `CALLS_ENABLED=true` in `.env`. Off, nothing of them runs and messaging is unaffected. The design, ports, AWS checklist and budgets are in [calls.md](calls.md#deployment).

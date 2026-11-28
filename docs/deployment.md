@@ -160,7 +160,9 @@ bound to loopback and the API to reach LiveKit through the host.
 ### Monitoring and alerts
 
 LiveKit's Prometheus metrics are on `127.0.0.1:${CALLS_METRICS_PORT}` (default 6789, loopback only); the
-API's own call metrics are on its `/metrics`. Never route either publicly. Alert on:
+API's own call metrics are on its `/metrics`. Never route either publicly. The Go profiler of the API and the
+worker (`PPROF_ADDR`, loopback ports 6060 and 6061, off by default) is described in
+[deploy-go.md](deploy-go.md#profiling-pprof). Alert on:
 
 | Signal | Source | Alert when |
 | --- | --- | --- |

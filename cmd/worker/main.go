@@ -205,6 +205,8 @@ func run() error {
 	})
 	mux.Handle("GET /metrics", p.Metrics.Handler())
 	srv := app.NewServer(cfg.WorkerAddr, mux, cfg.HTTP)
+	stopPprof := app.StartPprof(log, cfg.PprofAddr)
+	defer stopPprof()
 
 	log.Info("worker started", "addr", cfg.WorkerAddr, "instance", instance)
 	if err := p.Serve(srv); err != nil {
