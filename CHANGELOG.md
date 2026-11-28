@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.41.0](https://github.com/myronsi/messenger-back/compare/v1.40.5...v1.41.0) (2026-11-28)
+
+
+### Features
+
+* **ops:** optional pprof listener for the API and the worker ([#278](https://github.com/myronsi/messenger-back/issues/278)) ([47992ad](https://github.com/myronsi/messenger-back/commit/47992adff8e7a3cf3a9f92b3126a7360aec77de0))
+
+
+### Bug Fixes
+
+* **httpapi:** cancelled requests count as 499, not as server errors ([#277](https://github.com/myronsi/messenger-back/issues/277)) ([305c99e](https://github.com/myronsi/messenger-back/commit/305c99e96f0dc79b43b7cf7e0f6c3037d602995b))
+
+
+### Performance Improvements
+
+* **media:** cheaper import sticker jobs ([#276](https://github.com/myronsi/messenger-back/issues/276)) ([a84a9ce](https://github.com/myronsi/messenger-back/commit/a84a9ceb72e207fa214a379a5e03a1d8b30f6055))
+
 ## [1.40.5](https://github.com/myronsi/messenger-back/compare/v1.40.4...v1.40.5) (2026-11-27)
 
 
