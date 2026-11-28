@@ -75,3 +75,26 @@ func TestImportStickersThatNeedWorkGoToTheWorkerToo(t *testing.T) {
 		t.Fatalf("gif: %v", err)
 	}
 }
+
+func TestFirstWebPFrameDecodesOnlyTheFirstFrame(t *testing.T) {
+	img, err := firstWebPFrame(squareSticker(t, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if img.Bounds().Dx() != StickerSide || img.Bounds().Dy() != StickerSide {
+		t.Fatalf("bounds %v", img.Bounds())
+	}
+	opaque := false
+	for i := 3; i < len(img.Pix); i += 4 {
+		if img.Pix[i] != 0 {
+			opaque = true
+			break
+		}
+	}
+	if !opaque {
+		t.Fatal("first frame not drawn")
+	}
+	if _, err := firstWebPFrame(append([]byte("RIFF"), 4, 0, 0, 0, 'W', 'E', 'B', 'P')); err == nil {
+		t.Fatal("a file without frames has no first frame")
+	}
+}
