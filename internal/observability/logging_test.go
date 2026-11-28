@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"testing"
@@ -52,5 +54,28 @@ func TestLoggerKeepsAttributesFromWith(t *testing.T) {
 	log.Info("x", "k", "v")
 	if strings.Contains(buf.String(), `"abc"`) {
 		t.Fatalf("With() attribute not redacted: %s", buf.String())
+	}
+}
+
+func TestErrorsOfCancelledRequestsAreDebug(t *testing.T) {
+	var info, debug bytes.Buffer
+	ctx, cancel := context.WithCancel(WithRequestID(context.Background(), "req-cancelled"))
+	cancel()
+	NewLogger(&info, slog.LevelInfo, "test").ErrorContext(ctx, "read failed", "error", fmt.Errorf("read messages: %w", context.Canceled))
+	NewLogger(&debug, slog.LevelDebug, "test").ErrorContext(ctx, "read failed", "error", errors.New("media: Head: context canceled"))
+	if info.Len() != 0 {
+		t.Fatalf("logged at info level: %s", info.String())
+	}
+	if !strings.Contains(debug.String(), `"level":"DEBUG"`) {
+		t.Fatalf("debug log: %s", debug.String())
+	}
+	var live, real bytes.Buffer
+	NewLogger(&live, slog.LevelInfo, "test").ErrorContext(WithRequestID(context.Background(), "req-live"), "read failed", "error", context.Canceled)
+	if !strings.Contains(live.String(), `"level":"ERROR"`) {
+		t.Fatalf("live error: %s", live.String())
+	}
+	NewLogger(&real, slog.LevelInfo, "test").ErrorContext(ctx, "store write failed", "error", errors.New("duplicate key value violates unique constraint"))
+	if !strings.Contains(real.String(), `"level":"ERROR"`) {
+		t.Fatalf("a real failure after the client left must stay an error: %s", real.String())
 	}
 }
