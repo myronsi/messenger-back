@@ -60,7 +60,12 @@ func TestImportStickersDeferTheHeavyWork(t *testing.T) {
 			if done.ProcessingState == nil || *done.ProcessingState != media.ProcessingDone || !ok || panel.Width != media.PanelSide {
 				t.Fatalf("after the job %+v", done)
 			}
-			if _, ok := done.Variants.Get(media.VariantNameMessage); !ok {
+			_, hasMessage := done.Variants.Get(media.VariantNameMessage)
+			small := len(data) <= media.MaxMessageStickerBytes
+			if animated && small && hasMessage {
+				t.Fatal("a small animated sticker is served as it is in messages")
+			}
+			if !animated && !hasMessage {
 				t.Fatalf("no message variant %+v", done.Variants)
 			}
 		})

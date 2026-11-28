@@ -4,9 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"image"
+	"image/draw"
 	"io"
 	"os"
 	"time"
+
+	"golang.org/x/image/webp"
 
 	"github.com/myronsi/messenger-back/internal/store/postgres"
 )
@@ -144,12 +148,17 @@ func (s *Service) importStickerVariants(ctx context.Context, a postgres.Attachme
 	defer func() { <-s.images }()
 	vs := newVariantSet(a.StorageKey)
 	if animatedWebP(data) {
-		clip, err := webpStickerFrames(data, Upload{Purpose: PurposeSticker})
+		first, err := firstWebPFrame(data)
 		if err != nil {
 			return a, ErrUnsupported
 		}
-		if err := s.animatedStickerVariants(ctx, framesStickerSource(clip.frames), nil, vs); err != nil {
-			return a, err
+		s.addResized(ctx, vs, VariantNamePanel, first, PanelSide, 80)
+		if len(data) > MaxMessageStickerBytes {
+			clip, err := webpStickerFrames(data, Upload{Purpose: PurposeSticker})
+			if err != nil {
+				return a, ErrUnsupported
+			}
+			s.animatedMessageVariant(ctx, framesStickerSource(clip.frames), nil, vs)
 		}
 	} else {
 		img, err := StickerImage(data, "image/webp")
@@ -219,4 +228,33 @@ func (s *Service) finishImportSticker(ctx context.Context, a postgres.Attachment
 		return a, err
 	}
 	return updated, nil
+}
+
+func firstWebPFrame(data []byte) (*image.NRGBA, error) {
+	riffSize := int(binary.LittleEndian.Uint32(data[4:8]))
+	if riffSize < 4 || riffSize > len(data)-8 {
+		return nil, ErrUnsupported
+	}
+	chunks, err := riffChunks(data[12 : 8+riffSize])
+	if err != nil || len(chunks) == 0 || chunks[0].fourCC != "VP8X" || len(chunks[0].payload) < 10 {
+		return nil, ErrUnsupported
+	}
+	w, h := uint24(chunks[0].payload[4:7])+1, uint24(chunks[0].payload[7:10])+1
+	for _, c := range chunks[1:] {
+		if c.fourCC != "ANMF" {
+			continue
+		}
+		f, _, err := parseANMF(c.payload, w, h)
+		if err != nil {
+			return nil, ErrUnsupported
+		}
+		frame, err := webp.Decode(bytes.NewReader(f.still()))
+		if err != nil {
+			return nil, ErrUnsupported
+		}
+		canvas := image.NewNRGBA(image.Rect(0, 0, w, h))
+		draw.Draw(canvas, image.Rect(f.x, f.y, f.x+f.width, f.y+f.height), frame, frame.Bounds().Min, draw.Src)
+		return fitSquare(canvas, canvas.Bounds(), StickerSide), nil
+	}
+	return nil, ErrUnsupported
 }
